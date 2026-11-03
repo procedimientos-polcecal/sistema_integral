@@ -15,19 +15,21 @@ import {
  * hoja.
  *
  * **No se usa `leerLibro()` de `lib/core/excel.ts`**, que es el lector común
- * del repo, y la razón es la que define este archivo: ese lector **aplana las
- * fórmulas a su resultado**, porque los cinco importadores que lo usan sólo
- * quieren el valor. Acá la fórmula **es el dato**: `=C47+C50+C51` en la columna
- * N es lo que dice qué renglones van juntos en una OT. Aplanarla deja un 46 sin
- * ninguna forma de saber de dónde salió, y no habría grupos.
+ * del repo: ese lector **aplana cada celda a su valor** y pierde la diferencia
+ * entre un número escrito y una fórmula. Acá esa diferencia se usa dos veces, y
+ * las dos para no mentir: una celda de horas que es una fórmula **sin resultado
+ * calculado** no es un cero —es un archivo que Excel no recalculó— y el renglón
+ * tiene que entrar dudoso diciéndolo; y un `#REF!` no es una celda vacía —es
+ * una referencia rota— y también hay que decirlo. Medido sobre el archivo real
+ * de octubre: la fila 24 trae `#REF!` en «Fecha Desde».
  *
  * Lo que sí se comparte con ese archivo es **abrir** el libro (`abrirLibro`),
  * que lleva el segundo intento sin prefijos de namespace: ahí no hay nada
  * propio del cuaderno, y tener dos copias de ese reintento significaría
  * arreglarlo dos veces el día que aparezca otro XML raro.
  *
- * LA HOJA: se prueban todas y gana la primera que tenga el encabezado
- * «Fecha / Tarea». Un libro con una hoja —que es el caso medido— no cambia; uno
+ * LA HOJA: se prueban todas y gana la primera que tenga un encabezado con
+ * «Tarea» y «Hs». Un libro con una hoja —que es el caso medido— no cambia; uno
  * con la plantilla en la segunda hoja, o con una hoja de notas adelante, entra
  * igual en vez de fallar por el orden. Si ninguna tiene el encabezado, se
  * devuelve el error de la primera, que es el que nombra lo que sí había.

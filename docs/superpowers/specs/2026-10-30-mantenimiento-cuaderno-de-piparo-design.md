@@ -420,7 +420,7 @@ si la planilla no estaba.
 
 ---
 
-## Agregado el 02/11/2026: el mes también puede entrar por un Excel
+## Agregado el 02/11/2026, rehecho el 03/11: el mes también puede entrar por un Excel
 
 **El problema que apareció al usarlo.** No todos los meses vienen en el
 cuaderno: a veces quien carga arma él mismo la planilla. Fotografiar lo que ya
@@ -434,49 +434,77 @@ lo que viene después —el enganche a sector y equipo, juntar y separar, confir
 el sector, el freno de duplicados, generar— es el mismo código y no se entera
 de por dónde entraron los renglones.
 
+### Lo que cambió el 03/11, y por qué importa contarlo
+
+La primera versión leía un archivo de **dos mitades**: el detalle día por día a
+la izquierda y, a la derecha, un resumen cuyas fórmulas (`=C47+C50+C51`) decían
+qué renglones iban juntos en una OT. Un día después, quien arma el archivo lo
+reemplazó por **una sola tabla**: el resumen, ya consolidado, con el rango de
+días escrito en vez de deducido.
+
+Eso dejó una lección que vale más que el código que se tiró: **la tabla cambió
+de columnas (`K:O` → `A:E`) de un día para el otro.** Un lector que busca por
+letra de columna se rompe con ese movimiento y no puede decir por qué. Por eso
+ahora **las columnas se buscan por el texto del encabezado**, que es el contrato
+que la persona que arma el archivo ve y controla.
+
+### Las cinco columnas
+
+`Tarea · Fecha Desde · Fecha Hasta · Hs · Precio ($)`
+
+`Tarea` y `Hs` son las únicas obligatorias: sin tarea no hay qué hacer y sin
+horas no hay qué cargarle a la OT. Se aceptan los sinónimos razonables
+(`Descripción`, `Desde`, `Hasta`, `Horas`, `Importe`) y una sola columna `Fecha`
+se toma como el día en que empieza. **Una fila es una tarea y una tarea es una
+orden**: no hay nada que agrupar.
+
 ### Las cuatro decisiones
 
-1. **Las fórmulas del resumen son los grupos.** La columna `N` del archivo real
-   trae `=C47+C50+C51`, que es exactamente «estos tres renglones van en una
-   OT». Leer el valor y no la fórmula habría dejado un 46 sin forma de saber de
-   dónde salió. Por eso **los grupos entran armados** y no hay que proponerlos.
-   Un grupo de un solo renglón no se escribe: es la orden de ese renglón, y
-   marcarlo lo sacaría de la propuesta de acumular los que se llaman igual.
-2. **El control es que las horas del resumen den las del detalle.** Es el
-   criterio de quien pidió esto, y la defensa contra una fórmula que apunta una
-   fila más abajo. Si no cierra, **los renglones entran igual** —no se pierde el
-   trabajo de tipear el mes— pero **no se arma ningún grupo**, y se dice con
-   número de fila qué pasó. Nunca se arma un grupo sobre una cuenta que no da.
+1. **El control es la fila de TOTALES.** Al desaparecer el detalle desapareció
+   la comprobación de «las horas del resumen dan las del detalle». Lo que queda
+   es el total declarado contra la suma de las filas, y sirve porque **ese total
+   está escrito a mano y no es una fórmula**: compararlo detecta una fila de
+   más, una de menos o un dígito cambiado. Si no da, **los renglones entran
+   igual** —no hay nada que retener, la tabla es el dato— y se dice con los dos
+   números y la fila del total. Si no hay TOTALES, también se avisa.
+2. **El rango de días se guarda, no se deduce.** 18 de las 63 filas del archivo
+   real abarcan más de un día; una va del 24 al 31. Sin guardarlo, la OT diría
+   «El 24/10». Es una columna nueva, `fecha_hasta`, **nullable para siempre**:
+   null quiere decir «duró un día», que es lo que pasa con todos los renglones
+   que entran por foto. Sin check de `fecha_hasta >= fecha`: un rango dado
+   vuelta hay que mostrárselo a quien tipeó, no hacer fallar el insert de las 63
+   filas por una.
 3. **La procedencia no lleva columna nueva.** El archivo va al mismo bucket y a
    la misma tabla que las fotos (`mant_cuadernos_fotos`, con `orden: 1`), y lo
-   único que lo distingue es la extensión de la ruta. Eso evitó una migración
-   de columna y dejó intactos el borrado de la carga, el reintento y el vínculo
-   de cada renglón con su origen. La migración que sí hizo falta es la del
-   bucket: `allowed_mime_types` sólo tenía los cinco tipos de imagen.
+   único que lo distingue es la extensión de la ruta. Eso dejó intactos el
+   borrado de la carga, el reintento y el vínculo de cada renglón con su origen.
+   La migración que sí hizo falta es la del bucket: `allowed_mime_types` sólo
+   tenía los cinco tipos de imagen.
 4. **En pantalla no va el panel de la foto.** No hay hoja contra la cual
-   comparar: la transcripción la escribió la misma persona que carga. Va de qué
-   fila salió cada renglón, y lo que queda por hacer es completar los sectores.
-   **El filtro de «dudosos» se dejó** —el plan decía sacarlo—: el Excel también
-   produce dudosos (una fecha que no existe, unas horas que no son un número) y
-   esconderlos sería tapar problemas reales.
+   comparar: la transcripción la escribió la misma persona que carga. Van las
+   cinco columnas que se leyeron, de qué fila salió cada renglón, y dos campos
+   de fecha en vez de uno. **El filtro de «dudosos» se dejó** —el plan decía
+   sacarlo—: el Excel también produce dudosos y esconderlos sería tapar
+   problemas reales.
 
-### Lo que se midió (02/11/2026, `Tareas_Octubre_2026.xlsx`)
+### Lo que se midió (03/11/2026, `Tareas_Octubre_2026 2.xlsx`)
 
-Una hoja, 99 filas. 97 renglones, 1074 horas, 0 precios. 63 filas de resumen, de
-las cuales 18 juntan dos o más renglones. **La cuenta cierra exacta: 1074 =
-1074, 0 renglones contados dos veces, 0 sin cubrir, 0 referencias a celdas
-vacías, 0 dudosos.** Las dos filas de `TOTALES` usan `SUM()` y se saltean.
+Una hoja, 63 tareas, 1074 horas, y la fila de TOTALES dice 1074: **cierra
+exacto**. La tarea más larga son 106 h; 18 de las 63 duran más de un día; 0
+precios. **Un solo dudoso: la fila 24 trae `#REF!` en «Fecha Desde»**, una
+referencia que quedó rota al sacar el detalle — entra igual, marcada, usando su
+«Fecha Hasta». El tope de horas por fila quedó en **500**, no en los 200 de un
+renglón manuscrito: allá una fila es un día, acá es una tarea entera a lo largo
+del mes, y lo que hay que atrapar es el dígito de más (106 → 1060).
 
 ### Los riesgos que quedan asumidos
 
-- **Si la fórmula está mal pero cierra, el grupo sale mal.** Dos referencias
-  cruzadas entre dos grupos suman lo mismo y el control no lo ve. Lo que sí
-  atrapa es lo que cambia el total: una fila contada dos veces, una sin cubrir,
-  una referencia a una celda vacía, y un término de más en la fórmula (se
-  compara lo que dice la celda contra lo que suman sus referencias).
-- **La columna `O` del resumen no se lee.** El precio sale del detalle y la OT
-  suma el de sus renglones. Si alguien escribe un precio sólo en el resumen, no
-  entra — y es a propósito: leerlo sería una segunda fuente para el mismo dato.
-- **Un archivo que Excel no recalculó no se puede comparar.** Si la celda de
-  horas no trae valor calculado, mandan las referencias. Es lo correcto, pero
-  significa que un término de más ahí no se detecta.
+- **El control es más débil que el que reemplazó.** Antes se cruzaban dos
+  representaciones de lo mismo; ahora se compara un total contra la suma de las
+  filas que lo componen, y las dos las tipeó la misma persona en el mismo rato.
+  Un error de concepto —una tarea que se olvidó de anotar— no lo ve nadie.
+- **Si no hay fila de TOTALES no hay control ninguno**, y eso es lo más probable
+  en un archivo armado a las apuradas. Se avisa, pero avisar no es comprobar.
+- **Un rango de días no se puede verificar.** Que una tarea diga del 24 al 31 es
+  palabra de quien la anotó; el sistema sólo puede ver que el orden sea el
+  correcto.

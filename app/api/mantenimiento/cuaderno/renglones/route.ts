@@ -74,6 +74,14 @@ export async function PATCH(request: Request) {
     else if (fechaValida(cuerpo.fecha)) cambios.fecha = cuerpo.fecha;
     else problemas.push("La fecha tiene que ser un día válido, como 2026-09-17.");
   }
+  // El último día, cuando la tarea duró más de uno. **Vaciarlo es válido y
+  // quiere decir «duró un día»**, no «falta»: por eso se distingue `null` de
+  // que la clave no venga, igual que el sector y el precio.
+  if ("fecha_hasta" in cuerpo) {
+    if (cuerpo.fecha_hasta === null) cambios.fecha_hasta = null;
+    else if (fechaValida(cuerpo.fecha_hasta)) cambios.fecha_hasta = cuerpo.fecha_hasta;
+    else problemas.push("La fecha hasta tiene que ser un día válido, como 2026-09-17.");
+  }
   if ("tarea" in cuerpo) {
     if (textoOVacio(cuerpo.tarea)) cambios.tarea = cuerpo.tarea.trim();
     else problemas.push("La tarea no puede quedar vacía.");
@@ -130,7 +138,7 @@ export async function PATCH(request: Request) {
     .update(cambios)
     .eq("id", id)
     .is("orden_trabajo_id", null)
-    .select("id, foto_id, linea, fecha, tarea, lugar_raw, sector_id, sector_propuesto, equipo_id, horas, costo, dudoso, motivo_dudoso, heredado, grupo_id, orden_trabajo_id")
+    .select("id, foto_id, linea, fecha, fecha_hasta, tarea, lugar_raw, sector_id, sector_propuesto, equipo_id, horas, costo, dudoso, motivo_dudoso, heredado, grupo_id, orden_trabajo_id")
     .maybeSingle();
   if (error) {
     // 23503: el sector o el equipo no existe en el catálogo.
@@ -236,7 +244,7 @@ export async function POST(request: Request) {
   try {
     const { data: filas, error } = await supabase
       .from("mant_cuadernos_renglones")
-      .select("id, cuaderno_id, foto_id, linea, fecha, tarea, lugar_raw, sector_id, sector_propuesto, equipo_id, horas, costo, dudoso, motivo_dudoso, heredado, grupo_id, orden_trabajo_id")
+      .select("id, cuaderno_id, foto_id, linea, fecha, fecha_hasta, tarea, lugar_raw, sector_id, sector_propuesto, equipo_id, horas, costo, dudoso, motivo_dudoso, heredado, grupo_id, orden_trabajo_id")
       .in("id", ids);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

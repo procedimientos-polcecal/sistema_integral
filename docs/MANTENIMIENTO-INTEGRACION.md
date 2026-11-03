@@ -2124,40 +2124,57 @@ corte de 240, y las otras nueve entre 15 y 49. Una página así puede quedar jus
 del lado equivocado y terminar en `fallo`; se reintenta. Con un modelo que no
 razona tanto no debería pasar, pero no se pudo medir.
 
-### La otra puerta: el mes en un Excel (02/11/2026)
+### La otra puerta: el mes en un Excel (02–03/11/2026)
 
-**No todos los meses vienen en el cuaderno.** Quien carga arma a veces la planilla
-él mismo, y en ese caso fotografiar lo que ya está tipeado para que un modelo lo
-vuelva a leer es dar una vuelta entera para perder exactitud. Así que un mes
-puede entrar por un `.xlsx` **como alternativa a las fotos**, no como otro modo:
-los renglones quedan iguales y todo lo de abajo —el enganche a sector y equipo,
-juntar y separar, confirmar el sector, el freno de duplicados, generar— no se
-entera de por dónde entraron.
+**No todos los meses vienen en el cuaderno.** Quien carga arma a veces la
+planilla él mismo, y en ese caso fotografiar lo que ya está tipeado para que un
+modelo lo vuelva a leer es dar una vuelta entera para perder exactitud —y mete
+los dudosos de la letra manuscrita en un dato que nunca fue manuscrito—. Así que
+un mes puede entrar por un `.xlsx` **como alternativa a las fotos**, no como
+otro modo: los renglones quedan iguales y todo lo de abajo —el enganche a sector
+y equipo, juntar y separar, confirmar el sector, el freno de duplicados,
+generar— no se entera de por dónde entraron.
 
-**La forma del archivo, medida sobre `Tareas_Octubre_2026.xlsx`** (una hoja, 99
-filas): a la izquierda el detalle (`A` fecha, `B` tarea, `C` horas, `D` precio),
-97 renglones; a la derecha el resumen (`K` tarea, `L` desde, `M` hasta, `N` horas,
-`O` precio), 63 filas. **La celda de `N` es una fórmula —`=C47+C50+C51`— y eso es
-exactamente un grupo, o sea una OT.** Por eso los grupos entran armados y no hay
-que proponerlos: de los 63, 18 juntan dos o más renglones y los otros 45 son la
-orden de su renglón (`gruposAJuntar` no les escribe `grupo_id`, para que un
-renglón solo no aparezca como «juntado con 0 más» y no pierda la propuesta de
-acumular los que se llaman igual). La columna `O` **no se lee**: el precio sale
-del detalle, y leerla sería una segunda fuente para el mismo dato.
+#### Las cinco columnas que se procesan
 
-Cinco cosas que no se deducen del código:
+| Columna | Obligatoria | Qué es |
+|---|---|---|
+| **Tarea** | **sí** | Qué se hizo. Es lo que va a la descripción de la OT |
+| **Fecha Desde** | no | El primer día |
+| **Fecha Hasta** | no | El último. Vacío quiere decir que duró un día |
+| **Hs** | **sí** | Las horas de esa tarea |
+| **Precio ($)** | no | Lo que se cobra por trabajo, cuando no se cobra por hora |
 
-- **El control es que las horas del resumen den las del detalle**, sin renglones
-  contados dos veces ni renglones sin cubrir. Si no cierra, **los renglones
-  entran igual** —no se pierde el trabajo de tipear el mes— pero **no se arma
-  ningún grupo**, y se dice con número de fila qué pasó. Una fórmula que apunta
-  una fila más abajo junta dos tareas que no tienen nada que ver y manda las
-  horas a la OT equivocada sin que nadie lo note. Medido sobre el archivo real:
-  1074 = 1074, 0 duplicados, 0 sin cubrir, 0 problemas.
-- **Un renglón sólo con precio que ningún grupo toma no es un error.** Un empalme
-  o un parche se cobran por trabajo y no por hora: no tiene horas que se pierdan
-  y sale como su propia orden. Lo que sí es error es que un renglón esté en dos
-  grupos.
+**Se buscan por el texto del encabezado, no por la letra de la columna**, y eso
+no es comodidad. El 02/11/2026 este mismo contenido vivía en `K` a `O` —era el
+resumen de la derecha de una planilla que además traía el detalle día por día a
+la izquierda— y el 03/11 pasó a `A` a `E` al quedar la tabla sola. Leer por
+letra significa que mover la tabla una columna rompe la carga sin decir por qué.
+Se aceptan también `Descripción`, `Desde`, `Hasta`, `Horas` e `Importe`, y una
+sola columna `Fecha` se toma como el día en que empieza.
+
+**Una fila es una tarea y una tarea es una orden de trabajo.** No hay nada que
+agrupar: quien arma el archivo ya hizo la consolidación. Juntar y separar a mano
+siguen en la pantalla para el caso raro.
+
+#### Seis cosas que no se deducen del código
+
+- **El control es la fila de TOTALES**: sus horas tienen que dar la suma de las
+  filas. Medido sobre el archivo real, ese total está **escrito a mano y no es
+  una fórmula**, así que compararlo no es redundante — es lo que detecta una
+  fila tipeada de más, una de menos o un dígito cambiado. **Si no da, los
+  renglones entran igual**: no hay nada que retener, la tabla *es* el dato. Se
+  dice fuerte, con los dos números y la diferencia. Si no hay fila de TOTALES,
+  también se avisa: no hay contra qué comparar.
+- **`fecha_hasta` en null quiere decir «duró un día», no que falte.** Los ~1.400
+  renglones que entraron por foto no la tienen y no es que les falte: una línea
+  del cuaderno manuscrito es de un día. El código lo lee como
+  `fecha_hasta ?? fecha` (`totalesDeRenglones`), que es exactamente lo que hacía
+  antes de que la columna existiera (migración `20261103083610`).
+- **No hay check de que `fecha_hasta >= fecha`.** Un rango dado vuelta es un
+  error de quien tipeó y hay que **mostrárselo**: el intérprete lo marca dudoso
+  con su motivo y el renglón entra. Un check en la base haría fallar el insert
+  de las 63 filas por una.
 - **Que una carga sea de Excel no lo dice ninguna columna: lo dice la extensión
   de la ruta** (`esRutaDeExcel` en `lib/mantenimiento/cuadernoOrigen.ts`). El
   archivo va al mismo bucket y a la misma tabla (`mant_cuadernos_fotos`, con
@@ -2169,20 +2186,33 @@ Cinco cosas que no se deducen del código:
 - **No se mezclan fotos y planilla en una misma carga**, y la guarda está en las
   dos rutas y no sólo en la pantalla: el `accept` de un campo de archivo no
   impide elegir nada.
-- **`lib/core/excel.ts` no sirve acá y por eso hay otro lector.** Ese aplana las
-  fórmulas a su resultado, que es lo que quieren los cinco importadores que lo
-  usan; acá la fórmula **es** el dato. El lector propio es
-  `cuadernoExcelArchivo.ts`, y está separado del intérprete
-  (`cuadernoExcel.ts`, puro, 58 tests) para poder probar todas las decisiones sin
-  armar un `.xlsx`.
+- **`lib/core/excel.ts` no sirve para leerlo y por eso hay otro lector.** Ese
+  aplana cada celda a su valor, que es lo que quieren los cinco importadores que
+  lo usan. Acá esa diferencia se usa para no mentir: una celda de horas que es
+  una fórmula **sin resultado calculado** no es un cero sino un archivo que Excel
+  no recalculó, y un `#REF!` no es una celda vacía sino una referencia rota. El
+  lector propio es `cuadernoExcelArchivo.ts`, separado del intérprete
+  (`cuadernoExcel.ts`, puro) para poder probar las decisiones sin armar un
+  `.xlsx`.
+
+#### Lo que se midió (03/11/2026, `Tareas_Octubre_2026 2.xlsx`)
+
+Una hoja, 63 tareas, **1074 horas, y la fila de TOTALES dice 1074: cierra
+exacto**. La tarea más larga son 106 h y 18 de las 63 abarcan más de un día. 0
+precios. Un solo dudoso: **la fila 24 trae `#REF!` en «Fecha Desde»** —una
+referencia que quedó rota al sacar el detalle— y entra igual, marcada, usando su
+«Fecha Hasta». El tope de horas por fila es **500**: el error probable tipeando
+es el dígito de más (106 → 1060), y 500 lo atrapa dejando casi cinco veces el
+máximo visto de margen. No es el mismo número que `TOPE_DE_HORAS_POR_RENGLON`
+(200) ni tiene por qué serlo: allá una fila es un renglón de un día del cuaderno
+manuscrito, acá es una tarea entera a lo largo del mes.
 
 En pantalla, una carga de Excel **no muestra el panel de la foto**: no hay hoja
-contra la cual comparar, porque la transcripción la escribió la misma persona que
-carga. En su lugar va de qué fila salió cada renglón y lo que trajo el archivo, y
-lo que queda por hacer es completar los sectores. El filtro de «dudosos» **se
-dejó**, aunque el plan decía sacarlo: el Excel también produce dudosos —una fecha
-que no existe, unas horas que no son un número— y esconderlos sería tapar
-problemas reales.
+contra la cual comparar. En su lugar van las cinco columnas que se leyeron, de
+qué fila salió cada renglón, y dos campos de fecha por renglón en vez de uno. El
+filtro de «dudosos» **se dejó**, aunque el plan decía sacarlo: el Excel también
+produce dudosos —un `#REF!`, una fecha que no existe, unas horas que no son un
+número— y esconderlos sería tapar problemas reales.
 
 ### Lo que quedó anotado
 

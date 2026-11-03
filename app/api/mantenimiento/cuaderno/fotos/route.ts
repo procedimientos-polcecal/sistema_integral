@@ -431,7 +431,7 @@ export async function POST(request: Request) {
         heredado: r.heredado,
       })))
       .select(
-        "id, foto_id, linea, fecha, tarea, lugar_raw, sector_id, sector_propuesto, equipo_id, " +
+        "id, foto_id, linea, fecha, fecha_hasta, tarea, lugar_raw, sector_id, sector_propuesto, equipo_id, " +
         "horas, costo, dudoso, motivo_dudoso, heredado, grupo_id, orden_trabajo_id"
       );
     if (error) {

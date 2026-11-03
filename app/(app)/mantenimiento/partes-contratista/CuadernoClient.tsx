@@ -1143,10 +1143,13 @@ export default function CuadernoClient({
           <p className="mt-3 text-xs text-slate-500">
             {deExcel || elExcelElegido ? (
               <>
-                La planilla se lee entera de una vez y las órdenes salen de las fórmulas de la columna
-                de horas del resumen. El control es que esas horas den las del detalle: si no dan, los
-                renglones entran igual pero no se arma ningún grupo y se te dice en qué filas está el
-                problema. Volver a subirla reemplaza todo lo de esta carga.
+                Se leen cinco columnas, por el nombre del encabezado y no por su letra:{" "}
+                <strong>Tarea</strong>, <strong>Fecha Desde</strong>, <strong>Fecha Hasta</strong>,{" "}
+                <strong>Hs</strong> y <strong>Precio ($)</strong> — «Tarea» y «Hs» son las únicas
+                obligatorias. Cada fila es una orden de trabajo. Si hay una fila de{" "}
+                <strong>TOTALES</strong>, sus horas tienen que dar la suma de las filas: si no dan, los
+                renglones entran igual y se te dice de cuánto es la diferencia. Volver a subirla
+                reemplaza todo lo de esta carga.
               </>
             ) : (
               <>
@@ -1301,8 +1304,10 @@ export default function CuadernoClient({
                       Esta carga entró por Excel
                     </p>
                     <p className="mt-2 text-sm text-slate-700">
-                      {renglones.length} {renglones.length === 1 ? "renglón" : "renglones"} ·{" "}
-                      {gruposArmados} {gruposArmados === 1 ? "grupo armado" : "grupos armados"} desde el resumen
+                      {renglones.length} {renglones.length === 1 ? "tarea" : "tareas"}
+                      {gruposArmados > 0 && (
+                        <> · {gruposArmados} {gruposArmados === 1 ? "juntada" : "juntadas"} a mano</>
+                      )}
                     </p>
                     {errorDeFoto && <p className="mt-2 text-xs text-rose-700">{errorDeFoto}</p>}
                     {planilla && urls[planilla.id] && (
@@ -1315,9 +1320,16 @@ export default function CuadernoClient({
                       </a>
                     )}
                     <p className="mt-3 text-xs text-slate-500">
-                      No hay hoja que mirar al lado: la transcripción la escribiste vos. Lo que queda
-                      por hacer es completar los sectores. Los renglones que van en la misma orden ya
-                      vienen juntados desde las fórmulas del resumen.
+                      No hay hoja que mirar al lado: la transcripción la escribiste vos. <strong>Cada
+                      fila de la planilla es una orden de trabajo</strong>, así que lo que queda por
+                      hacer es completar los sectores.
+                    </p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Se leen cinco columnas, buscadas por el nombre del encabezado y no por su letra:
+                      <strong> Tarea</strong>, <strong>Fecha Desde</strong>, <strong>Fecha Hasta</strong>,
+                      <strong> Hs</strong> y <strong>Precio ($)</strong>. «Tarea» y «Hs» son las únicas
+                      obligatorias. La fila de <strong>TOTALES</strong> no es una tarea: sus horas se
+                      usan para comprobar que la suma de las filas dé.
                     </p>
 
                     {/* De qué fila de la planilla salió el renglón en el que estás parado. */}
@@ -1510,6 +1522,7 @@ export default function CuadernoClient({
                       equipoAparte={delSector && equipo && equipo.sector_id !== r.sector_id ? equipo : null}
                       etiquetaDeEquipo={etiquetaDeEquipo}
                       nombreDelSector={r.sector_id ? nombreDeSector.get(r.sector_id) ?? "" : ""}
+                      conRango={deExcel}
                       pagina={r.foto_id ? fotoDe.get(r.foto_id)?.orden ?? null : null}
                       hermanosEnPropuesta={enPropuesta.get(r.id) ?? 0}
                       integrantesDelGrupo={r.grupo_id ? renglones.filter((x) => x.grupo_id === r.grupo_id).length : 0}
@@ -1739,6 +1752,8 @@ interface PropsDeFila {
   equipoAparte: EquipoBasico | null;
   etiquetaDeEquipo: (e: EquipoBasico) => string;
   nombreDelSector: string;
+  /** La tarea puede durar varios días y se edita con dos fechas: lo traen las planillas, no las fotos. */
+  conRango: boolean;
   pagina: number | null;
   /** Con cuántos más (contándolo) lo propone juntar el sistema. 0 si no. */
   hermanosEnPropuesta: number;
@@ -1751,11 +1766,11 @@ interface PropsDeFila {
   onError: (mensaje: string) => void;
 }
 
-type Borrador = { fecha?: string; tarea?: string; horas?: string; costo?: string };
+type Borrador = { fecha?: string; fecha_hasta?: string; tarea?: string; horas?: string; costo?: string };
 
 function FilaDelRenglon({
   r, activo, marcado, puedeEditar, opcionesDeSector, opcionesDeEquipo, equipo, equipoAparte, etiquetaDeEquipo,
-  nombreDelSector, pagina, hermanosEnPropuesta, integrantesDelGrupo,
+  nombreDelSector, conRango, pagina, hermanosEnPropuesta, integrantesDelGrupo,
   onActivar, onMarcar, onGuardar, onCambiarSector, onConfirmarSector, onError,
 }: PropsDeFila) {
   // Lo que se está tipeando, hasta que se sale del campo. Se muestra el borrador
@@ -1784,6 +1799,10 @@ function FilaDelRenglon({
       if (campo === "fecha") {
         const nueva = escrito || null;
         if (nueva !== r.fecha) await onGuardar({ fecha: nueva });
+      } else if (campo === "fecha_hasta") {
+        // Vaciarlo quiere decir «duró un día», y es una decisión: va como null.
+        const nueva = escrito || null;
+        if (nueva !== (r.fecha_hasta ?? null)) await onGuardar({ fecha_hasta: nueva });
       } else if (campo === "tarea") {
         if (escrito.trim() !== r.tarea.trim()) await onGuardar({ tarea: escrito });
       } else {
@@ -1826,10 +1845,28 @@ function FilaDelRenglon({
             onChange={escribir("fecha")}
             onBlur={() => cerrarCampo("fecha")}
             disabled={bloqueado}
-            aria-label="Fecha"
+            aria-label={conRango ? "Fecha desde" : "Fecha"}
+            title={conRango ? "Fecha desde" : undefined}
             className={CLASE_CAMPO}
           />
         </div>
+        {/* El último día. Vacío quiere decir que la tarea fue de un día: no se
+            muestra con las fotos, donde un renglón es siempre de un día. */}
+        {conRango && (
+          <div className="w-36 shrink-0">
+            <input
+              type="date"
+              value={borrador.fecha_hasta ?? r.fecha_hasta ?? ""}
+              onChange={escribir("fecha_hasta")}
+              onBlur={() => cerrarCampo("fecha_hasta")}
+              disabled={bloqueado}
+              aria-label="Fecha hasta"
+              title="Fecha hasta — vacío quiere decir que duró un día"
+              placeholder="hasta"
+              className={CLASE_CAMPO}
+            />
+          </div>
+        )}
         <div className="min-w-0 flex-1 basis-48">
           <textarea
             rows={2}

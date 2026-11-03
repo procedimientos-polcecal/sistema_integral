@@ -5,7 +5,6 @@ import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { traerTodo } from "@/lib/core/paginado";
 import { normalizarLugar } from "@/lib/mantenimiento/partesDeContratista";
 import { interpretarArchivo } from "@/lib/mantenimiento/cuadernoExcelArchivo";
-import { gruposAJuntar } from "@/lib/mantenimiento/cuadernoExcel";
 import { esRutaDeExcel, TIPO_DE_EXCEL } from "@/lib/mantenimiento/cuadernoOrigen";
 import {
   engancharRenglonLeido,
@@ -21,7 +20,7 @@ import {
  * todo lo que viene después —juntar, separar, confirmar el sector, el freno de
  * duplicados, generar— no se entera de por dónde entraron.
  *
- * LAS DOS DIFERENCIAS CON LAS FOTOS, Y LAS DOS SON PORQUE LO ESCRIBIÓ UNA
+ * LAS TRES DIFERENCIAS CON LAS FOTOS, Y LAS TRES SON PORQUE LO ESCRIBIÓ UNA
  * PERSONA:
  *
  * - **No hay modelo.** Leer el archivo es `interpretarArchivo`, que es
@@ -29,16 +28,18 @@ import {
  *   inventar. Por eso acá un archivo que no se entiende **devuelve 400 y no
  *   guarda nada**, al revés que una foto, que devuelve 200 con su `fallo`
  *   anotado para poder reintentarla: no hay nada que reintentar.
- * - **El resumen ya dice qué va junto.** La fórmula de la columna N
- *   (`=C47+C50+C51`) es un grupo, o sea una OT, así que los grupos entran
- *   armados y no hay que proponerlos. Un grupo de un solo renglón **no** se
- *   escribe (`gruposAJuntar`): es la orden de ese renglón.
+ * - **No se arma ningún grupo.** Quien tipea la planilla ya hizo la
+ *   consolidación: una fila es una tarea y una tarea es una OT. Juntar y separar
+ *   a mano siguen estando en la pantalla para el caso raro, pero el archivo no
+ *   los necesita.
+ * - **El renglón trae su rango de días.** «Fecha Desde» y «Fecha Hasta» van a
+ *   `fecha` y `fecha_hasta`. Medido sobre el archivo real de octubre, 18 de las
+ *   63 filas abarcan más de un día.
  *
- * EL CONTROL ES EL DE QUIEN CARGA, Y NO SE NEGOCIA: las horas del resumen
- * tienen que dar las del detalle. Si no cierran, **los renglones entran igual**
- * —no se pierde el trabajo de tipear el mes— pero **no se arma ningún grupo**, y
- * la respuesta dice con número de fila qué no cerró. Armar grupos sobre una
- * cuenta que no da manda horas a la OT equivocada sin que nadie lo note.
+ * EL CONTROL ES EL DE QUIEN CARGA: la suma de las horas de las filas tiene que
+ * dar el total declarado en la fila de TOTALES. Si no da, **los renglones entran
+ * igual** —no hay nada que retener, la tabla es el dato— y la respuesta lo dice
+ * con los dos números y la fila del total.
  */
 
 // Leer un .xlsx y escribir ~100 renglones es rápido, pero el default de la
@@ -262,8 +263,8 @@ export async function POST(request: Request) {
   const evidencia = {
     origen: "excel",
     archivo: planilla.name,
+    columnas: lectura.columnas,
     control: lectura.control,
-    grupos_leidos: lectura.grupos_leidos,
     problemas: lectura.problemas,
   };
 
@@ -293,13 +294,6 @@ export async function POST(request: Request) {
     fotoId = data.id;
   }
 
-  // ── Los grupos que el resumen ya dice ───────────────────────
-  const grupoDeLaFila = new Map<number, string>();
-  for (const grupo of gruposAJuntar(lectura.grupos)) {
-    const grupo_id = crypto.randomUUID();
-    for (const fila of grupo.filas) grupoDeLaFila.set(fila, grupo_id);
-  }
-
   const { data: guardados, error: errorGuardado } = await admin
     .from("mant_cuadernos_renglones")
     .insert(lectura.renglones.map((r, i) => ({
@@ -307,7 +301,9 @@ export async function POST(request: Request) {
       foto_id: fotoId,
       // La fila del Excel: es la única forma de volver del renglón a la planilla.
       linea: r.fila,
-      fecha: r.fecha,
+      fecha: r.desde,
+      // Null cuando la tarea duró un día: no es que falte, es que no existe.
+      fecha_hasta: r.hasta && r.hasta !== r.desde ? r.hasta : null,
       tarea: r.tarea,
       lugar_raw: null,
       sector_id: enganches[i].sector_id,
@@ -318,11 +314,11 @@ export async function POST(request: Request) {
       dudoso: r.dudoso,
       motivo_dudoso: r.motivo_dudoso,
       heredado: false,
-      grupo_id: grupoDeLaFila.get(r.fila) ?? null,
+      grupo_id: null,
     })))
     .select(
-      "id, cuaderno_id, foto_id, linea, fecha, tarea, lugar_raw, sector_id, sector_propuesto, equipo_id, " +
-      "horas, costo, dudoso, motivo_dudoso, heredado, grupo_id, orden_trabajo_id"
+      "id, cuaderno_id, foto_id, linea, fecha, fecha_hasta, tarea, lugar_raw, sector_id, sector_propuesto, " +
+      "equipo_id, horas, costo, dudoso, motivo_dudoso, heredado, grupo_id, orden_trabajo_id"
     );
   if (errorGuardado) {
     return NextResponse.json(
@@ -347,7 +343,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     foto_id: fotoId,
     renglones: guardados ?? [],
-    grupos: gruposAJuntar(lectura.grupos).length,
+    columnas: lectura.columnas,
     control: lectura.control,
     problemas,
   });
