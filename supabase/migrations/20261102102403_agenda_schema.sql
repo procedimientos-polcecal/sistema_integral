@@ -51,9 +51,13 @@
 -- los usuarios SE BORRAN DE VERDAD: `app/api/administracion/usuarios/[id]/route.ts`
 -- hace un `delete` real. Borrar una persona se lleva en silencio todos sus
 -- eventos y deja las copias vivas en el calendario de los invitados, sin ninguna
--- fila que las encuentre. LA RUTA DE BORRADO DE USUARIO NO LO CONTEMPLA HOY y
--- queda pendiente: tiene que borrar los eventos de Google de esa persona antes de
--- borrarla.
+-- fila que las encuentre. La ruta de borrado de usuario lo contempla con un
+-- FRENO y no con un borrado: `agenda_eventos.dueno_id` está en
+-- `TABLAS_CON_HISTORIAL` de `app/api/administracion/usuarios/[id]/route.ts`, así
+-- que quien tiene eventos devuelve 409 y la salida es desactivar la cuenta. NO
+-- borra los eventos de Google de esa persona; simplemente no deja llegar a la
+-- cascada. Y el freno existe recién cuando ESTA migración corre: antes, esa
+-- consulta falla, `count` llega en null y cuenta como cero (falla abierta).
 --
 -- EL EVENTO DE UNA OT NO ES LA AGENDA PERSONAL DE NADIE: PERTENECE A LA ORDEN
 -- (lo prueban los cinco invitados fijos que trae). Cuando una persona manda al
