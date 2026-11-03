@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
 import { revisarLaCasilla, tokenValido, conteoVacio, resumenDelConteo } from "@/lib/agenda/canales";
+import { avisarDeLasDivergencias } from "@/lib/agenda/avisoDeDivergencia";
 
 // Releer los eventos futuros de una casilla es una llamada a Google por evento.
 export const maxDuration = 60;
@@ -67,6 +68,20 @@ export async function POST(request: Request) {
     const conteo = conteoVacio();
     const divergencias = await revisarLaCasilla(supabase, canal.casilla, fallos, new Date(), conteo, limite);
 
+    // El aviso al instante: `divergencias` es lo que **esta** revisión acaba de
+    // anotar, y sólo eso, así que un aviso repetido de Google (un eco, o el mismo
+    // cambio dos veces) no vuelve a nombrar lo que ya se avisó. Una notificación
+    // por persona y no una por evento, dentro de 7:00–21:00 y sin encolar lo que
+    // cae afuera; por qué esto no pasa por `avisarAQuienDecide` está en el
+    // encabezado de `avisoDeDivergencia.ts`. **Nunca tira**: la divergencia ya
+    // quedó anotada y un push service caído no puede hacer que Google reintente.
+    const aviso = await avisarDeLasDivergencias(supabase, divergencias);
+    // Que no se haya podido avisar no se esconde: queda en la fila de abajo, con
+    // lo que dijo el error.
+    if (aviso.error) {
+      fallos.push(`${canal.casilla}: las divergencias quedaron anotadas pero no se pudo avisar: ${aviso.error}`);
+    }
+
     // Lo detectado contra lo anotado: si no coinciden queda escrito, con la casilla.
     // Una carrera legítima es `ok` con la frase; un predicado roto además va a
     // `fallos` y deja la fila en rojo. Ver `ConteoDeLaRevision`.
@@ -80,12 +95,11 @@ export async function POST(request: Request) {
       });
     }
 
-    // Acá se engancha el aviso al instante (Tarea 10): `divergencias` es lo que
-    // acaba de divergir, y sólo eso.
     return NextResponse.json({
       ok: true,
       casilla: canal.casilla,
       divergencias: divergencias.length,
+      aviso,
       conteo,
       fallos: fallos.length,
     });

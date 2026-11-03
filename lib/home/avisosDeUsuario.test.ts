@@ -98,3 +98,18 @@ describe("sinLoQueNoPuedeAtender — Seguridad e Higiene", () => {
     );
   });
 });
+
+describe("los avisos de la Agenda", () => {
+  it("el de salud va sólo a admin_sistema: nadie más puede arreglar un canal de Google", () => {
+    const salud = [avisoDe("agendaPasosCaidos")];
+    expect(sinLoQueNoPuedeAtender(salud, { ...NADA, evaluaSyh: true, apruebaCompras: true })).toEqual([]);
+    expect(sinLoQueNoPuedeAtender(salud, { ...NADA, administraElSistema: true })).toEqual(salud);
+  });
+
+  // El de divergencias es de cada uno y lo decide su propio conteo: filtrarlo
+  // por rol le sacaría el aviso al dueño de un evento que sólo usa la Agenda.
+  it("el de divergencias le llega a cualquiera que tenga alguna", () => {
+    const propias = [avisoDe("agendaDivergencias")];
+    expect(sinLoQueNoPuedeAtender(propias, NADA)).toEqual(propias);
+  });
+});

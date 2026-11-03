@@ -144,3 +144,25 @@ describe("avisosDeRitmo", () => {
     expect(avisosDeRitmo(ritmo, ["inventario"])).toEqual([]);
   });
 });
+
+describe("los avisos de la Agenda", () => {
+  it("las divergencias salen con id propio y llevan a la Agenda", () => {
+    expect(avisosDeConteos({ agendaDivergencias: 2 })).toEqual([
+      {
+        id: "agenda-divergencias",
+        titulo: "Eventos del calendario que alguien cambió desde Google",
+        cantidad: 2,
+        href: "/agenda",
+      },
+    ]);
+  });
+
+  it("la salud sale con otro id, aparte: dos conteos distintos no comparten id", () => {
+    const avisos = avisosDeConteos({ agendaDivergencias: 1, agendaPasosCaidos: 1 });
+    expect(avisos.map((a) => a.id)).toEqual(["agenda-divergencias", "agenda-pasos-caidos"]);
+  });
+
+  it("con cero no avisan", () => {
+    expect(avisosDeConteos({ agendaDivergencias: 0, agendaPasosCaidos: 0 })).toEqual([]);
+  });
+});
