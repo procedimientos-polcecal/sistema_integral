@@ -552,9 +552,26 @@ faltantes. Contados de la segunda manera dan 44 en vez de 23, y ese 44 estuvo
 en este documento hasta el 29/10/2026.
 
 Un resultado lejos de eso es un error de la importación, no una novedad de la
-planta. **La utilización de Filler 2 sube a 87 % si alguien marca sus 34 días en
-cero como planta parada**, y eso es correcto: la diferencia entre los dos
-números es exactamente la decisión humana que el sistema no puede tomar solo.
+planta.
+
+**Corrección del 03/11/2026, porque este documento decía algo falso y de acá se
+copió a `docs/PRODUCCION.md`.** Decía que "la utilización de Filler 2 sube a
+87 % si alguien marca sus 34 días en cero como planta parada". No es cierto por
+dos razones:
+
+- **Marcar "planta parada" no mueve ningún indicador.** `indicadoresDe` recibe
+  los turnos y los días no operativos; las paradas no entran en esa cuenta.
+  Lo único que hace esa marca es sacar los cuatro turnos de la cola de lo que
+  falta explicar.
+- **Y el 87 % tampoco es el número de esos 34 días.** Medido sobre las 1.054
+  filas de Filler 2: con la regla puesta da **65,3 %**; tratando los 34 días
+  con las cuatro filas en cero como no operativos daría **75,0 %**; y
+  descartando los 282 turnos en cero uno por uno daría **87,8 %**. El 87 % era
+  este último, atribuido por error a los 34 días.
+
+Lo que sigue siendo cierto, y es lo que esa frase quería decir, es que **el
+sistema no puede inferir solo si un día en cero fue planta cerrada o un molino
+que no molió**, y por eso la marca la pone una persona.
 
 ## Lo que falta decidir fuera de este documento
 

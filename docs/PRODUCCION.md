@@ -394,9 +394,21 @@ distingue de uno bien. Están fijadas como tests con los casos reales en
    muele un martes alguien lo tiene que explicar. Para el caso real que esa
    regla deja afuera —el domingo, el feriado, la parada de planta programada—
    hay una salida explícita: **una persona marca el día como "planta parada"**,
-   que cubre los cuatro turnos de una vez. El sistema no lo infiere porque no
-   puede: la utilización de Filler 2 sube a 87 % si se marcan esos 34 días, y esa
-   diferencia es exactamente la decisión humana.
+   que cubre los cuatro turnos de una vez.
+
+   **Y acá hay que ser preciso, porque la versión anterior de este párrafo
+   decía algo falso.** Marcar "planta parada" **no mueve ningún indicador**:
+   `indicadoresDe` recibe los turnos y los días no operativos, y las paradas no
+   entran nunca en esa cuenta. Lo único que hace esa marca es **sacar los
+   cuatro turnos de la cola de lo que falta explicar**. La utilización de
+   Filler 2 sigue dando lo mismo antes y después de marcarlos.
+
+   Lo que sí cambiaría el número es haber elegido otra regla, y por eso
+   conviene tener los tres a mano (medidos el 03/11/2026 sobre las 1.054 filas
+   de Filler 2): **65,3 %** con la regla que está puesta; **75,0 %** si los 34
+   días con las cuatro filas en cero se trataran como no operativos; y
+   **87,8 %** si se descartaran los 282 turnos en cero, uno por uno. El 87 %
+   que figuraba acá era este último, atribuido por error a los 34 días.
 4. **Un turno que falta se acumula en el siguiente.** Cuando el robot no corta
    un turno, sus minutos y sus kilos aparecen en la fila que sigue, y esa fila
    mide más que su duración teórica (hay una de 1.013 minutos en un bloque de
@@ -455,9 +467,16 @@ normaliza por su propia suma y nunca por `kg`.**
 El zip es una foto completa desde febrero, no las novedades, así que la
 importación **no acumula: reconcilia**, y correrla dos veces no cambia nada
 (releer el mismo zip escribe 0 filas; se comprobó contra la base real). Corre por
-cron a las 13:00 UTC y con un botón, y lee la carpeta de Drive de la variable
+cron a las 13:00 UTC, y lee la carpeta de Drive de la variable
 `GOOGLE_DRIVE_PCROBOT_FOLDER_ID` (con `supportsAllDrives=true`: sin eso Drive
-contesta 404 sin explicar). Tres frenos que no son opcionales:
+contesta 404 sin explicar).
+
+**Y hay una ruta para correrla a mano, `POST /api/produccion/molinos/importar`,
+que ninguna pantalla llama todavía.** Está escrita y probada, pero no tiene
+botón: quien la quiera usar hoy la invoca directo. Este documento decía "y con
+un botón" y eso mandaba a buscar a la pantalla algo que no existe.
+
+Tres frenos que no son opcionales:
 
 - **Lo que una persona cargó no se pisa nunca.** El motivo, la OT y la marca de
   planta parada viven en `produccion_molino_paradas`, y la importación **no
