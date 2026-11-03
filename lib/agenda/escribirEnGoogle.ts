@@ -12,7 +12,7 @@ import type { Divergencia } from "./divergencia";
  * no tienen tests en este repo. Las rutas leen, llaman y guardan.
  */
 
-export type AccionEnGoogle = "crear" | "reintentar" | "actualizar" | "restaurar" | "borrar";
+export type AccionEnGoogle = "crear" | "actualizar" | "restaurar" | "borrar";
 
 export interface FilaParaGoogle {
   casilla: string;
@@ -66,26 +66,23 @@ function comoEscrito(e: EventoEnGoogle): ResultadoDeEscritura {
  * con lo que dijo Google, sin traducir, y quien llama lo guarda y se lo dice a
  * la persona. Un diagnóstico que no se distingue de otro no es un diagnóstico.
  *
- * LAS CINCO ACCIONES
+ * LAS CUATRO ACCIONES
  *
  * - `crear` usa el `id` del evento (`evento.id`, o el `google_event_id` de la
- *   fila si ya había uno): con id propio crear es idempotente. Es para un alta
- *   **nueva**, cuyo id no pudo existir antes. Google reserva el id **también de
- *   un evento borrado**: si lo que vuelve está cancelado, se restaura, porque lo
- *   que se pidió es un evento vivo.
- * - `reintentar` es `crear` seguido **siempre** de un `PUT` (`restaurar`), y es
- *   para quien vuelve a escribir un alta que pudo haber entrado: la fila sin
- *   `google_event_id` que se edita, el cron de pendientes. Ante un id que ya
+ *   fila si ya había uno), así que crear es idempotente y **sirve igual para el
+ *   alta nueva y para reintentarla** (la fila sin `google_event_id` que se
+ *   edita, el cron de pendientes): no hay que elegir un verbo. Ante un id que ya
  *   existe, `crearEvento` toma el 409 por «ya estaba» y **devuelve el evento
- *   viejo sin aplicarle el cuerpo nuevo**, y desde afuera es indistinguible de
- *   una creación recién hecha. Darlo por bueno dejaría la fila y Google
- *   distintos para siempre, sin divergencia (`inicio_escrito` sería lo viejo de
- *   Google) y sin pendiente. **No se compara lo que volvió con lo que se mandó**,
- *   a propósito: lo que Google devuelve no alcanza para saber si algo cambió
- *   (no trae descripción ni lugar), y una comparación incompleta es peor que
- *   ninguna, porque decide «no hace falta» sobre información que no tiene. El
- *   costo es un `PUT` de más —y un aviso de modificación a los invitados— en un
- *   camino que casi no se recorre.
+ *   viejo sin aplicarle el cuerpo nuevo**; lo marca con `yaEstaba`, y acá eso se
+ *   pisa entero con un `PUT` (`restaurar`). Darlo por bueno dejaría la fila y
+ *   Google distintos para siempre, sin divergencia (`inicio_escrito` sería lo
+ *   viejo de Google) y sin pendiente. Lo mismo si lo que vuelve está cancelado:
+ *   Google reserva el id **también de un evento borrado**, y lo que se pidió es
+ *   un evento vivo. Un alta nueva no paga el `PUT` ni manda un segundo aviso.
+ *   **No se compara lo que volvió con lo que se mandó**, a propósito: lo que
+ *   Google devuelve no alcanza para saber si algo cambió (no trae descripción ni
+ *   lugar), y una comparación incompleta es peor que ninguna, porque decide «no
+ *   hace falta» sobre información que no tiene.
  * - `actualizar` es un `PATCH`, y **sobre un evento borrado miente**: contesta
  *   200 y lo deja cancelado. Si lo que vuelve está cancelado, no es una
  *   escritura que salió bien sino una divergencia por borrado
@@ -118,12 +115,13 @@ export async function escribirEnGoogle(
       return { pendiente: `Falta el evento para ${accion} en Google: es un error del SdG, no de Google` };
     }
 
-    if (accion === "crear" || accion === "reintentar") {
+    if (accion === "crear") {
       const id = evento.id ?? fila.google_event_id ?? undefined;
       const creado = await crearEvento(fila.casilla, { ...evento, id });
-      // Un evento cancelado es un id reservado y borrado: se restaura siempre.
-      // `reintentar` pisa también el vivo: ver el docstring.
-      if (creado.cancelado || accion === "reintentar") {
+      // Un alta nueva se anota tal cual. Si ya estaba, o está cancelado (un id
+      // reservado y borrado), lo que volvió NO es lo que se pidió: se pisa
+      // entero con el `PUT`. Ver el docstring.
+      if (creado.yaEstaba || creado.cancelado) {
         return await restaurar(fila.casilla, creado.id, evento);
       }
       return comoEscrito(creado);
@@ -145,8 +143,19 @@ export async function escribirEnGoogle(
   }
 }
 
+/**
+ * `PUT` sobre un evento que **ya existe en Google** (se llega acá con su id), así
+ * que los dos caminos de fallo —la excepción y el cancelado— devuelven el
+ * `google_event_id`: omitirlo en uno dejaría a la fila sin saber dónde está un
+ * evento que Google sí tiene.
+ */
 async function restaurar(casilla: string, id: string, evento: EventoParaGoogle): Promise<ResultadoDeEscritura> {
-  const r = await restaurarEvento(casilla, id, evento);
+  let r: EventoEnGoogle;
+  try {
+    r = await restaurarEvento(casilla, id, evento);
+  } catch (e) {
+    return { google_event_id: id, pendiente: textoDelFallo(e) || SIN_MENSAJE };
+  }
   if (r.cancelado) {
     return {
       google_event_id: id,
@@ -172,7 +181,21 @@ async function restaurar(casilla: string, id: string, evento: EventoParaGoogle):
  * su test.
  */
 
-/** El fallo de una escritura, o `null` para limpiarlo. Un texto vacío no es «sin fallo»: se anota igual. */
+/**
+ * El fallo de una escritura, o `null` para limpiarlo. Un texto vacío no es «sin
+ * fallo»: se anota igual.
+ *
+ * **OBLIGACIÓN PARA QUIEN REINTENTA LOS PENDIENTES (el cron de la Tarea 9):
+ * UN EVENTO DIVERGIDO PUEDE TENER `google_pendiente`, y hay que mirar
+ * `divergencia` ANTES de reintentar.** Por el camino normal no pasaba —a un
+ * evento divergido el PATCH a propósito no le escribe nada en Google—, pero el
+ * PATCH anota un pendiente cuando falla el guardado de los invitados, y lo hace
+ * antes de llegar a la rama de divergencia. Un reintento que no mire
+ * `divergencia` primero pisa en Google lo que una persona hizo del otro lado,
+ * que es exactamente lo que este diseño decidió no hacer. Con `divergencia`
+ * puesta, el pendiente no se reintenta: lo resuelve `destrabar`, que además lo
+ * limpia.
+ */
 export function parPendiente(texto: string | null, ahora: string) {
   if (texto === null) return { google_pendiente: null, google_pendiente_el: null };
   return { google_pendiente: texto || SIN_MENSAJE, google_pendiente_el: ahora };

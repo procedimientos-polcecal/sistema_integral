@@ -71,6 +71,13 @@ export interface EventoEnGoogle {
   cancelado: boolean;
   titulo?: string;
   invitados: { email: string; respuesta?: string }[];
+  /**
+   * Sólo lo pone `crearEvento`, y sólo en su rama del 409: ese id ya existía, así
+   * que lo que vuelve **es el evento que había y no el que se pidió**. Sin esto
+   * una alta nueva y un «ya estaba» son indistinguibles desde afuera, y quien
+   * reintenta una escritura daría por buenos los datos viejos de Google.
+   */
+  yaEstaba?: true;
 }
 
 /** Misma cota que `lib/core/sheets.ts`; ver el porqué en su `CORTE_MS`. */
@@ -204,7 +211,10 @@ const ID_VALIDO = /^[a-v0-9]{5,1024}$/;
 
 /**
  * Con `evento.id`, crear es idempotente: un 409 es que ese id ya existe, o sea
- * que el intento anterior sí entró, y se devuelve el evento leyéndolo. Ojo: Google
+ * que el intento anterior sí entró, y se devuelve el evento leyéndolo, **con
+ * `yaEstaba: true` y sin aplicarle el cuerpo que se pasó**: quien reintenta una
+ * escritura tiene que pisarlo (`restaurarEvento`) o daría por buenos los datos
+ * viejos de Google. Ojo: Google
  * reserva el id también de un evento borrado, así que el 409 puede traer un
  * evento con `cancelado: true`; quien llama tiene que mirarlo. Sin `id`, un 409
  * se propaga como cualquier otro error.
@@ -224,7 +234,7 @@ export async function crearEvento(casilla: string, evento: EventoParaGoogle): Pr
   });
   if (res.status === 409 && evento.id) {
     const existente = await leerEvento(casilla, evento.id);
-    if (existente) return existente;
+    if (existente) return { ...existente, yaEstaba: true };
   }
   if (!res.ok) throw await fallo(res, "escribir");
   return recortar(await res.json());

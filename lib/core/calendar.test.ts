@@ -110,6 +110,12 @@ describe("crearEvento con id propio", () => {
     expect(pedido().cuerpo.id).toBe(ID);
   });
 
+  it("un alta nueva no viene marcada como «ya estaba»", async () => {
+    fetchMock.mockResolvedValue(json(200, { id: ID, status: "confirmed" }));
+    const evento = await crearEvento("ana@polcecal.com", { ...EVENTO, id: ID });
+    expect(evento.yaEstaba).toBeUndefined();
+  });
+
   it("sin id no manda ninguno", async () => {
     fetchMock.mockResolvedValue(json(200, { id: "e1" }));
     await crearEvento("ana@polcecal.com", EVENTO);
@@ -124,6 +130,8 @@ describe("crearEvento con id propio", () => {
 
     expect(evento.id).toBe(ID);
     expect(evento.cancelado).toBe(false);
+    // Lo que distingue «ya estaba» de un alta nueva: el cuerpo pedido NO se aplicó.
+    expect(evento.yaEstaba).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(pedido(1).metodo).toBe("GET");
     expect(pedido(1).url).toBe(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${ID}`);

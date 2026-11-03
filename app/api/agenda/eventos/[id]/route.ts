@@ -174,11 +174,11 @@ export async function PATCH(
       actual.casilla
     );
     // Sin id en Google es que el alta no llegó a anotarse, y pudo haber entrado:
-    // se reintenta con `reintentar` y no con `crear`, que ante un id que ya
-    // existe devolvería el evento viejo sin aplicarle este cambio.
+    // se reintenta crear, y con el id derivado de la fila es idempotente. Si el
+    // evento ya estaba, `escribirEnGoogle` lo pisa con este cambio.
     const sinEscribir = !actual.google_event_id;
     const resultado = await escribirEnGoogle(
-      sinEscribir ? "reintentar" : "actualizar",
+      sinEscribir ? "crear" : "actualizar",
       { casilla: actual.casilla, google_event_id: actual.google_event_id, inicio, fin },
       sinEscribir ? { ...evento, id: idDeGoogleDe(id) } : evento
     );
