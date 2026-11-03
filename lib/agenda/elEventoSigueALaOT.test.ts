@@ -589,7 +589,6 @@ describe("quién se comió el tiempo", () => {
     const { cliente } = clienteFalso({
       eventos: [1, 2, 3].map((n) => FILA_DE_EVENTO({
         id: `0000000${n}-89ab-cdef-0123-456789abcdef`, ot_id: `ot-${n}`,
-        ordenes_trabajo: { ot_number: 2900 + n },
       })),
     });
 
@@ -600,7 +599,7 @@ describe("quién se comió el tiempo", () => {
     expect(borrarEvento).toHaveBeenCalledTimes(1);
     expect([...r.keys()].sort()).toEqual(["ot-2", "ot-3"]);
     for (const id of ["ot-2", "ot-3"]) {
-      expect(r.get(id)).toContain("se lo llevó la OT 2901, cuyo borrado tardó 35 s");
+      expect(r.get(id)).toContain("se lo llevó la OT ot-1, cuyo borrado tardó 35 s");
     }
   });
 
@@ -609,28 +608,33 @@ describe("quién se comió el tiempo", () => {
     vi.mocked(borrarEvento).mockImplementation(async () => { t += 35_000; throw new Error("timeout de Google"); });
     const { cliente } = clienteFalso({
       eventos: [1, 2].map((n) => FILA_DE_EVENTO({
-        id: `0000000${n}-89ab-cdef-0123-456789abcdef`, ot_id: `ot-${n}`, ordenes_trabajo: [{ ot_number: 2900 + n }],
+        id: `0000000${n}-89ab-cdef-0123-456789abcdef`, ot_id: `ot-${n}`,
       })),
     });
     const r = await borrarLosEventosDeLasOT(cliente, ["ot-1", "ot-2"], {
       presupuesto: presupuestoDeGoogle(60_000, () => t).borrar, reloj: () => t,
     });
     expect(r.get("ot-1")).toContain("timeout de Google");
-    expect(r.get("ot-2")).toContain("OT 2901");
+    expect(r.get("ot-2")).toContain("OT ot-1");
   });
 
-  it("sin número de orden legible, nombra el id en vez de callar", async () => {
-    let t = 0;
-    vi.mocked(borrarEvento).mockImplementation(async () => { t += 35_000; });
-    const { cliente } = clienteFalso({
-      eventos: [1, 2].map((n) => FILA_DE_EVENTO({
-        id: `0000000${n}-89ab-cdef-0123-456789abcdef`, ot_id: `ot-${n}`, ordenes_trabajo: null,
-      })),
-    });
-    const r = await borrarLosEventosDeLasOT(cliente, ["ot-1", "ot-2"], {
-      presupuesto: presupuestoDeGoogle(60_000, () => t).borrar, reloj: () => t,
-    });
-    expect(r.get("ot-2")).toContain("OT ot-1");
+  it("el select del borrado no pide ningún embed: no depende de que `ordenes_trabajo!ot_id` resuelva", async () => {
+    vi.mocked(borrarEvento).mockResolvedValue();
+    const { cliente } = clienteFalso({ eventos: [FILA_DE_EVENTO()] });
+    // `clienteFalso` no guarda el texto del select, así que se espía acá.
+    const selects: string[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const c = cliente as any;
+    const desde = c.from.bind(c);
+    c.from = (tabla: string) => {
+      const q = desde(tabla);
+      const select = q.select;
+      q.select = (columnas: string) => { selects.push(columnas); return select.call(q, columnas); };
+      return q;
+    };
+    await borrarLosEventosDeLasOT(cliente, ["ot-1"]);
+    expect(selects.length).toBeGreaterThan(0);
+    expect(selects.join(" ")).not.toContain("ordenes_trabajo");
   });
 
   it("si nadie agotó el presupuesto no se nombra a nadie", async () => {

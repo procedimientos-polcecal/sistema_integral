@@ -325,7 +325,9 @@ export interface OpcionesDeLaPasada {
 }
 
 /**
- * Cómo se nombra a quien se comió el tiempo: «OT 2910, cuyo borrado tardó 31 s». `ot` es el número de la orden o, si no se pudo leer, lo que
+ * Cómo se nombra a quien se comió el tiempo: «OT 2910, cuyo borrado tardó 31 s». El
+ * movimiento la nombra por número (`seguirALasOT` ya tiene la orden en la mano); el
+ * borrado, por id. `ot` es el número de la orden o, si no se pudo leer, lo que
  * haya (un id). **Existe porque una OT cuyo `DELETE` da timeout consume su parte
  * del presupuesto en cada corrida, y las que están detrás no se borran**:
  * está aceptado como limitación, pero tiene que poder leerse en
@@ -670,7 +672,7 @@ export async function borrarLosEventosDeLasOT(
 
     const { data, error } = await cliente
       .from("agenda_eventos")
-      .select("id, ot_id, casilla, google_event_id, inicio, fin, ordenes_trabajo!ot_id(ot_number)")
+      .select("id, ot_id, casilla, google_event_id, inicio, fin")
       .in("ot_id", lote);
     if (error) {
       for (const id of lote) {
@@ -681,7 +683,6 @@ export async function borrarLosEventosDeLasOT(
 
     for (const ev of (data ?? []) as {
       id: string; ot_id: string; casilla: string; google_event_id: string | null; inicio: string; fin: string;
-      ordenes_trabajo?: { ot_number: number } | { ot_number: number }[] | null;
     }[]) {
       // Las OT del lote sin evento no cuestan nada y se borran igual; la que
       // tiene evento y no alcanza el tiempo se queda.
@@ -699,10 +700,10 @@ export async function borrarLosEventosDeLasOT(
       // El primero que deja el presupuesto agotado es quien se lo comió: sea porque
       // falló o porque salió bien pero lento, es el que hay que ir a mirar.
       if (seComioElTiempo === null && presupuesto.agotado()) {
-        const orden = Array.isArray(ev.ordenes_trabajo) ? ev.ordenes_trabajo[0] : ev.ordenes_trabajo;
-        seComioElTiempo = quienSeComioElTiempo(
-          orden ? `OT ${orden.ot_number}` : `OT ${ev.ot_id}`, "borrado", reloj() - desde
-        );
+        // Por id y no por número de orden, a propósito: leer el número pediría un embed en
+        // este `select`, y si no resolviera en producción **ninguna OT se borraría**. Un
+        // texto más legible no vale poner el borrado de espejo a depender de eso.
+        seComioElTiempo = quienSeComioElTiempo(`OT ${ev.ot_id}`, "borrado", reloj() - desde);
       }
       if (!r.pendiente) continue;
 
