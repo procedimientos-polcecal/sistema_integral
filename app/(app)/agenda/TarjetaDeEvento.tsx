@@ -42,7 +42,7 @@ export default function TarjetaDeEvento({
   const deUnaOT = e.otId !== null;
 
   return (
-    <div className="card overflow-hidden" style={pasado ? { opacity: 0.8 } : undefined}>
+    <div className="card overflow-hidden">
       {e.divergencia && (
         <PanelDeDivergencia
           evento={e} dueno={dueno} esMio={esMio} p={p}
@@ -50,7 +50,9 @@ export default function TarjetaDeEvento({
         />
       )}
 
-      <div className="space-y-3 p-4">
+      {/* La atenuación de un evento pasado va acá y no en la tarjeta: el panel de
+          divergencia de arriba es la alerta, y no se baja. */}
+      <div className="space-y-3 p-4" style={pasado ? { opacity: 0.8 } : undefined}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
             <h3 className="break-words text-base font-semibold text-slate-900">{e.titulo}</h3>
@@ -200,9 +202,14 @@ function PanelDeDivergencia({
           {!p.puedeAceptar && (
             <p className="text-slate-600">
               «Aceptar lo de Google» no está disponible:{" "}
-              {deUnaOT
-                ? "para una orden de trabajo la verdad es la orden, y aceptar un horario de Google lo cambiaría acá para que la próxima sincronización lo vuelva a pisar."
-                : "Google no tiene un horario para aceptar. Si ya no lo querés, borralo."}
+              {/* `borrado` se pregunta primero y no es un detalle: el motivo ahí es que
+                  Google no tiene horario porque el evento no está, también en una OT. Con
+                  `deUnaOT` adelante, un evento de OT borrado explicaba un motivo falso. */}
+              {borrado
+                ? deUnaOT
+                  ? "Google no tiene un horario para aceptar porque el evento no está. Para volver a ponerlo, «Volver a poner lo del sistema»."
+                  : "Google no tiene un horario para aceptar porque el evento no está. Para volver a ponerlo, «Volver a poner lo del sistema»; si ya no lo querés, borralo."
+                : "para una orden de trabajo la verdad es la orden, y aceptar un horario de Google lo cambiaría acá para que la próxima sincronización lo vuelva a pisar."}
             </p>
           )}
         </div>

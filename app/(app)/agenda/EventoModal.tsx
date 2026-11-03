@@ -4,7 +4,10 @@ import { useState } from "react";
 import Select from "@/components/Select";
 import { esCorreo } from "@/lib/agenda/evento";
 import { hoyEnArgentina } from "@/lib/core/fechas";
-import { diaYHoraDe, leerRespuestaDeEscritura, type EventoVista } from "@/lib/agenda/vista";
+import {
+  cruzaLaMedianoche, diaYHoraDe, horarioDelEvento, horarioParaGuardar, leerRespuestaDeEscritura,
+  type EventoVista, type HorarioDelFormulario,
+} from "@/lib/agenda/vista";
 
 export interface UsuarioInvitable {
   email: string;
@@ -48,6 +51,11 @@ export default function EventoModal({
   onFallo: () => void;
 }) {
   const inicial = evento ? { i: diaYHoraDe(evento.inicio), f: diaYHoraDe(evento.fin) } : null;
+  // Lo que el formulario cargó, para mandar al guardar sólo lo que se cambió.
+  const [original] = useState<HorarioDelFormulario | null>(
+    inicial ? { dia: inicial.i.dia, desde: inicial.i.hora, hasta: inicial.f.hora } : null
+  );
+  const cruza = evento ? cruzaLaMedianoche(evento.inicio, evento.fin) : false;
 
   const [titulo, setTitulo] = useState(evento?.titulo ?? "");
   const [dia, setDia] = useState(inicial?.i.dia ?? hoyEnArgentina());
@@ -94,8 +102,8 @@ export default function EventoModal({
           titulo,
           descripcion,
           lugar,
-          inicio: `${dia}T${desde}`,
-          fin: `${dia}T${hasta}`,
+          // Sólo el horario que se tocó: ver `horarioParaGuardar`.
+          ...horarioParaGuardar(original, { dia, desde, hasta }),
           invitados: sumados,
         }),
       });
@@ -126,6 +134,14 @@ export default function EventoModal({
           <p className="rounded-lg border px-3 py-2 text-sm text-slate-800" style={{ background: "#FFFBEB", borderColor: "#FCD34D" }}>
             Este evento está divergido: lo cambiaron desde Google. Lo que guardes se guarda en el SdG pero{" "}
             <strong>no se escribe en Google</strong> hasta que lo destrabes.
+          </p>
+        )}
+
+        {cruza && evento && (
+          <p className="rounded-lg border px-3 py-2 text-sm text-slate-800" style={{ background: "#FFFBEB", borderColor: "#FCD34D" }}>
+            Este evento cruza la medianoche ({horarioDelEvento(evento.inicio, evento.fin)}) y el formulario es de un
+            solo día. Mientras no toques el día ni las horas, el horario se queda como está. Si cambiás el día o la
+            hora de fin, el evento va a terminar el mismo día en que empieza.
           </p>
         )}
 

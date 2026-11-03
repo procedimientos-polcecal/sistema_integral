@@ -31,9 +31,11 @@ import TarjetaDeEvento from "./TarjetaDeEvento";
  * queda arriba, con lo que Google dijo, hasta que alguien lo cierre.
  */
 export default function AgendaClient({
-  eventos, miId, ahoraIso, usuarios, numerosDeOT, historial,
+  eventos, miId, ahoraIso, usuarios, numerosDeOT, historial, lecturaFallo,
 }: {
   eventos: EventoVista[];
+  /** La lectura de eventos falló: la lista vacía no quiere decir «no hay». */
+  lecturaFallo: boolean;
   miId: string;
   /** El «ahora» del servidor, para que próximos y pasados no cambien entre el render del servidor y el del navegador. */
   ahoraIso: string;
@@ -166,8 +168,10 @@ export default function AgendaClient({
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Próximos</h2>
+        {/* Con la lectura fallida no se dicen los estados vacíos: «falló» y «no
+            hay» son dos cosas distintas, y juntas la persona cree la que le conviene. */}
         {proximos.length === 0 ? (
-          <p className="text-sm text-slate-500">No tenés eventos por venir.</p>
+          !lecturaFallo && <p className="text-sm text-slate-500">No tenés eventos por venir.</p>
         ) : (
           <div className="space-y-3">{proximos.map((e) => tarjeta(e, false))}</div>
         )}
@@ -176,9 +180,11 @@ export default function AgendaClient({
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Anteriores</h2>
         {pasados.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            {historial ? "No hay eventos anteriores." : `No hay eventos de los últimos ${DIAS_DE_HISTORIAL} días.`}
-          </p>
+          !lecturaFallo && (
+            <p className="text-sm text-slate-500">
+              {historial ? "No hay eventos anteriores." : `No hay eventos de los últimos ${DIAS_DE_HISTORIAL} días.`}
+            </p>
+          )
         ) : (
           <div className="space-y-3">{pasados.map((e) => tarjeta(e, true))}</div>
         )}

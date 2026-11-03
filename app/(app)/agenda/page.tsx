@@ -121,6 +121,7 @@ export default async function AgendaPage({
         usuarios={invitables}
         numerosDeOT={numerosDeOT}
         historial={historial}
+        lecturaFallo={errorDeEventos !== ""}
       />
     </div>
   );

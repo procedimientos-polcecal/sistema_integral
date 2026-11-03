@@ -251,6 +251,47 @@ export function diaYHoraDe(instanteIso: string): { dia: string; hora: string } {
   return { dia: fechaEnArgentina(t), hora: ahoraEnArgentina(t).slice(11) };
 }
 
+/** El horario de pared como lo edita el modal: un día y dos horas. */
+export interface HorarioDelFormulario {
+  dia: string;
+  desde: string;
+  hasta: string;
+}
+
+/**
+ * Qué parte del horario hay que mandar al guardar una edición.
+ *
+ * **Sólo lo que la persona tocó.** El formulario es de un solo día y reconstruye
+ * `inicio` y `fin` como `dia` + hora, así que mandarlos siempre acortaría en
+ * silencio un evento que cruza la medianoche —23:00 a 01:00, posible si vino de
+ * Google y alguien lo aceptó— con sólo corregirle el título, y la ruta lo
+ * reescribiría **también en Google**. `inicio` va si cambió el día o la hora de
+ * inicio; `fin`, si cambió el día o la hora de fin. En un alta (`original`
+ * null) van los dos.
+ *
+ * Queda un caso sin resolver y por eso el modal avisa: si el original cruza la
+ * medianoche y se cambia el **día**, `fin` se reconstruye en el mismo día que
+ * `inicio`.
+ */
+export function horarioParaGuardar(
+  original: HorarioDelFormulario | null,
+  actual: HorarioDelFormulario
+): { inicio?: string; fin?: string } {
+  const inicio = `${actual.dia}T${actual.desde}`;
+  const fin = `${actual.dia}T${actual.hasta}`;
+  if (!original) return { inicio, fin };
+  const cambioElDia = actual.dia !== original.dia;
+  return {
+    ...(cambioElDia || actual.desde !== original.desde ? { inicio } : {}),
+    ...(cambioElDia || actual.hasta !== original.hasta ? { fin } : {}),
+  };
+}
+
+/** ¿Empieza un día y termina otro (hora de Argentina)? El formulario no lo puede expresar. */
+export function cruzaLaMedianoche(inicioIso: string, finIso: string): boolean {
+  return diaYHoraDe(inicioIso).dia !== diaYHoraDe(finIso).dia;
+}
+
 /**
  * «mar 03/11/2026 · 08:00 a 09:30». Si el evento cruza la medianoche —no se
  * crea así desde la pantalla, pero Google lo permite y «aceptar» lo trae— se

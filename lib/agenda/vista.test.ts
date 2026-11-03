@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  aEventoVista, corteDelHistorial, DIAS_DE_HISTORIAL, horarioDelEvento, leerRespuestaDeEscritura,
+  aEventoVista, corteDelHistorial, cruzaLaMedianoche, DIAS_DE_HISTORIAL, horarioDelEvento, horarioParaGuardar,
+  leerRespuestaDeEscritura,
   nombreDelDueno, permisosDelEvento, separarProximosYPasados, type EventoVista, type FilaCruda,
 } from "./vista";
 
@@ -166,6 +167,41 @@ describe("leerRespuestaDeEscritura: las cinco respuestas, una lectura", () => {
   it("destrabar y visto no traen google", () => {
     expect(leerRespuestaDeEscritura(200, { data: null, advertencia: "Recargá la pantalla." }).advertencia).toBe("Recargá la pantalla.");
     expect(leerRespuestaDeEscritura(200, { data: { vista: true } }).advertencia).toBeNull();
+  });
+});
+
+describe("horarioParaGuardar: editar el título no toca el horario", () => {
+  const original = { dia: "2026-11-03", desde: "23:00", hasta: "01:00" };
+
+  it("sin tocar día ni horas no manda ni inicio ni fin", () => {
+    // El evento de 23:00 a 01:00 de arriba se acortaría si se mandara reconstruido.
+    expect(horarioParaGuardar(original, { ...original })).toEqual({});
+  });
+  it("tocar sólo la hora de inicio manda sólo el inicio", () => {
+    expect(horarioParaGuardar(original, { ...original, desde: "22:00" })).toEqual({ inicio: "2026-11-03T22:00" });
+  });
+  it("tocar sólo la hora de fin manda sólo el fin", () => {
+    expect(horarioParaGuardar(original, { ...original, hasta: "02:00" })).toEqual({ fin: "2026-11-03T02:00" });
+  });
+  it("cambiar el día manda los dos", () => {
+    expect(horarioParaGuardar(original, { ...original, dia: "2026-11-04" })).toEqual({
+      inicio: "2026-11-04T23:00",
+      fin: "2026-11-04T01:00",
+    });
+  });
+  it("un alta manda los dos", () => {
+    expect(horarioParaGuardar(null, { dia: "2026-11-03", desde: "09:00", hasta: "10:00" })).toEqual({
+      inicio: "2026-11-03T09:00",
+      fin: "2026-11-03T10:00",
+    });
+  });
+});
+
+describe("cruzaLaMedianoche", () => {
+  it("lo ve en hora de Argentina y no en UTC", () => {
+    // 02:00Z a 03:30Z son las 23:00 y las 00:30 de Argentina: cruza, aunque en UTC no.
+    expect(cruzaLaMedianoche("2026-11-04T02:00:00Z", "2026-11-04T03:30:00Z")).toBe(true);
+    expect(cruzaLaMedianoche("2026-11-03T11:00:00Z", "2026-11-03T12:30:00Z")).toBe(false);
   });
 });
 
