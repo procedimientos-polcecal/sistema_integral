@@ -61,11 +61,16 @@ export interface EventoParaGoogle {
   inicio: string;
   fin: string;
   /**
-   * **`undefined` no toca los invitados; `[]` los vacía.** En un PATCH, mandar
-   * `attendees: []` borra a todos y les manda la cancelación, así que quien no
-   * sabe quiénes son (una lectura que volvió sin filas) tiene que dejarlo
-   * `undefined` y no mandar una lista vacía. Un PUT (`restaurarEvento`) sí los
-   * pierde si faltan: es un reemplazo entero.
+   * **`undefined` quiere decir cosas distintas según el verbo, y no se unifica.**
+   * En un PATCH (`actualizarEvento`), omitir `attendees` es «no los toques», y
+   * `[]` los borra a todos y les manda la cancelación: quien no sabe quiénes son
+   * (una lectura que volvió sin filas) lo deja `undefined`. En un PUT
+   * (`restaurarEvento`, que también es lo que usa `crearEvento` cuando el id ya
+   * estaba), omitir es «no hay»: reemplaza el recurso entero y pierde a los
+   * invitados con la misma cancelación. Por eso **quien va a hacer un PUT con
+   * `undefined` tiene que leer antes los invitados de Google y reusarlos**
+   * (`moverElEvento` lo hace); negarse a escribir dejaría el evento pendiente
+   * para siempre, porque el reintento se encontraría con lo mismo.
    */
   invitados?: string[];
 }

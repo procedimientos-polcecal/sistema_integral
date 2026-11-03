@@ -8,7 +8,7 @@ vi.mock("@/lib/core/calendar", () => ({
   leerEvento: vi.fn(),
 }));
 
-import { crearEvento, actualizarEvento, borrarEvento } from "@/lib/core/calendar";
+import { crearEvento, actualizarEvento, restaurarEvento, borrarEvento, leerEvento } from "@/lib/core/calendar";
 import {
   queHacerConElEvento, planDelEvento, seguirALasOT, borrarLosEventosDeLasOT, fechaDelEvento, AVISO_DE_BORRADO,
 } from "./elEventoSigueALaOT";
@@ -17,6 +17,8 @@ beforeEach(() => {
   vi.mocked(crearEvento).mockReset();
   vi.mocked(actualizarEvento).mockReset();
   vi.mocked(borrarEvento).mockReset();
+  vi.mocked(restaurarEvento).mockReset();
+  vi.mocked(leerEvento).mockReset();
 });
 
 /** 08:00 de Argentina del 03/11/2026, como lo devuelve la base. */
@@ -257,6 +259,58 @@ describe("seguirALasOT", () => {
     await seguirALasOT(cliente);
     const [, , cuerpo] = vi.mocked(actualizarEvento).mock.calls[0];
     expect((cuerpo as { invitados?: string[] }).invitados).toBeUndefined();
+  });
+
+  describe("sin google_event_id y sin filas de invitados: el camino es `crear`, que puede ser un PUT", () => {
+    // El evento se creó en Google, el update de la fila falló (no hay google_event_id)
+    // y el insert de invitados también (cero filas): los dos hipos de la misma red.
+    const sinId = () => clienteFalso({ eventos: [FILA_DE_EVENTO({ google_event_id: null })], invitados: [] });
+    const NUEVO = ENGOOGLE("2026-11-10T08:00:00-03:00", "2026-11-10T09:30:00-03:00");
+
+    it("lee los invitados de Google y los reusa en el PUT: omitirlos acá los borraría", async () => {
+      vi.mocked(leerEvento).mockResolvedValue({
+        ...ENGOOGLE("2026-11-03T08:00:00-03:00", "2026-11-03T09:30:00-03:00"),
+        invitados: [{ email: "Gerencia@polcecal.com" }, { email: "produccion@polcecal.com" }],
+      });
+      vi.mocked(crearEvento).mockResolvedValue({ ...NUEVO, yaEstaba: true });
+      vi.mocked(restaurarEvento).mockResolvedValue(NUEVO);
+
+      const { cliente } = sinId();
+      const r = await seguirALasOT(cliente);
+
+      expect(r).toMatchObject({ movidos: 1, pendientes: 0, fallos: [] });
+      expect(leerEvento).toHaveBeenCalledWith("mantenimiento@polcecal.com", "01234567" + "89abcdef0123456789abcdef");
+      const [, , cuerpo] = vi.mocked(restaurarEvento).mock.calls[0];
+      expect(cuerpo.invitados).toEqual(["gerencia@polcecal.com", "produccion@polcecal.com"]);
+    });
+
+    it("si Google no lo conoce, se crea sin invitados: no hay nada que perder", async () => {
+      vi.mocked(leerEvento).mockResolvedValue(null);
+      vi.mocked(crearEvento).mockResolvedValue(NUEVO);
+      const { cliente } = sinId();
+      const r = await seguirALasOT(cliente);
+      expect(r).toMatchObject({ movidos: 1, pendientes: 0, fallos: [] });
+      expect(vi.mocked(crearEvento).mock.calls[0][1].invitados).toBeUndefined();
+      expect(restaurarEvento).not.toHaveBeenCalled();
+    });
+
+    it("si no puede leerlos, no escribe a ciegas: queda pendiente", async () => {
+      vi.mocked(leerEvento).mockRejectedValue(new Error("Google respondió 503"));
+      const { cliente, hechos } = sinId();
+      const r = await seguirALasOT(cliente);
+      expect(r).toMatchObject({ pendientes: 1, fallos: [] });
+      expect(crearEvento).not.toHaveBeenCalled();
+      expect(restaurarEvento).not.toHaveBeenCalled();
+      const ultimo = hechos.filter((h) => h.op === "update").at(-1);
+      expect(ultimo?.columnas).toMatchObject({ google_pendiente: expect.stringContaining("503") });
+    });
+
+    it("con id (PATCH) no lee nada: omitir los invitados ahí es «no los toques»", async () => {
+      vi.mocked(actualizarEvento).mockResolvedValue(NUEVO);
+      const { cliente } = clienteFalso({ eventos: [FILA_DE_EVENTO()], invitados: [] });
+      await seguirALasOT(cliente);
+      expect(leerEvento).not.toHaveBeenCalled();
+    });
   });
 
   it("el aviso de un borrado fallido no lo limpia un movimiento; el que escribió esta lógica sí", async () => {

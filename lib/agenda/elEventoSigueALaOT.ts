@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { EventoParaGoogle } from "@/lib/core/calendar";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import { traerTodo } from "@/lib/core/paginado";
 import { fechaParaElCalendario, horarioDeLaOT, instanteDe, laOTEstaCerrada, TURNOS_DEL_TALLER } from "./evento";
+import { leerEvento, type EventoParaGoogle } from "@/lib/core/calendar";
 import { aHoraDePared, aInstanteISO, eventoParaGoogle, idDeGoogleDe } from "./pedido";
 import { columnasDespuesDeEscribir, escribirEnGoogle, parDivergencia, parPendiente } from "./escribirEnGoogle";
 import { anotarEnLaFila } from "./cargar";
@@ -286,7 +286,10 @@ interface FilaLeida {
  * **lo que se decide mover es sólo el horario**, y por eso una lista de
  * invitados que vuelve sin filas **no se manda**: `attendees: []` en un PATCH
  * borra a los invitados y les manda la cancelación, y la ruta de la OT deja a
- * propósito eventos cuyos invitados no se pudieron guardar.
+ * propósito eventos cuyos invitados no se pudieron guardar. **Esa omisión sólo
+ * vale para el PATCH**: en un PUT, omitir `attendees` es «no hay» y los pierde
+ * (ver `EventoParaGoogle.invitados`), así que si el camino es `crear` —sin
+ * `google_event_id`— se leen antes de Google y se reusan.
  */
 export async function seguirALasOT(
   cliente: SupabaseClient,
@@ -435,6 +438,26 @@ async function moverElEvento(
   } catch (e) {
     await encolar((e as Error).message);
     return;
+  }
+
+  // **Sin `google_event_id` el camino es `crear`, y `crear` puede terminar en un
+  // PUT** (si el id ya estaba en Google: el alta llegó y el `update` de la fila
+  // no). Un PUT reemplaza el recurso entero, así que `invitados: undefined` —que
+  // en un PATCH es «no los toques»— ahí es «no hay» y pierde a los cinco con la
+  // cancelación. Si no sabemos quiénes son, se leen de Google y se reusan. No
+  // existe todavía (`null`): se crea sin invitados, y no hay nada que perder.
+  // Negarse a escribir lo dejaría pendiente para siempre: el reintento se
+  // encontraría con lo mismo. Es el camino angosto de dos hipos de red juntos.
+  if (evento.invitados === undefined && !f.google_event_id) {
+    try {
+      const enGoogle = await leerEvento(f.casilla, evento.id ?? idDeGoogleDe(f.id));
+      if (enGoogle) evento = { ...evento, invitados: enGoogle.invitados.map((i) => i.email.toLowerCase()) };
+    } catch (e) {
+      await encolar(
+        `No se pudieron leer los invitados que el evento ya tiene en Google, y escribirlo sin ellos los borraría: ${(e as Error).message}`
+      );
+      return;
+    }
   }
 
   // `crear` es idempotente y sirve para un evento que todavía no llegó a Google;
