@@ -93,6 +93,11 @@ const nombrar = (f: { id: string; titulo: string; casilla: string }) => `«${f.t
  * alguien borró en Google contesta 200 `cancelled` al PATCH, y
  * `escribirEnGoogle` lo vuelve una divergencia `borrado` en vez de resucitarlo.
  *
+ * `limiteEnMsDeEpoca` es **un instante** (el `Date.now()` a partir del cual no se
+ * empieza otro pendiente) **y no una duración**: es el `pendientes` de
+ * `limitesDeLaCorrida`. Pasarle `240_000` a la vieja usanza daría un límite de 1970
+ * y cortaría siempre, en silencio. Lo que no se alcanza va nombrado en `fallos`.
+ *
  * Lo que sale bien limpia el pendiente; lo que falla de nuevo se queda con el
  * mensaje **nuevo** de Google y no con el viejo
  * (`columnasDespuesDeEscribir` → `parPendiente`). Los tres pares de columnas
@@ -101,7 +106,7 @@ const nombrar = (f: { id: string; titulo: string; casilla: string }) => `«${f.t
 export async function reintentarLosPendientes(
   supabase: SupabaseClient,
   ahora: Date = new Date(),
-  limite: number = Infinity
+  limiteEnMsDeEpoca: number = Infinity
 ): Promise<DeLosPendientes> {
   const r: DeLosPendientes = { limpiados: 0, siguen: 0, divergidos: 0, saltados: 0, fallos: [] };
 
@@ -121,7 +126,7 @@ export async function reintentarLosPendientes(
   const marca = ahora.toISOString();
   for (let i = 0; i < reintentar.length; i++) {
     const f = reintentar[i];
-    if (Date.now() >= limite) {
+    if (Date.now() >= limiteEnMsDeEpoca) {
       r.fallos.push(
         `Se cortó la corrida por tiempo: quedaron ${reintentar.length - i} pendientes sin reintentar; ` +
           `siguen en la cola para mañana.`

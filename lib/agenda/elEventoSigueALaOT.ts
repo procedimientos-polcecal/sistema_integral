@@ -4,7 +4,9 @@ import { traerTodo } from "@/lib/core/paginado";
 import { fechaParaElCalendario, horarioDeLaOT, instanteDe, laOTEstaCerrada, TURNOS_DEL_TALLER } from "./evento";
 import { leerEvento, type EventoParaGoogle } from "@/lib/core/calendar";
 import { aHoraDePared, aInstanteISO, eventoParaGoogle, idDeGoogleDe, invitadosLimpios } from "./pedido";
-import { columnasDespuesDeEscribir, escribirEnGoogle, parDivergencia, parPendiente } from "./escribirEnGoogle";
+import {
+  columnasDespuesDeEscribir, columnasDeUnBorradoFallido, escribirEnGoogle, parDivergencia, parPendiente,
+} from "./escribirEnGoogle";
 import { anotarEnLaFila } from "./cargar";
 
 /**
@@ -661,7 +663,11 @@ export async function borrarLosEventosDeLasOT(
       if (!r.pendiente) continue;
 
       const texto = `${AVISO_DE_BORRADO}. Google dijo: ${r.pendiente}`;
-      const sinAnotar = await anotarEnLaFila(cliente, ev.id, { aviso: texto });
+      // El aviso **y el pendiente limpio**, en el mismo update: si la fila traía un
+      // `google_pendiente`, el cron lo tomaría y haría `crear`/`actualizar` sobre el
+      // evento que el sistema quiso borrar. El texto es el de acá y no el de la ruta
+      // de la Agenda: `limpiable()` depende del prefijo `AVISO_DE_BORRADO`.
+      const sinAnotar = await anotarEnLaFila(cliente, ev.id, columnasDeUnBorradoFallido(r.pendiente, marca, texto));
       noSePuede.set(
         ev.ot_id,
         sinAnotar ? `${texto} (y tampoco se pudo anotar el aviso en el evento: ${sinAnotar})` : texto

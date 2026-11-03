@@ -64,6 +64,52 @@ import { parDivergencia } from "./escribirEnGoogle";
  * **nunca se traga un fallo** y devuelve cada uno nombrando la casilla.
  */
 
+// ── El presupuesto de una corrida del cron ───────────────────────────────────
+
+/**
+ * **Un solo presupuesto por corrida**, que se cuenta desde que arranca la función y
+ * se reparte entre las tres fases: cada una deja de empezar trabajo al llegar a
+ * su límite.
+ *
+ * POR QUÉ 170 s. El corte sólo se mira entre una iteración y la siguiente, así que
+ * lo que cuesta de más es la iteración que arrancó justo antes del límite. La peor
+ * es la de los pendientes: `crearEvento` hace el POST, recibe el 409 (que **es** el
+ * caso normal de reintentar un alta que cortó a los 30 s), hace su `leerEvento`
+ * interno, y después `restaurar` lee otra vez y manda el `PUT`: cuatro llamadas
+ * de hasta 30 s. 170 + 120 = 290 < 300. Con 200 serían 320, y la fila
+ * `agenda / pendientes` no llegaría a escribirse: justo lo que el presupuesto
+ * existe para evitar. (Abrir o renovar un canal son dos llamadas: `abrirCanal` y
+ * un solo `cerrarCanal`, el del viejo o el del que se acaba de abrir si el
+ * upsert falló; nunca los dos.) El canje del token se cuenta aparte: está en
+ * caché, y si cuelga lanza a los 30 s y esa iteración termina ahí.
+ */
+export const PRESUPUESTO_DE_LA_CORRIDA_MS = 170_000;
+
+/**
+ * **El piso de las fases 2 y 3.** Sin él el reparto sería por prioridad absoluta: si
+ * los canales se comen todo, el barrido y los pendientes cortan en la primera
+ * iteración corrida tras corrida, y la cola de las personas no se reintenta nunca,
+ * que es justo el caso del día malo. Los canales dejan de empezar casillas 60 s
+ * antes del fin y el barrido 30 s antes: lo que queda es para los pendientes.
+ */
+export const RESERVA_PARA_BARRIDO_Y_PENDIENTES_MS = 60_000;
+export const RESERVA_PARA_PENDIENTES_MS = 30_000;
+
+/**
+ * Los tres límites (instantes, en ms de época) de una corrida que arrancó en
+ * `empezo`. El transcurrido ya está descontado: el reparto es por instante y no
+ * por duración, así que si una fase termina antes, la siguiente aprovecha lo que
+ * sobró.
+ */
+export function limitesDeLaCorrida(empezo: number): { canales: number; barrido: number; pendientes: number } {
+  const fin = empezo + PRESUPUESTO_DE_LA_CORRIDA_MS;
+  return {
+    canales: fin - RESERVA_PARA_BARRIDO_Y_PENDIENTES_MS,
+    barrido: fin - RESERVA_PARA_PENDIENTES_MS,
+    pendientes: fin,
+  };
+}
+
 // ── Qué canales hay que abrir o renovar ──────────────────────────────────────
 
 const HORA_MS = 60 * 60_000;
@@ -264,15 +310,17 @@ async function casillasActivas(supabase: SupabaseClient): Promise<string[]> {
  * Sólo lee `usuarios` y `agenda_canales`; si eso falla sí tira, porque no hay
  * nada que decir sobre ninguna casilla.
  *
- * `limite` es el instante (en ms de época) en que hay que dejar de empezar
- * casillas: **un solo presupuesto por corrida**, que el cron reparte entre sus
- * tres fases. Lo que no se alcanza va nombrado en `fallos`.
+ * `limiteEnMsDeEpoca` es **un instante** (el `Date.now()` a partir del cual no se
+ * empieza otra casilla) **y no una duración**: es el límite que reparte
+ * `limitesDeLaCorrida`. Pasarle `240_000` a la vieja usanza daría un límite de
+ * 1970 y cortaría siempre, en silencio. Lo que no se alcanza va nombrado en
+ * `fallos`.
  */
 export async function ponerAlDiaLosCanales(
   supabase: SupabaseClient,
   appUrl: string | undefined,
   ahora: Date = new Date(),
-  limite: number = Infinity
+  limiteEnMsDeEpoca: number = Infinity
 ): Promise<DeLosCanales> {
   const r: DeLosCanales = { abiertos: [], renovados: [], fallos: [] };
 
@@ -296,7 +344,7 @@ export async function ponerAlDiaLosCanales(
   const actuales = new Map(canales.map((c) => [comoCasilla(c.casilla), c]));
   for (let i = 0; i < hoy.length; i++) {
     const { casilla, motivo } = hoy[i];
-    if (Date.now() >= limite) {
+    if (Date.now() >= limiteEnMsDeEpoca) {
       // Cada casilla son hasta tres llamadas a Google de hasta 30 s: sin este corte
       // la fase puede matar la función antes de que nada quede registrado.
       r.fallos.push(
@@ -407,18 +455,84 @@ export function resumenDelConteo(c: ConteoDeLaRevision): string | null {
 }
 
 /**
- * La frase que hace visible un barrido que no miró ningún evento, o `null` si miró
- * alguno (o no había casillas). Ver `revisadas` en `ConteoDeLaRevision`: un `select`
- * que no devuelve filas no detecta nada y es idéntico a un día sano, salvo por este
- * número. **No marca el registro como fallido**, porque un 0 es legítimo mientras no
- * haya eventos futuros escritos en Google, pero queda a la vista.
+ * Qué decir cuando un barrido no miró **ningún** evento, y si eso es un fallo.
+ *
+ * Un cero de `revisadas` es ambiguo: es legítimo mientras no haya eventos futuros
+ * escritos en Google, y es el bug si el `select` de `revisarLaCasilla` no los
+ * encuentra. Lo que los distingue es una cuenta **independiente de ese `select`**
+ * (`contarEventosPorRevisar`): si hay filas que cumplen el criterio y no se miró
+ * ninguna, no es un cero legítimo.
+ *
+ *  - `candidatas === 0`: es lo esperado. **No** es un fallo y en un día sano no
+ *    suena nunca.
+ *  - `candidatas > 0`: el `select` no las encuentra. **Es un fallo**: `roto`.
+ *  - `candidatas === null`: no se pudo hacer la cuenta, y ante la duda se nota.
+ *
+ * El texto vive en la columna `error` y esa sólo se ve cuando la fila queda con
+ * `ok: false`: por eso el caso malo tiene que ser `roto`.
  */
-export function lineaDeLosEventosMirados(casillas: number, revisadas: number): string | null {
-  if (casillas === 0 || revisadas > 0) return null;
-  return (
-    `${casillas} casillas, 0 eventos mirados: si ya hay eventos futuros escritos en Google, el select de ` +
-    `revisarLaCasilla no los está encontrando (mirar el filtro de fin sobre timestamptz y los de null)`
-  );
+export function veredictoDeCeroEventos(
+  casillas: number,
+  candidatas: number | null
+): { roto: boolean; texto: string } {
+  if (candidatas === 0) {
+    return {
+      roto: false,
+      texto: `${casillas} casillas, 0 eventos mirados, y es lo esperado: no hay ningún evento futuro escrito en Google que revisar`,
+    };
+  }
+  if (candidatas === null) {
+    return {
+      roto: true,
+      texto:
+        `${casillas} casillas, 0 eventos mirados, y no se pudo comprobar si había eventos futuros que ` +
+        `revisar: no se puede descartar que el select de revisarLaCasilla no los esté encontrando`,
+    };
+  }
+  return {
+    roto: true,
+    texto:
+      `${casillas} casillas, 0 eventos mirados, pero hay ${candidatas} eventos futuros escritos en Google que ` +
+      `cumplen el criterio: el select de revisarLaCasilla no los está encontrando (mirar el filtro de fin sobre ` +
+      `timestamptz y los de null). Hasta que se arregle ninguna divergencia se detecta`,
+  };
+}
+
+/**
+ * Cuántos eventos cumplen el criterio de `revisarLaCasilla` según **otra
+ * consulta**: sin ningún filtro en la base, trayendo las filas y aplicando el
+ * criterio acá, en JS. Es a propósito: contarlas con los mismos filtros del `select`
+ * sospechoso daría el mismo cero. Sólo corre cuando el barrido no miró nada, así
+ * que su costo no cuenta. `null` si no se pudo leer.
+ */
+async function contarEventosPorRevisar(
+  supabase: SupabaseClient,
+  casillas: string[],
+  ahora: Date
+): Promise<number | null> {
+  try {
+    const filas = await traerTodo<{
+      casilla: string; google_event_id: string | null; inicio_escrito: string | null;
+      divergencia: string | null; fin: string;
+    }>((desde, hasta) =>
+      supabase
+        .from("agenda_eventos")
+        .select("casilla, google_event_id, inicio_escrito, divergencia, fin")
+        .order("id")
+        .range(desde, hasta)
+    );
+    const delBarrido = new Set(casillas);
+    return filas.filter(
+      (f) =>
+        delBarrido.has(comoCasilla(f.casilla)) &&
+        Boolean(f.google_event_id) &&
+        Boolean(f.inicio_escrito) &&
+        !f.divergencia &&
+        new Date(f.fin).getTime() >= ahora.getTime()
+    ).length;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -489,9 +603,12 @@ async function porQueNoSeAnoto(
  * `sinExplicar` **y también a `fallos`, nombrando la casilla y el evento**: el
  * predicado está roto. Ver `ConteoDeLaRevision` para qué mirar.
  *
- * `limite` (ms de época) corta la revisión entre evento y evento: lo que queda
- * sin mirar va nombrado en `fallos`, con la casilla y cuántos eran. Cada lectura
- * a Google puede tardar hasta 30 s, así que quien lo pasa tiene que dejar margen.
+ * `limiteEnMsDeEpoca` es un instante (`Date.now()` a partir del cual no se empieza
+ * otro evento), **no una duración**: una duración daría un límite de 1970 y
+ * cortaría siempre, en silencio. Corta la revisión entre evento y evento: lo que
+ * queda sin mirar va nombrado en `fallos`, con la casilla y cuántos eran. Cada
+ * lectura a Google puede tardar hasta 30 s, así que quien lo pasa tiene que dejar
+ * margen.
  */
 export async function revisarLaCasilla(
   supabase: SupabaseClient,
@@ -499,7 +616,7 @@ export async function revisarLaCasilla(
   fallos: string[] = [],
   ahora: Date = new Date(),
   conteo: ConteoDeLaRevision = conteoVacio(),
-  limite: number = Infinity
+  limiteEnMsDeEpoca: number = Infinity
 ): Promise<{ evento_id: string; divergencia: Divergencia }[]> {
   const filas = await traerTodo<FilaARevisar>((desde, hasta) =>
     supabase
@@ -520,7 +637,7 @@ export async function revisarLaCasilla(
 
   for (let i = 0; i < filas.length; i++) {
     const f = filas[i];
-    if (Date.now() >= limite) {
+    if (Date.now() >= limiteEnMsDeEpoca) {
       fallos.push(
         `${casilla}: se cortó por tiempo y quedaron ${filas.length - i} eventos sin revisar. ` +
           `Se vuelven a ver con el próximo aviso de Google o con el barrido de mañana.`
@@ -595,6 +712,11 @@ export interface DelBarrido {
   fallos: string[];
   /** Detectadas contra anotadas, de todas las casillas juntas: ver `ConteoDeLaRevision`. */
   conteo: ConteoDeLaRevision;
+  /**
+   * Sólo si no se miró ningún evento y nada más había fallado: qué dice y si es un
+   * fallo (`veredictoDeCeroEventos`). `null` cuando se miró alguno.
+   */
+  ceroEventos: { roto: boolean; texto: string } | null;
 }
 
 /**
@@ -605,8 +727,8 @@ export interface DelBarrido {
  * quede**: la campana la levanta de la fila.
  *
  * **Nunca tira por una casilla**: cada una va por su cuenta y lo que falle vuelve
- * en `fallos` nombrándola. Con `limite` (ms de época, **el mismo de toda la
- * corrida** y no uno propio del barrido) corta antes de que Vercel mate la
+ * en `fallos` nombrándola. Con `limiteEnMsDeEpoca` (un instante y no una
+ * duración; **el de `limitesDeLaCorrida`** y no uno propio del barrido) corta antes de que Vercel mate la
  * función, y **lo dice**: las casillas que no se alcanzaron a mirar van nombradas.
  * El orden es el de `usuarios`, así que si se cortara seguido se miraría siempre
  * a las mismas primero y habría que rotarlas. Tira sólo si no puede leer
@@ -615,25 +737,31 @@ export interface DelBarrido {
 export async function barrerLasCasillas(
   supabase: SupabaseClient,
   ahora: Date = new Date(),
-  limite: number = Infinity
+  limiteEnMsDeEpoca: number = Infinity
 ): Promise<DelBarrido> {
   const casillas = [...new Set((await casillasActivas(supabase)).map(comoCasilla))];
-  const r: DelBarrido = { casillas: 0, divergencias: [], fallos: [], conteo: conteoVacio() };
+  const r: DelBarrido = { casillas: 0, divergencias: [], fallos: [], conteo: conteoVacio(), ceroEventos: null };
 
   for (let i = 0; i < casillas.length; i++) {
     const casilla = casillas[i];
-    if (Date.now() >= limite) {
+    if (Date.now() >= limiteEnMsDeEpoca) {
       r.fallos.push(`Se cortó el barrido por tiempo: no se miraron ${casillas.slice(i).join(", ")}.`);
       break;
     }
     r.casillas++;
     try {
-      for (const d of await revisarLaCasilla(supabase, casilla, r.fallos, ahora, r.conteo, limite)) {
+      for (const d of await revisarLaCasilla(supabase, casilla, r.fallos, ahora, r.conteo, limiteEnMsDeEpoca)) {
         r.divergencias.push({ casilla, ...d });
       }
     } catch (e) {
       r.fallos.push(`${casilla}: no se pudo revisar en el barrido: ${textoDe(e)}`);
     }
+  }
+
+  // Un cero sin ningún otro fallo es el único que hay que interpretar: con fallos
+  // (una lectura que falló, un corte por tiempo) la corrida ya queda en rojo.
+  if (r.casillas > 0 && r.conteo.revisadas === 0 && r.fallos.length === 0) {
+    r.ceroEventos = veredictoDeCeroEventos(r.casillas, await contarEventosPorRevisar(supabase, casillas, ahora));
   }
   return r;
 }

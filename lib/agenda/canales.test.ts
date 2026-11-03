@@ -9,7 +9,8 @@ vi.mock("@/lib/core/calendar", () => ({
 import { abrirCanal, cerrarCanal, leerEvento } from "@/lib/core/calendar";
 import {
   canalesARenovar, tokenValido, urlDelWebhook, revisarLaCasilla, ponerAlDiaLosCanales, barrerLasCasillas,
-  conteoVacio, resumenDelConteo, lineaDeLosEventosMirados,
+  conteoVacio, resumenDelConteo, veredictoDeCeroEventos, limitesDeLaCorrida,
+  PRESUPUESTO_DE_LA_CORRIDA_MS,
   ANTICIPO_DE_RENOVACION_MS,
 } from "./canales";
 import { baseEnMemoria, type Fila } from "./baseEnMemoria.testhelper";
@@ -729,21 +730,109 @@ describe("los eventos mirados", () => {
     expect(conteo.revisadas).toBe(0);
   });
 
-  it("un barrido de catorce casillas con cero eventos mirados lo dice: no se ve igual que un día sano", async () => {
+  it("catorce casillas, cero eventos mirados y eventos que SÍ cumplen el criterio: es el bug del select, y es rojo", async () => {
     const usuarios = Array.from({ length: 14 }, (_, i) => ({ id: `u${i}`, email: `c${i}@polcecal.com`, activo: true }));
-    // Hay eventos, pero ninguno que el select devuelva (todos con un fin ya vencido).
-    const base = baseEnMemoria({ usuarios, agenda_eventos: [evento("1", { casilla: "c0@polcecal.com", fin: "2020-01-01T00:00:00+00:00" })] });
+    // El select con filtros no encuentra nada, aunque la fila cumple el criterio.
+    const base = baseEnMemoria(
+      { usuarios, agenda_eventos: [evento("1", { casilla: "c0@polcecal.com" })] },
+      { selectConFiltrosVacio: ["agenda_eventos"] }
+    );
 
     const r = await barrerLasCasillas(base.cliente, AHORA);
 
     expect(r.casillas).toBe(14);
     expect(r.conteo.revisadas).toBe(0);
-    expect(lineaDeLosEventosMirados(r.casillas, r.conteo.revisadas)).toMatch(/14 casillas, 0 eventos mirados/);
-    expect(resumenDelConteo(r.conteo)).toBeNull(); // el conteo solo no lo ve: por eso existe la línea
+    expect(r.fallos).toEqual([]);
+    expect(r.ceroEventos).not.toBeNull();
+    expect(r.ceroEventos!.roto).toBe(true);
+    expect(r.ceroEventos!.texto).toMatch(/14 casillas, 0 eventos mirados, pero hay 1 eventos futuros/);
+    expect(resumenDelConteo(r.conteo)).toBeNull(); // el conteo solo no lo ve: por eso existe el veredicto
   });
 
-  it("no dice nada si miró eventos, ni si no había casillas", () => {
-    expect(lineaDeLosEventosMirados(14, 31)).toBeNull();
-    expect(lineaDeLosEventosMirados(0, 0)).toBeNull();
+  it("el mismo cero cuando de verdad no hay nada que revisar es legítimo: no es un fallo", async () => {
+    const usuarios = [{ id: "u1", email: CASILLA, activo: true }];
+    // El único evento ya terminó, otro está divergido y otro es de una casilla que no es usuario.
+    const base = baseEnMemoria({
+      usuarios,
+      agenda_eventos: [
+        evento("1", { fin: "2020-01-01T00:00:00+00:00" }),
+        evento("2", { divergencia: "movido", divergencia_el: "2026-11-02T10:00:00+00:00" }),
+        evento("3", { casilla: "baja@polcecal.com" }),
+      ],
+    });
+
+    const r = await barrerLasCasillas(base.cliente, AHORA);
+
+    expect(r.conteo.revisadas).toBe(0);
+    expect(r.ceroEventos).toEqual({ roto: false, texto: expect.stringMatching(/0 eventos mirados, y es lo esperado/) });
+  });
+
+  it("si se miró algún evento no hay veredicto que dar", async () => {
+    const base = baseEnMemoria({
+      usuarios: [{ id: "u1", email: CASILLA, activo: true }],
+      agenda_eventos: [evento("1")],
+    });
+    vi.mocked(leerEvento).mockResolvedValue({ id: "g1", ...IGUAL });
+
+    const r = await barrerLasCasillas(base.cliente, AHORA);
+
+    expect(r.conteo.revisadas).toBe(1);
+    expect(r.ceroEventos).toBeNull();
+  });
+
+  it("con otros fallos en el barrido no se interpreta el cero: la corrida ya está en rojo", async () => {
+    const base = baseEnMemoria({
+      usuarios: [{ id: "u1", email: CASILLA, activo: true }],
+      agenda_eventos: [evento("1")],
+    });
+    vi.mocked(leerEvento).mockRejectedValue(new Error("503"));
+
+    const r = await barrerLasCasillas(base.cliente, AHORA);
+
+    expect(r.conteo.revisadas).toBe(0);
+    expect(r.fallos).toHaveLength(1);
+    expect(r.ceroEventos).toBeNull();
+  });
+});
+
+describe("veredictoDeCeroEventos", () => {
+  it("sin candidatas es lo esperado y no es un fallo", () => {
+    expect(veredictoDeCeroEventos(14, 0).roto).toBe(false);
+  });
+  it("con candidatas es el bug del select, con el número", () => {
+    const v = veredictoDeCeroEventos(14, 26);
+    expect(v.roto).toBe(true);
+    expect(v.texto).toContain("hay 26 eventos futuros");
+    expect(v.texto).toContain("timestamptz");
+  });
+  it("si no se pudo contar, ante la duda se nota", () => {
+    const v = veredictoDeCeroEventos(14, null);
+    expect(v.roto).toBe(true);
+    expect(v.texto).toMatch(/no se pudo comprobar/);
+  });
+});
+
+describe("limitesDeLaCorrida", () => {
+  const T0 = 1_000_000;
+
+  it("un solo presupuesto: los tres límites son instantes de la misma corrida, con un piso para las fases 2 y 3", () => {
+    const l = limitesDeLaCorrida(T0);
+    expect(l.pendientes).toBe(T0 + PRESUPUESTO_DE_LA_CORRIDA_MS);
+    expect(l.canales).toBe(l.pendientes - 60_000);
+    expect(l.barrido).toBe(l.pendientes - 30_000);
+    expect(l.canales).toBeLessThan(l.barrido);
+    expect(l.barrido).toBeLessThan(l.pendientes);
+  });
+
+  it("la peor iteración de los pendientes entra en maxDuration: cuatro llamadas de 30 s tras el límite", () => {
+    // POST, 409, el leerEvento de crearEvento, el leerEvento de restaurar y el PUT.
+    // Con 200 s serían 320 > 300 y la fila `agenda / pendientes` no llegaría a escribirse.
+    const cuatroLlamadas = 4 * 30_000;
+    expect(PRESUPUESTO_DE_LA_CORRIDA_MS + cuatroLlamadas).toBeLessThan(300_000);
+  });
+
+  it("son instantes y no duraciones: pasados a las fases como están, no cortan de entrada", () => {
+    const l = limitesDeLaCorrida(Date.now());
+    expect(l.canales).toBeGreaterThan(Date.now());
   });
 });

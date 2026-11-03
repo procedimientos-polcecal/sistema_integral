@@ -18,6 +18,11 @@ export interface Opciones {
   falla?: Record<string, Partial<Record<"select" | "update" | "upsert", string>>>;
   /** Tablas cuyo `update` no encuentra nunca la fila: simula un predicado que no coincide. */
   updateQueNoTocaNada?: string[];
+  /**
+   * Tablas cuyo `select` **con filtros** devuelve vacío (y sin filtros devuelve
+   * todo): simula un filtro que no coincide, como un `.gte` sobre un `timestamptz`.
+   */
+  selectConFiltrosVacio?: string[];
 }
 
 export interface BaseEnMemoria {
@@ -49,7 +54,8 @@ export function baseEnMemoria(tablas: Record<string, Fila[]>, opciones: Opciones
 
         if (modo === "select") {
           // Copias: una fila leída es una foto, no la fila viva.
-          const leidas = filas.filter((f) => filtros.every((p) => p(f))).slice(desde, hasta + 1);
+          const roto = filtros.length > 0 && opciones.selectConFiltrosVacio?.includes(tabla);
+          const leidas = roto ? [] : filas.filter((f) => filtros.every((p) => p(f))).slice(desde, hasta + 1);
           return { data: leidas.map((f) => ({ ...f })), error: null };
         }
         if (modo === "update") {

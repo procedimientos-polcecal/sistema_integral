@@ -2,24 +2,10 @@ import { NextResponse } from "next/server";
 import { revisarElSecreto } from "@/lib/core/cron";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
-import { ponerAlDiaLosCanales, barrerLasCasillas, resumenDelConteo, lineaDeLosEventosMirados } from "@/lib/agenda/canales";
+import { ponerAlDiaLosCanales, barrerLasCasillas, resumenDelConteo, limitesDeLaCorrida } from "@/lib/agenda/canales";
 import { reintentarLosPendientes } from "@/lib/agenda/reintentarPendientes";
 
 export const maxDuration = 300;
-
-/**
- * **Un solo presupuesto por corrida**, que se cuenta desde que arranca la función
- * y se le pasa a las **tres** fases: cada una deja de empezar trabajo al llegar.
- *
- * Por qué 200 s y no 280: un corte sólo se mira entre una llamada y la siguiente, y
- * una llamada a Google puede tardar hasta 30 s (`CORTE_MS` de `calendar.ts`). Abrir
- * o renovar un canal son hasta tres, así que una casilla empezada justo al límite
- * llega a 200 + 90 s. El margen que queda hasta los 300 s es para **registrar**: si
- * Vercel mata la función antes de que cada fase anote su fila en `sincronizaciones`,
- * el día que Google se cae —justo cuando hace falta— no queda ningún rastro y el
- * cartel sigue mostrando la corrida de ayer.
- */
-const PRESUPUESTO_DE_LA_CORRIDA_MS = 200_000;
 
 /**
  * Agenda: abre y renueva los canales de Google, barre todas las casillas y
@@ -54,6 +40,12 @@ const PRESUPUESTO_DE_LA_CORRIDA_MS = 200_000;
  * lea como «falta escribir» y resucite, o le mande una modificación a los
  * invitados de, un evento que se quería borrar. Este cron no lee esa columna.
  *
+ * **Un solo presupuesto por corrida** (170 s), repartido con un piso para las fases
+ * 2 y 3 —los canales dejan de empezar casillas a los 110 s y el barrido a los
+ * 140 s—: la cuenta de por qué 170 está en `limitesDeLaCorrida`. Cada fase
+ * registra su fila aunque se corte, y es lo que evita que el día que Google se cae
+ * no quede ningún rastro.
+ *
  * Los canales se registran con `NEXT_PUBLIC_APP_URL`: Google llama de afuera y
  * necesita el dominio completo. Ver `docs/VARIABLES-VERCEL.md`.
  *
@@ -63,13 +55,14 @@ export async function GET(request: Request) {
   const rechazo = revisarElSecreto(request);
   if (rechazo) return rechazo;
 
-  const limite = Date.now() + PRESUPUESTO_DE_LA_CORRIDA_MS;
+  // Un solo presupuesto, repartido con un piso para las fases 2 y 3: ver `limitesDeLaCorrida`.
+  const limites = limitesDeLaCorrida(Date.now());
   const supabase = createAdminClient();
   const respuesta: Record<string, unknown> = {};
   let huboError = false;
 
   try {
-    const c = await ponerAlDiaLosCanales(supabase, process.env.NEXT_PUBLIC_APP_URL, new Date(), limite);
+    const c = await ponerAlDiaLosCanales(supabase, process.env.NEXT_PUBLIC_APP_URL, new Date(), limites.canales);
     await registrarSincronizacion({
       modulo: "agenda",
       recurso: "canales",
@@ -86,11 +79,13 @@ export async function GET(request: Request) {
   }
 
   try {
-    const b = await barrerLasCasillas(supabase, new Date(), limite);
+    const b = await barrerLasCasillas(supabase, new Date(), limites.barrido);
     await registrarSincronizacion({
       modulo: "agenda",
       recurso: "barrido",
-      ok: b.fallos.length === 0,
+      // Un cero de eventos mirados con eventos que sí cumplen el criterio es el bug del
+      // select, y es rojo; un cero con nada que revisar es verde (`veredictoDeCeroEventos`).
+      ok: b.fallos.length === 0 && !b.ceroEventos?.roto,
       // Los eventos que **miró**: es la señal de salud. «14 casillas, 0 eventos mirados»
       // es lo que se vería si el select de `revisarLaCasilla` no encontrara nada, y de
       // otro modo se vería idéntico a un día sano. Las divergencias anotadas son un
@@ -102,7 +97,7 @@ export async function GET(request: Request) {
       error:
         [
           resumenDelConteo(b.conteo),
-          lineaDeLosEventosMirados(b.casillas, b.conteo.revisadas),
+          b.ceroEventos?.texto,
           ...b.fallos,
         ].filter(Boolean).join(" · ").slice(0, 2000) || null,
     });
@@ -115,7 +110,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const p = await reintentarLosPendientes(supabase, new Date(), limite);
+    const p = await reintentarLosPendientes(supabase, new Date(), limites.pendientes);
     await registrarSincronizacion({
       modulo: "agenda",
       recurso: "pendientes",

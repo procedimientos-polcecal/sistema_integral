@@ -489,10 +489,23 @@ describe("borrarLosEventosDeLasOT", () => {
     expect([...r.keys()]).toEqual(["ot-1"]);
     expect(r.get("ot-1")).toContain("Google respondió 503");
     const [u] = hechos.filter((h) => h.op === "update");
-    // El cron de reintento lee `google_pendiente` como «falta escribir» y resucitaría el evento.
-    expect(u.columnas).toEqual({ aviso: expect.stringContaining("Google respondió 503") });
-    expect(u.columnas).not.toHaveProperty("google_pendiente");
-    expect(u.columnas).not.toHaveProperty("google_pendiente_el");
+    // El cron de reintento lee `google_pendiente` como «falta escribir» y resucitaría el
+    // evento. Por eso el fallo **nunca** se anota ahí, y el update además **limpia** el
+    // par: una fila que ya traía un pendiente de una escritura fallida anterior lo
+    // conservaría, y el cron haría `crear`/`actualizar` sobre el evento que se quiso borrar.
+    expect(u.columnas).toEqual({
+      aviso: expect.stringContaining("Google respondió 503"),
+      google_pendiente: null,
+      google_pendiente_el: null,
+    });
+  });
+
+  it("el aviso del borrado de espejo conserva su prefijo: limpiable() depende de él", async () => {
+    vi.mocked(borrarEvento).mockRejectedValue(new Error("Google respondió 503"));
+    const { cliente, hechos } = clienteFalso({ eventos: [FILA_DE_EVENTO()] });
+    await borrarLosEventosDeLasOT(cliente, ["ot-1"]);
+    const [u] = hechos.filter((h) => h.op === "update");
+    expect(String(u.columnas?.aviso).startsWith(AVISO_DE_BORRADO)).toBe(true);
   });
 
   it("la sincronización no limpia ese aviso en la misma corrida que lo escribió", () => {

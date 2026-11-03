@@ -313,9 +313,15 @@ export function avisoDeUnBorradoFallido(dijoGoogle: string): string {
  * la invitación o la modificación a los invitados. Es el daño que usar `aviso`
  * vino a evitar, alcanzado por la otra puerta. El diagnóstico viejo se pierde, y
  * no importa: es el de una escritura que ya no se quiere.
+ *
+ * **Son dos las puertas y las dos tienen que pasar por acá**: el `DELETE` de la
+ * Agenda y el borrado de espejo de las OT (`borrarLosEventosDeLasOT`). El segundo
+ * tiene su propio texto (`AVISO_DE_BORRADO`, y `limpiable()` depende de su prefijo
+ * para no limpiarlo), así que `aviso` lo pone quien llama; sin él se usa el de
+ * `avisoDeUnBorradoFallido`.
  */
-export function columnasDeUnBorradoFallido(dijoGoogle: string, ahora: string) {
-  return { ...parPendiente(null, ahora), aviso: avisoDeUnBorradoFallido(dijoGoogle) };
+export function columnasDeUnBorradoFallido(dijoGoogle: string, ahora: string, aviso?: string) {
+  return { ...parPendiente(null, ahora), aviso: aviso ?? avisoDeUnBorradoFallido(dijoGoogle) };
 }
 
 /**
