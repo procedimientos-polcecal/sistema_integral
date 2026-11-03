@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useConfirm } from "@/components/ConfirmProvider";
 import {
-  DIAS_DE_HISTORIAL, leerRespuestaDeEscritura, separarProximosYPasados, type EventoVista,
+  DIAS_DE_HISTORIAL, consecuenciaDeDestrabar, leerRespuestaDeEscritura, separarProximosYPasados, type EventoVista,
 } from "@/lib/agenda/vista";
 import EventoModal, { type UsuarioInvitable } from "./EventoModal";
 import TarjetaDeEvento from "./TarjetaDeEvento";
@@ -94,6 +94,7 @@ export default function AgendaClient({
   }
 
   async function destrabar(e: EventoVista, como: "reescribir" | "aceptar") {
+    const consecuencia = consecuenciaDeDestrabar(e);
     const ok = await confirm({
       title: como === "reescribir" ? "¿Volver a poner lo del sistema?" : "¿Aceptar lo de Google?",
       message:
@@ -101,9 +102,9 @@ export default function AgendaClient({
           ? (e.divergencia === "borrado"
               ? `«${e.titulo}» se vuelve a crear en Google con lo que dice el SdG.`
               : `Google pasa a decir lo que dice el SdG para «${e.titulo}».`) +
-            "\nEl sistema vuelve a mover este evento solo."
+            (consecuencia ? `\n${consecuencia}` : "")
           : `El SdG pasa a mostrar para «${e.titulo}» el horario que hoy tiene Google.` +
-            "\nEl sistema vuelve a mover este evento solo.",
+            (consecuencia ? `\n${consecuencia}` : ""),
       confirmText: como === "reescribir" ? "Volver a poner lo del sistema" : "Aceptar lo de Google",
     });
     if (ok) await accion(e.id, "destrabar el evento", post(`/api/agenda/eventos/${e.id}/destrabar`, { como }));

@@ -186,6 +186,47 @@ export function permisosDelEvento(e: EventoVista, miId: string): {
   };
 }
 
+// ── Lo que la tarjeta promete ───────────────────────────────────────────────
+
+/**
+ * Lo que la tarjeta dice de un evento que no llegó a Google, o `null` si no hay
+ * nada pendiente. **Promete un reintento sólo si existe**: un evento divergido
+ * puede tener `google_pendiente` y `quePendientesReintentar` lo saltea a
+ * propósito —reintentar pisaría lo que una persona hizo del otro lado—, así que
+ * decir «se reintenta solo» ahí es una frase falsa, y justo encima de la que
+ * dice que el sistema dejó de mover el evento.
+ */
+export function avisoDelPendiente(
+  e: Pick<EventoVista, "googlePendiente" | "divergencia" | "otId">
+): string | null {
+  if (!e.googlePendiente) return null;
+  const base = "El evento está guardado en el SdG, pero todavía no figura en el calendario de nadie.";
+  if (!e.divergencia) {
+    return `${base} Queda pendiente y se reintenta solo. Google dijo: ${e.googlePendiente}`;
+  }
+  const comoMandarlo =
+    e.otId !== null
+      ? "mandando la orden de nuevo desde Mantenimiento y confirmando que se pisa lo de Google"
+      : "con «Volver a poner lo del sistema», acá arriba (lo hace quien lo creó)";
+  return (
+    `${base} Y como está divergido NO se reintenta solo —reintentar pisaría lo que se hizo en Google—: ` +
+    `hay que volver a mandarlo a mano, ${comoMandarlo}. Google dijo: ${e.googlePendiente}`
+  );
+}
+
+/**
+ * Qué cambia después de destrabar, o `null` si no hay nada que prometer. «El
+ * sistema vuelve a mover este evento solo» **sólo es cierto para el de una OT**:
+ * es lo que la sincronización de la planilla hace cuando cambia la fecha de la
+ * orden. Un evento propio nadie lo mueve solo, nunca, así que ahí la frase es
+ * falsa y se calla.
+ */
+export function consecuenciaDeDestrabar(e: Pick<EventoVista, "otId">): string | null {
+  return e.otId !== null
+    ? "El sistema vuelve a mover este evento solo cuando cambie la fecha de la orden."
+    : null;
+}
+
 // ── La respuesta de una escritura ───────────────────────────────────────────
 
 export interface RespuestaDeEscritura {

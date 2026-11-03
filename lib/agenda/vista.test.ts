@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  aEventoVista, corteDelHistorial, cruzaLaMedianoche, DIAS_DE_HISTORIAL, horarioDelEvento, horarioParaGuardar,
+  aEventoVista, avisoDelPendiente, consecuenciaDeDestrabar, corteDelHistorial, cruzaLaMedianoche, DIAS_DE_HISTORIAL, horarioDelEvento, horarioParaGuardar,
   leerRespuestaDeEscritura,
   nombreDelDueno, permisosDelEvento, separarProximosYPasados, type EventoVista, type FilaCruda,
 } from "./vista";
@@ -134,6 +134,42 @@ describe("permisosDelEvento", () => {
     expect(permisosDelEvento(evento({ divergencia: "movido" }), "otro").puedeDarPorVisto).toBe(true);
     expect(permisosDelEvento(evento({ divergencia: "movido", divergenciaVista: true }), "otro").puedeDarPorVisto).toBe(false);
     expect(permisosDelEvento(evento(), "yo").puedeDarPorVisto).toBe(false);
+  });
+});
+
+describe("avisoDelPendiente: sólo promete el reintento que existe", () => {
+  it("sin pendiente no dice nada", () => {
+    expect(avisoDelPendiente(evento())).toBeNull();
+  });
+  it("un pendiente sin divergencia se reintenta solo, y dice lo que Google contestó", () => {
+    const t = avisoDelPendiente(evento({ googlePendiente: "quota exceeded" }));
+    expect(t).toContain("se reintenta solo");
+    expect(t).not.toContain("NO se reintenta");
+    expect(t).toContain("quota exceeded");
+  });
+  it("un pendiente en un evento divergido NO se reintenta, y no promete que sí", () => {
+    for (const divergencia of ["movido", "borrado"] as const) {
+      const t = avisoDelPendiente(evento({ googlePendiente: "quota exceeded", divergencia }));
+      expect(t).toContain("NO se reintenta solo");
+      expect(t).not.toContain("Queda pendiente y se reintenta solo");
+      expect(t).toContain("volver a mandarlo a mano");
+      expect(t).toContain("quota exceeded");
+    }
+  });
+  it("dice cómo volver a mandarlo según sea de una OT o propio", () => {
+    expect(avisoDelPendiente(evento({ googlePendiente: "x", divergencia: "movido", otId: "ot-1" })))
+      .toContain("mandando la orden de nuevo");
+    expect(avisoDelPendiente(evento({ googlePendiente: "x", divergencia: "movido" })))
+      .toContain("Volver a poner lo del sistema");
+  });
+});
+
+describe("consecuenciaDeDestrabar", () => {
+  it("el evento de una OT vuelve a moverse solo cuando cambie la fecha de la orden", () => {
+    expect(consecuenciaDeDestrabar(evento({ otId: "ot-1" }))).toContain("vuelve a mover este evento solo");
+  });
+  it("un evento propio no se mueve solo nunca: no se promete", () => {
+    expect(consecuenciaDeDestrabar(evento())).toBeNull();
   });
 });
 

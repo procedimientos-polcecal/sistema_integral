@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { horarioDelEvento, permisosDelEvento, type EventoVista } from "@/lib/agenda/vista";
+import { avisoDelPendiente, horarioDelEvento, permisosDelEvento, type EventoVista } from "@/lib/agenda/vista";
 
 /**
  * Un evento de la Agenda, con lo que hace falta saber de él y los botones que
@@ -91,8 +91,7 @@ export default function TarjetaDeEvento({
 
         {e.googlePendiente && (
           <p className="rounded-lg border px-3 py-2 text-sm text-slate-800" style={AMBAR}>
-            <strong>No llegó a Google.</strong> El evento está guardado en el SdG, pero todavía no figura en el
-            calendario de nadie; queda pendiente y se reintenta solo. Google dijo: {e.googlePendiente}
+            <strong>No llegó a Google.</strong> {avisoDelPendiente(e)}
           </p>
         )}
 
