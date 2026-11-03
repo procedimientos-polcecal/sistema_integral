@@ -5,8 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
 import {
-  INVITADOS_DE_UNA_OT, datosDeLaOT, duenoDelEventoDeLaOT, faltaConfirmarElPisado, fechaParaElCalendario,
-  horarioDeLaOT, problemasDeMandarLaOT, problemasDelEvento,
+  INVITADOS_DE_UNA_OT, advertenciaDeReenviarDivergido, datosDeLaOT, duenoDelEventoDeLaOT, faltaConfirmarElPisado,
+  fechaParaElCalendario, horarioDeLaOT, invitadosExtraDeLaOT, problemasDeMandarLaOT, problemasDelEvento,
 } from "@/lib/agenda/evento";
 import { aHoraDePared, aInstanteISO, eventoParaGoogle, invitadosLimpios } from "@/lib/agenda/pedido";
 import { leerEvento } from "@/lib/core/calendar";
@@ -14,7 +14,7 @@ import {
   escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura, parDivergencia, parPendiente,
 } from "@/lib/agenda/escribirEnGoogle";
 import { agregarInvitados, sacarInvitados, diferenciaDeInvitados } from "@/lib/agenda/invitados";
-import { anotarEnLaFila, POR_SI_YA_ESCRIBIO } from "@/lib/agenda/cargar";
+import { anotarEnLaFila } from "@/lib/agenda/cargar";
 import { ES_UUID, quienLlama } from "@/lib/agenda/sesion";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 
@@ -58,7 +58,19 @@ export async function GET(_request: Request, { params }: Params) {
   if (error) {
     return NextResponse.json({ error: `No se pudo leer el evento de la orden: ${error.message}` }, { status: 500 });
   }
-  if (!evento) return NextResponse.json({ existe: false, divergencia: null, google: null, google_error: null });
+  if (!evento) {
+    return NextResponse.json({ existe: false, divergencia: null, google: null, google_error: null, invitados_extra: [] });
+  }
+
+  // A quién se sumó a mano la vez anterior: el modal los precarga, porque
+  // reenviar reemplaza la lista y sin esto los sacaría sin avisar.
+  const { data: invitados, error: errorDeInvitados } = await admin
+    .from("agenda_invitados")
+    .select("email")
+    .eq("evento_id", evento.id);
+  if (errorDeInvitados) {
+    return NextResponse.json({ error: `No se pudieron leer los invitados: ${errorDeInvitados.message}` }, { status: 500 });
+  }
 
   let google: { inicio: string; fin: string } | null = null;
   let googleError: string | null = null;
@@ -78,6 +90,7 @@ export async function GET(_request: Request, { params }: Params) {
     divergencia: evento.divergencia,
     google,
     google_error: googleError,
+    invitados_extra: invitadosExtraDeLaOT((invitados ?? []).map((i: { email: string }) => i.email)),
   });
 }
 
@@ -152,7 +165,7 @@ export async function POST(request: Request, { params }: Params) {
     .from("ordenes_trabajo")
     // La cadena va literal y en una sola pieza: partida con `+` pierde la
     // inferencia de tipos de Supabase.
-    .select("id, ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_cierre, created_by, equipo_raw, equipo_code, sector_raw, especialidad, tipo, descripcion")
+    .select("id, ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_cierre, estado, created_by, equipo_raw, equipo_code, sector_raw, especialidad, tipo, descripcion")
     .eq("id", id)
     .maybeSingle();
   if (errorDeOrden) {
@@ -194,10 +207,15 @@ export async function POST(request: Request, { params }: Params) {
       dueno = { id: elegido.id, casilla: elegido.casilla };
     } else {
       // Sin `created_by`: es la casilla del área, y `dueno_id` pide un usuario.
+      // `ilike` y no `eq`: el correo se guardó como lo tipeó quien creó el
+      // usuario, y la casilla es minúscula. Y sólo uno activo: si esa casilla se
+      // desactiva, el evento quedaría a nombre de alguien que ya no está y nadie
+      // lo notaría. (La casilla no lleva `%` ni `_`: `ilike` la toma literal.)
       const { data: delArea, error: errorDelArea } = await admin
         .from("usuarios")
         .select("id")
-        .eq("email", elegido.casilla)
+        .ilike("email", elegido.casilla)
+        .eq("activo", true)
         .maybeSingle();
       if (errorDelArea) {
         return NextResponse.json(
@@ -210,7 +228,7 @@ export async function POST(request: Request, { params }: Params) {
           {
             error:
               `Esta orden no tiene quién la haya generado, así que su evento es de ${elegido.casilla}, ` +
-              `pero en el SdG no hay un usuario con ese correo. Hay que crearlo antes de mandarla.`,
+              `pero en el SdG no hay un usuario activo con ese correo. Hay que crearlo o reactivarlo antes de mandarla.`,
           },
           { status: 409 }
         );
@@ -223,7 +241,8 @@ export async function POST(request: Request, { params }: Params) {
   const extras = datos.invitados.map((c) => c.trim()).filter((c) => c !== "");
   const fecha = fechaParaElCalendario(orden);
   const delPedido = problemasDeMandarLaOT({
-    fecha_ejecucion: fecha, turno: datos.turno, invitados: extras, fecha_cierre: orden.fecha_cierre,
+    fecha_ejecucion: fecha, turno: datos.turno, invitados: extras,
+    fecha_cierre: orden.fecha_cierre, estado: orden.estado,
   });
   if (delPedido.length > 0) return errorDeValidacion(delPedido);
 
@@ -348,12 +367,21 @@ export async function POST(request: Request, { params }: Params) {
   }
   const errorAlAnotar = await anotarEnLaFila(admin, eventoId, columnas);
 
-  const dePendiente = advertenciaDeLaEscritura(enGoogle, "El evento");
+  // Con el evento divergido, el fallo deja `divergencia` y `google_pendiente` a la
+  // vez, y el cron no levanta eso: el cartel de siempre («se reintenta») mentiría.
+  const dePendiente =
+    actual?.divergencia && enGoogle.pendiente
+      ? advertenciaDeReenviarDivergido(enGoogle.pendiente)
+      : advertenciaDeLaEscritura(enGoogle, "El evento");
   if (dePendiente) advertencias.push(dePendiente);
   if (errorAlAnotar) {
     advertencias.push(
       `No se pudo anotar en el evento lo que pasó con Google, ni en dos intentos (${errorAlAnotar}). ` +
-        (enGoogle.pendiente ? "El evento sigue sin estar en Google." : POR_SI_YA_ESCRIBIO)
+        // El evento de una OT es de sólo lectura en la Agenda: «volvé a guardar
+        // el evento» llevaría a un 409. Se vuelve a mandar la orden.
+        (enGoogle.pendiente
+          ? "El evento sigue sin estar en Google."
+          : "Si Google ya tiene el cambio, el SdG puede avisar de un movimiento que no es real: volvé a mandar la orden.")
     );
   }
 

@@ -153,6 +153,21 @@ function esFechaDelDia(texto: string): boolean {
 }
 
 /**
+ * ¿Ya se hizo esta OT? **`fecha_cierre` o `estado === "REALIZADO"`, no sólo la
+ * primera**: el PATCH de estado acepta `REALIZADO` sin cargar la fecha y el
+ * kanban deja arrastrar ahí. Medido el 03/11/2026: 168 de 986 OT en `REALIZADO`
+ * (17 %) no tienen `fecha_cierre`, así que mirar sólo la fecha dejaba el botón
+ * en una de cada seis órdenes ya hechas.
+ *
+ * `SUSPENDIDA` queda afuera a propósito: suspender es una pausa y no una
+ * terminación —puede retomarse y su fecha puede seguir sirviendo—, y sacarle el
+ * botón sería quitar una capacidad que nadie pidió.
+ */
+export function laOTEstaCerrada(o: { fecha_cierre?: string | null; estado?: string | null }): boolean {
+  return Boolean(o.fecha_cierre) || o.estado === "REALIZADO";
+}
+
+/**
  * Qué impide mandar esta OT al calendario, todo junto y en castellano. Vacío =
  * se puede. Recibe **la fecha ya resuelta** (`fechaParaElCalendario`).
  *
@@ -167,11 +182,12 @@ export function problemasDeMandarLaOT(e: {
   turno: string;
   invitados?: string[];
   fecha_cierre?: string | null;
+  estado?: string | null;
 }): string[] {
   const problemas: string[] = [];
 
   // Mandar una orden que ya se hizo crearía un evento futuro de algo que pasó.
-  if (e.fecha_cierre) {
+  if (laOTEstaCerrada(e)) {
     problemas.push("La OT ya está cerrada: no se manda al calendario una orden que ya se hizo");
   }
 
@@ -257,6 +273,37 @@ export function duenoDelEventoDeLaOT(
 
 /** La casilla del área, dueña de los eventos de las OT que nadie cargó en el sistema. */
 export const CASILLA_DE_MANTENIMIENTO = "mantenimiento@polcecal.com";
+
+/**
+ * Los invitados de un evento que **no** son de los cinco fijos: a quién se sumó
+ * a mano. El modal los precarga al reenviar: la lista del pedido se arma siempre
+ * desde los fijos más los extras que vengan, y el `PUT` de Google reemplaza los
+ * `attendees`, así que quien reenvía sólo para cambiar el turno sacaría a los
+ * extras de la invitación —y al extra le llegaría una cancelación— sin saberlo.
+ */
+export function invitadosExtraDeLaOT(actuales: string[]): string[] {
+  const fijos = new Set(INVITADOS_DE_UNA_OT);
+  const vistos = new Set<string>();
+  for (const crudo of actuales) {
+    const correo = crudo.trim().toLowerCase();
+    if (correo && !fijos.has(correo)) vistos.add(correo);
+  }
+  return [...vistos];
+}
+
+/**
+ * Lo que se le dice a quien reenvió una OT con el evento divergido y Google
+ * falló. **No es el cartel de siempre** («queda pendiente y se reintenta»): un
+ * evento divergido no lo reintenta el cron, justamente para no pisar lo que una
+ * persona hizo del otro lado (ver `parPendiente`). Nadie lo va a reintentar:
+ * hay que volver a mandar la orden y volver a confirmar.
+ */
+export function advertenciaDeReenviarDivergido(pendiente: string): string {
+  return (
+    `El evento se guardó en el SdG pero no llegó a Google, y como estaba divergido NO se reintenta solo: ` +
+    `para que llegue hay que volver a mandar la orden y confirmar de nuevo que se pisa. Google dijo: ${pendiente}`
+  );
+}
 
 /**
  * Lo que se le contesta a quien reenvía una OT cuyo evento divergió en Google

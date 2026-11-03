@@ -23,7 +23,7 @@ import RepuestosOTModal from "./RepuestosOTModal";
 import JustificacionOT from "./JustificacionOT";
 import PostergarOTModal from "./PostergarOTModal";
 import MandarAlCalendarioModal from "./MandarAlCalendarioModal";
-import { fechaParaElCalendario } from "@/lib/agenda/evento";
+import { fechaParaElCalendario, laOTEstaCerrada } from "@/lib/agenda/evento";
 import { pideJustificacion } from "@/lib/mantenimiento/notas";
 import { prioridadEfectiva } from "@/lib/mantenimiento/prioridad";
 import OrdenarTrabajo from "./OrdenarTrabajo";
@@ -1106,9 +1106,11 @@ function OTDetail({
             no se distingue de uno roto. La fecha que cuenta es la pendiente
             cuando la hay (`fechaParaElCalendario`), la misma que usa el
             servidor. */}
-        {/* Una orden cerrada (con `fecha_cierre`) no lleva el botón: crearía un
-            evento futuro de algo que ya pasó. El servidor lo vuelve a negar. */}
-        {canEdit && !o.fecha_cierre && (
+        {/* Una orden cerrada no lleva el botón: crearía un evento futuro de algo
+            que ya pasó. Cerrada es `fecha_cierre` **o** REALIZADO —168 de 986
+            REALIZADO no tienen fecha—, y lo decide `laOTEstaCerrada`, la misma
+            función que usa el servidor. */}
+        {canEdit && !laOTEstaCerrada(o) && (
           fechaParaElCalendario(o) ? (
             <button
               onClick={() => setMandandoAlCalendario(true)}

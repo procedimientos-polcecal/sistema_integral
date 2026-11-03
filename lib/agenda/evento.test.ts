@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DURACION_OT_MINUTOS, INVITADOS_DE_UNA_OT, TURNOS_DEL_TALLER, datosDeLaOT, fechaParaElCalendario,
-  CASILLA_DE_MANTENIMIENTO, duenoDelEventoDeLaOT, faltaConfirmarElPisado, horarioDeLaOT, instanteDe, problemasDeMandarLaOT, problemasDelEvento,
+  CASILLA_DE_MANTENIMIENTO, advertenciaDeReenviarDivergido, duenoDelEventoDeLaOT, faltaConfirmarElPisado,
+  horarioDeLaOT, invitadosExtraDeLaOT, laOTEstaCerrada, instanteDe, problemasDeMandarLaOT, problemasDelEvento,
 } from "./evento";
 
 const bueno = { titulo: "x", inicio: "2026-11-03T08:00:00", fin: "2026-11-03T09:30:00", invitados: ["ok@polcecal.com"] };
@@ -206,6 +207,38 @@ describe("una OT cerrada no se manda", () => {
   });
   it("sin fecha de cierre, sí", () => {
     expect(problemasDeMandarLaOT({ fecha_ejecucion: "2026-11-03", turno: "8-16", fecha_cierre: null })).toEqual([]);
+  });
+  it("REALIZADA sin fecha de cierre tampoco: 168 de 986 están así", () => {
+    expect(problemasDeMandarLaOT({ fecha_ejecucion: "2026-11-03", turno: "8-16", fecha_cierre: null, estado: "REALIZADO" }))
+      .toContain("La OT ya está cerrada: no se manda al calendario una orden que ya se hizo");
+  });
+  it("laOTEstaCerrada: fecha de cierre o REALIZADO, y SUSPENDIDA no", () => {
+    expect(laOTEstaCerrada({ fecha_cierre: "2026-11-04", estado: "POR_HACER" })).toBe(true);
+    expect(laOTEstaCerrada({ fecha_cierre: null, estado: "REALIZADO" })).toBe(true);
+    expect(laOTEstaCerrada({ fecha_cierre: null, estado: "SUSPENDIDA" })).toBe(false);
+    expect(laOTEstaCerrada({ fecha_cierre: null, estado: "EN_PROCESO" })).toBe(false);
+    expect(laOTEstaCerrada({})).toBe(false);
+  });
+});
+
+describe("advertenciaDeReenviarDivergido", () => {
+  it("no promete un reintento que nadie hace, y dice qué hacer", () => {
+    const t = advertenciaDeReenviarDivergido("quota exceeded");
+    expect(t).not.toContain("se reintenta y");
+    expect(t).toContain("NO se reintenta solo");
+    expect(t).toContain("volver a mandar la orden");
+    expect(t).toContain("quota exceeded");
+  });
+});
+
+describe("invitadosExtraDeLaOT", () => {
+  it("devuelve a quienes no son de los cinco fijos", () => {
+    expect(invitadosExtraDeLaOT([...INVITADOS_DE_UNA_OT, "Proveedor@Externo.com", "otro@polcecal.com"]))
+      .toEqual(["proveedor@externo.com", "otro@polcecal.com"]);
+  });
+  it("sin extras, vacío; y sin repetidos", () => {
+    expect(invitadosExtraDeLaOT([...INVITADOS_DE_UNA_OT])).toEqual([]);
+    expect(invitadosExtraDeLaOT(["a@b.com", "A@B.com"])).toEqual(["a@b.com"]);
   });
 });
 

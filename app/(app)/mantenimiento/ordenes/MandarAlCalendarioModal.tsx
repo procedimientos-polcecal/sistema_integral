@@ -40,6 +40,8 @@ interface EstadoDelEvento {
   divergencia: "borrado" | "movido" | null;
   google: { inicio: string; fin: string } | null;
   google_error: string | null;
+  /** A quién se sumó a mano antes: se precarga, porque reenviar reemplaza la lista. */
+  invitados_extra: string[];
 }
 
 export default function MandarAlCalendarioModal({
@@ -62,7 +64,9 @@ export default function MandarAlCalendarioModal({
   const [errorDelCorreo, setErrorDelCorreo] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
-  const [listo, setListo] = useState<{ reemplazo: boolean; advertencia: string | null } | null>(null);
+  const [listo, setListo] = useState<
+    { reemplazo: boolean; escrito: boolean; advertencia: string | null } | null
+  >(null);
   // `undefined` es que todavía no se sabe; `null`, que no se pudo saber.
   const [estado, setEstado] = useState<EstadoDelEvento | null | undefined>(undefined);
   const [errorDelEstado, setErrorDelEstado] = useState("");
@@ -76,7 +80,14 @@ export default function MandarAlCalendarioModal({
         if (!r.ok) throw new Error(b.error ?? `El servidor contestó ${r.status}`);
         return b as EstadoDelEvento;
       })
-      .then((b) => { if (vigente) setEstado(b); })
+      .then((b) => {
+        if (!vigente) return;
+        setEstado(b);
+        // Reenviar reemplaza la lista de invitados: los extras de la vez
+        // anterior arrancan puestos, o quien sólo cambia el turno los sacaría
+        // sin enterarse (y a cada uno le llegaría una cancelación).
+        setExtras(b.invitados_extra ?? []);
+      })
       .catch((e) => {
         if (!vigente) return;
         setEstado(null);
@@ -122,7 +133,12 @@ export default function MandarAlCalendarioModal({
         );
         return;
       }
-      setListo({ reemplazo: Boolean(body.reemplazo), advertencia: body.advertencia ?? null });
+      setListo({
+        reemplazo: Boolean(body.reemplazo),
+        // Sin dato se supone que no: un verde de más es la mentira.
+        escrito: body.google?.escrito === true,
+        advertencia: body.advertencia ?? null,
+      });
     } catch (e) {
       setError(`No se pudo mandar la orden al calendario: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -146,11 +162,20 @@ export default function MandarAlCalendarioModal({
 
         {listo ? (
           <>
-            <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
-              {listo.reemplazo
-                ? "La orden ya estaba en el calendario: se movió al turno elegido."
-                : "La orden está en el calendario."}
-            </div>
+            {/* El titular mira lo que pasó con Google: el SdG guardó el evento
+                aunque Google haya fallado, y decir «está en el calendario» sería
+                mentir. La advertencia de abajo trae el detalle. */}
+            {listo.escrito ? (
+              <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+                {listo.reemplazo
+                  ? "La orden ya estaba en el calendario: se movió al turno elegido."
+                  : "La orden está en el calendario."}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+                La orden se guardó en el SdG, pero todavía no está en el calendario.
+              </div>
+            )}
             {listo.advertencia && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 {listo.advertencia}
