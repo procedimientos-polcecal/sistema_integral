@@ -618,3 +618,86 @@ pidiendo acordarse no habría servido —era justo lo que falló—.
 que la OT cargada a mano cubra de verdad esa tarea: no hay nada que las ate, y
 el cruce por fecha y contratista es justo lo que el freno de duplicados ya hace
 sin poder decidir. Lo que queda es el registro de quién lo decidió.
+
+## Lo que va en el texto y lo que va en su columna (03/11/2026)
+
+Salió de mirar las 48 órdenes de octubre ya escritas. La descripción decía
+
+    Resoldar chapas impacto rompedores p/ TRT Nº2 — PIPARO. El 19/10. 8 h en
+    total. Según el cuaderno: Resoldar chapas impacto rompedores p/ TRT Nº2
+    (19/10, 8 h).
+
+mientras **K FECHA DE CIERRE, M ESTADO, N CONTRATISTA y O HORAS estaban vacías
+en las 48**. El diagnóstico importa porque son dos cosas con un solo síntoma: el
+texto acumulaba lo que no le tocaba, y las columnas que sí lo llevan no se
+estaban llenando. Arreglar sólo el texto habría dejado la orden sin esos datos
+en ningún lado.
+
+### La descripción
+
+Pasa a ser sólo la tarea. El contratista, la fecha de cierre y las horas tienen
+columna propia, y una celda de prosa no se filtra ni se suma — la planilla es de
+donde lee quien no entra al sistema.
+
+**Riesgo asumido**: el detalle renglón por renglón sale de la planilla. Sigue en
+`mant_cuadernos_renglones`, enlazado a esa misma OT y visible en la pantalla del
+cuaderno, pero quien mira sólo la planilla ve el total y no el reparto. Se
+aceptó a pedido: el texto largo hacía ilegible la columna.
+
+### El denominador común, medido
+
+La regla «si todas las tareas del grupo son iguales, usar ésa» no habría servido
+para ninguno: de los **cinco grupos que una persona juntó de verdad, cero tienen
+las tareas idénticas**. Son la misma tarea escrita distinto cada día.
+
+Por eso el denominador son las palabras que están en **todas**, dichas con las
+palabras de la primera. Tres decisiones:
+
+- **El plural cuenta como la misma palabra.** Sin eso «techo» y «techos» no
+  coinciden y «Limpieza techo Hidratación» ×4 se queda en «Limpieza
+  Hidratación». El límite —prefijo exacto, ambas de cuatro letras o más, a lo
+  sumo dos de diferencia— está puesto para que **«Nº1» y «Nº2» no se parezcan
+  nunca**: una OT de la TRT Nº1 cargada en la Nº2 no se nota jamás.
+- **Con menos de dos palabras en común se listan las tareas distintas.** El
+  quinto grupo real sólo comparte «limpieza»; una orden que dijera eso es peor
+  que no simplificar. Simplificar cuando hay a qué, no inventar un resumen.
+- **El texto sale con las palabras de la primera tarea**, con sus acentos y sus
+  mayúsculas: es como lo escribió quien llevó el cuaderno, no una forma
+  normalizada que nadie usó.
+
+### Las columnas: el mecanismo ya existía
+
+De la K en adelante son literales del master y necesitan que la fila exista ahí,
+cosa que llega por `IMPORTRANGE` y tarda. La generación lo intentaba una vez, a
+medio segundo de crear la orden —o sea nunca a tiempo—, anotaba
+`sheets_pendiente` y lo dejaba para quien abriera Órdenes o para el sync, en la
+práctica cada 3 a 5 horas.
+
+Lo que cierra el caso es la comparación del mismo día:
+
+| | |
+|---|---|
+| OT del cuaderno | 48 de 48 con las cuatro columnas vacías, 47 en la cola |
+| OT de `/api/mantenimiento/ordenes`, que reintenta | **12 de 12 salieron, en el primer intento, a los 21 s** |
+
+O sea que no era un problema de IMPORTRANGE ni de permisos: era que esta ruta
+era la única que no usaba el reintento. Ahora drena con `after()`, con dos
+diferencias respecto del alta de una OT suelta:
+
+- **Una pasada para toda la corrida**, no una por orden: el master recibe las 25
+  juntas, y esperar 25 veces 20 segundos no tendría sentido.
+- **Las esperas se recortan a lo que queda de `maxDuration`**
+  (`esperasQueEntran`), porque el `after()` corre dentro del mismo techo que ya
+  gastó creando. Quedarse sin tiempo no rompe nada: la cola sigue siendo la red.
+
+### Lo que no cambió
+
+El costo sigue viajando en `REPUESTO UTILIZADO`, que es donde la práctica ya lo
+escribía a mano en 58 de las 380 OT viejas de PIPARO.
+
+### Lo que queda pendiente de una decisión
+
+Las 48 órdenes de octubre ya escritas conservan el texto largo. Reescribirlo es
+tocar la columna Y de «Altas del sistema» con `corregirLaAlta` —la H del master
+es derrame— y es una escritura en la planilla de producción, así que no se hizo
+sin pedirlo. Sus K/M/N/O, en cambio, se llenan solas al abrir Órdenes.

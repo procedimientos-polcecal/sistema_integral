@@ -41,29 +41,37 @@ describe("equipoParaLaPlanilla", () => {
 });
 
 describe("descripcionDeLaOrden", () => {
-  it("un renglón: la tarea, el día, las horas y lo que escribió PIPARO", () => {
-    const d = descripcionDeLaOrden(unGrupo([renglon("a")]), "PIPARO");
-    expect(d).toContain("Reparar rodillos — PIPARO.");
-    expect(d).toContain("El 17/9.");
-    expect(d).toContain("8 h en total.");
-    expect(d).toContain("P/Trit N°3");
+  it("un renglón: la tarea y nada más", () => {
+    expect(descripcionDeLaOrden(unGrupo([renglon("a")]))).toBe("Reparar rodillos");
   });
 
-  it("un grupo: el rango de fechas y cada tarea con su día", () => {
+  it("no lleva el contratista, ni la fecha, ni las horas, ni el detalle", () => {
+    // Los tres tienen su columna en el master —N, K y O— y es ahí donde se
+    // escriben. Repetirlos acá era lo que volvía ilegible la descripción.
+    const d = descripcionDeLaOrden(unGrupo([renglon("a")]));
+    expect(d).not.toContain("PIPARO");
+    expect(d).not.toMatch(/17\/9|8 h|en total|Según el cuaderno/);
+  });
+
+  it("un grupo de la misma tarea sale una sola vez", () => {
     const g = unGrupo([
       renglon("a", { grupo_id: "g", fecha: "2026-09-17", horas: 6, tarea: "Tranqueras D6" }),
       renglon("b", { grupo_id: "g", fecha: "2026-09-23", horas: 2.5, tarea: "Tranqueras D6" }),
     ]);
-    const d = descripcionDeLaOrden(g, "PIPARO");
-    expect(d).toContain("Del 17/9 al 23/9.");
-    expect(d).toContain("8,5 h en total.");
-    expect(d).toContain("(17/9, 6 h)");
-    expect(d).toContain("(23/9, 2,5 h)");
+    expect(descripcionDeLaOrden(g)).toBe("Tranqueras D6");
   });
 
-  it("sin horas no escribe «0 h»: un renglón con precio se cobra por trabajo", () => {
+  it("un grupo de tareas parecidas sale por su denominador común", () => {
+    const g = unGrupo([
+      renglon("a", { grupo_id: "g", fecha: "2026-09-17", tarea: "Limpieza techo Hidratación" }),
+      renglon("b", { grupo_id: "g", fecha: "2026-09-23", tarea: "Limpieza techos hidratacion" }),
+    ]);
+    expect(descripcionDeLaOrden(g)).toBe("Limpieza techo Hidratación");
+  });
+
+  it("nunca queda vacía: es imprescindible para el alta", () => {
     const g = unGrupo([renglon("a", { horas: null, costo: 240000 })]);
-    expect(descripcionDeLaOrden(g, "PIPARO")).not.toMatch(/\b0 h\b|en total/);
+    expect(descripcionDeLaOrden(g).trim()).not.toBe("");
   });
 });
 

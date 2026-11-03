@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
@@ -13,6 +13,8 @@ import {
   enOrdenes, pendientesDeOrdenes, type GrupoDeCuaderno, type RenglonDelCuaderno,
 } from "@/lib/mantenimiento/cuadernoGrupos";
 import { actualizarElEstado } from "@/lib/mantenimiento/cuadernoEstado";
+import { exportarLoPendiente } from "@/lib/mantenimiento/sincronizar";
+import { esperasQueEntran } from "@/lib/mantenimiento/reintentoDePendientes";
 import {
   valoresDeLaOrden, posiblesDuplicados, avisoDeDuplicados, rangoDelFreno, mismoContratista,
   type EquipoConNombre, type OrdenParaComparar, type SectorConNombre, type ValoresDeLaOrden,
@@ -144,6 +146,13 @@ const TOPE_DE_CLAVES = 500;
  */
 export const maxDuration = 300;
 const MARGEN_EN_MS = 200_000;
+
+/**
+ * El mismo techo, en milisegundos, para repartirlo. Lo que la corrida no gastó
+ * creando órdenes es lo que le queda al drenaje de `after()`, que corre dentro
+ * del mismo `maxDuration`.
+ */
+const TECHO_DE_LA_FUNCION_MS = maxDuration * 1000;
 
 /** Un `.in()` con muchos ids arma una URL que PostgREST rechaza con un 400. */
 const LOTE = 200;
@@ -354,6 +363,43 @@ export async function POST(request: Request) {
       const falloElEstado = await actualizarElEstado(admin, cuaderno_id);
       if (falloElEstado) {
         problemas.push(`Las órdenes se generaron, pero no se pudo actualizar el estado de la carga: ${falloElEstado}`);
+      }
+    }
+
+    // ── Y LAS COLUMNAS DEL MASTER, QUE NO SE ESCRIBEN EN EL MOMENTO ─────────
+    //
+    // De la K en adelante las columnas son **literales del master** —K FECHA DE
+    // CIERRE, M ESTADO, N CONTRATISTA, O HORAS— y para escribirlas la fila
+    // tiene que existir ahí, cosa que tarda: llega por `IMPORTRANGE`. El
+    // intento de arriba, a medio segundo de crear la orden, **no puede salir
+    // nunca**, y hasta hoy eso era todo: quedaba en `sheets_pendiente` y lo
+    // terminaba quien abriera Órdenes o la sincronización —en la práctica,
+    // cada 3 a 5 horas—.
+    //
+    // Medido el 03/11/2026: **las 31 OT que el cuaderno generó tenían las
+    // cuatro columnas vacías**, y 30 seguían en la cola. Al mismo tiempo, de
+    // las 12 OT creadas por `/api/mantenimiento/ordenes` —que sí reintenta—
+    // **12 de 12 habían salido, todas en el primer intento, a los 21 s**. O
+    // sea: el mecanismo existía y esta ruta era la única que no lo usaba.
+    //
+    // Va **una pasada para toda la corrida y no una por orden**: el master
+    // recibe las 25 juntas, así que esperar una vez y drenar la cola entera es
+    // una lectura de la columna A por orden en vez de veinticinco esperas.
+    // `exportarLoPendiente` sin freno es la misma función que usan la pantalla
+    // de Órdenes y la sincronización; drena todo lo que haya en la cola, no
+    // sólo lo de esta corrida, que es lo correcto.
+    //
+    // Y si no alcanza el tiempo, no pasa nada: la cola sigue siendo la red.
+    if (creadas.length + actualizadas.length > 0) {
+      const esperas = esperasQueEntran(TECHO_DE_LA_FUNCION_MS - (Date.now() - inicio));
+      if (esperas.length > 0) {
+        after(async () => {
+          for (const espera of esperas) {
+            await new Promise((r) => setTimeout(r, espera));
+            const siguen = await exportarLoPendiente(admin);
+            if (siguen.size === 0) return;
+          }
+        });
       }
     }
 

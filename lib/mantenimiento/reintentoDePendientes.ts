@@ -198,3 +198,41 @@ export function hacePocoQueSeDreno(
   if (ultimo === null) return false;
   return ahora - ultimo < minimoMs;
 }
+
+/**
+ * Lo que una corrida larga reserva para cada pasada del drenaje.
+ *
+ * Una pasada lee la columna A del master **una vez por orden en la cola** y
+ * escribe las suyas; con treinta encoladas son del orden de medio minuto.
+ * Pasarse no rompe nada —la plataforma corta la función, la cola queda como
+ * estaba y la próxima pasada la termina—, pero quedarse corto sí desperdicia el
+ * intento, así que el margen es generoso a propósito.
+ */
+export const MARGEN_POR_PASADA_MS = 20_000;
+
+/**
+ * Cuáles de las esperas entran en el tiempo que le queda a la función.
+ *
+ * El alta de una sola OT tiene los 300 s enteros para su reintento. La
+ * generación del cuaderno **no**: ya gastó parte del techo creando órdenes, y
+ * el drenaje corre después, en el mismo `maxDuration`. Esto recorta la lista a
+ * lo que de verdad entra en vez de arrancar una espera de dos minutos cuando
+ * quedan treinta segundos.
+ *
+ * Devolver una lista vacía es una respuesta válida y quiere decir «no hay
+ * tiempo, que lo termine la pantalla de Órdenes o la sincronización».
+ */
+export function esperasQueEntran(
+  restanteMs: number,
+  esperas: readonly number[] = ESPERAS_DEL_REINTENTO,
+  margenPorPasada: number = MARGEN_POR_PASADA_MS
+): number[] {
+  const entran: number[] = [];
+  let usado = 0;
+  for (const espera of esperas) {
+    if (usado + espera + margenPorPasada > restanteMs) break;
+    entran.push(espera);
+    usado += espera + margenPorPasada;
+  }
+  return entran;
+}

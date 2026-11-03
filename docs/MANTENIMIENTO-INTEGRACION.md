@@ -2385,6 +2385,94 @@ la pantalla**: la ruta deja cada fallo en `problemas`, sin traducir, y con esa
 línea se sabe dónde está. Sin ella no se puede arreglar sin adivinar, y lo que
 falla escribe en la planilla de producción.
 
+#### La descripción dice sólo qué se hizo, y lo demás va en su columna (03/11/2026)
+
+Al mirar las 48 órdenes recién generadas, lo que estaba mal era esto:
+
+    H (DESCRIPCIÓN): Resoldar chapas impacto rompedores p/ TRT Nº2 — PIPARO.
+                      El 19/10. 8 h en total. Según el cuaderno: Resoldar
+                      chapas impacto rompedores p/ TRT Nº2 (19/10, 8 h).
+    K (FECHA DE CIERRE): —    M (ESTADO): —    N (CONTRATISTA): —    O (HORAS): —
+
+Cuatro datos apilados en una celda de prosa **que tienen su propia columna**, y
+las cuatro columnas vacías. Desde un párrafo no se filtra ni se suma, y la
+planilla es de donde lee quien no entra al sistema.
+
+Son dos problemas distintos con el mismo síntoma, y conviene no confundirlos.
+
+**Uno: el texto.** `descripcionDeLaOrden` ahora devuelve sólo la tarea. Lo que
+pierde, dicho: el detalle renglón por renglón —qué día y cuántas horas cada
+uno— deja de estar en la planilla. No se pierde del sistema —vive en
+`mant_cuadernos_renglones`, enlazado a esa misma OT, y se ve en la pantalla del
+cuaderno—, pero quien mira sólo la planilla ve el total y no el reparto.
+
+**El denominador común de un grupo** vive en
+[lib/mantenimiento/cuadernoDescripcion.ts](../lib/mantenimiento/cuadernoDescripcion.ts),
+y lo que no se deduce del código es por qué no alcanzaba con «si son todas
+iguales, usar ésa»: medido sobre los **cinco grupos que una persona juntó de
+verdad, ninguno tiene las tareas idénticas**.
+
+| Las tareas del grupo | Queda |
+|---|---|
+| «Limpieza techo Hidratación» · «Limpieza techo hidratacion» · «Limpieza techos hidratacion» · «Limpieza techos hidratación» | **Limpieza techo Hidratación** |
+| «Limpieza p/ TRT Nº2» · «Limpieza y destorar pantalón en planta TRT Nº2» · «Limpieza espaldas tolvas p/ TRT Nº2 a pastareras y parte inferior» | **Limpieza TRT Nº2** |
+| «Limpieza p/ TRT Nº1» · «Limpieza túnel y pozo p/ TRT Nº1» | **Limpieza p/ TRT Nº1** |
+| «Pasillo en cinta 1 superior» · «Pasillo cinta 1» | **Pasillo cinta 1** |
+| «Limpieza en cinta tolva» · «Limpieza cola cinta 1 filer 2 parte superior» · «Limpieza en cinta 2 filer p/ sup.» · «Limpieza costado tolva filer 2» | las cuatro, con `·` |
+
+Tres cosas que no se deducen del código:
+
+- **El plural cuenta como la misma palabra** (`mismaPalabra`). Sin eso, «techo»
+  y «techos» no coinciden y el primer grupo se queda en «Limpieza Hidratación».
+  El límite es prefijo exacto, las dos de cuatro letras o más y a lo sumo dos
+  de diferencia: por eso **«Nº1» y «Nº2» no se parecen nunca**, que es lo que no
+  puede fallar —una OT de la TRT Nº1 en la Nº2 no se nota—.
+- **Con menos de dos palabras en común no se inventa un resumen**: se listan las
+  tareas distintas. Es el último caso, donde lo único compartido es «limpieza»,
+  y una orden que dijera sólo eso sería peor que no simplificar.
+- El texto sale **con las palabras de la primera tarea**, con sus acentos y sus
+  mayúsculas: es como lo escribió quien llevó el cuaderno.
+
+**Dos: las columnas, que es el problema de verdad.** De la K en adelante son
+literales del master, y para escribirlas la fila tiene que existir ahí —llega
+por `IMPORTRANGE` y tarda—. La generación lo intentaba **a medio segundo de
+crear la orden**, o sea nunca a tiempo, anotaba `sheets_pendiente` y ahí
+quedaba: lo terminaba quien abriera Órdenes o la sincronización, en la
+práctica cada 3 a 5 horas.
+
+Lo que lo cierra es que **el mecanismo ya existía y esta ruta era la única que
+no lo usaba**. Medido el 03/11/2026, el mismo día:
+
+| | |
+|---|---|
+| OT del cuaderno | **48 de 48 con K/M/N/O vacías**, 47 en la cola |
+| OT de `/api/mantenimiento/ordenes` (que sí reintenta) | **12 de 12 salieron, todas en el primer intento, a los 21 s** |
+
+Así que la generación drena su propia cola con `after()`, y lo que hay que
+saber antes de tocarlo:
+
+- **Una pasada para toda la corrida, no una por orden.** El master recibe las 25
+  juntas; esperar una vez y drenar la cola entera son 25 lecturas de la columna
+  A en vez de 25 esperas de 20 segundos.
+- Usa `exportarLoPendiente` **sin freno** —la misma función de la pantalla de
+  Órdenes y del sync—, así que drena todo lo que haya en la cola y no sólo lo
+  de esta corrida. Es lo correcto: lo viejo también hay que terminarlo.
+- **El `after()` corre dentro del mismo `maxDuration`**, así que las esperas se
+  recortan a lo que queda (`esperasQueEntran`). Pasarse no rompe nada —la cola
+  sigue siendo la red—, pero arrancar una espera de dos minutos cuando quedan
+  treinta segundos es desperdiciar el intento.
+
+**El costo no cambió**: sigue viajando en `REPUESTO UTILIZADO`, que es donde la
+práctica ya lo escribía a mano (58 de las 380 OT viejas de PIPARO). Con repuesto
+y precio queda `2 parches de 200 ($240.000)`; con precio solo, `$920.000`.
+
+**Lo que queda pendiente de una decisión**: las 48 órdenes de octubre ya escritas
+conservan el texto largo. Cambiarlo es reescribir la columna Y de «Altas del
+sistema» con `corregirLaAlta` —la H del master es derrame y no guarda lo que se
+le escribe— y es una escritura en la planilla de producción, así que no se hizo
+sola. Sus columnas K/M/N/O, en cambio, se llenan al abrir Mantenimiento →
+Órdenes, que drena la cola.
+
 ### Lo que quedó anotado
 
 - **`npm run catalogo` se dejó sin correr a propósito, para cuando el árbol esté
