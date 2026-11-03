@@ -37,6 +37,11 @@ export interface NavItem {
 // Estructura de navegación del SdG. La visibilidad real se filtra por permisos.
 export const NAV: NavItem[] = [
   { label: "Inicio", href: "/" },
+  // Sin `modulo`, como Inicio, y es deliberado: la Agenda no es un módulo con
+  // permisos sino una sección que ven los catorce usuarios, y cada uno ve sólo
+  // lo que creó o a lo que lo invitaron (eso lo resuelve RLS, no el menú).
+  // Ponerle un `modulo` la escondería de quien no tiene ninguno de los doce.
+  { label: "Agenda", href: "/agenda" },
   {
     label: "RRHH",
     href: "/rrhh",

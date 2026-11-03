@@ -82,6 +82,11 @@ export function instanteDe(texto: string): { ms: number; conZona: boolean } | nu
 
 const CORREO = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
+/** ¿Es un correo que la ruta va a aceptar? La pantalla lo usa para no ofrecer lo que `problemasDelEvento` rechazaría. */
+export function esCorreo(texto: string): boolean {
+  return CORREO.test(texto);
+}
+
 /**
  * Qué está mal en lo que entró, todo junto y en castellano. Vacío = está bien.
  *
@@ -113,7 +118,7 @@ export function problemasDelEvento(e: {
   }
 
   for (const correo of e.invitados) {
-    if (!CORREO.test(correo)) problemas.push(`El invitado «${correo}» no es un correo válido`);
+    if (!esCorreo(correo)) problemas.push(`El invitado «${correo}» no es un correo válido`);
   }
 
   return problemas;

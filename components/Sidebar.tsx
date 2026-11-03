@@ -23,6 +23,9 @@ function esRutaActiva(href: string, pathname: string, search: string): boolean {
 // entre módulos cuando el concepto es el mismo — ej. "Historial" o "Configuración").
 const ICONOS: Record<string, () => ReactElement> = {
   "Inicio": IconDash,
+  // Sin esta línea cae en el ícono de Inicio (`iconForItem`) y los dos primeros
+  // renglones del menú se ven iguales.
+  "Agenda": IconCalendar,
   "RRHH": IconUsers,
   "Remises": IconCar,
   "Mantenimiento": IconWrench,
