@@ -155,4 +155,38 @@ describe("obtenerToken", () => {
     await expect(obtenerToken([SCOPE_SHEETS])).rejects.toThrow(/Google OAuth/);
     expect(pedidos).toBe(2);
   });
+});
+
+describe("el canje del token tiene cota", () => {
+  it("manda un AbortSignal: sin él, un Google colgado mata la función desde adentro de una iteración", async () => {
+    let signal: AbortSignal | null | undefined;
+    vi.stubGlobal("fetch", async (_url: unknown, init?: { signal?: AbortSignal | null }) => {
+      signal = init?.signal;
+      return new Response(JSON.stringify({ access_token: "t", expires_in: 3600 }), { status: 200 });
+    });
+
+    await obtenerToken([SCOPE_SHEETS]);
+
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("si Google no contesta, el error lo dice y nombra a quién se impersonaba, y no queda cacheado", async () => {
+    vi.stubGlobal("fetch", async () => {
+      pedidos++;
+      throw Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+    });
+
+    await expect(obtenerToken([SCOPE_CALENDAR], "ana@polcecal.com")).rejects.toThrow(
+      /no contestó el canje del token de ana@polcecal.com en 30 segundos/
+    );
+    await expect(obtenerToken([SCOPE_CALENDAR], "ana@polcecal.com")).rejects.toThrow(/no contestó/);
+    expect(pedidos).toBe(2);
+  });
+
+  it("un error de red que no es de tiempo se propaga como estaba", async () => {
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("getaddrinfo ENOTFOUND");
+    });
+    await expect(obtenerToken([SCOPE_SHEETS])).rejects.toThrow(/ENOTFOUND/);
+  });
 });

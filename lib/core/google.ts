@@ -79,6 +79,17 @@ export function hayCredencialesGoogle(): boolean {
  * borde, la llamada volvería con un 401 que nadie sabría leer.
  */
 const MARGEN_SEGUNDOS = 60;
+
+/**
+ * Cuánto se espera el canje del token antes de darlo por perdido. Es la misma cota
+ * que usan `sheets.ts` y `calendar.ts` (`CORTE_MS`), y no es un detalle: **todo
+ * «hasta 30 s por llamada a Google» que dan por dicho los presupuestos de la Agenda
+ * descansa en que esta llamada también tenga cota.** El caché es por casilla y por
+ * proceso, así que una corrida fría son hasta catorce canjes; uno que cuelgue sin
+ * cota mata la función desde adentro de una iteración, donde ningún corte entre
+ * iteraciones lo alcanza.
+ */
+const CORTE_DEL_TOKEN_MS = 30_000;
 const tokensEnMemoria = new Map<string, { token: string; vence: number }>();
 
 export async function obtenerToken(scopes: string[], comoQuien?: string): Promise<string> {
@@ -119,14 +130,27 @@ export async function obtenerToken(scopes: string[], comoQuien?: string): Promis
   const firma = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", clave, Buffer.from(sinFirmar));
   const jwt = `${sinFirmar}.${Buffer.from(firma).toString("base64url")}`;
 
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: jwt,
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion: jwt,
+      }),
+      signal: AbortSignal.timeout(CORTE_DEL_TOKEN_MS),
+    });
+  } catch (e) {
+    if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
+      throw new Error(
+        `Google no contestó el canje del token${comoQuien ? ` de ${comoQuien}` : ""} en ` +
+          `${CORTE_DEL_TOKEN_MS / 1000} segundos y se cortó la espera; se reintenta solo`,
+        { cause: e }
+      );
+    }
+    throw e;
+  }
   const datos = await res.json();
   if (!datos.access_token) throw new Error(`Google OAuth: ${JSON.stringify(datos)}`);
 
