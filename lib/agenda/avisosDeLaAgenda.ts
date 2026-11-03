@@ -162,28 +162,45 @@ export function pasosCaidos(
   });
 }
 
+/** Lo que se pudo saber de la salud de la Agenda. */
+export interface SaludDeLaAgenda {
+  /** Pasos caídos, de 0 a 2. Es 0 también cuando no se pudo mirar: ver `sinComprobar`. */
+  caidos: number;
+  /**
+   * **La comprobación misma falló.** No es «todo bien» ni es «algo cayó»: es que
+   * no se sabe. Es un estado aparte, con su propio aviso, y no un 0.
+   */
+  sinComprobar: boolean;
+}
+
 /**
  * Los pasos caídos, leídos de `ultima_sincronizacion`. Esa vista la leen todos
  * los autenticados, así que da lo mismo con la sesión que con el cliente admin.
  *
- * Si la lectura falla devuelve 0 y lo dice en el log, por lo mismo que arriba.
- * (No es una buena respuesta —un aviso de salud que calla cuando no puede mirar
- * es el patrón que esto viene a evitar—, pero la campana corre en cada página y
- * la alternativa es voltearla.)
+ * **Si la lectura falla NO devuelve 0**: devuelve `sinComprobar`. Es el único
+ * aviso del sistema cuyo trabajo es detectar que algo dejó de funcionar en
+ * silencio, y uno que dice «todo bien» cuando no pudo mirar cierra el fallo un
+ * piso más abajo y lo abre un piso más arriba. Tampoco tira —ni por un error de
+ * PostgREST ni por una excepción de red—: la campana corre en cada página y no
+ * puede caerse por esto. Va al log y sale como su propio aviso
+ * (`agenda-salud-sin-comprobar`), con un texto que dice que **la comprobación**
+ * falló y no que los canales lo hayan hecho.
  */
-export async function contarPasosCaidos(
+export async function leerLaSaludDeLaAgenda(
   supabase: SupabaseClient,
   ahora: Date = new Date()
-): Promise<number> {
-  const { data, error } = await supabase
-    .from("ultima_sincronizacion")
-    .select("recurso, ok, created_at")
-    .eq("modulo", "agenda")
-    .in("recurso", [...PASOS_CON_GOOGLE])
-    .returns<CorridaDeLaAgenda[]>();
-  if (error) {
-    console.error("agenda: no se pudo leer ultima_sincronizacion:", error.message);
-    return 0;
+): Promise<SaludDeLaAgenda> {
+  try {
+    const { data, error } = await supabase
+      .from("ultima_sincronizacion")
+      .select("recurso, ok, created_at")
+      .eq("modulo", "agenda")
+      .in("recurso", [...PASOS_CON_GOOGLE])
+      .returns<CorridaDeLaAgenda[]>();
+    if (error) throw new Error(error.message);
+    return { caidos: pasosCaidos(data ?? [], ahora).length, sinComprobar: false };
+  } catch (e) {
+    console.error("agenda: no se pudo comprobar la salud de la Agenda:", e instanceof Error ? e.message : e);
+    return { caidos: 0, sinComprobar: true };
   }
-  return pasosCaidos(data ?? [], ahora).length;
 }

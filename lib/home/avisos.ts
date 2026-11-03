@@ -27,6 +27,7 @@ export interface ConteosParaAvisos {
   syhFotosSinRespaldar: number;
   agendaDivergencias: number;
   agendaPasosCaidos: number;
+  agendaSaludSinComprobar: number;
 }
 
 /**
@@ -156,12 +157,19 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * algo, igual que los avisos de ritmo. Por eso el título habla de «pasos» y no
    * de canales ni de eventos.
    *
-   * Le llega sólo a `admin_sistema` (`DE_UNA_LISTA`): lo arregla quien toca las
+   * **Y si no se pudo ni leer la salud, no es un 0**: sale `agenda-salud-sin-comprobar`,
+   * un aviso aparte con su propio id porque es otra cosa —«no sé»—, y su título
+   * dice que falló **la comprobación**, no que los canales estén caídos ni
+   * sanos. `cantidad` es 1 cuando pasa. Un aviso de salud que calla cuando no
+   * puede mirar es el fallo silencioso que esto viene a cerrar.
+   *
+   * Le llegan sólo a `admin_sistema` (`DE_UNA_LISTA`): lo arregla quien toca las
    * credenciales de Google y las variables de Vercel, no quien usa la Agenda. El
    * detalle de qué falló está en `sincronizaciones` (módulo `agenda`).
    */
   { clave: "agendaDivergencias", id: "agenda-divergencias", titulo: "Eventos del calendario que alguien cambió desde Google", href: "/agenda" },
   { clave: "agendaPasosCaidos", id: "agenda-pasos-caidos", titulo: "Pasos de la Agenda con Google que fallaron o no corrieron", href: "/agenda" },
+  { clave: "agendaSaludSinComprobar", id: "agenda-salud-sin-comprobar", titulo: "No se pudo comprobar si la Agenda sigue mirando Google", href: "/agenda" },
 ];
 
 /**

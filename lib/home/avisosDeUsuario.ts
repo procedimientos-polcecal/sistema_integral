@@ -7,7 +7,7 @@ import type { Modulo, Rol, UsuarioModulo } from "@/lib/core/types";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { filtrarDescartadas, type Notificacion } from "./notificaciones";
 import { avisosDeConteos, avisosDeRitmo, type ConteosParaAvisos } from "./avisos";
-import { contarDivergenciasSinVer, contarPasosCaidos } from "@/lib/agenda/avisosDeLaAgenda";
+import { contarDivergenciasSinVer, leerLaSaludDeLaAgenda } from "@/lib/agenda/avisosDeLaAgenda";
 import { ritmoPorModulo } from "./ritmo";
 import { traerRitmo, sinClasificarDelUltimoDiaHabil, equiposTallerVialSinService } from "./consultas";
 
@@ -75,7 +75,7 @@ async function avisosDeLosModulos(
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
     tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar, filasRitmo,
-    agendaDivergencias, agendaPasosCaidos,
+    agendaDivergencias, saludDeLaAgenda,
   ] = await Promise.all([
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
     contarSiTiene("mantenimiento", () => head("ordenes_trabajo").eq("estado", "ATRASADO")),
@@ -141,7 +141,9 @@ async function avisosDeLosModulos(
     // Ver `agendaDivergencias` en `avisos.ts`.
     opciones.usuarioId ? contarDivergenciasSinVer(supabase, opciones.usuarioId) : Promise.resolve(0),
     // Tampoco por módulo: es de la salud del cron. Ver `agendaPasosCaidos`.
-    opciones.saludDeLaAgenda ? contarPasosCaidos(supabase) : Promise.resolve(0),
+    opciones.saludDeLaAgenda
+      ? leerLaSaludDeLaAgenda(supabase)
+      : Promise.resolve({ caidos: 0, sinComprobar: false }),
   ]);
 
   const conteos: Partial<ConteosParaAvisos> = {
@@ -151,7 +153,9 @@ async function avisosDeLosModulos(
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
     tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar,
-    agendaDivergencias, agendaPasosCaidos,
+    agendaDivergencias,
+    agendaPasosCaidos: saludDeLaAgenda.caidos,
+    agendaSaludSinComprobar: saludDeLaAgenda.sinComprobar ? 1 : 0,
   };
 
   return [...avisosDeConteos(conteos), ...avisosDeRitmo(ritmoPorModulo(filasRitmo), modulos)];
@@ -227,6 +231,8 @@ const DE_UNA_LISTA: Record<string, keyof QuePuedeAtender> = {
    * ya llega sólo a quien le toca, por su propio conteo.)
    */
   "agenda-pasos-caidos": "administraElSistema",
+  // Que no se pueda ni mirar la salud también es de quien toca la infraestructura.
+  "agenda-salud-sin-comprobar": "administraElSistema",
 };
 
 /**

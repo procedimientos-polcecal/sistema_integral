@@ -106,6 +106,12 @@ describe("los avisos de la Agenda", () => {
     expect(sinLoQueNoPuedeAtender(salud, { ...NADA, administraElSistema: true })).toEqual(salud);
   });
 
+  it("el de «no se pudo comprobar» también va sólo a admin_sistema", () => {
+    const sin = [avisoDe("agendaSaludSinComprobar")];
+    expect(sinLoQueNoPuedeAtender(sin, NADA)).toEqual([]);
+    expect(sinLoQueNoPuedeAtender(sin, { ...NADA, administraElSistema: true })).toEqual(sin);
+  });
+
   // El de divergencias es de cada uno y lo decide su propio conteo: filtrarlo
   // por rol le sacaría el aviso al dueño de un evento que sólo usa la Agenda.
   it("el de divergencias le llega a cualquiera que tenga alguna", () => {

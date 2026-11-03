@@ -1,7 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   divergenciasSinVer,
   pasosCaidos,
+  leerLaSaludDeLaAgenda,
   HORAS_SIN_CORRER,
   type EventoDivergido,
   type CorridaDeLaAgenda,
@@ -141,5 +143,55 @@ describe("pasosCaidos", () => {
     const corridas = [...sana, { recurso: "aviso_de_google", ok: false, created_at: haceHoras(1) }];
     expect(pasosCaidos(corridas, AHORA)).toEqual([]);
     expect(pasosCaidos([{ recurso: "pendientes", ok: true, created_at: haceHoras(1) }], AHORA)).toEqual(["canales", "barrido"]);
+  });
+});
+
+describe("leerLaSaludDeLaAgenda", () => {
+  const AHORA = new Date("2026-11-03T12:00:00Z");
+  const reciente = new Date(AHORA.getTime() - 3_600_000).toISOString();
+
+  /** Un cliente cuya consulta termina en lo que se le diga. */
+  function clienteQue(resultado: () => Promise<unknown>): SupabaseClient {
+    const b: Record<string, unknown> = {};
+    for (const m of ["select", "eq", "in"]) b[m] = () => b;
+    b.returns = resultado;
+    return { from: () => b } as unknown as SupabaseClient;
+  }
+
+  it("con los dos pasos sanos: nada caído y comprobado", async () => {
+    const c = clienteQue(async () => ({
+      data: [
+        { recurso: "canales", ok: true, created_at: reciente },
+        { recurso: "barrido", ok: true, created_at: reciente },
+      ],
+      error: null,
+    }));
+    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toEqual({ caidos: 0, sinComprobar: false });
+  });
+
+  it("con un paso caído lo cuenta", async () => {
+    const c = clienteQue(async () => ({
+      data: [{ recurso: "canales", ok: false, created_at: reciente }, { recurso: "barrido", ok: true, created_at: reciente }],
+      error: null,
+    }));
+    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toEqual({ caidos: 1, sinComprobar: false });
+  });
+
+  /*
+   * El que importa: un aviso de salud que dice «todo bien» cuando no pudo mirar
+   * es el fallo silencioso que existe para cerrar.
+   */
+  it("si la lectura devuelve error NO es un cero: es una comprobación que falló", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const c = clienteQue(async () => ({ data: null, error: { message: "relation does not exist" } }));
+    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toEqual({ caidos: 0, sinComprobar: true });
+  });
+
+  it("si la lectura tira una excepción tampoco calla, y no tira", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const c = clienteQue(async () => {
+      throw new Error("fetch failed");
+    });
+    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toEqual({ caidos: 0, sinComprobar: true });
   });
 });

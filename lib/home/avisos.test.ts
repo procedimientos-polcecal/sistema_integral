@@ -163,6 +163,18 @@ describe("los avisos de la Agenda", () => {
   });
 
   it("con cero no avisan", () => {
-    expect(avisosDeConteos({ agendaDivergencias: 0, agendaPasosCaidos: 0 })).toEqual([]);
+    expect(avisosDeConteos({ agendaDivergencias: 0, agendaPasosCaidos: 0, agendaSaludSinComprobar: 0 })).toEqual([]);
+  });
+
+  // «No sé» no es «los canales están caídos» ni «están sanos»: otro id, otro texto.
+  it("la comprobación que falló es su propio aviso y dice que falló la comprobación", () => {
+    expect(avisosDeConteos({ agendaSaludSinComprobar: 1 })).toEqual([
+      {
+        id: "agenda-salud-sin-comprobar",
+        titulo: "No se pudo comprobar si la Agenda sigue mirando Google",
+        cantidad: 1,
+        href: "/agenda",
+      },
+    ]);
   });
 });
