@@ -136,8 +136,11 @@ describe("pasosCaidos", () => {
     const corridasDesde = (ultima: string) => sana.map((c) => ({ ...c, created_at: ultima }));
     const a = (iso: string) => pasosCaidos(corridasDesde(ULTIMA), new Date(iso));
 
-    it("la corrida de mañana no corrió y son las 17:00 UTC: es el caso que con 36 h sonaba", () => {
-      expect(a("2026-11-04T17:00:00Z")).toEqual([]);
+    // 18:00 UTC son 37 h después de la última corrida: pasada la marca de las 36 h
+    // —con la que esto SONABA— y a 13 h del umbral de 50. A las 17:00 en punto
+    // serían exactamente 36 h y, con `<` estricto, no distinguiría un umbral del otro.
+    it("la corrida de mañana no corrió y son las 18:00 UTC: 37 h, que con 36 h sonaba", () => {
+      expect(a("2026-11-04T18:00:00Z")).toEqual([]);
     });
 
     it("sigue sin sonar cuando ya debería haber corrido la de pasado mañana", () => {

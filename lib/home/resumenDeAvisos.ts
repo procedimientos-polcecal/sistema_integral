@@ -13,8 +13,7 @@ const CUANTOS_SE_NOMBRAN = 3;
  * `cantidadDelAviso` en `./ritmo.ts`—. Escribirla al lado del título daría
  * "9 · Trituración: hace 36 días que no se carga", que no significa nada. El
  * título de esos avisos ya es la frase completa, así que va solo.
- */
-/**
+ *
  * **Tampoco una bandera** (`ES_BANDERA`): `agenda-salud-sin-comprobar` usa
  * `cantidad: 1` como «pasa», no como cuántos. Sale igual de sin número.
  */
