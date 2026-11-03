@@ -40,9 +40,10 @@ export const maxDuration = 300;
  * lea como «falta escribir» y resucite, o le mande una modificación a los
  * invitados de, un evento que se quería borrar. Este cron no lee esa columna.
  *
- * **Un solo presupuesto por corrida** (170 s), repartido con un piso para las fases
- * 2 y 3 —los canales dejan de empezar casillas a los 110 s y el barrido a los
- * 140 s—: la cuenta de por qué 170 está en `limitesDeLaCorrida`. Cada fase
+ * **Un solo presupuesto por corrida** (140 s), repartido con un piso de mejor
+ * esfuerzo para las fases 2 y 3 —los canales dejan de empezar casillas a los 80 s y
+ * el barrido a los 110 s—: la cuenta de por qué 140, y por qué el piso no es una
+ * garantía, está en `PRESUPUESTO_DE_LA_CORRIDA_MS`. Cada fase
  * registra su fila aunque se corte, y es lo que evita que el día que Google se cae
  * no quede ningún rastro.
  *

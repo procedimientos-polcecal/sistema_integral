@@ -71,26 +71,52 @@ import { parDivergencia } from "./escribirEnGoogle";
  * se reparte entre las tres fases: cada una deja de empezar trabajo al llegar a
  * su límite.
  *
- * POR QUÉ 170 s. El corte sólo se mira entre una iteración y la siguiente, así que
- * lo que cuesta de más es la iteración que arrancó justo antes del límite. La peor
- * es la de los pendientes: `crearEvento` hace el POST, recibe el 409 (que **es** el
- * caso normal de reintentar un alta que cortó a los 30 s), hace su `leerEvento`
- * interno, y después `restaurar` lee otra vez y manda el `PUT`: cuatro llamadas
- * de hasta 30 s. 170 + 120 = 290 < 300. Con 200 serían 320, y la fila
- * `agenda / pendientes` no llegaría a escribirse: justo lo que el presupuesto
- * existe para evitar. (Abrir o renovar un canal son dos llamadas: `abrirCanal` y
- * un solo `cerrarCanal`, el del viejo o el del que se acaba de abrir si el
- * upsert falló; nunca los dos.) El canje del token se cuenta aparte: está en
- * caché, y si cuelga lanza a los 30 s y esa iteración termina ahí.
+ * POR QUÉ 140 s. El corte sólo se mira entre una iteración y la siguiente, así que
+ * lo que cuesta de más es la iteración que arrancó justo antes del límite, con cada
+ * llamada a Google cortada a los 30 s (`CORTE_MS` de `calendar.ts` y
+ * `CORTE_DEL_TOKEN_MS` de `google.ts`). Lo que cuesta cada fase, en el peor caso:
+ *
+ *  - **Pendientes** (la que fija el número): `crearEvento` hace el POST, recibe el
+ *    409 —que **es** el caso normal de reintentar un alta que cortó a los 30 s—,
+ *    hace su `leerEvento` interno, y después `restaurar` lee otra vez y manda el
+ *    `PUT`: cuatro llamadas. **Y llega con el token frío**: una fila encolada por un
+ *    alta fallida tiene `inicio_escrito` en null y queda fuera del `select` del
+ *    barrido, así que la casilla típica de un pendiente es la que ninguna fase
+ *    anterior tocó. Cinco llamadas, 150 s. 140 + 150 = 290 < 300. Con 170 serían
+ *    320, y la fila `agenda / pendientes` no llegaría a escribirse: justo lo que el
+ *    presupuesto existe para evitar.
+ *  - **Canales**: el canje del token, `abrirCanal` y un solo `cerrarCanal` (el del
+ *    viejo, o el del que se acaba de abrir si el upsert falló; nunca los dos): 90 s.
+ *  - **Barrido**: el canje del token y una lectura de evento: 60 s.
+ *
+ * Con los límites de abajo, las tres fases terminan como tarde a los 170, 170 y 290 s.
  */
-export const PRESUPUESTO_DE_LA_CORRIDA_MS = 170_000;
+export const PRESUPUESTO_DE_LA_CORRIDA_MS = 140_000;
 
 /**
- * **El piso de las fases 2 y 3.** Sin él el reparto sería por prioridad absoluta: si
- * los canales se comen todo, el barrido y los pendientes cortan en la primera
- * iteración corrida tras corrida, y la cola de las personas no se reintenta nunca,
- * que es justo el caso del día malo. Los canales dejan de empezar casillas 60 s
- * antes del fin y el barrido 30 s antes: lo que queda es para los pendientes.
+ * **El piso de las fases 2 y 3 es de mejor esfuerzo, no una garantía.** Sin él el
+ * reparto sería por prioridad absoluta: si los canales se comen todo, el barrido y
+ * los pendientes cortan en la primera iteración corrida tras corrida, y la cola de
+ * las personas no se reintenta nunca, que es justo el caso del día malo. Los canales
+ * dejan de empezar casillas 60 s antes del fin y el barrido 30 s antes: en un día
+ * en que Google contesta lento pero contesta, lo que queda alcanza.
+ *
+ * **Qué lo rompe:** cada reserva es menor que lo que puede desbordar una sola
+ * iteración de la fase anterior. Una casilla de canales empezada justo en su límite
+ * puede costar 90 s (token, `abrirCanal`, `cerrarCanal`) y la reserva que le sigue es
+ * de 30; una lectura del barrido puede costar 60 (token y lectura) y su reserva es de
+ * 30. Si Google cuelga, la fase que se pasa se come el piso de la siguiente, y esa
+ * corta en la primera iteración. Se ve —las filas de `sincronizaciones` quedan en
+ * `ok: false` y nombran lo que no se alcanzó—, pero no se evita.
+ *
+ * **Por qué una garantía de verdad no entra en 300 s.** Para asegurarle a los
+ * pendientes que empiezan, el barrido tendría que cortar 60 s antes que ellos
+ * (su peor iteración), y para asegurárselo al barrido, los canales 90 s antes que
+ * él: 90 + 60 = 150 s de reserva antes del límite de los pendientes, que es de 140.
+ * El límite de los canales tendría que ser **cero** (140 − 150 < 0), o sea que no
+ * harían nada nunca. La única salida sería cortar *adentro* de una iteración, con
+ * un `AbortSignal` común a todas las llamadas de la corrida, que es otro diseño y
+ * no se hizo.
  */
 export const RESERVA_PARA_BARRIDO_Y_PENDIENTES_MS = 60_000;
 export const RESERVA_PARA_PENDIENTES_MS = 30_000;
@@ -345,8 +371,9 @@ export async function ponerAlDiaLosCanales(
   for (let i = 0; i < hoy.length; i++) {
     const { casilla, motivo } = hoy[i];
     if (Date.now() >= limiteEnMsDeEpoca) {
-      // Cada casilla son hasta tres llamadas a Google de hasta 30 s: sin este corte
-      // la fase puede matar la función antes de que nada quede registrado.
+      // Cada casilla son hasta 90 s en el peor caso (el canje del token, `abrirCanal` y
+      // un solo `cerrarCanal`): sin este corte la fase puede matar la función antes de
+      // que nada quede registrado. Ver `PRESUPUESTO_DE_LA_CORRIDA_MS`.
       r.fallos.push(
         `Se cortó por tiempo: quedaron sin abrir o renovar ${hoy.slice(i).map((c) => c.casilla).join(", ")}. ` +
           `Se reintenta mañana, y mientras tanto esas casillas no avisan.`

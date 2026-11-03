@@ -824,11 +824,30 @@ describe("limitesDeLaCorrida", () => {
     expect(l.barrido).toBeLessThan(l.pendientes);
   });
 
-  it("la peor iteración de los pendientes entra en maxDuration: cuatro llamadas de 30 s tras el límite", () => {
-    // POST, 409, el leerEvento de crearEvento, el leerEvento de restaurar y el PUT.
-    // Con 200 s serían 320 > 300 y la fila `agenda / pendientes` no llegaría a escribirse.
-    const cuatroLlamadas = 4 * 30_000;
-    expect(PRESUPUESTO_DE_LA_CORRIDA_MS + cuatroLlamadas).toBeLessThan(300_000);
+  it("la peor iteración de los pendientes entra en maxDuration, con el token frío", () => {
+    // El canje del token y después POST, 409, el leerEvento de crearEvento, el
+    // leerEvento de restaurar y el PUT: cinco llamadas de 30 s. El token llega frío
+    // porque una fila encolada por un alta fallida tiene `inicio_escrito` en null y
+    // queda fuera del select del barrido. Con 170 s serían 320 > 300 y la fila
+    // `agenda / pendientes` no llegaría a escribirse.
+    const cincoLlamadas = 5 * 30_000;
+    expect(limitesDeLaCorrida(0).pendientes + cincoLlamadas).toBeLessThan(300_000);
+  });
+
+  it("las tres fases terminan antes de los 300 s aun en el peor caso de cada una", () => {
+    const l = limitesDeLaCorrida(0);
+    const canales = 3 * 30_000; // token, abrirCanal, cerrarCanal
+    const barrido = 2 * 30_000; // token, una lectura
+    expect(l.canales + canales).toBeLessThan(300_000);
+    expect(l.barrido + barrido).toBeLessThan(300_000);
+  });
+
+  it("el piso de las fases 2 y 3 es de mejor esfuerzo: una garantía no entra en el presupuesto", () => {
+    // Para asegurarle a los pendientes que empiezan, el barrido tendría que cortar 60 s antes
+    // (su peor iteración) y los canales 90 s antes que el barrido: 150 s de reserva, y el
+    // límite de los pendientes es de 140. El de los canales tendría que ser cero.
+    const reservaNecesaria = 90_000 + 60_000;
+    expect(reservaNecesaria).toBeGreaterThan(PRESUPUESTO_DE_LA_CORRIDA_MS);
   });
 
   it("son instantes y no duraciones: pasados a las fases como están, no cortan de entrada", () => {
