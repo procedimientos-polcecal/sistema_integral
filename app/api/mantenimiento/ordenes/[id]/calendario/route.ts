@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
 import {
-  INVITADOS_DE_UNA_OT, advertenciaDeReenviarDivergido, datosDeLaOT, duenoDelEventoDeLaOT, faltaConfirmarElPisado,
+  INVITADOS_DE_UNA_OT, advertenciaDeReenviarDivergido, datosDeLaOT, faltaConfirmarElPisado,
   fechaParaElCalendario, horarioDeLaOT, invitadosExtraDeLaOT, problemasDeMandarLaOT, problemasDelEvento,
 } from "@/lib/agenda/evento";
 import { aHoraDePared, aInstanteISO, eventoParaGoogle, invitadosLimpios } from "@/lib/agenda/pedido";
@@ -15,6 +15,7 @@ import {
 } from "@/lib/agenda/escribirEnGoogle";
 import { agregarInvitados, sacarInvitados, diferenciaDeInvitados } from "@/lib/agenda/invitados";
 import { anotarEnLaFila } from "@/lib/agenda/cargar";
+import { elegirElDuenoDeLaOT } from "@/lib/agenda/duenoDeLaOT";
 import { ES_UUID, quienLlama } from "@/lib/agenda/sesion";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 
@@ -38,6 +39,12 @@ const esquemaDeMandar = z.object({
  * como hora de pared de Argentina (`2026-11-03T08:00:00`); con `"borrado"`, o si
  * Google ya no lo conoce, `google` es `null`. Una lectura que falla no tira el
  * pedido: vuelve en `google_error` con lo que dijo Google, sin traducir.
+ *
+ * Trae también **de quién es el evento** (`dueno_casilla`), para que el modal lo
+ * diga antes de apretar: el del evento que ya existe, o el que va a tener según
+ * `elegirElDuenoDeLaOT`, que es la misma lectura que usa el POST al crearlo.
+ * `dueno_casilla` es `null` si no se pudo averiguar, y el modal calla antes que
+ * inventarlo.
  */
 export async function GET(_request: Request, { params }: Params) {
   const { id } = await params;
@@ -59,7 +66,14 @@ export async function GET(_request: Request, { params }: Params) {
     return NextResponse.json({ error: `No se pudo leer el evento de la orden: ${error.message}` }, { status: 500 });
   }
   if (!evento) {
-    return NextResponse.json({ existe: false, divergencia: null, google: null, google_error: null, invitados_extra: [] });
+    // Todavía no hay evento: el dueño es el que va a tener (ver `elegirElDuenoDeLaOT`).
+    const { data: orden } = await admin.from("ordenes_trabajo").select("created_by").eq("id", id).maybeSingle();
+    const elegido = orden ? await elegirElDuenoDeLaOT(admin, orden.created_by ?? null) : null;
+    return NextResponse.json({
+      existe: false, divergencia: null, google: null, google_error: null, invitados_extra: [],
+      dueno_casilla: elegido?.ok ? elegido.casilla : null,
+      dueno_del_area: elegido?.ok ? elegido.delArea : false,
+    });
   }
 
   // A quién se sumó a mano la vez anterior: el modal los precarga, porque
@@ -87,6 +101,8 @@ export async function GET(_request: Request, { params }: Params) {
 
   return NextResponse.json({
     existe: true,
+    dueno_casilla: evento.casilla,
+    dueno_del_area: false,
     divergencia: evento.divergencia,
     google,
     google_error: googleError,
@@ -187,22 +203,8 @@ export async function POST(request: Request, { params }: Params) {
   if (actual) {
     dueno = { id: actual.dueno_id, casilla: actual.casilla };
   } else {
-    let generador: { id: string; email: string | null } | null = null;
-    if (orden.created_by) {
-      const { data: u, error: errorDeUsuario } = await admin
-        .from("usuarios")
-        .select("id, email")
-        .eq("id", orden.created_by)
-        .maybeSingle();
-      if (errorDeUsuario) {
-        return NextResponse.json(
-          { error: `No se pudo averiguar quién generó la orden: ${errorDeUsuario.message}` },
-          { status: 500 }
-        );
-      }
-      generador = u ?? null;
-    }
-    const elegido = duenoDelEventoDeLaOT(generador);
+    const elegido = await elegirElDuenoDeLaOT(admin, orden.created_by ?? null);
+    if (!elegido.ok) return NextResponse.json({ error: elegido.error }, { status: 500 });
     if (elegido.id) {
       dueno = { id: elegido.id, casilla: elegido.casilla };
     } else {

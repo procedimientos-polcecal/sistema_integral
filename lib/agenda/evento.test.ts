@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   DURACION_OT_MINUTOS, INVITADOS_DE_UNA_OT, TURNOS_DEL_TALLER, datosDeLaOT, fechaParaElCalendario,
   CASILLA_DE_MANTENIMIENTO, advertenciaDeReenviarDivergido, duenoDelEventoDeLaOT, faltaConfirmarElPisado,
+  invitacionesDeLaOT, leyendaDelDuenoDeLaOT,
   horarioDeLaOT, invitadosExtraDeLaOT, laOTEstaCerrada, instanteDe, problemasDeMandarLaOT, problemasDelEvento,
 } from "./evento";
+import { invitadosLimpios } from "./pedido";
 
 const bueno = { titulo: "x", inicio: "2026-11-03T08:00:00", fin: "2026-11-03T09:30:00", invitados: ["ok@polcecal.com"] };
 
@@ -218,6 +220,46 @@ describe("una OT cerrada no se manda", () => {
     expect(laOTEstaCerrada({ fecha_cierre: null, estado: "SUSPENDIDA" })).toBe(false);
     expect(laOTEstaCerrada({ fecha_cierre: null, estado: "EN_PROCESO" })).toBe(false);
     expect(laOTEstaCerrada({})).toBe(false);
+  });
+});
+
+describe("leyendaDelDuenoDeLaOT: el modal dice el dueño real", () => {
+  it("una OT sin created_by nombra a mantenimiento@, no a «la casilla que la generó»", () => {
+    const t = leyendaDelDuenoDeLaOT(CASILLA_DE_MANTENIMIENTO, false, true);
+    expect(t).toContain(CASILLA_DE_MANTENIMIENTO);
+    expect(t).toContain("no la cargó nadie");
+    expect(t).not.toContain("que es quien generó");
+  });
+  it("una con created_by nombra a quien la generó", () => {
+    const t = leyendaDelDuenoDeLaOT("soporte.mantenimiento@polcecal.com", false, false);
+    expect(t).toContain("soporte.mantenimiento@polcecal.com, que es quien generó la orden");
+  });
+  it("con evento ya creado dice que el dueño no cambia al reenviar, y de quién es", () => {
+    const t = leyendaDelDuenoDeLaOT("ana@polcecal.com", true, false);
+    expect(t).toContain("es de ana@polcecal.com");
+    expect(t).toContain("no cambia de quién es");
+    expect(t).toContain("otra casilla");
+  });
+});
+
+describe("invitacionesDeLaOT: lo que la pantalla lista es lo que se manda", () => {
+  it("con el dueño entre los fijos se mandan cuatro, no cinco", () => {
+    const r = invitacionesDeLaOT(CASILLA_DE_MANTENIMIENTO, []);
+    expect(r.reciben).toHaveLength(INVITADOS_DE_UNA_OT.length - 1);
+    expect(r.reciben).not.toContain(CASILLA_DE_MANTENIMIENTO);
+    expect(r.elDuenoEstaEntreLosFijos).toBe(true);
+  });
+  it("con un dueño que no es de los fijos se mandan los cinco", () => {
+    const r = invitacionesDeLaOT("otra@polcecal.com", ["Extra@x.com"]);
+    expect(r.reciben).toEqual([...INVITADOS_DE_UNA_OT, "extra@x.com"]);
+    expect(r.elDuenoEstaEntreLosFijos).toBe(false);
+  });
+  it("coincide con invitadosLimpios, que es lo que escribe la ruta", () => {
+    for (const casilla of [CASILLA_DE_MANTENIMIENTO, "soporte.mantenimiento@polcecal.com", "otra@polcecal.com"]) {
+      const extras = ["a@x.com", "A@x.com", casilla.toUpperCase()];
+      expect(invitacionesDeLaOT(casilla, extras).reciben)
+        .toEqual(invitadosLimpios([...INVITADOS_DE_UNA_OT, ...extras], casilla));
+    }
   });
 });
 

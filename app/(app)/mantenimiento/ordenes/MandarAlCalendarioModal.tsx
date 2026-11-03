@@ -5,6 +5,7 @@ import Select from "@/components/Select";
 import { comoSeLee } from "@/lib/core/fechas";
 import {
   INVITADOS_DE_UNA_OT, TURNOS_DEL_TALLER, esCorreo, fechaParaElCalendario, horarioDeLaOT,
+  invitacionesDeLaOT, leyendaDelDuenoDeLaOT,
 } from "@/lib/agenda/evento";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 
@@ -37,6 +38,12 @@ function comoSeLeeLaHora(paredDeArgentina: string): string {
 }
 
 interface EstadoDelEvento {
+  /** ¿La orden ya tiene evento? Con evento, el dueño no cambia al reenviar. */
+  existe: boolean;
+  /** De quién es el evento (o de quién va a ser). Null si el servidor no pudo averiguarlo. */
+  dueno_casilla: string | null;
+  /** Sin evento todavía: ¿cae en la casilla del área porque nadie cargó la orden? */
+  dueno_del_area: boolean;
   divergencia: "borrado" | "movido" | null;
   google: { inicio: string; fin: string } | null;
   google_error: string | null;
@@ -97,6 +104,8 @@ export default function MandarAlCalendarioModal({
   }, [orden.id]);
 
   const horario = fecha ? horarioDeLaOT(fecha, turno) : null;
+  const duenoCasilla = estado?.dueno_casilla?.trim().toLowerCase() ?? null;
+  const invitaciones = duenoCasilla ? invitacionesDeLaOT(duenoCasilla, extras) : null;
   const horas = horario ? `${horario.inicio.slice(11, 16)} a ${horario.fin.slice(11, 16)}` : null;
 
   function sumar() {
@@ -203,7 +212,10 @@ export default function MandarAlCalendarioModal({
               <p className="mb-1 text-xs font-medium text-slate-600">Invitados</p>
               <ul className="space-y-0.5 text-sm text-slate-700">
                 {INVITADOS_DE_UNA_OT.map((c) => (
-                  <li key={c} className="truncate">{c}</li>
+                  <li key={c} className="truncate">
+                    {c}
+                    {c === duenoCasilla && <span className="text-slate-400"> · es la dueña del evento, no se invita a sí misma</span>}
+                  </li>
                 ))}
                 {extras.map((c) => (
                   <li key={c} className="flex items-center gap-2">
@@ -217,9 +229,16 @@ export default function MandarAlCalendarioModal({
                   </li>
                 ))}
               </ul>
-              <p className="mt-1 text-xs text-slate-400">
-                El evento queda a nombre de la casilla que generó la orden, y esa casilla no se invita a sí misma.
-              </p>
+              {estado?.dueno_casilla ? (
+                <p className="mt-1 text-xs text-slate-400">
+                  {leyendaDelDuenoDeLaOT(estado.dueno_casilla, estado.existe, estado.dueno_del_area)}
+                  {" "}Se mandan {invitaciones?.reciben.length} invitaciones.
+                </p>
+              ) : (
+                estado !== undefined && (
+                  <p className="mt-1 text-xs text-slate-400">No se pudo averiguar de quién va a ser el evento.</p>
+                )
+              )}
             </div>
 
             <div>

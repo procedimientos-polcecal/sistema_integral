@@ -275,6 +275,53 @@ export function duenoDelEventoDeLaOT(
 export const CASILLA_DE_MANTENIMIENTO = "mantenimiento@polcecal.com";
 
 /**
+ * Lo que el modal le dice a quien va a mandar una OT sobre **de quién es el
+ * evento**. Tiene que ser el dueño de verdad de esa orden y no una frase general:
+ * la frase de antes decía «la casilla que generó la orden» y eso es cierto en 91
+ * de 2.349 OT (las que tienen `created_by`); en el resto el dueño es
+ * `mantenimiento@`, y la pantalla describía un dueño que no existía.
+ *
+ * Y dice lo segundo que alguien va a asumir al apretar desde otra casilla: que
+ * reenviar le pasa el evento. **No**: con un evento que ya existe el dueño no
+ * cambia, mande quien mande.
+ */
+export function leyendaDelDuenoDeLaOT(
+  casilla: string,
+  yaTieneEvento: boolean,
+  delArea: boolean
+): string {
+  if (yaTieneEvento) {
+    return (
+      `El evento de esta orden es de ${casilla}. Volver a mandarla no cambia de quién es, ` +
+      `aunque la mandes desde otra casilla.`
+    );
+  }
+  return delArea
+    ? `Esta orden no la cargó nadie en el sistema, así que el evento va a quedar a nombre de ${casilla}.`
+    : `El evento va a quedar a nombre de ${casilla}, que es quien generó la orden.`;
+}
+
+/**
+ * A quién le llega de verdad la invitación: los cinco fijos más los extras, **sin
+ * el dueño** —no se invita a sí mismo (`invitadosLimpios` en `pedido.ts`)—. Sin
+ * esto la pantalla lista cinco invitados y se mandan cuatro. Vive acá y repite
+ * esa regla en vez de importarla porque `pedido.ts` arrastra zod al navegador;
+ * el test ata las dos.
+ */
+export function invitacionesDeLaOT(
+  casillaDelDueno: string,
+  extras: readonly string[]
+): { reciben: string[]; elDuenoEstaEntreLosFijos: boolean } {
+  const dueno = casillaDelDueno.trim().toLowerCase();
+  const vistos = new Set<string>();
+  for (const crudo of [...INVITADOS_DE_UNA_OT, ...extras]) {
+    const correo = crudo.trim().toLowerCase();
+    if (correo !== dueno) vistos.add(correo);
+  }
+  return { reciben: [...vistos], elDuenoEstaEntreLosFijos: INVITADOS_DE_UNA_OT.includes(dueno) };
+}
+
+/**
  * Los invitados de un evento que **no** son de los cinco fijos: a quién se sumó
  * a mano. El modal los precarga al reenviar: la lista del pedido se arma siempre
  * desde los fijos más los extras que vengan, y el `PUT` de Google reemplaza los
