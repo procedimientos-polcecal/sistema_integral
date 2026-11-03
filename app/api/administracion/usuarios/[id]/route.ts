@@ -38,9 +38,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   return NextResponse.json(usuario);
 }
 
-// Tablas (y columna) que referencian usuarios.id sin cascade — bloquean el
-// borrado si tienen alguna fila para este usuario (misma idea que el guard
-// de borrado de empleados en app/api/rrhh/empleados/[id]/route.ts).
+// Tablas (y columna) donde una persona dejó rastro: bloquean el borrado si
+// tienen alguna fila para este usuario (misma idea que el guard de borrado de
+// empleados en app/api/rrhh/empleados/[id]/route.ts).
+//
+// Esta lista **no es «las que no tienen cascade»**, aunque casi todas sean eso:
+// lo que decide si una tabla entra es si borrarla en silencio perdería algo que
+// nadie más puede recuperar. `agenda_eventos.dueno_id` sí tiene cascade, y entra
+// **justamente por eso**: la cascada se llevaría la fila con su `google_event_id`
+// y el evento quedaría vivo en los calendarios de Google sin ninguna fila que lo
+// nombre, así que nadie podría sacarlo nunca más desde el sistema. Con el freno
+// el borrado da 409 y la salida es desactivar la cuenta.
 const TABLAS_CON_HISTORIAL: { tabla: string; columna: string }[] = [
   { tabla: "ausencias", columna: "cargado_por_id" },
   { tabla: "liquidaciones", columna: "generado_por_id" },
@@ -59,6 +67,7 @@ const TABLAS_CON_HISTORIAL: { tabla: string; columna: string }[] = [
   { tabla: "ordenes_trabajo", columna: "created_by" },
   { tabla: "planificacion_diaria", columna: "created_by" },
   { tabla: "planificacion_diaria_items", columna: "assigned_to" },
+  { tabla: "agenda_eventos", columna: "dueno_id" },
 ];
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
