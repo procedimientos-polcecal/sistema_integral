@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  aEventoVista, avisoDelPendiente, consecuenciaDeDestrabar, corteDelHistorial, cruzaLaMedianoche, DIAS_DE_HISTORIAL, horarioDelEvento, horarioParaGuardar,
+  aEventoVista, avisoDelPendiente, consecuenciaDeDestrabar, corteDelHistorial, mientrasEstaDivergido, cruzaLaMedianoche, DIAS_DE_HISTORIAL, horarioDelEvento, horarioParaGuardar,
   leerRespuestaDeEscritura,
   nombreDelDueno, permisosDelEvento, separarProximosYPasados, type EventoVista, type FilaCruda,
 } from "./vista";
@@ -161,6 +161,20 @@ describe("avisoDelPendiente: sólo promete el reintento que existe", () => {
       .toContain("mandando la orden de nuevo");
     expect(avisoDelPendiente(evento({ googlePendiente: "x", divergencia: "movido" })))
       .toContain("Volver a poner lo del sistema");
+  });
+});
+
+describe("mientrasEstaDivergido: el panel no promete un movimiento solo que no existe", () => {
+  it("el evento de una OT dice que el sistema deja de moverlo solo, y qué pasa con la fecha de la orden", () => {
+    const t = mientrasEstaDivergido(evento({ otId: "ot-1" }), "elijas");
+    expect(t.negrita).toBe("Hasta que elijas una salida, el sistema deja de mover este evento solo.");
+    expect(t.resto).toContain("la fecha de la orden");
+  });
+  it("uno propio no se mueve solo nunca: dice lo que sí es cierto, que el SdG no lo escribe en Google", () => {
+    const t = mientrasEstaDivergido(evento(), "Ana Paz elija");
+    expect(t.negrita).toBe("Hasta que Ana Paz elija una salida, el SdG no escribe nada de este evento en Google.");
+    expect(t.negrita).not.toContain("mover este evento solo");
+    expect(t.resto).not.toContain("orden");
   });
 });
 

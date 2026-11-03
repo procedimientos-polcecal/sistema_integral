@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { avisoDelPendiente, horarioDelEvento, permisosDelEvento, type EventoVista } from "@/lib/agenda/vista";
+import {
+  avisoDelPendiente, horarioDelEvento, mientrasEstaDivergido, permisosDelEvento, type EventoVista,
+} from "@/lib/agenda/vista";
 
 /**
  * Un evento de la Agenda, con lo que hace falta saber de él y los botones que
@@ -147,9 +149,10 @@ function CajaDeLaOT({ numero }: { numero: number | null }) {
  * - «Ya lo vi» apaga la campana **para quien lo aprieta** y nada más. El evento
  *   sigue divergido.
  * - «Destrabar» es del dueño, y es lo que vuelve a atar el evento al SdG.
- *   **Hasta que elija, el sistema deja de mover ese evento solo.** Sin esa frase
- *   en pantalla, alguien ve que su orden cambió de fecha y el evento no se movió,
- *   y no entiende por qué.
+ *   **Hasta que elija, el sistema deja de mover ese evento solo** —si es de una
+ *   OT— **o de escribirlo en Google, si es propio** (`mientrasEstaDivergido`). Sin
+ *   esa frase en pantalla, alguien ve que su orden cambió de fecha y el evento no
+ *   se movió, y no entiende por qué.
  */
 function PanelDeDivergencia({
   evento: e, dueno, esMio, p, ocupado, onVisto, onDestrabar,
@@ -164,6 +167,7 @@ function PanelDeDivergencia({
 }) {
   const borrado = e.divergencia === "borrado";
   const deUnaOT = e.otId !== null;
+  const mientras = mientrasEstaDivergido(e, esMio ? "elijas" : `${dueno} elija`);
 
   return (
     <div className="space-y-2 border-b px-4 py-3 text-sm text-slate-800" style={AMBAR} role="alert">
@@ -176,9 +180,8 @@ function PanelDeDivergencia({
           : "Lo que se ve acá es lo que el SdG tiene guardado; en Google está en otro horario."}
       </p>
       <p>
-        <strong>Hasta que {esMio ? "elijas una salida" : `${dueno} elija una salida`}, el sistema deja de mover este
-        evento solo.</strong>
-        {deUnaOT && " Si la fecha de la orden cambia en la planilla, el evento no se va a mover."}
+        <strong>{mientras.negrita}</strong>
+        {mientras.resto && ` ${mientras.resto}`}
       </p>
 
       {p.puedeDestrabar ? (

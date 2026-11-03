@@ -215,6 +215,37 @@ export function avisoDelPendiente(
 }
 
 /**
+ * Lo que el panel de divergencia dice que pasa **mientras el evento siga
+ * divergido**. `negrita` es la frase fuerte; `resto`, lo que se agrega.
+ *
+ * «El sistema deja de mover este evento solo» **sólo es cierto para el de una
+ * OT**: es la sincronización de la planilla la que lo movía. Un evento propio
+ * nadie lo mueve solo nunca, así que ahí la frase es falsa. Lo que sí es cierto
+ * de uno propio es que, mientras esté divergido, **el SdG no escribe nada de
+ * él en Google**: ni los cambios que se le hagan desde la Agenda (el PATCH los
+ * guarda y se niega a escribir) ni un pendiente (`quePendientesReintentar` lo
+ * saltea).
+ *
+ * `quien` es el sujeto ya conjugado: «elijas» si lo mira el dueño, o
+ * «Ana Paz elija» si no.
+ */
+export function mientrasEstaDivergido(
+  e: Pick<EventoVista, "otId">,
+  quien: string
+): { negrita: string; resto: string | null } {
+  if (e.otId !== null) {
+    return {
+      negrita: `Hasta que ${quien} una salida, el sistema deja de mover este evento solo.`,
+      resto: "Si la fecha de la orden cambia en la planilla, el evento no se va a mover.",
+    };
+  }
+  return {
+    negrita: `Hasta que ${quien} una salida, el SdG no escribe nada de este evento en Google.`,
+    resto: "Los cambios que se le hagan acá quedan sólo en el SdG.",
+  };
+}
+
+/**
  * Qué cambia después de destrabar, o `null` si no hay nada que prometer. «El
  * sistema vuelve a mover este evento solo» **sólo es cierto para el de una OT**:
  * es lo que la sincronización de la planilla hace cuando cambia la fecha de la
