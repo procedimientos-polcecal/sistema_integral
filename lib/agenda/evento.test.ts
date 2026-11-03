@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DURACION_OT_MINUTOS, INVITADOS_DE_UNA_OT, horarioDeLaOT, instanteDe, problemasDelEvento } from "./evento";
+import {
+  DURACION_OT_MINUTOS, INVITADOS_DE_UNA_OT, TURNOS_DEL_TALLER, datosDeLaOT, fechaParaElCalendario,
+  duenoDelEventoDeLaOT, horarioDeLaOT, instanteDe, problemasDeMandarLaOT, problemasDelEvento,
+} from "./evento";
 
 const bueno = { titulo: "x", inicio: "2026-11-03T08:00:00", fin: "2026-11-03T09:30:00", invitados: ["ok@polcecal.com"] };
 
@@ -91,5 +94,104 @@ describe("instanteDe", () => {
   it("rechaza lo que no es una fecha-hora", () => {
     expect(instanteDe("mañana")).toBeNull();
     expect(instanteDe("2026-11-03")).toBeNull();
+  });
+});
+
+describe("fechaParaElCalendario", () => {
+  it("la fecha que manda es la pendiente cuando la hay", () => {
+    expect(fechaParaElCalendario({ fecha_ejecucion: "2026-11-03", fecha_ejecucion_pendiente: "2026-11-10" }))
+      .toBe("2026-11-10");
+  });
+  it("sin pendiente, la de ejecución", () => {
+    expect(fechaParaElCalendario({ fecha_ejecucion: "2026-11-03", fecha_ejecucion_pendiente: null })).toBe("2026-11-03");
+    expect(fechaParaElCalendario({ fecha_ejecucion: "2026-11-03" })).toBe("2026-11-03");
+  });
+  it("una pendiente en blanco no tapa a la de ejecución", () => {
+    expect(fechaParaElCalendario({ fecha_ejecucion: "2026-11-03", fecha_ejecucion_pendiente: "  " })).toBe("2026-11-03");
+  });
+  it("sin ninguna de las dos no hay fecha", () => {
+    expect(fechaParaElCalendario({ fecha_ejecucion: null, fecha_ejecucion_pendiente: null })).toBeNull();
+  });
+});
+
+describe("problemasDeMandarLaOT", () => {
+  it("una OT sin fecha de ejecución no se puede mandar", () => {
+    expect(problemasDeMandarLaOT({ fecha_ejecucion: null, turno: "8-16" }))
+      .toContain("La OT no tiene fecha de ejecución: primero hay que ponerle una");
+  });
+  it("una OT con fecha y turno no tiene problemas", () => {
+    expect(problemasDeMandarLaOT({ fecha_ejecucion: "2026-11-03", turno: "8-16", invitados: [...INVITADOS_DE_UNA_OT] }))
+      .toEqual([]);
+  });
+  it("una fecha mal formada se rechaza nombrándola: horarioDeLaOT no la valida", () => {
+    for (const mala of ["03/11/2026", "2026-11-3", "2026-02-31", "mañana"]) {
+      const p = problemasDeMandarLaOT({ fecha_ejecucion: mala, turno: "8-16" });
+      expect(p.join(" ")).toContain(mala);
+    }
+  });
+  it("un turno que no es del taller se rechaza", () => {
+    const p = problemasDeMandarLaOT({ fecha_ejecucion: "2026-11-03", turno: "9-17" });
+    expect(p.join(" ")).toContain("9-17");
+  });
+  it("los TURNOS_DEL_TALLER son los tres, y todos arman horario", () => {
+    expect(TURNOS_DEL_TALLER).toEqual(["4-12", "8-16", "12-20"]);
+    for (const t of TURNOS_DEL_TALLER) expect(() => horarioDeLaOT("2026-11-03", t)).not.toThrow();
+  });
+  it("un invitado mal escrito se nombra", () => {
+    const p = problemasDeMandarLaOT({ fecha_ejecucion: "2026-11-03", turno: "8-16", invitados: ["sin-arroba"] });
+    expect(p.join(" ")).toContain("sin-arroba");
+  });
+  it("informa todo junto", () => {
+    const p = problemasDeMandarLaOT({ fecha_ejecucion: null, turno: "9-17", invitados: ["x"] });
+    expect(p).toHaveLength(3);
+  });
+});
+
+describe("datosDeLaOT", () => {
+  const ot = {
+    ot_number: 2935, equipo_raw: "Molino 2", equipo_code: "ML-02", sector_raw: "Molienda",
+    especialidad: "Mecánica", tipo: "Preventivo", descripcion: "Cambiar rodamientos",
+  };
+  it("el título lleva el número y el equipo", () => {
+    expect(datosDeLaOT(ot).titulo).toBe("OT 2935 · Molino 2");
+  });
+  it("sin equipo, el título es sólo el número", () => {
+    expect(datosDeLaOT({ ...ot, equipo_raw: null, equipo_code: null }).titulo).toBe("OT 2935");
+  });
+  it("sin texto de equipo usa el código", () => {
+    expect(datosDeLaOT({ ...ot, equipo_raw: "  " }).titulo).toBe("OT 2935 · ML-02");
+  });
+  it("el lugar es el sector, y null si no hay", () => {
+    expect(datosDeLaOT(ot).lugar).toBe("Molienda");
+    expect(datosDeLaOT({ ...ot, sector_raw: null }).lugar).toBeNull();
+  });
+  it("la descripción trae lo que se sabe y la descripción de la OT", () => {
+    const d = datosDeLaOT(ot).descripcion;
+    expect(d).toContain("Orden de trabajo 2935");
+    expect(d).toContain("Mecánica");
+    expect(d).toContain("Cambiar rodamientos");
+  });
+  it("no revienta con todo en null", () => {
+    const d = datosDeLaOT({
+      ot_number: 1, equipo_raw: null, equipo_code: null, sector_raw: null,
+      especialidad: null, tipo: null, descripcion: null,
+    });
+    expect(d.titulo).toBe("OT 1");
+    expect(d.descripcion).toContain("Orden de trabajo 1");
+  });
+});
+
+describe("duenoDelEventoDeLaOT", () => {
+  const llama = { id: "u-llama", casilla: "persona@polcecal.com" };
+  it("es la casilla que generó la OT, no quien aprieta el botón", () => {
+    expect(duenoDelEventoDeLaOT({ id: "u-gen", email: "Mantenimiento@polcecal.com " }, llama))
+      .toEqual({ id: "u-gen", casilla: "mantenimiento@polcecal.com", deQuienLlama: false });
+  });
+  it("una OT que nadie cargó en el sistema queda a nombre de quien la manda, y lo dice", () => {
+    expect(duenoDelEventoDeLaOT(null, llama)).toEqual({ id: "u-llama", casilla: "persona@polcecal.com", deQuienLlama: true });
+  });
+  it("un generador sin correo no sirve de casilla", () => {
+    expect(duenoDelEventoDeLaOT({ id: "u-gen", email: " " }, llama).deQuienLlama).toBe(true);
+    expect(duenoDelEventoDeLaOT({ id: "u-gen", email: null }, llama).id).toBe("u-llama");
   });
 });

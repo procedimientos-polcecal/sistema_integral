@@ -123,3 +123,121 @@ export function problemasDelEvento(e: {
 
   return problemas;
 }
+
+// ── Mandar una OT al calendario ──────────────────────────────────
+
+/** Los tres turnos del taller, los mismos que `horarioDeLaOT` sabe arrancar. */
+export const TURNOS_DEL_TALLER = Object.keys(ARRANQUE_DEL_TURNO) as Turno[];
+
+/**
+ * La fecha con la que una OT entra al calendario: `fecha_ejecucion_pendiente`
+ * cuando la hay y, si no, `fecha_ejecucion`, o `null` si no tiene ninguna.
+ *
+ * La pendiente es la que **el SdG fijó y la planilla todavía no devolvió** —el
+ * derrame tarda de 3 a 53 horas—, o sea la que la persona acaba de elegir. Si
+ * se mirara sólo `fecha_ejecucion`, una OT recién postergada caería en el
+ * calendario en el día que ya no es. Una pendiente en blanco no cuenta.
+ */
+export function fechaParaElCalendario(o: {
+  fecha_ejecucion: string | null;
+  fecha_ejecucion_pendiente?: string | null;
+}): string | null {
+  const pendiente = o.fecha_ejecucion_pendiente?.trim();
+  if (pendiente) return pendiente;
+  return o.fecha_ejecucion?.trim() || null;
+}
+
+/** Una fecha `AAAA-MM-DD` que existe en el calendario. */
+function esFechaDelDia(texto: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(texto) && instanteDe(`${texto}T00:00:00`) !== null;
+}
+
+/**
+ * Qué impide mandar esta OT al calendario, todo junto y en castellano. Vacío =
+ * se puede. Recibe **la fecha ya resuelta** (`fechaParaElCalendario`).
+ *
+ * Valida la fecha porque `horarioDeLaOT` no lo hace: arma el texto con lo que le
+ * den, y una fecha mal formada daría un evento ilegible que en cada
+ * notificación de Google saldría «movido» para siempre. La falta de fecha es el
+ * caso real y frecuente (15 de 22 OT abiertas la tienen; las demás no), y por
+ * eso es la primera frase.
+ */
+export function problemasDeMandarLaOT(e: {
+  fecha_ejecucion: string | null;
+  turno: string;
+  invitados?: string[];
+}): string[] {
+  const problemas: string[] = [];
+
+  if (!e.fecha_ejecucion) {
+    problemas.push("La OT no tiene fecha de ejecución: primero hay que ponerle una");
+  } else if (!esFechaDelDia(e.fecha_ejecucion)) {
+    problemas.push(`La fecha de ejecución «${e.fecha_ejecucion}» no es una fecha válida (tiene que ser AAAA-MM-DD)`);
+  }
+
+  if (!(TURNOS_DEL_TALLER as string[]).includes(e.turno)) {
+    problemas.push(`El turno «${e.turno}» no es uno del taller: tiene que ser ${TURNOS_DEL_TALLER.join(", ")}`);
+  }
+
+  for (const correo of e.invitados ?? []) {
+    if (!esCorreo(correo)) problemas.push(`El invitado «${correo}» no es un correo válido`);
+  }
+
+  return problemas;
+}
+
+/** Lo que de una OT hace falta para escribir su evento. */
+export interface OTParaElEvento {
+  ot_number: number;
+  equipo_raw: string | null;
+  equipo_code: string | null;
+  sector_raw: string | null;
+  especialidad: string | null;
+  tipo: string | null;
+  descripcion: string | null;
+}
+
+/** El texto del evento de una OT: título, descripción y lugar (el sector). */
+export function datosDeLaOT(o: OTParaElEvento): { titulo: string; descripcion: string; lugar: string | null } {
+  const limpio = (t: string | null) => t?.trim() || null;
+  const equipo = limpio(o.equipo_raw) ?? limpio(o.equipo_code);
+  const sector = limpio(o.sector_raw);
+
+  const lineas = [`Orden de trabajo ${o.ot_number}`];
+  if (equipo) lineas.push(`Equipo: ${equipo}`);
+  if (sector) lineas.push(`Sector: ${sector}`);
+  const especialidad = limpio(o.especialidad);
+  if (especialidad) lineas.push(`Especialidad: ${especialidad}`);
+  const tipo = limpio(o.tipo);
+  if (tipo) lineas.push(`Tipo: ${tipo}`);
+  const descripcion = limpio(o.descripcion);
+
+  return {
+    titulo: equipo ? `OT ${o.ot_number} · ${equipo}` : `OT ${o.ot_number}`,
+    // El tope es el del esquema de la agenda (5000): el evento se puede editar
+    // después y la descripción de una OT del formulario no tiene límite.
+    descripcion: (lineas.join("\n") + (descripcion ? `\n\n${descripcion}` : "")).slice(0, 5000),
+    lugar: sector,
+  };
+}
+
+/**
+ * De quién es el evento de una OT que todavía no tenía evento: **de la casilla
+ * que generó la OT** (`created_by`) y no de quien aprieta el botón. El evento
+ * pertenece a la orden y no a la agenda de nadie; lo prueban los cinco
+ * invitados fijos.
+ *
+ * Una OT que entró por el formulario no tiene `created_by` (ni nadie que la
+ * haya cargado en el sistema): ahí no hay una casilla que la haya generado, y
+ * el evento queda a nombre de quien la manda. `deQuienLlama` dice cuándo pasó,
+ * para que la respuesta se lo avise a la persona en vez de dejarlo como un
+ * hecho consumado.
+ */
+export function duenoDelEventoDeLaOT(
+  generador: { id: string; email: string | null } | null,
+  quienLlama: { id: string; casilla: string }
+): { id: string; casilla: string; deQuienLlama: boolean } {
+  const casilla = generador?.email?.trim().toLowerCase();
+  if (generador && casilla) return { id: generador.id, casilla, deQuienLlama: false };
+  return { id: quienLlama.id, casilla: quienLlama.casilla, deQuienLlama: true };
+}

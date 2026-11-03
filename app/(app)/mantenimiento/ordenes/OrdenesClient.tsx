@@ -22,6 +22,8 @@ import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
 import RepuestosOTModal from "./RepuestosOTModal";
 import JustificacionOT from "./JustificacionOT";
 import PostergarOTModal from "./PostergarOTModal";
+import MandarAlCalendarioModal from "./MandarAlCalendarioModal";
+import { fechaParaElCalendario } from "@/lib/agenda/evento";
 import { pideJustificacion } from "@/lib/mantenimiento/notas";
 import { prioridadEfectiva } from "@/lib/mantenimiento/prioridad";
 import OrdenarTrabajo from "./OrdenarTrabajo";
@@ -981,6 +983,7 @@ function OTDetail({
   onPostergada?: () => void;
 }) {
   const [postergando, setPostergando] = useState(false);
+  const [mandandoAlCalendario, setMandandoAlCalendario] = useState(false);
   const ESTADO_OPTIONS = ["POR_HACER", "EN_PROCESO", "REALIZADO", "ATRASADO"];
   return (
     <div className="px-4 pb-4 pt-2 bg-slate-50 border-t border-slate-100 space-y-3">
@@ -1096,7 +1099,44 @@ function OTDetail({
             La fecha de esta orden se cambia en la planilla: entró por el formulario.
           </span>
         )}
+
+        {/* ── AL CALENDARIO ─────────────────────────────────────────────────
+            Sin fecha de ejecución no hay día para el evento, así que el botón
+            queda deshabilitado **diciendo por qué**: uno gris sin explicación
+            no se distingue de uno roto. La fecha que cuenta es la pendiente
+            cuando la hay (`fechaParaElCalendario`), la misma que usa el
+            servidor. */}
+        {canEdit && (
+          fechaParaElCalendario(o) ? (
+            <button
+              onClick={() => setMandandoAlCalendario(true)}
+              className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Mandar al calendario
+            </button>
+          ) : (
+            <>
+              <button
+                disabled
+                className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 disabled:opacity-40"
+              >
+                Mandar al calendario
+              </button>
+              <span className="text-xs text-slate-400">
+                No se puede mandar al calendario: la orden no tiene fecha de ejecución.
+              </span>
+            </>
+          )
+        )}
       </div>
+
+      {mandandoAlCalendario && (
+        <MandarAlCalendarioModal
+          orden={o}
+          onCerrar={() => setMandandoAlCalendario(false)}
+          onMandada={() => setMandandoAlCalendario(false)}
+        />
+      )}
 
       {postergando && (
         <PostergarOTModal
