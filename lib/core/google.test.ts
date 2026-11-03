@@ -155,7 +155,7 @@ describe("obtenerToken", () => {
     await expect(obtenerToken([SCOPE_SHEETS])).rejects.toThrow(/Google OAuth/);
     expect(pedidos).toBe(2);
   });
-});
+});
 
 describe("el canje del token tiene cota", () => {
   it("manda un AbortSignal: sin él, un Google colgado mata la función desde adentro de una iteración", async () => {
