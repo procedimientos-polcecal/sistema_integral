@@ -717,25 +717,34 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     antesDeBorrar: (ids) => borrarLosEventosDeLasOT(admin, ids),
   });
 
+  // La corrida se anota ANTES de tocar la Agenda. Lo que sigue habla con Google,
+  // que puede colgarse, y si la invocación muere por tiempo el registro de que
+  // las órdenes se importaron bien no puede perderse con ella: la pantalla
+  // mostraría la corrida vieja y los avisos de ritmo mentirían sobre un módulo
+  // que sí se actualizó.
+  await registrarSincronizacion({
+    modulo: "mantenimiento", recurso: "ordenes", ok: true, filas: guardadas,
+  });
+
   // ── EL EVENTO DE LA AGENDA SIGUE A LA OT ──────────────────────────────────
   //
   // Va después del borrado: las OT que acaban de irse se llevaron su evento y
   // no hay nada que mover. Un evento que ya divergió en Google no se pisa y un
   // fallo de escritura va a la cola (`google_pendiente`); lo que no se pudo ni
-  // guardar sale acá, en el registro de la corrida, y no en un `console.warn`.
+  // guardar sale acá y en el registro, y no en un `console.warn`. Tiene un
+  // límite de tiempo (`LIMITE_DE_GOOGLE_MS`): corre dentro del cron que sigue
+  // con las otras tres sincronizaciones.
   const eventos = await seguirALasOT(admin);
 
-  // Si no se pudo mover algún evento, la corrida **no se anota como limpia**: las
-  // OT sí se guardaron, y el mensaje lo dice para que no se lea como una corrida
+  // Si no se pudo mover algún evento, la última anotación pasa a decirlo: las OT
+  // sí se guardaron, y el mensaje lo dice para que no se lea como una corrida
   // perdida. Mismo criterio que las áreas de los avisos.
-  await registrarSincronizacion(
-    eventos.fallos.length > 0
-      ? {
-          modulo: "mantenimiento", recurso: "ordenes", ok: false, filas: guardadas,
-          error: `Las órdenes se guardaron pero no se pudo seguir con los eventos de la Agenda: ${eventos.fallos.join(" | ")}`,
-        }
-      : { modulo: "mantenimiento", recurso: "ordenes", ok: true, filas: guardadas }
-  );
+  if (eventos.fallos.length > 0) {
+    await registrarSincronizacion({
+      modulo: "mantenimiento", recurso: "ordenes", ok: false, filas: guardadas,
+      error: `Las órdenes se guardaron pero no se pudo seguir con los eventos de la Agenda: ${eventos.fallos.join(" | ")}`,
+    });
+  }
   return logra({
     leidas: filas.length - 1,
     guardadas,
@@ -751,6 +760,7 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     eventos_avisados: eventos.avisados,
     eventos_divergidos_sin_tocar: eventos.respetados,
     eventos_pendientes_de_google: eventos.pendientes,
+    eventos_sin_alcanzar: eventos.sinAlcanzar,
     ...(eventos.fallos.length > 0 ? { eventos_con_fallos: eventos.fallos } : {}),
     divergencias: divergencias.cuantas,
     ...(divergencias.recortadas > 0 ? { divergencias_recortadas: divergencias.recortadas } : {}),

@@ -224,7 +224,8 @@ describe("seguirALasOT", () => {
     const updates = hechos.filter((h) => h.op === "update");
     // Primero la fila (el SdG es el dueño del dato), después lo de Google.
     expect(updates[0].columnas).toEqual({
-      inicio: "2026-11-10T11:00:00.000Z", fin: "2026-11-10T12:30:00.000Z", aviso: null,
+      inicio: "2026-11-10T11:00:00.000Z", fin: "2026-11-10T12:30:00.000Z",
+      google_pendiente: expect.any(String), google_pendiente_el: expect.any(String),
     });
     expect(updates[1].columnas).toMatchObject({
       inicio_escrito: "2026-11-10T08:00:00-03:00", fin_escrito: "2026-11-10T09:30:00-03:00",
@@ -234,10 +235,67 @@ describe("seguirALasOT", () => {
     expect(cuerpo).toMatchObject({ inicio: "2026-11-10T08:00:00", fin: "2026-11-10T09:30:00", invitados: ["gerencia@polcecal.com"] });
   });
 
+  it("el horario nuevo y el pendiente van en el MISMO update: una muerte antes de Google no deja una divergencia silenciosa", async () => {
+    // Sin el pendiente, la fila queda con el día nuevo, Google con el viejo y `escrito`
+    // con el viejo, y nadie lo ve: la corrida compara fila contra OT y el webhook
+    // compara `escrito` contra Google.
+    let updatesAntesDeGoogle = -1;
+    const { cliente, hechos } = clienteFalso({ eventos: [FILA_DE_EVENTO()] });
+    vi.mocked(actualizarEvento).mockImplementation(async () => {
+      updatesAntesDeGoogle = hechos.filter((h) => h.op === "update").length;
+      return ENGOOGLE("2026-11-10T08:00:00-03:00", "2026-11-10T09:30:00-03:00");
+    });
+    await seguirALasOT(cliente);
+    expect(updatesAntesDeGoogle).toBe(1);
+    const [primero] = hechos.filter((h) => h.op === "update");
+    expect(primero.columnas).toMatchObject({ inicio: expect.any(String), google_pendiente: expect.any(String) });
+  });
+
+  it("un evento sin filas de invitados no manda `invitados`: `attendees: []` borraría a los cinco", async () => {
+    vi.mocked(actualizarEvento).mockResolvedValue(ENGOOGLE("2026-11-10T08:00:00-03:00", "2026-11-10T09:30:00-03:00"));
+    const { cliente } = clienteFalso({ eventos: [FILA_DE_EVENTO()], invitados: [] });
+    await seguirALasOT(cliente);
+    const [, , cuerpo] = vi.mocked(actualizarEvento).mock.calls[0];
+    expect((cuerpo as { invitados?: string[] }).invitados).toBeUndefined();
+  });
+
+  it("el aviso de un borrado fallido no lo limpia un movimiento; el que escribió esta lógica sí", async () => {
+    vi.mocked(actualizarEvento).mockResolvedValue(ENGOOGLE("2026-11-10T08:00:00-03:00", "2026-11-10T09:30:00-03:00"));
+
+    const deBorrado = clienteFalso({ eventos: [FILA_DE_EVENTO({ aviso: `${AVISO_DE_BORRADO}. Google dijo: 503` })] });
+    await seguirALasOT(deBorrado.cliente);
+    expect(deBorrado.hechos.find((h) => h.op === "update")?.columnas).not.toHaveProperty("aviso");
+
+    const viejo = clienteFalso({ eventos: [FILA_DE_EVENTO({ aviso: "La planilla dejó la orden sin fecha de ejecución…" })] });
+    await seguirALasOT(viejo.cliente);
+    expect(viejo.hechos.find((h) => h.op === "update")?.columnas).toMatchObject({ aviso: null });
+  });
+
+  it("con Google lento corta a los 60 s: lo que falta queda para la próxima corrida", async () => {
+    // Cada llamada a Google tarda 40 s de reloj. Con diez eventos y Google colgado
+    // serían 300 s: lo que tumba al cron entero.
+    let t = 0;
+    vi.mocked(actualizarEvento).mockImplementation(async () => {
+      t += 40_000;
+      return ENGOOGLE("2026-11-10T08:00:00-03:00", "2026-11-10T09:30:00-03:00");
+    });
+    const { cliente, hechos } = clienteFalso({
+      eventos: [1, 2, 3, 4].map((n) => FILA_DE_EVENTO({ id: `0000000${n}-89ab-cdef-0123-456789abcdef` })),
+    });
+
+    const r = await seguirALasOT(cliente, { limiteMs: 60_000, reloj: () => t });
+
+    expect(actualizarEvento).toHaveBeenCalledTimes(2);
+    expect(r).toMatchObject({ movidos: 2, sinAlcanzar: 2, fallos: [] });
+    // Los que no se alcanzaron no se tocaron: ni la fila ni Google.
+    const tocados = new Set(hechos.filter((h) => h.op === "update").map((h) => h.donde));
+    expect(tocados.size).toBe(2);
+  });
+
   it("un evento divergido no se escribe en Google aunque la fecha cambió, y la alerta vuelve", async () => {
     const { cliente, hechos } = clienteFalso({ eventos: [FILA_DE_EVENTO({ divergencia: "movido" })] });
 
-    const r = await seguirALasOT(cliente, new Date("2026-11-05T12:00:00Z"));
+    const r = await seguirALasOT(cliente, { ahora: new Date("2026-11-05T12:00:00Z") });
 
     expect(r).toMatchObject({ movidos: 0, respetados: 1, fallos: [] });
     expect(actualizarEvento).not.toHaveBeenCalled();
@@ -371,6 +429,20 @@ describe("borrarLosEventosDeLasOT", () => {
       orden: { fecha_ejecucion: "2026-11-03", fecha_ejecucion_pendiente: null, fecha_cierre: null },
     });
     expect(p).toEqual({ tipo: "nada", mover: null, aviso: undefined, volverAAlertar: false });
+  });
+
+  it("con Google lento corta a los 60 s: las OT que faltan no se borran y se reintentan", async () => {
+    let t = 0;
+    vi.mocked(borrarEvento).mockImplementation(async () => { t += 40_000; });
+    const { cliente } = clienteFalso({
+      eventos: [1, 2, 3].map((n) => FILA_DE_EVENTO({ id: `0000000${n}-89ab-cdef-0123-456789abcdef`, ot_id: `ot-${n}` })),
+    });
+
+    const r = await borrarLosEventosDeLasOT(cliente, ["ot-1", "ot-2", "ot-3"], { limiteMs: 60_000, reloj: () => t });
+
+    expect(borrarEvento).toHaveBeenCalledTimes(2);
+    expect([...r.keys()]).toEqual(["ot-3"]);
+    expect(r.get("ot-3")).toContain("Se agotó el tiempo");
   });
 
   it("si no puede ni mirar los eventos, ninguna OT del lote se borra", async () => {

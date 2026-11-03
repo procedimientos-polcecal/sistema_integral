@@ -60,7 +60,14 @@ export interface EventoParaGoogle {
   lugar?: string;
   inicio: string;
   fin: string;
-  invitados: string[];
+  /**
+   * **`undefined` no toca los invitados; `[]` los vacía.** En un PATCH, mandar
+   * `attendees: []` borra a todos y les manda la cancelación, así que quien no
+   * sabe quiénes son (una lectura que volvió sin filas) tiene que dejarlo
+   * `undefined` y no mandar una lista vacía. Un PUT (`restaurarEvento`) sí los
+   * pierde si faltan: es un reemplazo entero.
+   */
+  invitados?: string[];
 }
 
 /** Lo que Google devuelve, ya recortado a lo que el SdG mira. */

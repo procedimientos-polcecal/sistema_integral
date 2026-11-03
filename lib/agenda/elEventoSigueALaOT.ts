@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { EventoParaGoogle } from "@/lib/core/calendar";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import { traerTodo } from "@/lib/core/paginado";
 import { fechaParaElCalendario, horarioDeLaOT, instanteDe, laOTEstaCerrada, TURNOS_DEL_TALLER } from "./evento";
@@ -222,8 +223,31 @@ export interface LoQueSeguio {
   respetados: number;
   /** Fallos de escritura a Google que quedaron en la cola (`google_pendiente`). */
   pendientes: number;
+  /** Movimientos que no se alcanzaron a hacer porque se agotó el tiempo: la próxima corrida los hace. */
+  sinAlcanzar: number;
   /** Lo que no se pudo ni guardar ni encolar. Quien llama lo tiene que mostrar. */
   fallos: string[];
+}
+
+/**
+ * Cuánto se le dedica a Google en una pasada.
+ *
+ * **Estos dos caminos corren adentro de la sincronización de OT, que corre
+ * adentro del cron de Mantenimiento, que corre las cinco sincronizaciones en una
+ * sola invocación de 300 segundos.** Cada llamada a Google corta a los 30 s
+ * (`CORTE_MS` de `calendar.ts`) y las de acá son secuenciales: con Google sin
+ * contestar, diez eventos son 300 s exactos y las otras cuatro sincronizaciones
+ * —que no tienen nada que ver con la Agenda— no llegan a correr. Lo que no se
+ * alcanza a hacer se hace en la corrida siguiente; lo que no puede pasar es que
+ * la Agenda tumbe lo que ya funcionaba.
+ */
+export const LIMITE_DE_GOOGLE_MS = 60_000;
+
+export interface OpcionesDeLaPasada {
+  ahora?: Date;
+  /** Se agota a los `limiteMs`; el reloj se inyecta para poder probarlo. */
+  limiteMs?: number;
+  reloj?: () => number;
 }
 
 interface FilaLeida {
@@ -247,16 +271,29 @@ interface FilaLeida {
 
 /**
  * Mueve los eventos de las OT cuya fecha cambió. **Nunca tira**: se llama
- * después de importar las órdenes, que es lo que no puede fallar.
+ * después de importar las órdenes, que es lo que no puede fallar. Y **no pasa de
+ * `LIMITE_DE_GOOGLE_MS`**: ver esa constante.
  *
  * Mira todos los eventos de OT y no sólo los de las órdenes que esta corrida
  * escribió, a propósito: es una decisión sobre el estado final de la base y no
  * sobre qué cambió en la lectura, así que da lo mismo si la fecha la movió la
  * planilla, un derrame que llegó tarde o una postergación hecha desde el SdG.
  * Son decenas de filas.
+ *
+ * LO QUE SE LE ESCRIBE A GOOGLE: el evento entero —título, descripción, lugar,
+ * horario e invitados— tal como está en la fila, con un PATCH. En régimen es un
+ * no-op para todo menos el horario, porque los dos lados dicen lo mismo; pero
+ * **lo que se decide mover es sólo el horario**, y por eso una lista de
+ * invitados que vuelve sin filas **no se manda**: `attendees: []` en un PATCH
+ * borra a los invitados y les manda la cancelación, y la ruta de la OT deja a
+ * propósito eventos cuyos invitados no se pudieron guardar.
  */
-export async function seguirALasOT(cliente: SupabaseClient, ahora: Date = new Date()): Promise<LoQueSeguio> {
-  const r: LoQueSeguio = { movidos: 0, avisados: 0, respetados: 0, pendientes: 0, fallos: [] };
+export async function seguirALasOT(
+  cliente: SupabaseClient,
+  { ahora = new Date(), limiteMs = LIMITE_DE_GOOGLE_MS, reloj = Date.now }: OpcionesDeLaPasada = {}
+): Promise<LoQueSeguio> {
+  const r: LoQueSeguio = { movidos: 0, avisados: 0, respetados: 0, pendientes: 0, sinAlcanzar: 0, fallos: [] };
+  const corte = reloj() + limiteMs;
 
   let filas: FilaLeida[];
   try {
@@ -289,7 +326,13 @@ export async function seguirALasOT(cliente: SupabaseClient, ahora: Date = new Da
       if (plan.tipo === "nada" && plan.aviso === undefined) continue;
 
       if (plan.mover) {
-        await moverElEvento(cliente, f, plan.mover, marca, nombre, r);
+        // Sin tiempo no se empieza: la fila queda como estaba y la próxima
+        // corrida lo mueve. Lo que cuesta es hablar con Google; lo demás es base.
+        if (reloj() >= corte) {
+          r.sinAlcanzar += 1;
+          continue;
+        }
+        await moverElEvento(cliente, f, plan.mover, plan.aviso, marca, nombre, r);
         continue;
       }
 
@@ -319,11 +362,20 @@ export async function seguirALasOT(cliente: SupabaseClient, ahora: Date = new Da
  * La fila primero, después Google, después lo que Google dijo: el mismo orden
  * que la ruta de mandar una OT. El SdG es el dueño del dato, así que un fallo
  * de Google **no** deshace el movimiento: queda `google_pendiente`.
+ *
+ * **El pendiente se escribe en el mismo `update` que el horario nuevo**, y se
+ * limpia al volver de Google (`columnasDespuesDeEscribir`). Entre el `update` y
+ * la escritura hay una ventana en la que la invocación puede morir (timeout,
+ * deploy): sin pendiente quedaría la fila con el día nuevo, Google con el viejo
+ * y `escrito` con el viejo, y nadie lo vería —la corrida siguiente compara la
+ * fila contra la OT y coinciden; el webhook compara `escrito` contra Google y
+ * coinciden—. Con el pendiente, esa muerte deja algo que el cron levanta.
  */
 async function moverElEvento(
   cliente: SupabaseClient,
   f: FilaLeida,
   nuevo: { inicio: string; fin: string },
+  aviso: string | null | undefined,
   marca: string,
   nombre: string,
   r: LoQueSeguio
@@ -335,8 +387,16 @@ async function moverElEvento(
     return;
   }
 
-  // `aviso: null` va con la fila: si había uno (la fecha estuvo vacía) ya no corresponde.
-  const { error } = await cliente.from("agenda_eventos").update({ inicio, fin, aviso: null }).eq("id", f.id);
+  // El aviso es el que decidió `planDelEvento`: limpia el que esta lógica
+  // escribió y deja el de un borrado fallido (`AVISO_DE_BORRADO`), que no es suyo.
+  const { error } = await cliente.from("agenda_eventos").update({
+    inicio, fin,
+    ...(aviso !== undefined ? { aviso } : {}),
+    ...parPendiente(
+      "El evento se movió en el SdG y todavía no se confirmó la escritura en Google: si este aviso sigue acá, no terminó",
+      marca
+    ),
+  }).eq("id", f.id);
   if (error) {
     // Nada cambió: la próxima corrida lo vuelve a intentar.
     r.fallos.push(`${nombre}: no se pudo guardar el nuevo horario de su evento: ${error.message}`);
@@ -361,13 +421,17 @@ async function moverElEvento(
     return;
   }
 
-  let evento;
+  let evento: EventoParaGoogle;
   try {
-    evento = eventoParaGoogle(
+    const correos = (invitados ?? []).map((i: { email: string }) => i.email.toLowerCase());
+    const completo = eventoParaGoogle(
       { id: f.id, titulo: f.titulo, descripcion: f.descripcion, lugar: f.lugar, inicio, fin },
-      (invitados ?? []).map((i: { email: string }) => i.email.toLowerCase()),
+      correos,
       f.casilla
     );
+    // Cero filas no es «no hay invitados»: es que no se sabe quiénes son, y
+    // mandar `[]` en un PATCH los borra y les manda la cancelación.
+    evento = correos.length > 0 ? completo : { ...completo, invitados: undefined };
   } catch (e) {
     await encolar((e as Error).message);
     return;
@@ -428,19 +492,29 @@ async function moverElEvento(
  * existe, es éxito.
  *
  * **Nunca tira**: si no puede ni mirar qué eventos hay, todas las OT del lote
- * quedan sin borrar.
+ * quedan sin borrar. Y **no pasa de `LIMITE_DE_GOOGLE_MS`** (ver esa constante):
+ * al agotarse, las OT con evento que faltan quedan sin borrar y se reintentan
+ * en la próxima corrida.
  */
 export async function borrarLosEventosDeLasOT(
   cliente: SupabaseClient,
   otIds: readonly string[],
-  ahora: Date = new Date()
+  { ahora = new Date(), limiteMs = LIMITE_DE_GOOGLE_MS, reloj = Date.now }: OpcionesDeLaPasada = {}
 ): Promise<Map<string, string>> {
   const noSePuede = new Map<string, string>();
   const marca = ahora.toISOString();
+  const corte = reloj() + limiteMs;
+  const SIN_TIEMPO = "Se agotó el tiempo que se le dedica a Google en una corrida: se borra en la próxima";
 
   // De a 200: un `.in()` con muchos ids arma una URL que PostgREST rechaza.
   for (let i = 0; i < otIds.length; i += 200) {
     const lote = otIds.slice(i, i + 200);
+
+    // Sin tiempo, ni siquiera se mira: ninguna OT del lote se borra.
+    if (reloj() >= corte) {
+      for (const id of lote) noSePuede.set(id, SIN_TIEMPO);
+      continue;
+    }
 
     const { data, error } = await cliente
       .from("agenda_eventos")
@@ -456,6 +530,12 @@ export async function borrarLosEventosDeLasOT(
     for (const ev of (data ?? []) as {
       id: string; ot_id: string; casilla: string; google_event_id: string | null; inicio: string; fin: string;
     }[]) {
+      // Las OT del lote sin evento no cuestan nada y se borran igual; la que
+      // tiene evento y no alcanza el tiempo se queda.
+      if (reloj() >= corte) {
+        noSePuede.set(ev.ot_id, SIN_TIEMPO);
+        continue;
+      }
       const r = await escribirEnGoogle("borrar", {
         casilla: ev.casilla,
         google_event_id: ev.google_event_id ?? idDeGoogleDe(ev.id),
