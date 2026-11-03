@@ -2346,6 +2346,45 @@ tienen) y mezclar las dos cosas lo volvería ruido. Si la pestaña no devuelve
 ninguna fila corta sin concluir nada, porque una planilla recalculando se lee
 igual que una vacía. Sale 1 si encuentra alguna; hoy da **HUÉRFANAS 0**.
 
+#### Octubre de 2026: el primer mes real que salió entero (03/11/2026)
+
+El Excel de octubre se generó completo. Los números, porque son la primera
+medición de este camino de punta a punta:
+
+- **58 renglones → 48 órdenes de trabajo**, OT **2972 a 3019**, sin saltearse
+  ningún número. 978 horas. Las 48 nacen `REALIZADO`, con horas y con fecha de
+  cierre. La carga quedó en `GENERADA`.
+- Las 63 filas originales fueron **58** porque se sacaron 5 renglones cuya OT ya
+  estaba cargada a mano (queda en `auditoria`, con quién y qué decía).
+- El **freno de duplicados saltó con 91** —las OT de PIPARO de octubre cargadas
+  por otro camino— y hubo que confirmarlo. Se cruzaron las 17 últimas contra
+  esas 91 antes de confirmar: **ninguna pisaba una real**. Las 5 que compartían
+  palabras («Rep paño zaranda», «Cambiar lateral cinta 5», «Limpieza techo 02»)
+  eran todas del **02/10**, con otras horas y otro equipo. El freno hace lo que
+  tiene que hacer —avisar— y la decisión sigue siendo de quien mira.
+- **47 de las 48 quedaron con `sheets_pendiente`** y eso es lo normal, no un
+  fallo: el master recibe la fila por `IMPORTRANGE` y tarda, así que el estado,
+  las horas y el cierre viajan en la cola. Mientras estén ahí,
+  `sincronizar.ts` **no las pisa** —es para eso que existe la marca— y
+  `exportarLoPendiente` las termina en el sync siguiente. Hasta entonces, esas
+  columnas del master se ven vacías y no hay nada perdido.
+
+**Lo que quedó sin explicar, y lo que hay que capturar la próxima vez.** No
+salió de una sola apretada: fueron **cuatro corridas de 12, 19, 8 y 9**, y
+ninguna se topó con un límite conocido —el tope son 25, el margen de tiempo son
+200 s y las corridas duraron 18, 29, 13 y 32 segundos, a 1,6 s por orden—. Se
+descartaron, midiendo contra los datos y la planilla reales: la validez de los
+renglones, la serie de números, el encabezado de altas, el armado de las
+celdas, el `INSERT` en `ordenes_trabajo` (probado con las 18, con números de
+descarte), el tamaño de la grilla (999 filas, vamos por la 119), la salud de
+las planillas y el permiso de escritura de la cuenta de servicio. **Queda la
+hipótesis de que quien genera eligió ir de a poco** —el botón de la selección
+y el filtro por sector hacen exactamente eso—, y no hay forma de distinguirlo
+en los datos. Si vuelve a pasar, **lo único que falta es el texto que muestra
+la pantalla**: la ruta deja cada fallo en `problemas`, sin traducir, y con esa
+línea se sabe dónde está. Sin ella no se puede arreglar sin adivinar, y lo que
+falla escribe en la planilla de producción.
+
 ### Lo que quedó anotado
 
 - **`npm run catalogo` se dejó sin correr a propósito, para cuando el árbol esté
