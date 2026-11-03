@@ -150,7 +150,8 @@ function CajaDeLaOT({ numero }: { numero: number | null }) {
  *   sigue divergido.
  * - «Destrabar» es del dueño, y es lo que vuelve a atar el evento al SdG.
  *   **Hasta que elija, el sistema deja de mover ese evento solo** —si es de una
- *   OT— **o de escribirlo en Google, si es propio** (`mientrasEstaDivergido`). Sin
+ *   OT— **o de moverlo y reescribirlo en Google, si es propio**
+ *   (`mientrasEstaDivergido`); borrarlo sí llega a Google. Sin
  *   esa frase en pantalla, alguien ve que su orden cambió de fecha y el evento no
  *   se movió, y no entiende por qué.
  */

@@ -170,11 +170,19 @@ describe("mientrasEstaDivergido: el panel no promete un movimiento solo que no e
     expect(t.negrita).toBe("Hasta que elijas una salida, el sistema deja de mover este evento solo.");
     expect(t.resto).toContain("la fecha de la orden");
   });
-  it("uno propio no se mueve solo nunca: dice lo que sí es cierto, que el SdG no lo escribe en Google", () => {
+  it("uno propio no se mueve solo nunca: dice lo que sí es cierto, que el SdG no lo mueve ni lo reescribe en Google", () => {
     const t = mientrasEstaDivergido(evento(), "Ana Paz elija");
-    expect(t.negrita).toBe("Hasta que Ana Paz elija una salida, el SdG no escribe nada de este evento en Google.");
+    expect(t.negrita).toBe("Hasta que Ana Paz elija una salida, el SdG no mueve ni reescribe este evento en Google.");
     expect(t.negrita).not.toContain("mover este evento solo");
     expect(t.resto).not.toContain("orden");
+  });
+  it("uno propio no promete «no escribe nada»: el borrado sí escribe en Google, y el panel lo dice", () => {
+    // El DELETE no mira `divergencia` (borrar es una decisión explícita) y el
+    // botón «Borrar» está a la vista. La frase tiene que decir lo mismo que él.
+    const t = mientrasEstaDivergido(evento(), "elijas");
+    expect(t.negrita).not.toContain("no escribe nada");
+    expect(t.resto).toContain("borrarlo");
+    expect(t.resto).toContain("se borra también allá");
   });
 });
 

@@ -221,10 +221,18 @@ export function avisoDelPendiente(
  * «El sistema deja de mover este evento solo» **sólo es cierto para el de una
  * OT**: es la sincronización de la planilla la que lo movía. Un evento propio
  * nadie lo mueve solo nunca, así que ahí la frase es falsa. Lo que sí es cierto
- * de uno propio es que, mientras esté divergido, **el SdG no escribe nada de
- * él en Google**: ni los cambios que se le hagan desde la Agenda (el PATCH los
- * guarda y se niega a escribir) ni un pendiente (`quePendientesReintentar` lo
- * saltea).
+ * de uno propio es que, mientras esté divergido, **el SdG no lo mueve ni lo
+ * reescribe en Google**: ni los cambios que se le hagan desde la Agenda (el
+ * PATCH los guarda y se niega a escribir) ni un pendiente
+ * (`quePendientesReintentar` lo saltea).
+ *
+ * **«No escribe nada» era falso, y por una sola puerta: el borrado.** El
+ * `DELETE` de `app/api/agenda/eventos/[id]/route.ts` no mira `divergencia`, y es
+ * a propósito: borrar es una decisión explícita de una persona, como reenviar una
+ * OT. Apretar «Borrar» sobre un evento divergido sí escribe en Google, y se lleva
+ * el evento que la persona había movido de ese lado. Por eso la frase se acota a
+ * mover y reescribir, y el resto dice lo que el borrado hace. Si alguna vez el
+ * `DELETE` empieza a respetar la divergencia, esto se vuelve a decir.
  *
  * `quien` es el sujeto ya conjugado: «elijas» si lo mira el dueño, o
  * «Ana Paz elija» si no.
@@ -240,8 +248,9 @@ export function mientrasEstaDivergido(
     };
   }
   return {
-    negrita: `Hasta que ${quien} una salida, el SdG no escribe nada de este evento en Google.`,
-    resto: "Los cambios que se le hagan acá quedan sólo en el SdG.",
+    negrita: `Hasta que ${quien} una salida, el SdG no mueve ni reescribe este evento en Google.`,
+    resto:
+      "Los cambios que se le hagan acá quedan sólo en el SdG. Lo único que sí llega a Google es borrarlo: si lo borrás acá, se borra también allá.",
   };
 }
 
