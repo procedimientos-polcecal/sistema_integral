@@ -2466,12 +2466,37 @@ saber antes de tocarlo:
 práctica ya lo escribía a mano (58 de las 380 OT viejas de PIPARO). Con repuesto
 y precio queda `2 parches de 200 ($240.000)`; con precio solo, `$920.000`.
 
-**Lo que queda pendiente de una decisión**: las 48 órdenes de octubre ya escritas
-conservan el texto largo. Cambiarlo es reescribir la columna Y de «Altas del
-sistema» con `corregirLaAlta` —la H del master es derrame y no guarda lo que se
-le escribe— y es una escritura en la planilla de producción, así que no se hizo
-sola. Sus columnas K/M/N/O, en cambio, se llenan al abrir Mantenimiento →
-Órdenes, que drena la cola.
+**Las 48 de octubre se corrigieron a mano el 03/11/2026**, a pedido, con
+[scripts/corregir-ot-del-cuaderno.mts](../scripts/corregir-ot-del-cuaderno.mts)
+—que sin `--escribir` no toca nada—. Quedó: 48 descripciones acortadas en
+«Altas del sistema» y en la base, 0 con el texto viejo de los dos lados, 0 en la
+cola, y **47 de 48 con K/M/N/O en el master**.
+
+Tres cosas de esa corrida que vale la pena saber:
+
+- **La salvaguarda fue reconstruir el texto viejo** desde los renglones de cada
+  orden y exigir que coincidiera **exacto** con lo que la base tenía guardado.
+  Las 48 coincidieron, o sea que nadie las había editado; la que no hubiera
+  coincidido se salteaba, porque corregir lo que escribió una persona es peor
+  que dejar el texto largo.
+- **Primero la planilla y después la base.** Si la planilla sale y la base no,
+  la próxima sincronización las empareja; al revés, la planilla pisaría la base.
+- **La que falta es la 2983**, y no es de esto: es la órden que quedó escrita en
+  la planilla y nunca entró al sistema (ver más arriba). Como no existe en
+  `ordenes_trabajo`, no hay de dónde sacarle el estado ni las horas.
+
+**Y una medida que va a volver: el drenaje pega contra la cuota de Google.**
+`exportarLoPendiente` lee la columna A del master **una vez por orden en la
+cola**; con 48 encoladas de golpe, una se cayó con
+
+    Google respondió 429: Quota exceeded for quota metric 'Read requests' and
+    limit 'Read requests per minute per user'
+
+y quedó en la cola hasta la pasada siguiente, que es exactamente lo que la cola
+existe para que pase. No se tocó nada por ahora —el reintento lo resuelve—,
+pero con un mes de 100 órdenes esto va a dejar varias para la segunda vuelta: el
+día que moleste, lo que hay que cambiar es que el drenaje lea la columna A **una
+vez por pasada** y no una por orden.
 
 ### Lo que quedó anotado
 
