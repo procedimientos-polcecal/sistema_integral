@@ -739,14 +739,47 @@ export function loQueQuedoPendiente(cuerpoCrudo) {
       : `La clave de esta carga no se pudo anotar del lado del servidor ` +
         `(${claveError}): si se vuelve a mandar, mirá la planilla antes de darla ` +
         `por duplicada.`,
-    planillaError === null
-      ? null
-      : `El estado y las horas todavía no llegaron a la planilla (${planillaError}) — ` +
-        `queda pendiente y lo escribe la próxima sincronización.`,
+    textoDelPendienteDePlanilla(planillaError, cuerpo.planilla_reintentando === true),
     texto(cuerpo.aviso_error),
+    // Los repuestos que no entraron. **Faltaba**, y es el único de los cuatro
+    // que no se decía por este camino: el modal de «Nueva orden de trabajo» lo
+    // leía por su cuenta, así que la misma OT contaba una cosa cargada con la
+    // app abierta y otra cuando salía de la cola.
+    texto(cuerpo.repuestos_error),
   ].filter((parte) => parte !== null);
 
   return partes.length > 0 ? partes.join(" ") : null;
+}
+
+/**
+ * Qué decir cuando el estado y las horas no llegaron a la planilla.
+ *
+ * **VIVE ACÁ PORQUE SON DOS LOS QUE LO DICEN**: esta cola y el modal de «Nueva
+ * orden de trabajo», que hasta el 02/11/2026 tenía su propia redacción en
+ * `lib/mantenimiento/reintentoDePendientes.ts`. Las dos hablaban de lo mismo y
+ * decían cosas distintas: la de acá prometía «la próxima sincronización», que
+ * en la práctica son entre 3 y 5 horas, cuando el sistema reintenta solo
+ * durante unos minutos. Quien lo lee decide si va a mirar la planilla, así que
+ * la diferencia no es de estilo.
+ *
+ * @param {string | null} error
+ * @param {boolean} reintentando
+ * @returns {string | null}
+ */
+export function textoDelPendienteDePlanilla(error, reintentando) {
+  // Un `""` cuenta como "no hay error", igual que en `texto()`: la ruta puede
+  // mandar la clave vacía y eso no es algo que contarle a nadie. Lo fija el
+  // test «si salió, no dice nada», que es el que atrapó esto cuando el modal
+  // pasó a delegar acá.
+  if (texto(error) === null) return null;
+  if (reintentando) {
+    return (
+      "De la columna K en adelante —el cierre, el estado, las horas y los operarios— " +
+      "la planilla las recibe en unos minutos: su fila del master todavía no existe y " +
+      "el sistema reintenta solo."
+    );
+  }
+  return `El estado y las horas todavía no llegaron a la planilla (${error}).`;
 }
 
 /** El campo si es un texto con algo adentro; null en cualquier otro caso. */

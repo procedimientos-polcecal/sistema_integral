@@ -238,6 +238,7 @@ que mirar si el cartel de "actualizado hace…" se queda viejo.
 |---|---|---|
 | `AI_GATEWAY_API_KEY` | La llave del Vercel AI Gateway, que es por donde el asistente habla con el modelo | En Vercel, si el proyecto tiene el Gateway habilitado, se inyecta sola vía OIDC y no hace falta cargarla. En local sí hace falta: se saca del panel de Vercel, **AI Gateway → API keys**. Sin ella, la ruta `/api/asistente` devuelve el error del proveedor tal cual, que es lo que corresponde. **Desde el 05/10/2026 también está cargada explícitamente** en Production y Preview: no porque el OIDC no alcance, sino porque una variable que está es más fácil de mirar que una que se inyecta sola |
 | `ASISTENTE_MODELO` | Con qué modelo contesta el asistente. **Opcional**: sin ella usa `anthropic/claude-sonnet-5`, que es el que corresponde | Sólo se carga para probar sin créditos (ver abajo). Borrarla vuelve al modelo bueno |
+| `CUADERNO_MODELO` | Con qué modelo lee el cuaderno de Piparo (`/mantenimiento/partes-contratista`). **Opcional**: sin ella usa `anthropic/claude-sonnet-5`, que es el que corresponde. Usa la misma `AI_GATEWAY_API_KEY` | Sólo se carga para probar la cañería sin créditos: con una llave del tier gratuito la lectura falla con el 403 de arriba. `google/gemini-2.5-flash` anduvo (02/11/2026) y **su lectura no sirve para juzgar la calidad**: se equivoca de año, de día y pega un «Hs» al número. Borrarla vuelve al modelo bueno |
 
 ### Probar el asistente sin comprar créditos
 

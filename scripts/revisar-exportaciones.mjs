@@ -302,6 +302,15 @@ export const REGISTRO = {
     estrategia: "cola",
     porque: "Las dos ramas —OT nueva y OT reutilizada— anotan el pendiente del registro.",
   },
+  "app/api/mantenimiento/cuaderno/generar/route.ts": {
+    estrategia: "cola",
+    porque:
+      "Crear y sumar anotan `sheets_pendiente` con lo que el master no pudo recibir " +
+      "(estado, cierre, horas). El costo es un campo que se exporta y viaja dentro de " +
+      "`REPUESTO UTILIZADO`: al crear, en el alta; al sumar, se corrige en «Altas del " +
+      "sistema» ANTES de tocar la base, y si eso falla no se toca nada (planilla primero, " +
+      "no queda nada que encolar). El master no sirve para esa columna: es derrame.",
+  },
   "lib/mantenimiento/sincronizar.ts": {
     estrategia: "cola",
     porque:

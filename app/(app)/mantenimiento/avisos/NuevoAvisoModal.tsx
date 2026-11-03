@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { URGENCIAS } from "@/lib/mantenimiento/avisos";
 import Select from "@/components/Select";
+import { CartelDelResultado } from "@/app/cargar/envio";
+import { mandarOEncolar, type Resultado } from "@/lib/core/mandarOEncolar";
 
 /**
  * Con qué campos abre el formulario.
@@ -53,6 +55,8 @@ export default function NuevoAvisoModal({
   const [sectores, setSectores] = useState<{ id: string; nombre: string; codigo: string | null }[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
+  /** Cómo salió el envío. El `error` de arriba es sólo para lo que se valida acá adentro. */
+  const [resultado, setResultado] = useState<Resultado | null>(null);
 
   const [campos, setCampos] = useState({
     equipo_raw: inicial?.equipo ?? "",
@@ -133,6 +137,17 @@ export default function NuevoAvisoModal({
     setAvisoDeLaFoto("");
   }
 
+  /**
+   * Manda el aviso y, si no hay con qué, lo deja en la cola del teléfono.
+   *
+   * **ANTES ACÁ HABÍA UN `fetch` SUELTO Y SIN `try`.** Sin señal el `await`
+   * tiraba, el error se escapaba de esta función y el modal quedaba colgado
+   * con el spinner puesto y lo escrito adentro: no mostraba mal el error, no
+   * mostraba ninguno. Desde el 02/11/2026 eso lo resuelve `mandarOEncolar`,
+   * que es el mismo camino que usa la pantalla sin señal — y por eso no se
+   * decide nada acá: si el envío se cayó por conexión, el aviso queda
+   * esperando y sale solo cuando vuelva.
+   */
   async function crear() {
     if (!campos.descripcion.trim()) { setError("Contá qué pasa."); return; }
     // Sin elegir no se manda: la ruta lo resolvería sola desde las áreas de la
@@ -140,22 +155,22 @@ export default function NuevoAvisoModal({
     if (areas.length > 0 && !campos.area_id) { setError("Elegí el área."); return; }
     setGuardando(true);
     setError("");
+    setResultado(null);
 
-    const res = await fetch("/api/mantenimiento/avisos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...campos,
-        sector_id: campos.sector_id || null,
-        area_id: campos.area_id || null,
-        reference_photos: foto ? [foto.link] : [],
-      }),
+    const salida = await mandarOEncolar("aviso", {
+      ...campos,
+      sector_id: campos.sector_id || null,
+      area_id: campos.area_id || null,
+      reference_photos: foto ? [foto.link] : [],
     });
-    const body = await res.json().catch(() => ({}));
     setGuardando(false);
 
-    if (!res.ok) { setError(body.error ?? "No se pudo cargar el aviso."); return; }
-    onCreado(body.oa_number);
+    // Lo que entró cierra el modal, como siempre. Lo que quedó esperando y lo
+    // que se rechazó se cuentan con el mismo cartel que la pantalla sin señal,
+    // y no con un texto propio: es la misma situación y ya está redactada ahí,
+    // incluido el caso en que la fila igual quedó escrita.
+    if (salida.estado === "mandada") { onCreado(salida.numero); return; }
+    setResultado(salida);
   }
 
   return (
@@ -170,6 +185,8 @@ export default function NuevoAvisoModal({
             El número se lo pone el sistema, siguiendo el último de la planilla.
           </p>
         </div>
+
+        <CartelDelResultado tipo="aviso" resultado={resultado} />
 
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>

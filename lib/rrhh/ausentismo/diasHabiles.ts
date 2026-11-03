@@ -111,3 +111,40 @@ export function anioSinFeriadosCargados(anio: number, feriados: readonly string[
   const prefijo = `${anio}-`;
   return !feriados.some((f) => f.startsWith(prefijo));
 }
+
+/**
+ * Si el año está cargado **a medias** hasta el mes que se reporta.
+ *
+ * Es el hueco que dejaba `anioSinFeriadosCargados` sola: ésa sólo ve el año
+ * entero vacío. Si alguien carga enero a junio y nada más, el año «tiene
+ * feriados», no salta ninguna alerta, `habilesAcumulados` cuenta de más y el
+ * porcentual sale más bajo de lo que es — en silencio, que es exactamente lo
+ * que el aviso existe para evitar.
+ *
+ * LA SEÑAL SON DOS MESES VACÍOS SEGUIDOS, Y ESO ESTÁ MEDIDO, no supuesto.
+ * Un mes suelto sin feriado es normal: Argentina no tiene feriado nacional en
+ * septiembre. Contados los 17 feriados reales de 2026, tanto en el fixture como
+ * en la base, **todos los meses tienen al menos uno salvo septiembre**. Así que
+ * septiembre solo nunca dispara esto, y un año cortado al medio sí: deja de
+ * junio en adelante una racha larga.
+ *
+ * Mira sólo hasta `hastaMes` porque el acumulado llega hasta ahí: los meses
+ * posteriores no entran en ningún denominador y que les falte el feriado no
+ * cambia ningún número todavía.
+ */
+export function anioParcialmenteCargado(
+  anio: number,
+  hastaMes: string,
+  feriados: readonly string[],
+): boolean {
+  if (anioSinFeriadosCargados(anio, feriados)) return false; // ya lo dice el otro aviso
+  const conFeriado = new Set(feriados.map((f) => f.slice(0, 7)));
+  const mesFinal = Number(hastaMes.slice(5, 7));
+  let seguidos = 0;
+  for (let m = 1; m <= mesFinal; m++) {
+    const mes = `${anio}-${String(m).padStart(2, "0")}`;
+    seguidos = conFeriado.has(mes) ? 0 : seguidos + 1;
+    if (seguidos >= 2) return true;
+  }
+  return false;
+}

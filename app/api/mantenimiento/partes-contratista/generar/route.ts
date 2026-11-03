@@ -477,6 +477,8 @@ async function crearLaOT(
     descripcion,
     repuesto: null,
     fecha_ejecucion: grupo.fecha_cierre,
+    // Nadie estima el fin acá: la OT nace de un parte ya trabajado.
+    fecha_fin: null,
     prioridad,
   });
 

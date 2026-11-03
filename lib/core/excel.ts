@@ -217,6 +217,38 @@ async function cargarDestildado(entrada: Buffer): Promise<ExcelJS.Workbook | nul
 }
 
 /**
+ * El libro de un .xlsx, abierto, con el segundo intento sin prefijos de
+ * namespace (ver `leerLibro`).
+ *
+ * Existe aparte para quien necesita **más que el valor de cada celda**:
+ * `leerLibro` aplana una fórmula a su resultado, y el Excel del cuaderno de
+ * contratista lee las fórmulas mismas —`=C47+C50+C51` es lo que dice qué
+ * renglones van juntos—. Sin esto ese lector tendría su propia copia del
+ * reintento, y el día que aparezca otro XML raro habría que arreglarlo en dos
+ * lugares.
+ */
+export async function abrirLibro(datos: ArrayBuffer | Buffer | Uint8Array): Promise<ExcelJS.Workbook> {
+  // `exceljs` pide un ArrayBuffer o un Buffer; un Uint8Array que no sea Buffer
+  // hay que desenvolverlo o lo rechaza.
+  const entrada = Buffer.isBuffer(datos)
+    ? datos
+    : datos instanceof ArrayBuffer
+      ? Buffer.from(datos)
+      : Buffer.from(datos as Uint8Array);
+
+  let libro: ExcelJS.Workbook;
+  try {
+    libro = await cargarLibro(entrada);
+    if (libro.worksheets.length === 0) libro = (await cargarDestildado(entrada)) ?? libro;
+  } catch (e) {
+    const destildado = await cargarDestildado(entrada);
+    if (!destildado) throw e;
+    libro = destildado;
+  }
+  return libro;
+}
+
+/**
  * Todas las hojas de un .xlsx, en orden.
  *
  * Es `async` porque `exceljs` lo es — SheetJS leía sincrónico. Las cinco
@@ -244,23 +276,7 @@ async function cargarDestildado(entrada: Buffer): Promise<ExcelJS.Workbook | nul
  * y reportar éxito es la falla que más caro salió en este repo.
  */
 export async function leerLibro(datos: ArrayBuffer | Buffer | Uint8Array): Promise<HojaLeida[]> {
-  // `exceljs` pide un ArrayBuffer o un Buffer; un Uint8Array que no sea Buffer
-  // hay que desenvolverlo o lo rechaza.
-  const entrada = Buffer.isBuffer(datos)
-    ? datos
-    : datos instanceof ArrayBuffer
-      ? Buffer.from(datos)
-      : Buffer.from(datos as Uint8Array);
-
-  let libro: ExcelJS.Workbook;
-  try {
-    libro = await cargarLibro(entrada);
-    if (libro.worksheets.length === 0) libro = (await cargarDestildado(entrada)) ?? libro;
-  } catch (e) {
-    const destildado = await cargarDestildado(entrada);
-    if (!destildado) throw e;
-    libro = destildado;
-  }
+  const libro = await abrirLibro(datos);
 
   return libro.worksheets.map((hoja) => {
     const ancho = hoja.columnCount;

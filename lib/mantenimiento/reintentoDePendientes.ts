@@ -41,6 +41,8 @@
  * **y se calla** sería peor que no tenerlo.
  */
 
+import { textoDelPendienteDePlanilla } from "@/public/cola/colaOffline.js";
+
 /**
  * Cuánto esperar antes de cada intento, en milisegundos.
  *
@@ -165,17 +167,12 @@ export function avisoDelPendiente(
   error: string | null | undefined,
   reintentando: boolean
 ): string | null {
-  if (!error) return null;
-
-  if (reintentando) {
-    return (
-      "De la columna K en adelante —el cierre, el estado, las horas y los operarios— " +
-      "la planilla las recibe en unos minutos: su fila del master todavía no existe y " +
-      "el sistema reintenta solo."
-    );
-  }
-
-  return `El estado y las horas todavía no llegaron a la planilla (${error}).`;
+  // **EL TEXTO NO VIVE ACÁ DESDE EL 02/11/2026.** Lo dicen dos caminos —esta
+  // pantalla y la cola sin señal, que lo arma en `loQueQuedoPendiente`— y
+  // decían cosas distintas sobre lo mismo: el de allá prometía «la próxima
+  // sincronización», que en la práctica son entre 3 y 5 horas. Quien lo lee
+  // decide si va a mirar la planilla, así que la diferencia no era de estilo.
+  return textoDelPendienteDePlanilla(error ?? null, reintentando);
 }
 
 /** Cuánto espera una misma instancia antes de volver a drenar la cola. */

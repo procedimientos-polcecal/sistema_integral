@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   indiceDeColumnas, laSerieEstaCongelada, maximoDeLaSerie, celdasDelAlta,
   loQueSigueEnLaSerie, laFilaEstaLibre, celdaDeLaFechaComprometida,
+  celdasParaCorregirLaAlta,
 } from "./formulario";
 import { serialDelDia } from "@/lib/core/fechaDeSheets";
 
@@ -21,7 +22,7 @@ const ENCABEZADO = [
   "EQUIPO QUE SOLICITA", "EQUIPO QUE SOLICITA",
   "ESPECIALIDAD", "TIPO DE TRABAJO", "QUIÉN LO REALIZA",
   "DESCRIPCIÓN DEL TRABAJO", "REPUESTO UTILIZADO", "FECHA COMPROMETIDA",
-  "Puntuación", "PRIORIDAD",
+  "Puntuación", "PRIORIDAD", "Frecuencia", "Próxima fecha", "FECHA DE FIN",
 ];
 
 const datos = {
@@ -38,6 +39,7 @@ const datos = {
   descripcion: "Reemplazo de grillas",
   repuesto: null,
   fecha_ejecucion: "2026-10-20",
+  fecha_fin: "2026-10-25",
   prioridad: "🟠 Alta",
 };
 
@@ -54,6 +56,7 @@ describe("en que columna esta cada cosa", () => {
     expect(i.descripcion).toBe(24);  // Y
     expect(i.fecha).toBe(26);        // AA
     expect(i.prioridad).toBe(28);    // AC
+    expect(i.fechaFin).toBe(31);     // AF
   });
 
   /** Catorce columnas iguales; al master llegan aplanadas, asi que da igual. */
@@ -128,6 +131,35 @@ describe("las celdas del alta", () => {
     if (!r.ok) throw new Error("no armó");
     expect(typeof valorDe(r.celdas, 1)).toBe("number");  // marca temporal
     expect(typeof valorDe(r.celdas, 26)).toBe("number"); // fecha comprometida
+  });
+
+  /**
+   * La fecha de fin, desde el 02/11/2026. Es una estimacion -cuando se calcula
+   * que termina- y por eso no es la de cierre, que es la real.
+   */
+  it("la fecha de fin va como serial en su columna", () => {
+    const r = celdasDelAlta(ENCABEZADO, datos);
+    if (!r.ok) throw new Error(r.motivos.join(" · "));
+    expect(valorDe(r.celdas, 31)).toBe(serialDelDia("2026-10-25"));
+  });
+
+  it("sin fecha de fin esa celda no se escribe", () => {
+    const r = celdasDelAlta(ENCABEZADO, { ...datos, fecha_fin: null });
+    if (!r.ok) throw new Error(r.motivos.join(" · "));
+    expect(valorDe(r.celdas, 31)).toBeUndefined();
+  });
+
+  /**
+   * Hasta que el encabezado no tenga la columna, el dato no se escribe y el
+   * alta no se cae: es la misma regla que ya vale para toda columna que el
+   * formulario puede no tener.
+   */
+  it("sin la columna en el encabezado la OT se crea igual", () => {
+    const sinLaColumna = ENCABEZADO.filter((h) => h !== "FECHA DE FIN");
+    const r = celdasDelAlta(sinLaColumna, datos);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.celdas.some((c) => c.valor === serialDelDia("2026-10-25"))).toBe(false);
   });
 
   /**
@@ -378,5 +410,60 @@ describe("la celda de la fecha comprometida", () => {
 
   it("una fecha que no existe no se escribe", () => {
     expect(celdaDeLaFechaComprometida(FILAS, 2896, "2026-02-30").ok).toBe(false);
+  });
+});
+
+/**
+ * Corregir lo que el alta escribió: la descripción, el repuesto y la fecha de
+ * una orden que ya está en «Altas del sistema». Existe porque el master las
+ * recibe por derrame y escribirlas ahí no queda.
+ */
+describe("celdasParaCorregirLaAlta", () => {
+  const ENC = ["N° OT", "Marca temporal", "DESCRIPCIÓN DEL TRABAJO", "REPUESTO UTILIZADO", "FECHA COMPROMETIDA"];
+  const FILAS = [ENC, [2896, 46320, "x", "", 46328], [2897, 46320, "y", "", 46328]];
+
+  it("encuentra la fila por el número de OT y escribe cada cosa en su columna", () => {
+    const r = celdasParaCorregirLaAlta(FILAS, 2897, {
+      descripcion: "Nueva", repuesto: "$920.000", fecha_ejecucion: "2026-11-05",
+    });
+    expect(r).toEqual({
+      ok: true,
+      celdas: [
+        { fila: 3, columna: 2, valor: "Nueva" },
+        { fila: 3, columna: 3, valor: "$920.000" },
+        { fila: 3, columna: 4, valor: serialDelDia("2026-11-05") },
+      ],
+    });
+  });
+
+  it("sólo escribe lo que se pidió", () => {
+    const r = celdasParaCorregirLaAlta(FILAS, 2896, { repuesto: "$1.000" });
+    expect(r).toEqual({ ok: true, celdas: [{ fila: 2, columna: 3, valor: "$1.000" }] });
+  });
+
+  it("la prosa pasa por el escape y la fecha va como serial", () => {
+    const r = celdasParaCorregirLaAlta(FILAS, 2896, {
+      descripcion: "=IMPORTRANGE(1)", fecha_ejecucion: "2026-11-05",
+    });
+    expect(r.ok && r.celdas[0].valor).toBe("'=IMPORTRANGE(1)");
+    expect(r.ok && typeof r.celdas[1].valor).toBe("number");
+  });
+
+  it("una OT que no creó el sistema no está, y lo explica", () => {
+    const r = celdasParaCorregirLaAlta(FILAS, 1234, { repuesto: "$1" });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("creó el sistema");
+  });
+
+  it("si falta una columna, no escribe nada y dice cuál", () => {
+    const r = celdasParaCorregirLaAlta([["N° OT", "DESCRIPCIÓN DEL TRABAJO"], [2896, "x"]], 2896, {
+      descripcion: "a", repuesto: "$1",
+    });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("REPUESTO UTILIZADO");
+  });
+
+  it("una fecha que no existe no se escribe", () => {
+    expect(celdasParaCorregirLaAlta(FILAS, 2896, { fecha_ejecucion: "2026-02-30" }).ok).toBe(false);
   });
 });

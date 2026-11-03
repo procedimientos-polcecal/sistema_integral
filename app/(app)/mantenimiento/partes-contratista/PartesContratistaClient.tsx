@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
+import CuadernoClient, { type CargaResumen } from "./CuadernoClient";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
 import {
   horasTrasUnCambio, controlarHoras, normalizarLugar,
@@ -26,7 +27,15 @@ import {
  * propuesta pise una corrección.
  */
 
-export interface Contratista { id: string; nombre: string }
+export interface Contratista {
+  id: string; nombre: string;
+  /**
+   * Cómo entrega el trabajo: `parte_diario` (hojas sueltas con número y total,
+   * Candia) o `cuaderno` (fotos de un cuaderno manuscrito, PIPARO). Lo decide
+   * el dato del contratista y no una lista en el código.
+   */
+  modo_de_carga: string;
+}
 export interface EquipoBasico {
   id: string; name: string; code: string | null; sector_id: string | null;
 }
@@ -75,7 +84,7 @@ function conLaPropuesta(
 }
 
 export default function PartesContratistaClient({
-  puedeEditar, sectores, equipos, contratistas, lugares, partes, faltaLaMigracion,
+  puedeEditar, sectores, equipos, contratistas, lugares, partes, cargas, faltaLaMigracion,
 }: {
   puedeEditar: boolean;
   sectores: SectorDePlanta[];
@@ -83,6 +92,8 @@ export default function PartesContratistaClient({
   contratistas: Contratista[];
   lugares: LugarConocido[];
   partes: ParteCargado[];
+  /** Las cargas del cuaderno, sin renglones. `null` si falta su migración. */
+  cargas: CargaResumen[] | null;
   faltaLaMigracion: boolean;
 }) {
   const router = useRouter();
@@ -299,7 +310,12 @@ export default function PartesContratistaClient({
     router.refresh();
   }
 
-  if (faltaLaMigracion) {
+  // El desplegable de contratista es el que decide qué pantalla se abre.
+  const elegido = contratistas.find((c) => c.id === contratista);
+  const esCuaderno = elegido?.modo_de_carga === "cuaderno";
+
+  // La migración de los partes no le hace falta a quien lleva cuaderno.
+  if (faltaLaMigracion && !esCuaderno) {
     return (
       <div className="mx-auto max-w-2xl rounded-lg border border-amber-300 bg-amber-50 p-6">
         <h1 className="mb-2 text-lg font-semibold text-amber-900">
@@ -320,10 +336,15 @@ export default function PartesContratistaClient({
     <div className="space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-800">Partes diarios del contratista</h1>
+          <h1 className="text-xl font-semibold text-slate-800">
+            {esCuaderno ? "Cuaderno del contratista" : "Partes diarios del contratista"}
+          </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Se carga el papel tal como está escrito. Las órdenes de trabajo las genera el
-            sistema después, una por quincena, actividad y sector.
+            {esCuaderno
+              ? "El cuaderno se sube como fotos: el sistema las lee y se chequea cada renglón " +
+                "contra la hoja antes de generar las órdenes de trabajo."
+              : "Se carga el papel tal como está escrito. Las órdenes de trabajo las genera el " +
+                "sistema después, una por quincena, actividad y sector."}
           </p>
         </div>
         <label className="block w-full sm:w-64">
@@ -340,341 +361,355 @@ export default function PartesContratistaClient({
         </label>
       </header>
 
-      {error && (
-        <p className="rounded border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-          {error}
-        </p>
-      )}
-      {aviso && (
-        <p className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          {aviso}
-        </p>
-      )}
+      {esCuaderno ? (
+        <CuadernoClient
+          // La clave: cambiar de contratista no puede heredar la carga abierta del otro.
+          key={contratista}
+          proveedor={{ id: contratista, nombre: elegido?.nombre ?? "" }}
+          puedeEditar={puedeEditar}
+          sectores={sectores}
+          equipos={equipos}
+          cargas={cargas}
+        />
+      ) : (
+        <>
+          {error && (
+            <p className="rounded border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {error}
+            </p>
+          )}
+          {aviso && (
+            <p className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {aviso}
+            </p>
+          )}
 
-      {puedeEditar && (
-        <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">
-            Cargar un parte
-          </h2>
+          {puedeEditar && (
+            <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">
+                Cargar un parte
+              </h2>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Campo etiqueta="N° de parte">
-              <input
-                type="number" inputMode="numeric" value={numero}
-                onChange={(e) => setNumero(e.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-              />
-            </Campo>
-            <Campo etiqueta="Fecha">
-              <input
-                type="date" value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-              />
-            </Campo>
-            <Campo etiqueta="A los Sres.">
-              <input
-                value={dirigidoA} onChange={(e) => setDirigidoA(e.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-              />
-            </Campo>
-            <Campo etiqueta="Hora de entrada">
-              <input
-                value={horaEntrada} onChange={(e) => setHoraEntrada(e.target.value)}
-                placeholder="08H"
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-              />
-            </Campo>
-            <Campo etiqueta="Hora de salida">
-              <input
-                value={horaSalida} onChange={(e) => setHoraSalida(e.target.value)}
-                placeholder="16H"
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-              />
-            </Campo>
-            <Campo etiqueta="Materiales">
-              <input
-                value={materiales} onChange={(e) => setMateriales(e.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-              />
-            </Campo>
-          </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Campo etiqueta="N° de parte">
+                  <input
+                    type="number" inputMode="numeric" value={numero}
+                    onChange={(e) => setNumero(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </Campo>
+                <Campo etiqueta="Fecha">
+                  <input
+                    type="date" value={fecha}
+                    onChange={(e) => setFecha(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </Campo>
+                <Campo etiqueta="A los Sres.">
+                  <input
+                    value={dirigidoA} onChange={(e) => setDirigidoA(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </Campo>
+                <Campo etiqueta="Hora de entrada">
+                  <input
+                    value={horaEntrada} onChange={(e) => setHoraEntrada(e.target.value)}
+                    placeholder="08H"
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </Campo>
+                <Campo etiqueta="Hora de salida">
+                  <input
+                    value={horaSalida} onChange={(e) => setHoraSalida(e.target.value)}
+                    placeholder="16H"
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </Campo>
+                <Campo etiqueta="Materiales">
+                  <input
+                    value={materiales} onChange={(e) => setMateriales(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </Campo>
+              </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Campo etiqueta="Total que dice el papel">
-              <input
-                type="number" step="0.01" value={declaradas}
-                onChange={(e) => cambiarTotal(e.target.value)}
-                placeholder="18"
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-              />
-            </Campo>
-            <Campo etiqueta="Al 50 %">
-              <input
-                type="number" step="0.01" value={horas50}
-                onChange={(e) => setHoras50(e.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-              />
-            </Campo>
-            <Campo etiqueta="Al 100 %">
-              <input
-                type="number" step="0.01" value={horas100}
-                onChange={(e) => setHoras100(e.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-              />
-            </Campo>
-          </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Campo etiqueta="Total que dice el papel">
+                  <input
+                    type="number" step="0.01" value={declaradas}
+                    onChange={(e) => cambiarTotal(e.target.value)}
+                    placeholder="18"
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </Campo>
+                <Campo etiqueta="Al 50 %">
+                  <input
+                    type="number" step="0.01" value={horas50}
+                    onChange={(e) => setHoras50(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </Campo>
+                <Campo etiqueta="Al 100 %">
+                  <input
+                    type="number" step="0.01" value={horas100}
+                    onChange={(e) => setHoras100(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </Campo>
+              </div>
 
-          {/* El control de la factura, a la vista mientras se carga. */}
-          <div className="mt-3">
-            {control.ok ? (
-              <p className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                Cierra: {control.total} h entre {renglones.length}{" "}
-                {renglones.length === 1 ? "renglón" : "renglones"}.
-              </p>
-            ) : (
-              <ul className="space-y-1 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                {control.problemas.map((p) => <li key={p}>{p}</li>)}
-              </ul>
-            )}
-          </div>
+              {/* El control de la factura, a la vista mientras se carga. */}
+              <div className="mt-3">
+                {control.ok ? (
+                  <p className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                    Cierra: {control.total} h entre {renglones.length}{" "}
+                    {renglones.length === 1 ? "renglón" : "renglones"}.
+                  </p>
+                ) : (
+                  <ul className="space-y-1 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    {control.problemas.map((p) => <li key={p}>{p}</li>)}
+                  </ul>
+                )}
+              </div>
 
-          <div className="mt-5 mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Detalle del trabajo
-            </h3>
-            <span className="text-xs text-slate-500">
-              {horasAMano
-                ? "Las horas las estás poniendo vos."
-                : "Las horas arrancan repartidas parejo; corregilas donde no dio parejo."}
-              <button
-                type="button"
-                onClick={repartirParejo}
-                className="ml-2 text-slate-600 underline hover:text-slate-800"
-              >
-                Repartir parejo
-              </button>
-            </span>
-          </div>
+              <div className="mt-5 mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Detalle del trabajo
+                </h3>
+                <span className="text-xs text-slate-500">
+                  {horasAMano
+                    ? "Las horas las estás poniendo vos."
+                    : "Las horas arrancan repartidas parejo; corregilas donde no dio parejo."}
+                  <button
+                    type="button"
+                    onClick={repartirParejo}
+                    className="ml-2 text-slate-600 underline hover:text-slate-800"
+                  >
+                    Repartir parejo
+                  </button>
+                </span>
+              </div>
 
-          <div className="space-y-3">
-            {renglones.map((r, i) => {
-              const delSector = r.sector_id ? porSector.get(r.sector_id) ?? [] : [];
-              const conocido = catalogo.has(normalizarLugar(r.lugar_raw));
-              return (
-                <div
-                  key={i}
-                  className="rounded border border-slate-200 bg-slate-50 p-3"
-                >
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                    <Campo etiqueta="Actividad">
-                      <input
-                        value={r.actividad}
-                        onChange={(e) => cambiarRenglon(i, { actividad: e.target.value })}
-                        className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                      />
-                    </Campo>
-                    <Campo etiqueta="Lugar, como lo escribió">
-                      <input
-                        value={r.lugar_raw}
-                        onChange={(e) => cambiarRenglon(i, { lugar_raw: e.target.value })}
-                        onBlur={() => engancharDelCatalogo(i)}
-                        placeholder="Molino horizontal"
-                        className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                      />
-                    </Campo>
-                    <Campo etiqueta="Sector">
-                      <Select
-                        value={r.sector_id}
-                        onChange={(e) => cambiarRenglon(i, { sector_id: e.target.value, equipo_id: "" })}
-                        className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                      >
-                        <option value="">— sin enganchar —</option>
-                        {sectores.map((s) => (
-                          <option key={s.id} value={s.id}>{s.nombre}</option>
-                        ))}
-                      </Select>
-                    </Campo>
-                    <Campo etiqueta="Equipo (si es uno)">
-                      <Select
-                        value={r.equipo_id}
-                        onChange={(e) => cambiarRenglon(i, { equipo_id: e.target.value })}
-                        className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                      >
-                        <option value="">— todo el sector —</option>
-                        {delSector.map((e) => (
-                          <option key={e.id} value={e.id}>
-                            {e.code ? `${e.code} - ${e.name}` : e.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </Campo>
-                    <Campo etiqueta="Horas">
-                      <input
-                        type="number" step="0.01" min="0" inputMode="decimal"
-                        value={r.horas}
-                        onChange={(e) => cambiarHoras(i, e.target.value)}
-                        placeholder="0"
-                        className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                      />
-                    </Campo>
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                    {conocido && (
-                      <span className="text-slate-400">ya estaba en el catálogo</span>
-                    )}
-                    {!r.sector_id && r.lugar_raw.trim() && (
-                      <span className="text-amber-700">
-                        sin sector no se va a convertir en OT
-                      </span>
-                    )}
-                    {renglones.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => quitarRenglon(i)}
-                        className="ml-auto text-rose-600 hover:underline"
-                      >
-                        Quitar
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={agregarRenglon}
-              className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              Agregar renglón
-            </button>
-            <button
-              type="button"
-              onClick={guardar}
-              disabled={cargando || !control.ok}
-              className="rounded bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
-            >
-              {cargando ? "Guardando…" : "Guardar parte"}
-            </button>
-            <button
-              type="button"
-              onClick={limpiar}
-              className="rounded px-3 py-2 text-sm text-slate-500 hover:underline"
-            >
-              Limpiar
-            </button>
-          </div>
-        </section>
-      )}
-
-      {puedeEditar && (
-        <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
-          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-slate-400">
-            Generar las órdenes de trabajo
-          </h2>
-          <p className="mb-4 text-sm text-slate-500">
-            Una OT por quincena, actividad y sector, ya realizada y con sus horas. La
-            quincena va del 1 al 15 y del 16 a fin de mes, sin mirar el día de la semana:
-            el rango que pedís se estira a quincenas enteras. Un renglón que ya se
-            convirtió no se vuelve a convertir.
-          </p>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Campo etiqueta="Desde">
-              <input
-                type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-              />
-            </Campo>
-            <Campo etiqueta="Hasta">
-              <input
-                type="date" value={hasta} onChange={(e) => setHasta(e.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-              />
-            </Campo>
-            <div className="flex items-end gap-2">
-              <button
-                type="button"
-                onClick={() => generar(true)}
-                disabled={cargando || !desde || !hasta}
-                className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 disabled:opacity-40"
-              >
-                Ver qué se crea
-              </button>
-              <button
-                type="button"
-                onClick={() => generar(false)}
-                disabled={cargando || !previo || !previo.grupos.length}
-                className="rounded bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
-              >
-                {cargando ? "Generando…" : "Generar"}
-              </button>
-            </div>
-          </div>
-
-          {previo && <Previo previo={previo} />}
-        </section>
-      )}
-
-      <section>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
-          Partes cargados ({partesDelContratista.length})
-        </h2>
-        {partesDelContratista.length === 0 ? (
-          <p className="rounded border border-slate-200 bg-white px-3 py-4 text-sm text-slate-500">
-            Todavía no hay partes cargados de este contratista.
-          </p>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-400">
-                <tr>
-                  <th className="px-3 py-2">N°</th>
-                  <th className="px-3 py-2">Fecha</th>
-                  <th className="px-3 py-2">Quincena</th>
-                  <th className="px-3 py-2">Horas</th>
-                  <th className="px-3 py-2">Renglones</th>
-                  <th className="px-3 py-2">OT</th>
-                </tr>
-              </thead>
-              <tbody>
-                {partesDelContratista.map((p) => {
-                  const rs = p.mant_partes_contratista_renglones ?? [];
-                  const generados = rs.filter((r) => r.orden_trabajo_id).length;
+              <div className="space-y-3">
+                {renglones.map((r, i) => {
+                  const delSector = r.sector_id ? porSector.get(r.sector_id) ?? [] : [];
+                  const conocido = catalogo.has(normalizarLugar(r.lugar_raw));
                   return (
-                    <tr
-                      key={p.id}
-                      onClick={() => setAbierto(abierto === p.id ? null : p.id)}
-                      className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
+                    <div
+                      key={i}
+                      className="rounded border border-slate-200 bg-slate-50 p-3"
                     >
-                      <td className="px-3 py-2 font-medium">{p.numero}</td>
-                      <td className="px-3 py-2">{enDiaMes(p.fecha)}</td>
-                      <td className="px-3 py-2 text-slate-500">
-                        {rangoDeLaQuincena(p.fecha)}
-                      </td>
-                      <td className="px-3 py-2">{p.horas_declaradas} h</td>
-                      <td className="px-3 py-2 text-slate-500">
-                        {abierto === p.id
-                          ? rs.map((r) => `${r.lugar_raw} (${r.horas} h)`).join(" · ")
-                          : `${rs.length}`}
-                      </td>
-                      <td className="px-3 py-2 text-slate-500">
-                        {generados === 0
-                          ? "—"
-                          : generados === rs.length ? "todas" : `${generados}/${rs.length}`}
-                      </td>
-                    </tr>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                        <Campo etiqueta="Actividad">
+                          <input
+                            value={r.actividad}
+                            onChange={(e) => cambiarRenglon(i, { actividad: e.target.value })}
+                            className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                          />
+                        </Campo>
+                        <Campo etiqueta="Lugar, como lo escribió">
+                          <input
+                            value={r.lugar_raw}
+                            onChange={(e) => cambiarRenglon(i, { lugar_raw: e.target.value })}
+                            onBlur={() => engancharDelCatalogo(i)}
+                            placeholder="Molino horizontal"
+                            className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                          />
+                        </Campo>
+                        <Campo etiqueta="Sector">
+                          <Select
+                            value={r.sector_id}
+                            onChange={(e) => cambiarRenglon(i, { sector_id: e.target.value, equipo_id: "" })}
+                            className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                          >
+                            <option value="">— sin enganchar —</option>
+                            {sectores.map((s) => (
+                              <option key={s.id} value={s.id}>{s.nombre}</option>
+                            ))}
+                          </Select>
+                        </Campo>
+                        <Campo etiqueta="Equipo (si es uno)">
+                          <Select
+                            value={r.equipo_id}
+                            onChange={(e) => cambiarRenglon(i, { equipo_id: e.target.value })}
+                            className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                          >
+                            <option value="">— todo el sector —</option>
+                            {delSector.map((e) => (
+                              <option key={e.id} value={e.id}>
+                                {e.code ? `${e.code} - ${e.name}` : e.name}
+                              </option>
+                            ))}
+                          </Select>
+                        </Campo>
+                        <Campo etiqueta="Horas">
+                          <input
+                            type="number" step="0.01" min="0" inputMode="decimal"
+                            value={r.horas}
+                            onChange={(e) => cambiarHoras(i, e.target.value)}
+                            placeholder="0"
+                            className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                          />
+                        </Campo>
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                        {conocido && (
+                          <span className="text-slate-400">ya estaba en el catálogo</span>
+                        )}
+                        {!r.sector_id && r.lugar_raw.trim() && (
+                          <span className="text-amber-700">
+                            sin sector no se va a convertir en OT
+                          </span>
+                        )}
+                        {renglones.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => quitarRenglon(i)}
+                            className="ml-auto text-rose-600 hover:underline"
+                          >
+                            Quitar
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={agregarRenglon}
+                  className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  Agregar renglón
+                </button>
+                <button
+                  type="button"
+                  onClick={guardar}
+                  disabled={cargando || !control.ok}
+                  className="rounded bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+                >
+                  {cargando ? "Guardando…" : "Guardar parte"}
+                </button>
+                <button
+                  type="button"
+                  onClick={limpiar}
+                  className="rounded px-3 py-2 text-sm text-slate-500 hover:underline"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </section>
+          )}
+
+          {puedeEditar && (
+            <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
+              <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-slate-400">
+                Generar las órdenes de trabajo
+              </h2>
+              <p className="mb-4 text-sm text-slate-500">
+                Una OT por quincena, actividad y sector, ya realizada y con sus horas. La
+                quincena va del 1 al 15 y del 16 a fin de mes, sin mirar el día de la semana:
+                el rango que pedís se estira a quincenas enteras. Un renglón que ya se
+                convirtió no se vuelve a convertir.
+              </p>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Campo etiqueta="Desde">
+                  <input
+                    type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </Campo>
+                <Campo etiqueta="Hasta">
+                  <input
+                    type="date" value={hasta} onChange={(e) => setHasta(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </Campo>
+                <div className="flex items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => generar(true)}
+                    disabled={cargando || !desde || !hasta}
+                    className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 disabled:opacity-40"
+                  >
+                    Ver qué se crea
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => generar(false)}
+                    disabled={cargando || !previo || !previo.grupos.length}
+                    className="rounded bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+                  >
+                    {cargando ? "Generando…" : "Generar"}
+                  </button>
+                </div>
+              </div>
+
+              {previo && <Previo previo={previo} />}
+            </section>
+          )}
+
+          <section>
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
+              Partes cargados ({partesDelContratista.length})
+            </h2>
+            {partesDelContratista.length === 0 ? (
+              <p className="rounded border border-slate-200 bg-white px-3 py-4 text-sm text-slate-500">
+                Todavía no hay partes cargados de este contratista.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-400">
+                    <tr>
+                      <th className="px-3 py-2">N°</th>
+                      <th className="px-3 py-2">Fecha</th>
+                      <th className="px-3 py-2">Quincena</th>
+                      <th className="px-3 py-2">Horas</th>
+                      <th className="px-3 py-2">Renglones</th>
+                      <th className="px-3 py-2">OT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {partesDelContratista.map((p) => {
+                      const rs = p.mant_partes_contratista_renglones ?? [];
+                      const generados = rs.filter((r) => r.orden_trabajo_id).length;
+                      return (
+                        <tr
+                          key={p.id}
+                          onClick={() => setAbierto(abierto === p.id ? null : p.id)}
+                          className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
+                        >
+                          <td className="px-3 py-2 font-medium">{p.numero}</td>
+                          <td className="px-3 py-2">{enDiaMes(p.fecha)}</td>
+                          <td className="px-3 py-2 text-slate-500">
+                            {rangoDeLaQuincena(p.fecha)}
+                          </td>
+                          <td className="px-3 py-2">{p.horas_declaradas} h</td>
+                          <td className="px-3 py-2 text-slate-500">
+                            {abierto === p.id
+                              ? rs.map((r) => `${r.lugar_raw} (${r.horas} h)`).join(" · ")
+                              : `${rs.length}`}
+                          </td>
+                          <td className="px-3 py-2 text-slate-500">
+                            {generados === 0
+                              ? "—"
+                              : generados === rs.length ? "todas" : `${generados}/${rs.length}`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </>
+      )}
     </div>
   );
 }

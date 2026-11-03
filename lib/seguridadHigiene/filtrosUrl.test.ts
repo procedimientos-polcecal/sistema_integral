@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import { avisosDeConteos } from "@/lib/home/avisos";
 import {
   escribirFiltrosDeGestion,
+  escribirOrdenDeGestion,
   leerFiltrosDeGestion,
+  leerOrdenDeGestion,
 } from "./filtrosUrl";
 import { SIN_FILTROS } from "./gestion";
+import { ORDEN_POR_DEFECTO } from "./ordenDeColumna";
 
 const LUGARES = { sectores: ["sec-1", "sec-2"], equipos: ["eq-1"] };
 const leer = (query: string) => leerFiltrosDeGestion(new URLSearchParams(query), LUGARES);
@@ -84,5 +87,56 @@ describe("los enlaces de los avisos de Seguridad e Higiene", () => {
 
   it("«sin completar» abre las abiertas a las que les falta algo", () => {
     expect(filtrosDe("syh-sin-completar")).toEqual({ ...SIN_FILTROS, estado: "abierta", falta: "alguna" });
+  });
+});
+
+/**
+ * El orden también viaja en la URL: una tabla ordenada por fecha máxima es
+ * algo que alguien manda por chat, y recargar no tiene por qué deshacerlo.
+ */
+describe("el orden en la URL", () => {
+  const leerOrden = (query: string) => leerOrdenDeGestion(new URLSearchParams(query));
+
+  it("sin `orden` vale el de la pantalla, el que sube lo que falta", () => {
+    expect(leerOrden("")).toEqual(ORDEN_POR_DEFECTO);
+    expect(leerOrden("estado=Vencida")).toEqual(ORDEN_POR_DEFECTO);
+  });
+
+  it("lee la columna y el sentido", () => {
+    expect(leerOrden("orden=riesgo&dir=desc")).toEqual({ columna: "riesgo", ascendente: false });
+    expect(leerOrden("orden=fecha_maxima&dir=asc")).toEqual({ columna: "fecha_maxima", ascendente: true });
+  });
+
+  it("una columna que no existe cae en el orden por defecto", () => {
+    expect(leerOrden("orden=color&dir=desc")).toEqual(ORDEN_POR_DEFECTO);
+  });
+
+  // Son dos parámetros justamente para esto: un `dir` raro no se lleva puesta
+  // la columna, sólo cae en ascendente.
+  it("un sentido raro deja la columna y ordena ascendente", () => {
+    expect(leerOrden("orden=lugar&dir=arriba")).toEqual({ columna: "lugar", ascendente: true });
+    expect(leerOrden("orden=lugar")).toEqual({ columna: "lugar", ascendente: true });
+  });
+
+  it("el orden por defecto no escribe nada: la URL limpia es la de siempre", () => {
+    expect(escribirOrdenDeGestion(ORDEN_POR_DEFECTO)).toBe("");
+  });
+
+  it("ida y vuelta por cada columna y cada sentido", () => {
+    for (const columna of ["numero", "estado", "lugar", "descripcion", "peligro", "riesgo", "responsable", "fecha_maxima"] as const) {
+      for (const ascendente of [true, false]) {
+        const orden = { columna, ascendente };
+        expect(leerOrden(escribirOrdenDeGestion(orden))).toEqual(orden);
+      }
+    }
+  });
+
+  it("el orden y los filtros conviven en la misma URL", () => {
+    const query = [
+      escribirFiltrosDeGestion({ ...SIN_FILTROS, estado: "abierta", falta: "alguna" }),
+      escribirOrdenDeGestion({ columna: "responsable", ascendente: true }),
+    ].join("&");
+    expect(leer(query)).toEqual({ ...SIN_FILTROS, estado: "abierta", falta: "alguna" });
+    expect(leerOrden(query)).toEqual({ columna: "responsable", ascendente: true });
   });
 });

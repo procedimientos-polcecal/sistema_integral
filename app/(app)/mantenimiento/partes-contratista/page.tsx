@@ -6,6 +6,7 @@ import { traerTodo } from "@/lib/core/paginado";
 import PartesContratistaClient, {
   type ParteCargado, type LugarConocido, type EquipoBasico, type Contratista,
 } from "./PartesContratistaClient";
+import type { CargaResumen } from "./CuadernoClient";
 
 /**
  * Los partes diarios del contratista.
@@ -29,14 +30,7 @@ export default async function PartesContratistaPage() {
 
   const [sectores, contratistas, equipos] = await Promise.all([
     sectoresDePlanta<SectorDePlanta>(supabase),
-    traerTodo<Contratista>((d, h) =>
-      supabase
-        .from("proveedores")
-        .select("id, nombre")
-        .eq("es_contratista", true)
-        .order("nombre")
-        .range(d, h)
-    ),
+    contratistasConModo(supabase),
     traerTodo<EquipoBasico>((d, h) =>
       supabase
         .from("equipos")
@@ -66,6 +60,18 @@ export default async function PartesContratistaPage() {
       .range(d, h)
   ).catch(() => null);
 
+  // Las cargas del cuaderno, **sin renglones**: un año son ~1.400 y se piden de
+  // a una carga cuando se abre (`api/mantenimiento/cuaderno?id=`). Mientras la
+  // migración del cuaderno no esté corrida la consulta falla: se degrada a
+  // `null` y la pantalla lo dice.
+  const cargas = await traerTodo<CargaResumen>((d, h) =>
+    supabase
+      .from("mant_cuadernos")
+      .select("id, proveedor_id, estado, created_at, mant_cuadernos_fotos(id, orden, ruta, fallo)")
+      .order("created_at", { ascending: false })
+      .range(d, h)
+  ).catch(() => null);
+
   return (
     <PartesContratistaClient
       puedeEditar={puedeEditar}
@@ -74,7 +80,42 @@ export default async function PartesContratistaPage() {
       contratistas={contratistas}
       lugares={lugares ?? []}
       partes={partes ?? []}
+      cargas={cargas}
       faltaLaMigracion={lugares === null || partes === null}
     />
   );
+}
+
+/**
+ * Los contratistas, con la manera en que cada uno entrega: partes diarios o
+ * cuaderno.
+ *
+ * `proveedores.modo_de_carga` nace en la migración `20261101224012`. Mientras
+ * no esté corrida, pedirla tira un 400 que tumbaría la pantalla entera —
+ * también la de Candia, que no depende de ella—, así que se reintenta sin la
+ * columna y todos quedan como `parte_diario`, que es lo que eran.
+ */
+async function contratistasConModo(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<Contratista[]> {
+  try {
+    return await traerTodo<Contratista>((d, h) =>
+      supabase
+        .from("proveedores")
+        .select("id, nombre, modo_de_carga")
+        .eq("es_contratista", true)
+        .order("nombre")
+        .range(d, h)
+    );
+  } catch {
+    const sinModo = await traerTodo<{ id: string; nombre: string }>((d, h) =>
+      supabase
+        .from("proveedores")
+        .select("id, nombre")
+        .eq("es_contratista", true)
+        .order("nombre")
+        .range(d, h)
+    );
+    return sinModo.map((c) => ({ ...c, modo_de_carga: "parte_diario" }));
+  }
 }

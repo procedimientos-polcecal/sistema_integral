@@ -86,6 +86,7 @@ const ALIAS = {
   descripcion: ["DESCRIPCIÓN DEL TRABAJO", "DESCRIPCION DEL TRABAJO"],
   repuesto: ["REPUESTO UTILIZADO"],
   fecha: ["FECHA COMPROMETIDA"],
+  fechaFin: ["FECHA DE FIN"],
   prioridad: ["PRIORIDAD"],
 } as const;
 
@@ -218,8 +219,20 @@ export interface DatosDelAlta {
   quien: string | null;
   descripcion: string;
   repuesto: string | null;
-  /** "YYYY-MM-DD". Es la fecha de ejecución comprometida. */
+  /**
+   * "YYYY-MM-DD". La fecha comprometida, que en el master es la J y desde el
+   * 02/11/2026 se llama «FECHA DE INICIO».
+   */
   fecha_ejecucion: string | null;
+  /**
+   * "YYYY-MM-DD". Cuándo se estima que termina — la Y del master.
+   *
+   * **Si el encabezado no trae la columna, esto no se escribe y el alta no se
+   * cae**, que es la regla que ya vale para toda columna que el formulario
+   * puede no tener. O sea que hasta que «FECHA DE FIN» exista en las dos
+   * pestañas, cargarla en la app no deja nada del otro lado.
+   */
+  fecha_fin: string | null;
   prioridad: string | null;
 }
 
@@ -287,10 +300,14 @@ export function celdasDelAlta(
     prioridad: texto(datos.prioridad),
   };
 
-  // La fecha va como serial o no va. Un "14/10/2026" lo interpreta la planilla
-  // según su locale, que es la trampa que dio vuelta 885 fechas en Compras.
+  // Las fechas van como serial o no van. Un "14/10/2026" lo interpreta la
+  // planilla según su locale, que es la trampa que dio vuelta 885 fechas en
+  // Compras.
   const serial = datos.fecha_ejecucion ? serialDelDia(datos.fecha_ejecucion) : null;
   if (serial !== null) valores.fecha = serial;
+
+  const serialFin = datos.fecha_fin ? serialDelDia(datos.fecha_fin) : null;
+  if (serialFin !== null) valores.fechaFin = serialFin;
 
   const celdas: Celda[] = [];
   for (const [clave, valor] of Object.entries(valores) as [Clave, string | number][]) {
@@ -569,6 +586,106 @@ export async function corregirLaFechaComprometida(
     await escribirCeldas(planilla, [{
       pestana: HOJA_DE_ALTAS, fila: donde.fila, columna: donde.columna, valor: donde.valor,
     }]);
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
+/** Lo que se puede corregir de una orden que ya está en «Altas del sistema». */
+export interface CorreccionDeLaAlta {
+  descripcion?: string;
+  repuesto?: string;
+  /** "YYYY-MM-DD". */
+  fecha_ejecucion?: string;
+}
+
+/**
+ * Qué celdas hay que reescribir en «Altas del sistema» para corregir una orden
+ * que ya está ahí. Pura: recibe las filas ya leídas.
+ *
+ * Es la hermana de `celdaDeLaFechaComprometida`, y existe por lo mismo: la
+ * descripción (H), el repuesto (I) y la fecha de inicio (J) del master son
+ * **derrame** de los `QUERY(IMPORTRANGE())`, así que escribirlas ahí no queda y
+ * la próxima sincronización las lee como estaban. La de verdad está en esta
+ * pestaña. Se necesita cuando la generación del cuaderno **le suma** un
+ * renglón a una orden que ya existe: sin esto, el costo nuevo queda en la base
+ * y la planilla sigue diciendo el viejo.
+ *
+ * Sólo devuelve lo que se pidió, la fila se busca por N° de OT, la prosa pasa
+ * por `textoParaLaCelda` y la fecha va como serial. Si falta **alguna** de las
+ * columnas pedidas no escribe ninguna: una corrección a medias deja la fila
+ * diciendo dos cosas que no son de la misma versión.
+ */
+export function celdasParaCorregirLaAlta(
+  filas: readonly (readonly unknown[])[],
+  ot_number: number,
+  cambios: CorreccionDeLaAlta
+): { ok: true; celdas: { fila: number; columna: number; valor: string | number }[] } | { ok: false; error: string } {
+  const idx = indiceDeColumnas((filas[0] ?? []).map((c) => String(c ?? "")));
+
+  const pedidas: [Clave, string | number][] = [];
+  if (cambios.descripcion !== undefined) {
+    pedidas.push(["descripcion", textoParaLaCelda(cambios.descripcion.trim())]);
+  }
+  if (cambios.repuesto !== undefined) {
+    pedidas.push(["repuesto", textoParaLaCelda(cambios.repuesto.trim())]);
+  }
+  if (cambios.fecha_ejecucion !== undefined) {
+    const serial = serialDelDia(cambios.fecha_ejecucion);
+    if (serial === null) return { ok: false, error: `La fecha ${cambios.fecha_ejecucion} no existe.` };
+    pedidas.push(["fecha", serial]);
+  }
+
+  const faltan = pedidas.filter(([clave]) => idx[clave] < 0).map(([clave]) => ALIAS[clave].join(" ni "));
+  if (faltan.length > 0) {
+    return { ok: false, error: `El encabezado de «${HOJA_DE_ALTAS}» no tiene ${faltan.join(" ni ")}.` };
+  }
+
+  for (let i = 1; i < filas.length; i++) {
+    if (Number(String(filas[i]?.[0] ?? "").trim()) === ot_number) {
+      // La planilla cuenta desde 1 y la fila 0 es el encabezado.
+      return {
+        ok: true,
+        celdas: pedidas.map(([clave, valor]) => ({ fila: i + 1, columna: idx[clave], valor })),
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    error:
+      `La OT ${ot_number} no está en «${HOJA_DE_ALTAS}». Sólo se corrige lo de las ` +
+      `órdenes que creó el sistema: las del formulario viven en otra pestaña, que ` +
+      `maneja Forms, y escribir ahí corre las filas de los demás.`,
+  };
+}
+
+/**
+ * Corrige en «Altas del sistema» lo que cambió de una orden. Devuelve el motivo
+ * si no se pudo, **sin traducir**: un diagnóstico que no se distingue de otro
+ * no es un diagnóstico.
+ */
+export async function corregirLaAlta(
+  ot_number: number,
+  cambios: CorreccionDeLaAlta
+): Promise<string | null> {
+  if (Object.keys(cambios).length === 0) return null;
+
+  const planilla = PLANILLA();
+  if (!planilla) {
+    return "Falta configurar GOOGLE_SHEETS_MANTENIMIENTO_FORMULARIO_ID, así que no hay dónde escribir.";
+  }
+
+  try {
+    const filas = await leerValores(planilla, HOJA_DE_ALTAS, { sinFormato: true });
+    const donde = celdasParaCorregirLaAlta(filas, ot_number, cambios);
+    if (!donde.ok) return donde.error;
+
+    await escribirCeldas(
+      planilla,
+      donde.celdas.map((c) => ({ pestana: HOJA_DE_ALTAS, fila: c.fila, columna: c.columna, valor: c.valor }))
+    );
     return null;
   } catch (e) {
     return e instanceof Error ? e.message : String(e);

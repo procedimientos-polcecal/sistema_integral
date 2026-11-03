@@ -5,7 +5,6 @@ import Select from "@/components/Select";
 import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
 import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
-import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { AYUDA_GUT, ESCALAS_GUT } from "@/lib/mantenimiento/gut";
@@ -16,6 +15,8 @@ import {
 import RepuestosDeLaOT from "@/components/RepuestosDeLaOT";
 import FallaDeLaOT, { FALLA_VACIA, type LaFalla } from "@/components/FallaDeLaOT";
 import type { LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
+import { CartelDelResultado } from "@/app/cargar/envio";
+import { mandarOEncolar, type Resultado } from "@/lib/core/mandarOEncolar";
 
 /**
  * Los cuatro vocabularios, de `lib/`, no una copia.
@@ -85,6 +86,8 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
   // falla todavía no pasó.
   const [falla, setFalla] = useState<LaFalla>(FALLA_VACIA);
   const [error, setError]   = useState("");
+  /** Cómo salió el envío. El `error` de arriba es sólo lo que se valida acá adentro. */
+  const [resultado, setResultado] = useState<Resultado | null>(null);
 
   /* ── Reutilizar una OT vieja ──────────────────────────────────────────
    * Se cargan trabajos ya hechos en tanda, varios del mismo día y con la
@@ -162,6 +165,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     descripcion:    "",
     fecha:          hoyEnArgentina(),
     fecha_ejecucion: "",
+    fecha_fin:      "",
     fecha_cierre:   "",
     estado:         "POR_HACER",
     contratista:    "",
@@ -209,15 +213,12 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
       setError(`Falta cargar ${falta.join(", ")}.`);
       return;
     }
-    setSaving(true); setError("");
+    setSaving(true); setError(""); setResultado(null);
 
     const eq = equipos.find((eq: any) => eq.id === form.equipment_id);
     const sec = sectores.find((s: any) => s.id === form.sector_id);
 
-    const res = await fetch("/api/mantenimiento/ordenes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const salida = await mandarOEncolar("orden", {
         ...form,
         // Los renglones; la ruta arma con ellos el texto de la celda de la
         // planilla, que tiene una sola.
@@ -239,29 +240,27 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
         sector_raw:  sec?.nombre ?? null,
         equipment_id: form.equipment_id || null,
         sector_id:   form.sector_id || null,
-      }),
     });
-    const data = await res.json();
-    if (!res.ok) { setError(data.error ?? "Error al crear"); setSaving(false); return; }
+    setSaving(false);
+
+    // Lo que entró cierra el modal, como siempre. Lo que quedó esperando y lo
+    // que se rechazó se cuentan con el mismo cartel que la pantalla sin señal:
+    // es la misma situación y ya está redactada ahí.
+    if (salida.estado !== "mandada") { setResultado(salida); return; }
 
     // Lo que salió a medias se dice, no se calla. La OT se creó —por eso el
     // modal se cierra igual— pero si el aviso del que nació no quedó marcado,
-    // alguien puede generar una segunda orden para el mismo problema. Este
-    // valor se devolvía desde siempre y nadie lo leía: el 16/10/2026 una OT no
-    // llegó a la planilla y la pantalla no dijo una palabra.
-    // Y lo mismo con lo que no llegó a la planilla. Que el estado o las horas
-    // queden pendientes es lo normal recién creada —la fila del master tarda—,
-    // así que se dice sin sonar a error. El texto lo arma `avisoDelPendiente`,
-    // en `lib/`, porque las tres pantallas que crean una OT decían tres cosas
-    // distintas y ésta prometía «la próxima sincronización», que en la práctica
-    // son entre 3 y 5 horas. Hoy el sistema reintenta solo durante 4 minutos.
-    const aMedias = [
-      data.aviso_error,
-      avisoDelPendiente(data.planilla_error, data.planilla_reintentando),
-      data.repuestos_error,
-    ].filter(Boolean) as string[];
-
-    onCreated(aMedias.length ? aMedias.join(" ") : null);
+    // alguien puede generar una segunda orden para el mismo problema; el
+    // 16/10/2026 una OT no llegó a la planilla y la pantalla no dijo una
+    // palabra.
+    //
+    // **ESE TEXTO YA NO SE ARMA ACÁ.** Lo arma `loQueQuedoPendiente` de
+    // `public/cola/colaOffline.js`, que es por donde pasan los dos caminos
+    // —éste y el de la cola sin señal—. Hasta el 02/11/2026 este modal leía
+    // `repuestos_error` por su cuenta y redactaba lo de la planilla aparte, así
+    // que la misma OT contaba una cosa cargada con la app abierta y otra
+    // cuando salía de la cola.
+    onCreated(salida.advertencia);
   }
 
   return (
@@ -373,12 +372,20 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           </F>
 
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Dos columnas y no tres desde que son cuatro fechas: en tres, la
+              de cierre quedaba sola en un segundo renglón. En el teléfono va
+              una por renglón, como todo el resto. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <F label="Fecha creación">
               <input type="date" value={form.fecha} onChange={e => f("fecha", e.target.value)} className="input" />
             </F>
-            <F label="Fecha ejecución" required>
+            <F label="Fecha de inicio" required>
               <input type="date" value={form.fecha_ejecucion} onChange={e => f("fecha_ejecucion", e.target.value)} className="input" />
+            </F>
+            {/* Estimada, y por eso opcional: quien carga la orden no siempre
+                sabe cuándo termina. La real es la de cierre. */}
+            <F label="Fecha de fin (estimada)">
+              <input type="date" value={form.fecha_fin} onChange={e => f("fecha_fin", e.target.value)} className="input" />
             </F>
             <F label="Fecha cierre">
               <input type="date" value={form.fecha_cierre} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
@@ -506,6 +513,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
             </span>
           </label>
 
+          <CartelDelResultado tipo="orden" resultado={resultado} />
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <div className="flex gap-2 pt-1 border-t border-slate-100">
