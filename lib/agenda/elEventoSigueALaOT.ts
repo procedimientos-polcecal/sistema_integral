@@ -243,11 +243,32 @@ export interface LoQueSeguio {
  *
  * **Es un solo presupuesto para las dos funciones** (`presupuestoDeGoogle`) y no
  * uno cada una: con 60 s para cada una, el peor caso eran unos 240 s de los 300,
- * y quedaban 60 para las otras cuatro, que es justo lo que esto protege. El
- * límite se mira **antes** de empezar un evento y no corta a mitad de uno, así
- * que el sobrepaso es el de un evento en curso (hasta tres llamadas de 30 s:
- * leer, crear y restaurar): con 30 s de presupuesto, la Agenda no pasa de unos
- * 90 s en total y el peor evento la lleva a 120.
+ * y quedaban 60 para las otras cuatro, que es justo lo que esto protege.
+ *
+ * **Y el borrado no se lo puede comer entero**: gasta a lo sumo la mitad
+ * (`borrar`), y a `seguirALasOT` le queda garantizada la otra mitad **contada
+ * desde que ella empieza** (`mover`). Sin esa reserva, una OT cuyo `DELETE` da
+ * timeout siempre —y que por eso no se borra— vuelve a ser la primera de la
+ * lista en cada corrida, agota los 30 s y ningún evento se mueve **nunca**, sin
+ * que ninguna pantalla lo muestre. Con la reserva, esa OT se lleva su parte y no
+ * la de todos; y si Google está caído de verdad, el primer evento que se intenta
+ * mover deja un `google_pendiente`, que sí se ve en la Agenda.
+ *
+ * EL PEOR CASO, CON LA CUENTA. El límite se mira **antes** de empezar un evento
+ * y no corta a mitad de uno, así que se pasa por lo que tarde el que está en
+ * curso:
+ * - borrar: una sola llamada (`borrarEvento`, 30 s). Empieza a lo sumo a los
+ *   15 s y termina a los 45.
+ * - mover un evento **sin `google_event_id`**: cuatro llamadas —`leerEvento` de
+ *   los invitados (`moverElEvento`), el `POST` de `crearEvento`, **el
+ *   `leerEvento` que `crearEvento` hace por dentro cuando recibe el 409**, y el
+ *   `PUT` de `restaurar`—, 4 × 30 s = 120 s. Con `google_event_id` es un solo
+ *   `PATCH`.
+ * Un evento que arranca a los 14,9 s de su mitad y encadena cuatro llamadas
+ * lentas cierra a 15 + 120 = 135 s, y sumado al borrado la Agenda llega a unos
+ * **180 s de los 300** en el peor caso imaginable (Google contestando cada
+ * llamada justo antes del corte). Con Google colgado de verdad es mucho menos:
+ * el primer evento que no tiene id cuesta 30 s y agota la mitad.
  */
 export const LIMITE_DE_GOOGLE_MS = 30_000;
 
@@ -256,18 +277,38 @@ export interface PresupuestoDeGoogle {
   agotado(): boolean;
 }
 
-/** Arranca el reloj. Se crea **una vez por corrida** y se le pasa a las dos funciones. */
+/** Los dos tramos del presupuesto de una corrida: ver `LIMITE_DE_GOOGLE_MS`. */
+export interface PresupuestoDeLaCorrida {
+  /** Para `borrarLosEventosDeLasOT`: se agota a la mitad. */
+  borrar: PresupuestoDeGoogle;
+  /** Para `seguirALasOT`: el resto, y como mínimo la mitad desde que ella empieza. */
+  mover: PresupuestoDeGoogle;
+}
+
+/** Arranca el reloj. Se crea **una vez por corrida** y se le pasa un tramo a cada función. */
 export function presupuestoDeGoogle(
   limiteMs: number = LIMITE_DE_GOOGLE_MS,
   reloj: () => number = Date.now
-): PresupuestoDeGoogle {
-  const corte = reloj() + limiteMs;
-  return { agotado: () => reloj() >= corte };
+): PresupuestoDeLaCorrida {
+  const inicio = reloj();
+  const mitad = limiteMs / 2;
+  let empezoAMover: number | null = null;
+  return {
+    borrar: { agotado: () => reloj() >= inicio + mitad },
+    mover: {
+      agotado: () => {
+        // Si el borrado se pasó de su mitad (una llamada lenta lo puede hacer),
+        // el movimiento igual cuenta con su mitad completa desde que empieza.
+        empezoAMover ??= reloj();
+        return reloj() >= Math.max(inicio + limiteMs, empezoAMover + mitad);
+      },
+    },
+  };
 }
 
 export interface OpcionesDeLaPasada {
   ahora?: Date;
-  /** Compartido entre `borrarLosEventosDeLasOT` y `seguirALasOT`; si falta, cada una arranca el suyo. */
+  /** El tramo de `presupuestoDeGoogle` que le toca; si falta, la función arranca uno propio. */
   presupuesto?: PresupuestoDeGoogle;
 }
 
@@ -340,7 +381,7 @@ interface FilaLeida {
  */
 export async function seguirALasOT(
   cliente: SupabaseClient,
-  { ahora = new Date(), presupuesto = presupuestoDeGoogle() }: OpcionesDeLaPasada = {}
+  { ahora = new Date(), presupuesto = presupuestoDeGoogle().mover }: OpcionesDeLaPasada = {}
 ): Promise<LoQueSeguio> {
   const r: LoQueSeguio = { movidos: 0, avisados: 0, respetados: 0, pendientes: 0, sinAlcanzar: 0, fallos: [] };
 
@@ -575,7 +616,7 @@ async function moverElEvento(
 export async function borrarLosEventosDeLasOT(
   cliente: SupabaseClient,
   otIds: readonly string[],
-  { ahora = new Date(), presupuesto = presupuestoDeGoogle() }: OpcionesDeLaPasada = {}
+  { ahora = new Date(), presupuesto = presupuestoDeGoogle().borrar }: OpcionesDeLaPasada = {}
 ): Promise<Map<string, string>> {
   const noSePuede = new Map<string, string>();
   const marca = ahora.toISOString();

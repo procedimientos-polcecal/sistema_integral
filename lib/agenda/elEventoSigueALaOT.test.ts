@@ -357,7 +357,7 @@ describe("seguirALasOT", () => {
       eventos: [1, 2, 3, 4].map((n) => FILA_DE_EVENTO({ id: `0000000${n}-89ab-cdef-0123-456789abcdef` })),
     });
 
-    const r = await seguirALasOT(cliente, { presupuesto: presupuestoDeGoogle(60_000, () => t) });
+    const r = await seguirALasOT(cliente, { presupuesto: presupuestoDeGoogle(60_000, () => t).mover });
 
     expect(actualizarEvento).toHaveBeenCalledTimes(2);
     expect(r).toMatchObject({ movidos: 2, sinAlcanzar: 2, fallos: [] });
@@ -505,15 +505,16 @@ describe("borrarLosEventosDeLasOT", () => {
     expect(p).toEqual({ tipo: "nada", mover: null, aviso: undefined, volverAAlertar: false });
   });
 
-  it("con Google lento corta a los 60 s: las OT que faltan no se borran y se reintentan", async () => {
+  it("el borrado corta a la mitad del presupuesto: las OT que faltan no se borran y se reintentan", async () => {
+    // Presupuesto de 60 s: el borrado tiene 30. Cada llamada tarda 20 s.
     let t = 0;
-    vi.mocked(borrarEvento).mockImplementation(async () => { t += 40_000; });
+    vi.mocked(borrarEvento).mockImplementation(async () => { t += 20_000; });
     const { cliente } = clienteFalso({
       eventos: [1, 2, 3].map((n) => FILA_DE_EVENTO({ id: `0000000${n}-89ab-cdef-0123-456789abcdef`, ot_id: `ot-${n}` })),
     });
 
     const r = await borrarLosEventosDeLasOT(cliente, ["ot-1", "ot-2", "ot-3"], {
-      presupuesto: presupuestoDeGoogle(60_000, () => t),
+      presupuesto: presupuestoDeGoogle(60_000, () => t).borrar,
     });
 
     expect(borrarEvento).toHaveBeenCalledTimes(2);
@@ -521,24 +522,46 @@ describe("borrarLosEventosDeLasOT", () => {
     expect(r.get("ot-3")).toContain("Se agotó el tiempo");
   });
 
-  it("borrar y mover comparten UN presupuesto: lo que gastó el borrado no se vuelve a tener para mover", async () => {
-    // Con 60 s para cada una, el peor caso de la Agenda eran ~240 s de los 300 del cron.
+  it("una OT trabada en el borrado no se come el presupuesto de mover: ese tramo queda reservado", async () => {
+    // El `DELETE` de una OT da timeout siempre, así que esa OT no se borra y es la primera de
+    // la lista en cada corrida. Sin la reserva, sus 30 s agotaban todo y ningún evento se
+    // movía nunca, sin que ninguna pantalla lo mostrara.
     let t = 0;
     const presupuesto = presupuestoDeGoogle(60_000, () => t);
     vi.mocked(borrarEvento).mockImplementation(async () => { t += 70_000; });
-    vi.mocked(actualizarEvento).mockResolvedValue(ENGOOGLE("2026-11-10T08:00:00-03:00", "2026-11-10T09:30:00-03:00"));
+    vi.mocked(actualizarEvento).mockImplementation(async () => {
+      t += 20_000;
+      return ENGOOGLE("2026-11-10T08:00:00-03:00", "2026-11-10T09:30:00-03:00");
+    });
 
     const borrado = clienteFalso({ eventos: [FILA_DE_EVENTO({ ot_id: "ot-9" })] });
-    await borrarLosEventosDeLasOT(borrado.cliente, ["ot-9"], { presupuesto });
+    await borrarLosEventosDeLasOT(borrado.cliente, ["ot-9"], { presupuesto: presupuesto.borrar });
+    expect(t).toBe(70_000); // se pasó de su mitad (y hasta del total): una llamada lenta lo hace
 
-    const mover = clienteFalso({ eventos: [FILA_DE_EVENTO()] });
-    const r = await seguirALasOT(mover.cliente, { presupuesto });
+    const mover = clienteFalso({
+      eventos: [1, 2, 3].map((n) => FILA_DE_EVENTO({ id: `0000000${n}-89ab-cdef-0123-456789abcdef` })),
+    });
+    const r = await seguirALasOT(mover.cliente, { presupuesto: presupuesto.mover });
 
-    expect(actualizarEvento).not.toHaveBeenCalled();
-    expect(r).toMatchObject({ movidos: 0, sinAlcanzar: 1 });
+    // Cuenta con su mitad (30 s) desde que empieza: mueve dos (20 s cada una; el segundo
+    // arranca a los 20 s) y el tercero queda para la próxima.
+    expect(actualizarEvento).toHaveBeenCalledTimes(2);
+    expect(r).toMatchObject({ movidos: 2, sinAlcanzar: 1 });
   });
 
-  it("si no puede ni mirar los eventos, ninguna OT del lote se borra", async () => {    const { cliente } = clienteFalso({ falla: { leer: "timeout" } });
+  it("si el borrado no gasta su mitad, el movimiento aprovecha lo que sobró", () => {
+    let t = 0;
+    const p = presupuestoDeGoogle(60_000, () => t);
+    t = 10_000;
+    expect(p.mover.agotado()).toBe(false);
+    t = 59_000;
+    expect(p.mover.agotado()).toBe(false);
+    t = 60_000;
+    expect(p.mover.agotado()).toBe(true);
+  });
+
+  it("si no puede ni mirar los eventos, ninguna OT del lote se borra", async () => {
+    const { cliente } = clienteFalso({ falla: { leer: "timeout" } });
     const r = await borrarLosEventosDeLasOT(cliente, ["ot-1", "ot-2"]);
     expect([...r.keys()].sort()).toEqual(["ot-1", "ot-2"]);
     expect(borrarEvento).not.toHaveBeenCalled();

@@ -717,8 +717,9 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
     // El evento de Google de una OT se borra ANTES que la OT, y si no se puede,
     // esa OT no se borra en esta corrida. Ver `borrarLosEventosDeLasOT`.
-    // Y el tiempo que se le dedica a Google es UNO para borrar y para mover.
-    antesDeBorrar: (ids) => borrarLosEventosDeLasOT(admin, ids, { presupuesto: presupuestoDeLaAgenda }),
+    // Y el tiempo que se le dedica a Google es UNO para borrar y para mover, con
+    // la mitad reservada para mover: ver `LIMITE_DE_GOOGLE_MS`.
+    antesDeBorrar: (ids) => borrarLosEventosDeLasOT(admin, ids, { presupuesto: presupuestoDeLaAgenda.borrar }),
   });
 
   // La corrida se anota ANTES de tocar la Agenda. Lo que sigue habla con Google,
@@ -738,7 +739,7 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   // guardar sale acá y en el registro, y no en un `console.warn`. Tiene un
   // límite de tiempo (`LIMITE_DE_GOOGLE_MS`): corre dentro del cron que sigue
   // con las otras tres sincronizaciones.
-  const eventos = await seguirALasOT(admin, { presupuesto: presupuestoDeLaAgenda });
+  const eventos = await seguirALasOT(admin, { presupuesto: presupuestoDeLaAgenda.mover });
 
   // Si no se pudo mover algún evento, o no se alcanzó, la última anotación pasa a
   // decirlo: las OT sí se guardaron, y el mensaje lo dice para que no se lea
