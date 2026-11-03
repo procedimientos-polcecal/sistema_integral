@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { revisarElSecreto } from "@/lib/core/cron";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
-import { ponerAlDiaLosCanales, barrerLasCasillas } from "@/lib/agenda/canales";
+import { ponerAlDiaLosCanales, barrerLasCasillas, resumenDelConteo } from "@/lib/agenda/canales";
 import { reintentarLosPendientes } from "@/lib/agenda/reintentarPendientes";
 
 // Tres cosas con Google, una detrás de otra. Los cortes propios (el barrido a
@@ -83,9 +83,12 @@ export async function GET(request: Request) {
       modulo: "agenda",
       recurso: "barrido",
       ok: b.fallos.length === 0,
-      // Las divergencias nuevas que encontró: son un hallazgo y no un fallo.
-      filas: b.divergencias.length,
-      error: b.fallos.length > 0 ? b.fallos.join(" · ").slice(0, 2000) : null,
+      // Las divergencias que **anotó**: son un hallazgo y no un fallo.
+      filas: b.conteo.anotadas,
+      // «3 divergencias detectadas, 0 anotadas» tiene que saltar a la vista el primer
+      // día: si el update condicional no tocara nunca la fila, todo se vería verde y
+      // la campana en cero. Ver `ConteoDeLaRevision`.
+      error: [resumenDelConteo(b.conteo), ...b.fallos].filter(Boolean).join(" · ").slice(0, 2000) || null,
     });
     respuesta.barrido = b;
   } catch (e) {

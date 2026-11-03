@@ -9,6 +9,7 @@ vi.mock("@/lib/core/calendar", () => ({
 import { abrirCanal, cerrarCanal, leerEvento } from "@/lib/core/calendar";
 import {
   canalesARenovar, tokenValido, urlDelWebhook, revisarLaCasilla, ponerAlDiaLosCanales, barrerLasCasillas,
+  conteoVacio, resumenDelConteo,
   ANTICIPO_DE_RENOVACION_MS,
 } from "./canales";
 import { baseEnMemoria, type Fila } from "./baseEnMemoria.testhelper";
@@ -508,5 +509,140 @@ describe("barrerLasCasillas", () => {
   it("tira si no puede leer usuarios: no se miró nada", async () => {
     const base = baseEnMemoria({ usuarios: [] }, { falla: { usuarios: { select: "sin base" } } });
     await expect(barrerLasCasillas(base.cliente, AHORA)).rejects.toThrow(/sin base/);
+  });
+});
+
+// ── El conteo: detectadas contra anotadas ───────────────────────────────────
+
+describe("el conteo de lo detectado contra lo anotado", () => {
+  it("lo anotado coincide con lo detectado y no hay nada que decir", async () => {
+    const base = baseEnMemoria({ agenda_eventos: [evento("1")] });
+    vi.mocked(leerEvento).mockResolvedValue(null);
+    const conteo = conteoVacio();
+
+    await revisarLaCasilla(base.cliente, CASILLA, [], AHORA, conteo);
+
+    expect(conteo).toEqual({ detectadas: 1, anotadas: 1, porCarrera: 0, sinExplicar: 0, conError: 0 });
+    expect(resumenDelConteo(conteo)).toBeNull();
+  });
+
+  it("una carrera legítima se cuenta aparte y no es un fallo", async () => {
+    const base = baseEnMemoria({ agenda_eventos: [evento("1")] });
+    vi.mocked(leerEvento).mockImplementation(async () => {
+      Object.assign(base.tablas.agenda_eventos[0], {
+        inicio_escrito: "2026-11-04T13:00:00+00:00",
+        fin_escrito: "2026-11-04T14:30:00+00:00",
+      });
+      return { id: "g1", ...IGUAL, inicio: "2026-11-04T10:00:00-03:00", fin: "2026-11-04T11:30:00-03:00" };
+    });
+    const conteo = conteoVacio();
+    const fallos: string[] = [];
+
+    await revisarLaCasilla(base.cliente, CASILLA, fallos, AHORA, conteo);
+
+    expect(conteo).toEqual({ detectadas: 1, anotadas: 0, porCarrera: 1, sinExplicar: 0, conError: 0 });
+    expect(fallos).toEqual([]);
+    expect(resumenDelConteo(conteo)).toMatch(/1 divergencias detectadas, 0 anotadas.*carrera legítima/);
+    expect(resumenDelConteo(conteo)).not.toMatch(/SIN EXPLICACIÓN/);
+  });
+
+  it("si la fila se borró mientras tanto también es una carrera", async () => {
+    const base = baseEnMemoria({ agenda_eventos: [evento("1")] });
+    vi.mocked(leerEvento).mockImplementation(async () => {
+      base.tablas.agenda_eventos.length = 0;
+      return null;
+    });
+    const conteo = conteoVacio();
+
+    await revisarLaCasilla(base.cliente, CASILLA, [], AHORA, conteo);
+
+    expect(conteo.porCarrera).toBe(1);
+    expect(conteo.sinExplicar).toBe(0);
+  });
+
+  it("un update que no toca una fila que no cambió es un predicado roto: queda escrito y va a fallos", async () => {
+    // El peor fallo posible: nada se anota, la campana queda en cero y todo se ve verde.
+    const base = baseEnMemoria(
+      { agenda_eventos: [evento("1"), evento("2")] },
+      { updateQueNoTocaNada: ["agenda_eventos"] }
+    );
+    vi.mocked(leerEvento).mockResolvedValue(null);
+    const conteo = conteoVacio();
+    const fallos: string[] = [];
+
+    const r = await revisarLaCasilla(base.cliente, CASILLA, fallos, AHORA, conteo);
+
+    expect(r).toEqual([]);
+    expect(conteo).toEqual({ detectadas: 2, anotadas: 0, porCarrera: 0, sinExplicar: 2, conError: 0 });
+    expect(fallos).toHaveLength(2);
+    expect(fallos[0]).toContain(CASILLA);
+    expect(fallos[0]).toMatch(/sin explicación/);
+    const resumen = resumenDelConteo(conteo)!;
+    expect(resumen).toContain("2 divergencias detectadas, 0 anotadas");
+    expect(resumen).toContain("SIN EXPLICACIÓN");
+    expect(resumen).toContain("inicio_escrito");
+  });
+
+  it("un error de la base al anotar se cuenta como error y no como predicado roto", async () => {
+    const base = baseEnMemoria(
+      { agenda_eventos: [evento("1")] },
+      { falla: { agenda_eventos: { update: "se cayó la base" } } }
+    );
+    vi.mocked(leerEvento).mockResolvedValue(null);
+    const conteo = conteoVacio();
+
+    await revisarLaCasilla(base.cliente, CASILLA, [], AHORA, conteo);
+
+    expect(conteo).toEqual({ detectadas: 1, anotadas: 0, porCarrera: 0, sinExplicar: 0, conError: 1 });
+    expect(resumenDelConteo(conteo)).toMatch(/error de la base/);
+  });
+
+  it("si no se puede ni releer la fila, se cuenta como sin explicación: ante la duda, que se note", async () => {
+    const falla: Record<string, { select?: string }> = { agenda_eventos: {} };
+    const base = baseEnMemoria({ agenda_eventos: [evento("1")] }, { updateQueNoTocaNada: ["agenda_eventos"], falla });
+    // La relectura es un select posterior: la lectura inicial ya salió bien.
+    vi.mocked(leerEvento).mockImplementation(async () => {
+      falla.agenda_eventos.select = "sin lectura";
+      return null;
+    });
+    const conteo = conteoVacio();
+    const fallos: string[] = [];
+
+    await revisarLaCasilla(base.cliente, CASILLA, fallos, AHORA, conteo);
+
+    expect(conteo.sinExplicar).toBe(1);
+    expect(fallos[0]).toContain("sin lectura");
+  });
+
+  it("el barrido junta el conteo de todas las casillas", async () => {
+    const base = baseEnMemoria({
+      usuarios: [
+        { id: "u1", email: CASILLA, activo: true },
+        { id: "u2", email: "ana@polcecal.com", activo: true },
+      ],
+      agenda_eventos: [evento("1"), evento("2", { casilla: "ana@polcecal.com", google_event_id: "g2" })],
+    });
+    vi.mocked(leerEvento).mockResolvedValue(null);
+
+    const r = await barrerLasCasillas(base.cliente, AHORA);
+
+    expect(r.conteo).toEqual({ detectadas: 2, anotadas: 2, porCarrera: 0, sinExplicar: 0, conError: 0 });
+  });
+
+  it("el barrido con el predicado roto lo dice en fallos y en el resumen: 2 detectadas, 0 anotadas", async () => {
+    const base = baseEnMemoria(
+      {
+        usuarios: [{ id: "u1", email: CASILLA, activo: true }],
+        agenda_eventos: [evento("1"), evento("2")],
+      },
+      { updateQueNoTocaNada: ["agenda_eventos"] }
+    );
+    vi.mocked(leerEvento).mockResolvedValue(null);
+
+    const r = await barrerLasCasillas(base.cliente, AHORA);
+
+    expect(r.divergencias).toEqual([]);
+    expect(r.fallos.length).toBeGreaterThan(0);
+    expect(resumenDelConteo(r.conteo)).toContain("2 divergencias detectadas, 0 anotadas");
   });
 });

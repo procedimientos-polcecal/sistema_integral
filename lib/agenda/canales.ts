@@ -321,6 +321,93 @@ interface FilaARevisar {
 }
 
 /**
+ * Cuántas divergencias se detectaron y qué pasó con cada una. **Existe para que
+ * el peor fallo posible no sea silencioso.**
+ *
+ * Si la anotación condicional de `revisarLaCasilla` no tocara nunca la fila
+ * (un detalle de formato de fecha en el `eq` sobre un `timestamptz`, por
+ * ejemplo), ni el webhook ni el barrido registrarían ninguna divergencia, la
+ * campana quedaría en cero y el sistema se vería **exactamente igual que si
+ * funcionara**. Es el anti-objetivo del diseño cumplido por un detalle. Contar
+ * lo que se detectó contra lo que se anotó es lo que lo hace visible.
+ *
+ * `detectadas = anotadas + porCarrera + sinExplicar + conError`. Un cero en
+ * `anotadas` con `detectadas` mayor que cero **es sospechoso**, y lo que se mira
+ * es `sinExplicar`:
+ *
+ *  - `porCarrera`: el `update` no tocó nada porque, al volver a leer la fila, ya
+ *    no era la que se había leído (una escritura propia cambió `inicio_escrito` y
+ *    `fin_escrito`, alguien la divergió, o se borró). Es lo que el predicado
+ *    condicional existe para hacer, y no es un problema.
+ *  - `sinExplicar`: el `update` no tocó nada **y la fila sigue exactamente como se
+ *    leyó**. El predicado tendría que haber coincidido y no lo hizo: está roto.
+ *    Mirar el `eq` sobre `inicio_escrito` / `fin_escrito` (¿el texto que devolvió
+ *    PostgREST viaja igual en el filtro?) y que `is("divergencia", null)` siga
+ *    siendo cierto.
+ *  - `conError`: la base devolvió un error al anotar (también va a `fallos`).
+ */
+export interface ConteoDeLaRevision {
+  detectadas: number;
+  anotadas: number;
+  porCarrera: number;
+  sinExplicar: number;
+  conError: number;
+}
+
+export const conteoVacio = (): ConteoDeLaRevision => ({
+  detectadas: 0, anotadas: 0, porCarrera: 0, sinExplicar: 0, conError: 0,
+});
+
+/**
+ * La frase para el registro de `sincronizaciones` cuando lo detectado no es lo
+ * anotado, o `null` si coinciden. Lleva los cuatro números y, si hay
+ * `sinExplicar`, qué mirar: es lo que se lee el primer día.
+ */
+export function resumenDelConteo(c: ConteoDeLaRevision): string | null {
+  if (c.detectadas === c.anotadas) return null;
+  const partes = [`${c.detectadas} divergencias detectadas, ${c.anotadas} anotadas`];
+  if (c.porCarrera > 0) {
+    partes.push(`${c.porCarrera} no se anotaron porque la fila cambió mientras se miraba Google (carrera legítima)`);
+  }
+  if (c.conError > 0) partes.push(`${c.conError} no se anotaron por un error de la base`);
+  if (c.sinExplicar > 0) {
+    partes.push(
+      `${c.sinExplicar} SIN EXPLICACIÓN: el update condicional no tocó una fila que no había cambiado, así que ` +
+        `el predicado está roto y esa divergencia no quedó registrada. Mirar el eq sobre inicio_escrito y ` +
+        `fin_escrito (timestamptz) en revisarLaCasilla`
+    );
+  }
+  return partes.join(", ");
+}
+
+/**
+ * El `update` condicional no tocó nada: ¿fue una carrera o es un predicado roto?
+ * Se vuelve a leer la fila. Si ya no existe, o cambió su divergencia o lo
+ * escrito, fue una carrera; si sigue idéntica a como se leyó, el predicado tendría
+ * que haber coincidido. Si ni siquiera se puede releer, se cuenta como sin
+ * explicación: ante la duda, que se note.
+ */
+async function porQueNoSeAnoto(
+  supabase: SupabaseClient,
+  f: FilaARevisar
+): Promise<{ motivo: "carrera" } | { motivo: "sinExplicar"; detalle: string }> {
+  const { data, error } = await supabase
+    .from("agenda_eventos")
+    .select("id, divergencia, inicio_escrito, fin_escrito")
+    .eq("id", f.id)
+    .maybeSingle();
+  if (error) return { motivo: "sinExplicar", detalle: `ni siquiera se pudo volver a leer la fila (${error.message})` };
+  if (!data) return { motivo: "carrera" };
+  if (data.divergencia !== null || data.inicio_escrito !== f.inicio_escrito || data.fin_escrito !== f.fin_escrito) {
+    return { motivo: "carrera" };
+  }
+  return {
+    motivo: "sinExplicar",
+    detalle: `la fila sigue igual que cuando se leyó (inicio_escrito ${f.inicio_escrito}, fin_escrito ${f.fin_escrito}) y el update igual no la tocó`,
+  };
+}
+
+/**
  * Revisa los eventos futuros de una casilla contra Google y **anota** los que
  * divergieron. Devuelve **sólo los que acaban de divergir**, que es lo que hay
  * que avisar: uno que ya estaba divergido no vuelve a aparecer.
@@ -353,12 +440,20 @@ interface FilaARevisar {
  * dijo Google sin traducir, y se sigue con el resto. Quien llama tiene que
  * registrarlos. Tira sólo si no puede leer la base, porque entonces no se miró
  * nada.
+ *
+ * **Cuenta lo que detectó contra lo que anotó** (`conteo`, que se acumula entre
+ * llamadas) y quien llama lo registra con `resumenDelConteo`. **Un cero en
+ * anotadas con divergencias detectadas es sospechoso**: cuando el `update`
+ * condicional no toca nada se vuelve a leer la fila, y si no cambió, ese caso va a
+ * `sinExplicar` **y también a `fallos`, nombrando la casilla y el evento**: el
+ * predicado está roto. Ver `ConteoDeLaRevision` para qué mirar.
  */
 export async function revisarLaCasilla(
   supabase: SupabaseClient,
   casilla: string,
   fallos: string[] = [],
-  ahora: Date = new Date()
+  ahora: Date = new Date(),
+  conteo: ConteoDeLaRevision = conteoVacio()
 ): Promise<{ evento_id: string; divergencia: Divergencia }[]> {
   const filas = await traerTodo<FilaARevisar>((desde, hasta) =>
     supabase
@@ -388,6 +483,7 @@ export async function revisarLaCasilla(
 
     const divergencia = queDivergio({ inicio: f.inicio_escrito, fin: f.fin_escrito }, enGoogle);
     if (!divergencia) continue;
+    conteo.detectadas++;
 
     // Un reintento: es el `update` que decide si alguien se entera, y un
     // parpadeo de la base no puede ser lo que lo pierda.
@@ -406,14 +502,29 @@ export async function revisarLaCasilla(
       else anotadas = r.data ?? [];
     }
     if (anotadas === null) {
+      conteo.conError++;
       fallos.push(
         `${casilla}: el evento ${f.id} ${divergencia === "borrado" ? "lo borraron" : "lo movieron"} en Google ` +
           `pero no se pudo anotar, ni en dos intentos (${error}). Se vuelve a ver con el próximo aviso de Google.`
       );
       continue;
     }
-    if (anotadas.length === 0) continue; // cambió mientras tanto: ver el docstring
+    if (anotadas.length === 0) {
+      const por = await porQueNoSeAnoto(supabase, f);
+      if (por.motivo === "carrera") {
+        conteo.porCarrera++;
+      } else {
+        conteo.sinExplicar++;
+        fallos.push(
+          `${casilla}: el evento ${f.id} ${divergencia === "borrado" ? "lo borraron" : "lo movieron"} en Google ` +
+            `y NO quedó anotado, sin explicación: ${por.detalle}. El predicado del update condicional está ` +
+            `roto: hasta que se arregle ninguna divergencia se registra.`
+        );
+      }
+      continue;
+    }
 
+    conteo.anotadas++;
     nuevas.push({ evento_id: f.id, divergencia });
   }
   return nuevas;
@@ -427,6 +538,8 @@ export interface DelBarrido {
   divergencias: { casilla: string; evento_id: string; divergencia: Divergencia }[];
   /** Una frase por fallo, con la casilla nombrada. */
   fallos: string[];
+  /** Detectadas contra anotadas, de todas las casillas juntas: ver `ConteoDeLaRevision`. */
+  conteo: ConteoDeLaRevision;
 }
 
 /**
@@ -449,7 +562,7 @@ export async function barrerLasCasillas(
   presupuestoMs: number = 120_000
 ): Promise<DelBarrido> {
   const casillas = [...new Set((await casillasActivas(supabase)).map(comoCasilla))];
-  const r: DelBarrido = { casillas: 0, divergencias: [], fallos: [] };
+  const r: DelBarrido = { casillas: 0, divergencias: [], fallos: [], conteo: conteoVacio() };
   const empezo = Date.now();
 
   for (let i = 0; i < casillas.length; i++) {
@@ -460,7 +573,7 @@ export async function barrerLasCasillas(
     }
     r.casillas++;
     try {
-      for (const d of await revisarLaCasilla(supabase, casilla, r.fallos, ahora)) {
+      for (const d of await revisarLaCasilla(supabase, casilla, r.fallos, ahora, r.conteo)) {
         r.divergencias.push({ casilla, ...d });
       }
     } catch (e) {

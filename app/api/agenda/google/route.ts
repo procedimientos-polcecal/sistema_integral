@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
-import { revisarLaCasilla, tokenValido } from "@/lib/agenda/canales";
+import { revisarLaCasilla, tokenValido, conteoVacio, resumenDelConteo } from "@/lib/agenda/canales";
 
 // Releer los eventos futuros de una casilla es una llamada a Google por evento.
 export const maxDuration = 60;
@@ -61,14 +61,19 @@ export async function POST(request: Request) {
 
   const fallos: string[] = [];
   try {
-    const divergencias = await revisarLaCasilla(supabase, canal.casilla, fallos);
+    const conteo = conteoVacio();
+    const divergencias = await revisarLaCasilla(supabase, canal.casilla, fallos, new Date(), conteo);
 
-    if (fallos.length > 0) {
+    // Lo detectado contra lo anotado: si no coinciden queda escrito, con la casilla.
+    // Una carrera legítima es `ok` con la frase; un predicado roto además va a
+    // `fallos` y deja la fila en rojo. Ver `ConteoDeLaRevision`.
+    const resumen = resumenDelConteo(conteo);
+    if (fallos.length > 0 || resumen) {
       await registrarSincronizacion({
         modulo: "agenda",
         recurso: "aviso_de_google",
-        ok: false,
-        error: fallos.join(" · ").slice(0, 2000),
+        ok: fallos.length === 0,
+        error: [resumen ? `${canal.casilla}: ${resumen}` : null, ...fallos].filter(Boolean).join(" · ").slice(0, 2000),
       });
     }
 
@@ -78,6 +83,7 @@ export async function POST(request: Request) {
       ok: true,
       casilla: canal.casilla,
       divergencias: divergencias.length,
+      conteo,
       fallos: fallos.length,
     });
   } catch (e) {
