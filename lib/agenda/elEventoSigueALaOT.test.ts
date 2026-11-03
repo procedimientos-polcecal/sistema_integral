@@ -11,6 +11,7 @@ vi.mock("@/lib/core/calendar", () => ({
 import { crearEvento, actualizarEvento, restaurarEvento, borrarEvento, leerEvento } from "@/lib/core/calendar";
 import {
   queHacerConElEvento, planDelEvento, seguirALasOT, borrarLosEventosDeLasOT, fechaDelEvento, AVISO_DE_BORRADO,
+  presupuestoDeGoogle, loQueSeAnotaDeLosEventos,
 } from "./elEventoSigueALaOT";
 
 beforeEach(() => {
@@ -305,12 +306,31 @@ describe("seguirALasOT", () => {
       expect(ultimo?.columnas).toMatchObject({ google_pendiente: expect.stringContaining("503") });
     });
 
+    it("el organizador que Google devuelve entre los attendees no se reescribe como invitado", async () => {
+      vi.mocked(leerEvento).mockResolvedValue({
+        ...ENGOOGLE("2026-11-03T08:00:00-03:00", "2026-11-03T09:30:00-03:00"),
+        invitados: [{ email: "Mantenimiento@polcecal.com" }, { email: "gerencia@polcecal.com" }],
+      });
+      vi.mocked(crearEvento).mockResolvedValue({ ...NUEVO, yaEstaba: true });
+      vi.mocked(restaurarEvento).mockResolvedValue(NUEVO);
+      await seguirALasOT(sinId().cliente);
+      expect(vi.mocked(restaurarEvento).mock.calls[0][2].invitados).toEqual(["gerencia@polcecal.com"]);
+    });
+
     it("con id (PATCH) no lee nada: omitir los invitados ahí es «no los toques»", async () => {
       vi.mocked(actualizarEvento).mockResolvedValue(NUEVO);
       const { cliente } = clienteFalso({ eventos: [FILA_DE_EVENTO()], invitados: [] });
       await seguirALasOT(cliente);
       expect(leerEvento).not.toHaveBeenCalled();
     });
+  });
+
+  it("una fila cuyo único invitado es el dueño tampoco manda `attendees: []`", async () => {
+    // `eventoParaGoogle` saca al dueño: la lista de la fila tiene uno y la que se manda, cero.
+    vi.mocked(actualizarEvento).mockResolvedValue(ENGOOGLE("2026-11-10T08:00:00-03:00", "2026-11-10T09:30:00-03:00"));
+    const { cliente } = clienteFalso({ eventos: [FILA_DE_EVENTO()], invitados: [{ email: "Mantenimiento@polcecal.com" }] });
+    await seguirALasOT(cliente);
+    expect((vi.mocked(actualizarEvento).mock.calls[0][2] as { invitados?: string[] }).invitados).toBeUndefined();
   });
 
   it("el aviso de un borrado fallido no lo limpia un movimiento; el que escribió esta lógica sí", async () => {
@@ -337,7 +357,7 @@ describe("seguirALasOT", () => {
       eventos: [1, 2, 3, 4].map((n) => FILA_DE_EVENTO({ id: `0000000${n}-89ab-cdef-0123-456789abcdef` })),
     });
 
-    const r = await seguirALasOT(cliente, { limiteMs: 60_000, reloj: () => t });
+    const r = await seguirALasOT(cliente, { presupuesto: presupuestoDeGoogle(60_000, () => t) });
 
     expect(actualizarEvento).toHaveBeenCalledTimes(2);
     expect(r).toMatchObject({ movidos: 2, sinAlcanzar: 2, fallos: [] });
@@ -492,17 +512,55 @@ describe("borrarLosEventosDeLasOT", () => {
       eventos: [1, 2, 3].map((n) => FILA_DE_EVENTO({ id: `0000000${n}-89ab-cdef-0123-456789abcdef`, ot_id: `ot-${n}` })),
     });
 
-    const r = await borrarLosEventosDeLasOT(cliente, ["ot-1", "ot-2", "ot-3"], { limiteMs: 60_000, reloj: () => t });
+    const r = await borrarLosEventosDeLasOT(cliente, ["ot-1", "ot-2", "ot-3"], {
+      presupuesto: presupuestoDeGoogle(60_000, () => t),
+    });
 
     expect(borrarEvento).toHaveBeenCalledTimes(2);
     expect([...r.keys()]).toEqual(["ot-3"]);
     expect(r.get("ot-3")).toContain("Se agotó el tiempo");
   });
 
-  it("si no puede ni mirar los eventos, ninguna OT del lote se borra", async () => {
-    const { cliente } = clienteFalso({ falla: { leer: "timeout" } });
+  it("borrar y mover comparten UN presupuesto: lo que gastó el borrado no se vuelve a tener para mover", async () => {
+    // Con 60 s para cada una, el peor caso de la Agenda eran ~240 s de los 300 del cron.
+    let t = 0;
+    const presupuesto = presupuestoDeGoogle(60_000, () => t);
+    vi.mocked(borrarEvento).mockImplementation(async () => { t += 70_000; });
+    vi.mocked(actualizarEvento).mockResolvedValue(ENGOOGLE("2026-11-10T08:00:00-03:00", "2026-11-10T09:30:00-03:00"));
+
+    const borrado = clienteFalso({ eventos: [FILA_DE_EVENTO({ ot_id: "ot-9" })] });
+    await borrarLosEventosDeLasOT(borrado.cliente, ["ot-9"], { presupuesto });
+
+    const mover = clienteFalso({ eventos: [FILA_DE_EVENTO()] });
+    const r = await seguirALasOT(mover.cliente, { presupuesto });
+
+    expect(actualizarEvento).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ movidos: 0, sinAlcanzar: 1 });
+  });
+
+  it("si no puede ni mirar los eventos, ninguna OT del lote se borra", async () => {    const { cliente } = clienteFalso({ falla: { leer: "timeout" } });
     const r = await borrarLosEventosDeLasOT(cliente, ["ot-1", "ot-2"]);
     expect([...r.keys()].sort()).toEqual(["ot-1", "ot-2"]);
     expect(borrarEvento).not.toHaveBeenCalled();
+  });
+});
+
+describe("loQueSeAnotaDeLosEventos", () => {
+  it("sin fallos ni pendientes de tiempo, no anota nada", () => {
+    expect(loQueSeAnotaDeLosEventos({ fallos: [], sinAlcanzar: 0 })).toBeNull();
+  });
+
+  it("lo que no se alcanzó a mover deja el texto en el registro, sin poner la corrida en rojo", () => {
+    // Con Google caído varios días estos eventos se posponen en silencio: no tienen ni pendiente.
+    expect(loQueSeAnotaDeLosEventos({ fallos: [], sinAlcanzar: 3 })).toEqual({
+      ok: true, error: expect.stringContaining("Quedaron 3 eventos de la Agenda sin mover"),
+    });
+  });
+
+  it("un fallo pone la corrida en rojo, y si además faltó tiempo lo dice en el mismo texto", () => {
+    const r = loQueSeAnotaDeLosEventos({ fallos: ["OT 1: boom"], sinAlcanzar: 2 });
+    expect(r?.ok).toBe(false);
+    expect(r?.error).toContain("OT 1: boom");
+    expect(r?.error).toContain("Quedaron 2 eventos");
   });
 });

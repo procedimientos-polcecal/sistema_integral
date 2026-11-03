@@ -25,7 +25,9 @@ import { traerTodo } from "@/lib/core/paginado";
 import { avisarAQuienDecide } from "@/lib/core/avisoAlInstante";
 import { lasOSQueNacenEsperando } from "@/lib/mantenimiento/aprobacion";
 import { borrarLoQueLaPlanillaNoTrajo } from "@/lib/core/borradoDeEspejo";
-import { borrarLosEventosDeLasOT, seguirALasOT } from "@/lib/agenda/elEventoSigueALaOT";
+import {
+  borrarLosEventosDeLasOT, loQueSeAnotaDeLosEventos, presupuestoDeGoogle, seguirALasOT,
+} from "@/lib/agenda/elEventoSigueALaOT";
 import { leerValores, leerFormulas, listarPestanas } from "@/lib/core/sheets";
 import { linkDeCelda } from "@/lib/core/links";
 import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
@@ -709,12 +711,14 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
       .in("ot_number", yaDerramaron);
   }
 
+  const presupuestoDeLaAgenda = presupuestoDeGoogle();
   const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_OT, {
     clavesLeidas: trajoLaPlanilla,
     cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
     // El evento de Google de una OT se borra ANTES que la OT, y si no se puede,
     // esa OT no se borra en esta corrida. Ver `borrarLosEventosDeLasOT`.
-    antesDeBorrar: (ids) => borrarLosEventosDeLasOT(admin, ids),
+    // Y el tiempo que se le dedica a Google es UNO para borrar y para mover.
+    antesDeBorrar: (ids) => borrarLosEventosDeLasOT(admin, ids, { presupuesto: presupuestoDeLaAgenda }),
   });
 
   // La corrida se anota ANTES de tocar la Agenda. Lo que sigue habla con Google,
@@ -734,16 +738,14 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   // guardar sale acá y en el registro, y no en un `console.warn`. Tiene un
   // límite de tiempo (`LIMITE_DE_GOOGLE_MS`): corre dentro del cron que sigue
   // con las otras tres sincronizaciones.
-  const eventos = await seguirALasOT(admin);
+  const eventos = await seguirALasOT(admin, { presupuesto: presupuestoDeLaAgenda });
 
-  // Si no se pudo mover algún evento, la última anotación pasa a decirlo: las OT
-  // sí se guardaron, y el mensaje lo dice para que no se lea como una corrida
-  // perdida. Mismo criterio que las áreas de los avisos.
-  if (eventos.fallos.length > 0) {
-    await registrarSincronizacion({
-      modulo: "mantenimiento", recurso: "ordenes", ok: false, filas: guardadas,
-      error: `Las órdenes se guardaron pero no se pudo seguir con los eventos de la Agenda: ${eventos.fallos.join(" | ")}`,
-    });
+  // Si no se pudo mover algún evento, o no se alcanzó, la última anotación pasa a
+  // decirlo: las OT sí se guardaron, y el mensaje lo dice para que no se lea
+  // como una corrida perdida. Mismo criterio que las áreas de los avisos.
+  const loAnotado = loQueSeAnotaDeLosEventos(eventos);
+  if (loAnotado) {
+    await registrarSincronizacion({ modulo: "mantenimiento", recurso: "ordenes", filas: guardadas, ...loAnotado });
   }
   return logra({
     leidas: filas.length - 1,

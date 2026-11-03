@@ -3,7 +3,7 @@ import type { Turno } from "@/lib/mantenimiento/programacion";
 import { traerTodo } from "@/lib/core/paginado";
 import { fechaParaElCalendario, horarioDeLaOT, instanteDe, laOTEstaCerrada, TURNOS_DEL_TALLER } from "./evento";
 import { leerEvento, type EventoParaGoogle } from "@/lib/core/calendar";
-import { aHoraDePared, aInstanteISO, eventoParaGoogle, idDeGoogleDe } from "./pedido";
+import { aHoraDePared, aInstanteISO, eventoParaGoogle, idDeGoogleDe, invitadosLimpios } from "./pedido";
 import { columnasDespuesDeEscribir, escribirEnGoogle, parDivergencia, parPendiente } from "./escribirEnGoogle";
 import { anotarEnLaFila } from "./cargar";
 
@@ -230,7 +230,7 @@ export interface LoQueSeguio {
 }
 
 /**
- * Cuánto se le dedica a Google en una pasada.
+ * Cuánto se le dedica a Google en total, **entre borrar y mover**.
  *
  * **Estos dos caminos corren adentro de la sincronización de OT, que corre
  * adentro del cron de Mantenimiento, que corre las cinco sincronizaciones en una
@@ -240,14 +240,61 @@ export interface LoQueSeguio {
  * —que no tienen nada que ver con la Agenda— no llegan a correr. Lo que no se
  * alcanza a hacer se hace en la corrida siguiente; lo que no puede pasar es que
  * la Agenda tumbe lo que ya funcionaba.
+ *
+ * **Es un solo presupuesto para las dos funciones** (`presupuestoDeGoogle`) y no
+ * uno cada una: con 60 s para cada una, el peor caso eran unos 240 s de los 300,
+ * y quedaban 60 para las otras cuatro, que es justo lo que esto protege. El
+ * límite se mira **antes** de empezar un evento y no corta a mitad de uno, así
+ * que el sobrepaso es el de un evento en curso (hasta tres llamadas de 30 s:
+ * leer, crear y restaurar): con 30 s de presupuesto, la Agenda no pasa de unos
+ * 90 s en total y el peor evento la lleva a 120.
  */
-export const LIMITE_DE_GOOGLE_MS = 60_000;
+export const LIMITE_DE_GOOGLE_MS = 30_000;
+
+/** El tiempo que le queda a la Agenda para hablar con Google en esta corrida. */
+export interface PresupuestoDeGoogle {
+  agotado(): boolean;
+}
+
+/** Arranca el reloj. Se crea **una vez por corrida** y se le pasa a las dos funciones. */
+export function presupuestoDeGoogle(
+  limiteMs: number = LIMITE_DE_GOOGLE_MS,
+  reloj: () => number = Date.now
+): PresupuestoDeGoogle {
+  const corte = reloj() + limiteMs;
+  return { agotado: () => reloj() >= corte };
+}
 
 export interface OpcionesDeLaPasada {
   ahora?: Date;
-  /** Se agota a los `limiteMs`; el reloj se inyecta para poder probarlo. */
-  limiteMs?: number;
-  reloj?: () => number;
+  /** Compartido entre `borrarLosEventosDeLasOT` y `seguirALasOT`; si falta, cada una arranca el suyo. */
+  presupuesto?: PresupuestoDeGoogle;
+}
+
+/**
+ * Lo que de una pasada hay que dejar en el registro de `sincronizaciones`, o
+ * `null` si no hay nada que decir.
+ *
+ * **Con `fallos` la corrida sale en rojo; con sólo `sinAlcanzar`, no, pero el
+ * texto queda escrito.** Lo que se difiere por falta de tiempo no es un fallo,
+ * pero con Google caído varios días los eventos que nunca se alcanzan a mover se
+ * posponen en silencio corrida tras corrida: los que sí se intentan al menos
+ * quedan con pendiente y ésos se ven, éstos no tienen ni eso.
+ */
+export function loQueSeAnotaDeLosEventos(
+  e: Pick<LoQueSeguio, "fallos" | "sinAlcanzar">
+): { ok: boolean; error: string } | null {
+  const partes: string[] = [];
+  if (e.fallos.length > 0) {
+    partes.push(`Las órdenes se guardaron pero no se pudo seguir con los eventos de la Agenda: ${e.fallos.join(" | ")}`);
+  }
+  if (e.sinAlcanzar > 0) {
+    partes.push(
+      `Quedaron ${e.sinAlcanzar} eventos de la Agenda sin mover porque se agotó el tiempo que se le dedica a ` +
+        `Google en una corrida; se mueven en la próxima`
+    );
+  }
+  return partes.length === 0 ? null : { ok: e.fallos.length === 0, error: partes.join(". ") };
 }
 
 interface FilaLeida {
@@ -293,10 +340,9 @@ interface FilaLeida {
  */
 export async function seguirALasOT(
   cliente: SupabaseClient,
-  { ahora = new Date(), limiteMs = LIMITE_DE_GOOGLE_MS, reloj = Date.now }: OpcionesDeLaPasada = {}
+  { ahora = new Date(), presupuesto = presupuestoDeGoogle() }: OpcionesDeLaPasada = {}
 ): Promise<LoQueSeguio> {
   const r: LoQueSeguio = { movidos: 0, avisados: 0, respetados: 0, pendientes: 0, sinAlcanzar: 0, fallos: [] };
-  const corte = reloj() + limiteMs;
 
   let filas: FilaLeida[];
   try {
@@ -331,7 +377,7 @@ export async function seguirALasOT(
       if (plan.mover) {
         // Sin tiempo no se empieza: la fila queda como estaba y la próxima
         // corrida lo mueve. Lo que cuesta es hablar con Google; lo demás es base.
-        if (reloj() >= corte) {
+        if (presupuesto.agotado()) {
           r.sinAlcanzar += 1;
           continue;
         }
@@ -434,7 +480,12 @@ async function moverElEvento(
     );
     // Cero filas no es «no hay invitados»: es que no se sabe quiénes son, y
     // mandar `[]` en un PATCH los borra y les manda la cancelación.
-    evento = correos.length > 0 ? completo : { ...completo, invitados: undefined };
+    //
+    // Se pregunta por `completo.invitados` y no por `correos`: `eventoParaGoogle`
+    // saca al dueño (`invitadosLimpios`), así que una fila cuyo único invitado
+    // fuera la propia casilla daría un `correos` de uno y un `completo` vacío, y
+    // un PATCH con `attendees: []`.
+    evento = completo.invitados && completo.invitados.length > 0 ? completo : { ...completo, invitados: undefined };
   } catch (e) {
     await encolar((e as Error).message);
     return;
@@ -451,7 +502,9 @@ async function moverElEvento(
   if (evento.invitados === undefined && !f.google_event_id) {
     try {
       const enGoogle = await leerEvento(f.casilla, evento.id ?? idDeGoogleDe(f.id));
-      if (enGoogle) evento = { ...evento, invitados: enGoogle.invitados.map((i) => i.email.toLowerCase()) };
+      // Por el mismo filtro que los de la fila: Google devuelve al organizador
+      // entre los `attendees`, y no se lo reescribe como invitado de su evento.
+      if (enGoogle) evento = { ...evento, invitados: invitadosLimpios(enGoogle.invitados.map((i) => i.email), f.casilla) };
     } catch (e) {
       await encolar(
         `No se pudieron leer los invitados que el evento ya tiene en Google, y escribirlo sin ellos los borraría: ${(e as Error).message}`
@@ -522,11 +575,10 @@ async function moverElEvento(
 export async function borrarLosEventosDeLasOT(
   cliente: SupabaseClient,
   otIds: readonly string[],
-  { ahora = new Date(), limiteMs = LIMITE_DE_GOOGLE_MS, reloj = Date.now }: OpcionesDeLaPasada = {}
+  { ahora = new Date(), presupuesto = presupuestoDeGoogle() }: OpcionesDeLaPasada = {}
 ): Promise<Map<string, string>> {
   const noSePuede = new Map<string, string>();
   const marca = ahora.toISOString();
-  const corte = reloj() + limiteMs;
   const SIN_TIEMPO = "Se agotó el tiempo que se le dedica a Google en una corrida: se borra en la próxima";
 
   // De a 200: un `.in()` con muchos ids arma una URL que PostgREST rechaza.
@@ -534,7 +586,7 @@ export async function borrarLosEventosDeLasOT(
     const lote = otIds.slice(i, i + 200);
 
     // Sin tiempo, ni siquiera se mira: ninguna OT del lote se borra.
-    if (reloj() >= corte) {
+    if (presupuesto.agotado()) {
       for (const id of lote) noSePuede.set(id, SIN_TIEMPO);
       continue;
     }
@@ -555,7 +607,7 @@ export async function borrarLosEventosDeLasOT(
     }[]) {
       // Las OT del lote sin evento no cuestan nada y se borran igual; la que
       // tiene evento y no alcanza el tiempo se queda.
-      if (reloj() >= corte) {
+      if (presupuesto.agotado()) {
         noSePuede.set(ev.ot_id, SIN_TIEMPO);
         continue;
       }
