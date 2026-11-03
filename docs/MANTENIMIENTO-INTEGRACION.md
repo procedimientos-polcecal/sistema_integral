@@ -2320,6 +2320,32 @@ Lo que no se deduce del código:
 El botón va chico y abajo en el renglón, no al lado de los campos que se tocan
 todo el tiempo: es lo único irreversible de esa fila.
 
+#### La OT que queda escrita en la planilla y no entra al sistema (03/11/2026)
+
+**Crear una OT desde el cuaderno son dos escrituras que no se pueden atar.**
+Primero `altaEnLaPlanilla` toma un número y escribe la fila en «Altas del
+sistema»; después la ruta inserta en `ordenes_trabajo` y marca los renglones.
+Si lo segundo falla, **la orden ya está escrita en la planilla de producción**
+—que se borra a mano, fila por fila— y el sistema no sabe que existe. La ruta
+lo dice en la pantalla de quien generó, con esas palabras, y ahí se termina el
+rastro: si esa persona cierra la página, no queda nada.
+
+Pasó con la **OT 2983** («Pasar 1400 barras/cuadrados rompedores», fila 100).
+Lo que lo volvía peligroso no era la orden perdida sino que **su renglón seguía
+sin convertir**: la próxima generación habría creado una segunda OT por el
+mismo trabajo. Se encontró contando los números —la corrida hizo 2972..2982,
+saltó la 2983 y la siguiente arrancó en 2984— y se arregló insertando la fila
+con los mismos valores que habría armado la generación y enlazando su renglón.
+
+Ese conteo quedó como **`npx tsx scripts/ot-huerfanas-del-cuaderno.mts`**: lee
+la columna A de «Altas del sistema» y la compara contra `ordenes_trabajo` en
+ese rango. No escribe nada y no interpreta: lo que busca es estrecho a
+propósito —**un número que la planilla tiene y la base no**—, porque una OT
+sin renglón es normal (las que se cargan desde la pantalla de alta tampoco lo
+tienen) y mezclar las dos cosas lo volvería ruido. Si la pestaña no devuelve
+ninguna fila corta sin concluir nada, porque una planilla recalculando se lee
+igual que una vacía. Sale 1 si encuentra alguna; hoy da **HUÉRFANAS 0**.
+
 ### Lo que quedó anotado
 
 - **`npm run catalogo` se dejó sin correr a propósito, para cuando el árbol esté
