@@ -3,6 +3,7 @@ import {
   type EventoParaGoogle, type EventoEnGoogle,
 } from "@/lib/core/calendar";
 import { instanteDe } from "./evento";
+import { invitadosLimpios } from "./pedido";
 import type { Divergencia } from "./divergencia";
 
 /**
@@ -176,7 +177,14 @@ async function restaurar(casilla: string, id: string, evento: EventoParaGoogle):
   if (evento.invitados === undefined) {
     try {
       const enGoogle = await leerEvento(casilla, id);
-      if (enGoogle) evento = { ...evento, invitados: enGoogle.invitados.map((i) => i.email.toLowerCase()) };
+      // **Por `invitadosLimpios`**: Google devuelve al organizador entre los
+      // `attendees`, y reusarlos tal cual lo agregaría como invitado de su propio
+      // evento (le llegaría una invitación a una reunión que organiza). La
+      // organizadora es la casilla en cuyo calendario se escribe. Además
+      // normaliza: minúscula, sin espacios y sin repetidos.
+      if (enGoogle) {
+        evento = { ...evento, invitados: invitadosLimpios(enGoogle.invitados.map((i) => i.email), casilla) };
+      }
     } catch (e) {
       return {
         google_event_id: id,

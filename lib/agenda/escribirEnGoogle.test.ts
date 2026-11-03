@@ -502,6 +502,24 @@ describe("escribirEnGoogle — un PUT sin invitados conocidos los lee de Google 
     ]);
   });
 
+  it("los que lee de Google pasan por invitadosLimpios: el organizador no se invita a su propio evento", async () => {
+    // Google devuelve al organizador entre los attendees; la casilla de FILA es la que organiza.
+    vi.mocked(leerEvento).mockResolvedValue({
+      ...ENGOOGLE,
+      invitados: [
+        { email: "Mantenimiento@Polcecal.com" },
+        { email: " ana@polcecal.com " },
+        { email: "ANA@polcecal.com" },
+        { email: "b@polcecal.com" },
+      ],
+    });
+    vi.mocked(restaurarEvento).mockResolvedValue(ENGOOGLE);
+
+    await escribirEnGoogle("restaurar", conId, sinInvitados);
+
+    expect(vi.mocked(restaurarEvento).mock.calls[0][2].invitados).toEqual(["ana@polcecal.com", "b@polcecal.com"]);
+  });
+
   it("crear sobre un id que ya estaba (termina en PUT) también los reusa", async () => {
     vi.mocked(crearEvento).mockResolvedValue({ ...ENGOOGLE, yaEstaba: true });
     vi.mocked(leerEvento).mockResolvedValue(enGoogleConCinco);
