@@ -227,6 +227,14 @@ export interface LoQueSeguio {
   pendientes: number;
   /** Movimientos que no se alcanzaron a hacer porque se agotó el tiempo: la próxima corrida los hace. */
   sinAlcanzar: number;
+  /**
+   * **Quién se comió el tiempo**, si se sabe: la OT cuyo movimiento dejó el
+   * presupuesto agotado, con lo que tardó (`quienSeComioElTiempo`). Sólo está si
+   * hubo `sinAlcanzar`. Sin esto «quedaron 3 sin mover» no dice por dónde
+   * empezar a mirar, y una OT lenta que se repite cada corrida es indistinguible
+   * de un Google lento.
+   */
+  seComioElTiempo?: string;
   /** Lo que no se pudo ni guardar ni encolar. Quien llama lo tiene que mostrar. */
   fallos: string[];
 }
@@ -312,6 +320,20 @@ export interface OpcionesDeLaPasada {
   ahora?: Date;
   /** El tramo de `presupuestoDeGoogle` que le toca; si falta, la función arranca uno propio. */
   presupuesto?: PresupuestoDeGoogle;
+  /** El reloj con el que se mide cuánto tarda cada llamada a Google (`Date.now`; se inyecta en los tests). */
+  reloj?: () => number;
+}
+
+/**
+ * Cómo se nombra a quien se comió el tiempo: «OT 2910, cuyo borrado tardó 31 s». `ot` es el número de la orden o, si no se pudo leer, lo que
+ * haya (un id). **Existe porque una OT cuyo `DELETE` da timeout consume su parte
+ * del presupuesto en cada corrida, y las que están detrás no se borran**:
+ * está aceptado como limitación, pero tiene que poder leerse en
+ * `sincronizaciones` *cuál* es, o quien la mire no sabe a quién buscarle el
+ * problema.
+ */
+export function quienSeComioElTiempo(ot: string, que: "borrado" | "movimiento", ms: number): string {
+  return `${ot}, cuyo ${que} tardó ${Math.max(1, Math.round(ms / 1000))} s`;
 }
 
 /**
@@ -325,7 +347,7 @@ export interface OpcionesDeLaPasada {
  * quedan con pendiente y ésos se ven, éstos no tienen ni eso.
  */
 export function loQueSeAnotaDeLosEventos(
-  e: Pick<LoQueSeguio, "fallos" | "sinAlcanzar">
+  e: Pick<LoQueSeguio, "fallos" | "sinAlcanzar" | "seComioElTiempo">
 ): { ok: boolean; error: string } | null {
   const partes: string[] = [];
   if (e.fallos.length > 0) {
@@ -334,7 +356,8 @@ export function loQueSeAnotaDeLosEventos(
   if (e.sinAlcanzar > 0) {
     partes.push(
       `Quedaron ${e.sinAlcanzar} eventos de la Agenda sin mover porque se agotó el tiempo que se le dedica a ` +
-        `Google en una corrida; se mueven en la próxima`
+        `Google en una corrida${e.seComioElTiempo ? ` (se lo llevó la ${e.seComioElTiempo})` : ""}; ` +
+        `se mueven en la próxima`
     );
   }
   return partes.length === 0 ? null : { ok: e.fallos.length === 0, error: partes.join(". ") };
@@ -383,7 +406,7 @@ interface FilaLeida {
  */
 export async function seguirALasOT(
   cliente: SupabaseClient,
-  { ahora = new Date(), presupuesto = presupuestoDeGoogle().mover }: OpcionesDeLaPasada = {}
+  { ahora = new Date(), presupuesto = presupuestoDeGoogle().mover, reloj = Date.now }: OpcionesDeLaPasada = {}
 ): Promise<LoQueSeguio> {
   const r: LoQueSeguio = { movidos: 0, avisados: 0, respetados: 0, pendientes: 0, sinAlcanzar: 0, fallos: [] };
 
@@ -424,7 +447,12 @@ export async function seguirALasOT(
           r.sinAlcanzar += 1;
           continue;
         }
+        const desde = reloj();
         await moverElEvento(cliente, f, plan.mover, plan.aviso, marca, nombre, r);
+        // El primero que deja el presupuesto agotado es quien se lo comió.
+        if (r.seComioElTiempo === undefined && presupuesto.agotado()) {
+          r.seComioElTiempo = quienSeComioElTiempo(nombre, "movimiento", reloj() - desde);
+        }
         continue;
       }
 
@@ -618,11 +646,17 @@ async function moverElEvento(
 export async function borrarLosEventosDeLasOT(
   cliente: SupabaseClient,
   otIds: readonly string[],
-  { ahora = new Date(), presupuesto = presupuestoDeGoogle().borrar }: OpcionesDeLaPasada = {}
+  { ahora = new Date(), presupuesto = presupuestoDeGoogle().borrar, reloj = Date.now }: OpcionesDeLaPasada = {}
 ): Promise<Map<string, string>> {
   const noSePuede = new Map<string, string>();
   const marca = ahora.toISOString();
-  const SIN_TIEMPO = "Se agotó el tiempo que se le dedica a Google en una corrida: se borra en la próxima";
+  // La OT cuyo borrado dejó el presupuesto agotado, para nombrarla en el motivo de
+  // todas las que se quedaron sin borrar por eso (ver `quienSeComioElTiempo`).
+  let seComioElTiempo: string | null = null;
+  const sinTiempo = () =>
+    "Se agotó el tiempo que se le dedica a Google en una corrida" +
+    (seComioElTiempo ? ` (se lo llevó la ${seComioElTiempo})` : "") +
+    ": se borra en la próxima";
 
   // De a 200: un `.in()` con muchos ids arma una URL que PostgREST rechaza.
   for (let i = 0; i < otIds.length; i += 200) {
@@ -630,13 +664,13 @@ export async function borrarLosEventosDeLasOT(
 
     // Sin tiempo, ni siquiera se mira: ninguna OT del lote se borra.
     if (presupuesto.agotado()) {
-      for (const id of lote) noSePuede.set(id, SIN_TIEMPO);
+      for (const id of lote) noSePuede.set(id, sinTiempo());
       continue;
     }
 
     const { data, error } = await cliente
       .from("agenda_eventos")
-      .select("id, ot_id, casilla, google_event_id, inicio, fin")
+      .select("id, ot_id, casilla, google_event_id, inicio, fin, ordenes_trabajo!ot_id(ot_number)")
       .in("ot_id", lote);
     if (error) {
       for (const id of lote) {
@@ -647,19 +681,29 @@ export async function borrarLosEventosDeLasOT(
 
     for (const ev of (data ?? []) as {
       id: string; ot_id: string; casilla: string; google_event_id: string | null; inicio: string; fin: string;
+      ordenes_trabajo?: { ot_number: number } | { ot_number: number }[] | null;
     }[]) {
       // Las OT del lote sin evento no cuestan nada y se borran igual; la que
       // tiene evento y no alcanza el tiempo se queda.
       if (presupuesto.agotado()) {
-        noSePuede.set(ev.ot_id, SIN_TIEMPO);
+        noSePuede.set(ev.ot_id, sinTiempo());
         continue;
       }
+      const desde = reloj();
       const r = await escribirEnGoogle("borrar", {
         casilla: ev.casilla,
         google_event_id: ev.google_event_id ?? idDeGoogleDe(ev.id),
         inicio: ev.inicio,
         fin: ev.fin,
       });
+      // El primero que deja el presupuesto agotado es quien se lo comió: sea porque
+      // falló o porque salió bien pero lento, es el que hay que ir a mirar.
+      if (seComioElTiempo === null && presupuesto.agotado()) {
+        const orden = Array.isArray(ev.ordenes_trabajo) ? ev.ordenes_trabajo[0] : ev.ordenes_trabajo;
+        seComioElTiempo = quienSeComioElTiempo(
+          orden ? `OT ${orden.ot_number}` : `OT ${ev.ot_id}`, "borrado", reloj() - desde
+        );
+      }
       if (!r.pendiente) continue;
 
       const texto = `${AVISO_DE_BORRADO}. Google dijo: ${r.pendiente}`;

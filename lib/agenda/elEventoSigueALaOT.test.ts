@@ -581,6 +581,91 @@ describe("borrarLosEventosDeLasOT", () => {
   });
 });
 
+describe("quién se comió el tiempo", () => {
+  it("el borrado nombra a la OT cuyo DELETE agotó el presupuesto, en el motivo de las que quedaron atrás", async () => {
+    // Presupuesto de 60 s, al borrado le tocan 30. La primera tarda 35 s (el timeout de Google).
+    let t = 0;
+    vi.mocked(borrarEvento).mockImplementation(async () => { t += 35_000; });
+    const { cliente } = clienteFalso({
+      eventos: [1, 2, 3].map((n) => FILA_DE_EVENTO({
+        id: `0000000${n}-89ab-cdef-0123-456789abcdef`, ot_id: `ot-${n}`,
+        ordenes_trabajo: { ot_number: 2900 + n },
+      })),
+    });
+
+    const r = await borrarLosEventosDeLasOT(cliente, ["ot-1", "ot-2", "ot-3"], {
+      presupuesto: presupuestoDeGoogle(60_000, () => t).borrar, reloj: () => t,
+    });
+
+    expect(borrarEvento).toHaveBeenCalledTimes(1);
+    expect([...r.keys()].sort()).toEqual(["ot-2", "ot-3"]);
+    for (const id of ["ot-2", "ot-3"]) {
+      expect(r.get(id)).toContain("se lo llevó la OT 2901, cuyo borrado tardó 35 s");
+    }
+  });
+
+  it("si la OT lenta además falló, su propio motivo es el de Google y las demás nombran a ella", async () => {
+    let t = 0;
+    vi.mocked(borrarEvento).mockImplementation(async () => { t += 35_000; throw new Error("timeout de Google"); });
+    const { cliente } = clienteFalso({
+      eventos: [1, 2].map((n) => FILA_DE_EVENTO({
+        id: `0000000${n}-89ab-cdef-0123-456789abcdef`, ot_id: `ot-${n}`, ordenes_trabajo: [{ ot_number: 2900 + n }],
+      })),
+    });
+    const r = await borrarLosEventosDeLasOT(cliente, ["ot-1", "ot-2"], {
+      presupuesto: presupuestoDeGoogle(60_000, () => t).borrar, reloj: () => t,
+    });
+    expect(r.get("ot-1")).toContain("timeout de Google");
+    expect(r.get("ot-2")).toContain("OT 2901");
+  });
+
+  it("sin número de orden legible, nombra el id en vez de callar", async () => {
+    let t = 0;
+    vi.mocked(borrarEvento).mockImplementation(async () => { t += 35_000; });
+    const { cliente } = clienteFalso({
+      eventos: [1, 2].map((n) => FILA_DE_EVENTO({
+        id: `0000000${n}-89ab-cdef-0123-456789abcdef`, ot_id: `ot-${n}`, ordenes_trabajo: null,
+      })),
+    });
+    const r = await borrarLosEventosDeLasOT(cliente, ["ot-1", "ot-2"], {
+      presupuesto: presupuestoDeGoogle(60_000, () => t).borrar, reloj: () => t,
+    });
+    expect(r.get("ot-2")).toContain("OT ot-1");
+  });
+
+  it("si nadie agotó el presupuesto no se nombra a nadie", async () => {
+    vi.mocked(borrarEvento).mockResolvedValue();
+    const { cliente } = clienteFalso({ eventos: [FILA_DE_EVENTO()] });
+    expect((await borrarLosEventosDeLasOT(cliente, ["ot-1"])).size).toBe(0);
+  });
+
+  it("el movimiento nombra a la OT que agotó el tiempo, y el texto de sincronizaciones la repite", async () => {
+    let t = 0;
+    vi.mocked(actualizarEvento).mockImplementation(async () => {
+      t += 40_000;
+      return ENGOOGLE("2026-11-10T08:00:00-03:00", "2026-11-10T09:30:00-03:00");
+    });
+    const { cliente } = clienteFalso({
+      eventos: [1, 2, 3, 4].map((n) => FILA_DE_EVENTO({ id: `0000000${n}-89ab-cdef-0123-456789abcdef` })),
+    });
+
+    const r = await seguirALasOT(cliente, { presupuesto: presupuestoDeGoogle(60_000, () => t).mover, reloj: () => t });
+
+    expect(r.sinAlcanzar).toBe(2);
+    // La primera deja 40 s de 60: no es ella. La segunda llega a 80 y agota.
+    expect(r.seComioElTiempo).toContain("cuyo movimiento tardó 40 s");
+    expect(loQueSeAnotaDeLosEventos(r)?.error).toContain(`se lo llevó la ${r.seComioElTiempo}`);
+  });
+
+  it("sin nada sin alcanzar, no queda ningún culpable en el resultado", async () => {
+    vi.mocked(actualizarEvento).mockResolvedValue(ENGOOGLE("2026-11-10T08:00:00-03:00", "2026-11-10T09:30:00-03:00"));
+    const { cliente } = clienteFalso({ eventos: [FILA_DE_EVENTO()] });
+    const r = await seguirALasOT(cliente);
+    expect(r.sinAlcanzar).toBe(0);
+    expect(r.seComioElTiempo).toBeUndefined();
+  });
+});
+
 describe("loQueSeAnotaDeLosEventos", () => {
   it("sin fallos ni pendientes de tiempo, no anota nada", () => {
     expect(loQueSeAnotaDeLosEventos({ fallos: [], sinAlcanzar: 0 })).toBeNull();
