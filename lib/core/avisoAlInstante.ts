@@ -19,15 +19,23 @@ import { traerTodo } from "@/lib/core/paginado";
  * Un evento merece interrumpir si cumple **las tres**:
  *
  *   1. Hay una **persona nombrada** esperando: una lista concreta de usuarios
- *      —`compras_aprobadores`, `os_aprobadores`—, no "el módulo" ni "alguien
- *      del sector". Si no se puede decir a quién avisarle, es un cartel.
+ *      —`compras_aprobadores`, `os_aprobadores`, `compras_consultados`—, no "el
+ *      módulo" ni "alguien del sector". Si no se puede decir a quién avisarle,
+ *      es un cartel.
  *   2. **Nada avanza hasta que decida.** No es "miralo hoy": es "hasta que vos
  *      no digas, esto está parado".
  *   3. **Acaba de pasar.** El evento es la aparición. Un estado que lleva tres
  *      días igual no es noticia a ninguna hora, y ése es el trabajo del resumen.
  *
- * Hoy las cumplen dos cosas y nada más: un requerimiento de compra que nace
- * esperando aprobación, y una orden de servicio que nace esperando aprobación.
+ * Hoy las cumplen **tres** cosas y nada más: un requerimiento de compra que nace
+ * esperando aprobación, una orden de servicio que nace esperando aprobación, y
+ * —desde el 31/10/2026— una pregunta de Mantenimiento a Compras por un repuesto
+ * que falta, que va a `compras_consultados`.
+ *
+ * Esa tercera se agregó con una lista propia y no reusando `compras_aprobadores`,
+ * que es la decisión que más importa de las tres: medido el 26/10/2026, la de
+ * aprobadores tiene cuatro personas y sólo una es quien contesta. Reusarla
+ * repetía por el otro lado el error que `compras-por-aprobar` ya pagó.
  *
  * Los que NO pasan, para poder decirle que no al próximo:
  *

@@ -679,6 +679,64 @@ columnas, así que hay que ensancharla a 24 y poner `OBSERVACIÓN PREVIA` en `X1
 Hasta que esté, la nota se guarda igual y la pantalla avisa que no llegó a la
 planilla con lo que haya dicho Google.
 
+## Preguntarle a Compras por un repuesto (31/10/2026)
+
+El diseño está en
+[el spec del 26/10](superpowers/specs/2026-10-26-mantenimiento-preguntar-a-compras-design.md)
+y el plan en
+[el del 29/10](superpowers/plans/2026-10-29-mantenimiento-preguntar-a-compras.md).
+Resumen: «falta el repuesto» era la justificación más común de una OT atrasada y
+**no tenía vuelta**. Quien la escribía no sabía si Compras lo había pedido, y
+Compras no se enteraba de que lo estaban esperando. Ahora desde la OT se
+pregunta, Compras contesta desde su propia bandeja (`/compras/consultas`), y la
+conversación queda en el historial de esa orden.
+
+**Es la misma tabla que las justificaciones**, `ordenes_trabajo_notas`, separada
+por `tipo` — `JUSTIFICACION` (el default y lo único que había antes),
+`PREGUNTA` y `RESPUESTA`. Seis cosas que no se deducen del código:
+
+- **Compras contesta desde Compras, y eso no es comodidad: es lo único que
+  funciona.** Medido el 30/10/2026 contra producción, el encargado de compras
+  tiene `compras`, `inventario`, `facturacion` y `remises` — **nada de
+  Mantenimiento**. Pedirle que abra una OT para contestar es pedirle que entre a
+  un módulo que no tiene.
+- **Eso mismo obliga a que el conteo del resumen diario lea con el cliente
+  admin.** `ordenes_trabajo_notas` y `ordenes_trabajo` están cerradas con
+  `mant_puede_ver()`, así que con la sesión de quien contesta la campana habría
+  dicho **0 sin un solo error** mientras el push decía 3. Es la misma trampa que
+  el valor hora, por otro módulo.
+- **«Pregunta abierta» se calcula en TypeScript y nunca en SQL.** Es una
+  anti-unión —sin `RESPUESTA` que la apunte, sin otra `PREGUNTA` que la supere,
+  la orden no cerrada, el repuesto todavía en la lista— y PostgREST no la sabe
+  expresar. Escribirla en la base sería una **segunda definición** separada de la
+  que tiene los tests. La única es `preguntasAbiertas` de
+  `lib/mantenimiento/consultaDeRepuesto.ts`, y de ahí salen las tres puntas: la
+  OT, la bandeja de Compras y el resumen.
+- **La columna X sigue mostrando la última nota, y ahora una pregunta puede ser
+  la última.** Una respuesta de Compras **es** la justificación vigente de por
+  qué la orden sigue abierta, así que se escribe ahí a propósito. Si consultás la
+  tabla para «por qué sigue abierta», filtrá `tipo = 'JUSTIFICACION'`.
+- **El aviso va a `compras_consultados` y no a `compras_aprobadores`.** Medido el
+  26/10/2026: la de aprobadores tiene cuatro personas y sólo una es quien
+  contesta. Reusarla repetía por el otro lado el error que `compras-por-aprobar`
+  ya pagó —le llegaba a 6 y 3 no podían aprobar—. **Estar en esa lista no es un
+  permiso sino un destinatario**: contestar lo habilita tener Compras, así que
+  quien cubre a alguien de licencia contesta sin que nadie edite la lista, y
+  vaciarla sólo apaga el aviso.
+- **Borrar una pregunta que ya tiene respuesta lo rechaza la base**, con un
+  `23503` que la ruta traduce a un 409. La FK `responde_a` **no** lleva
+  `on delete cascade` justamente por eso: quien preguntó podía borrar su pregunta
+  y llevarse la respuesta de Compras.
+
+**Al desplegar, el orden es obligatorio: primero la migración
+`20261029082249`.** No es que lo nuevo no ande: el GET y el POST de notas nombran
+`tipo`, `repuesto_id` y `responde_a`, así que sin esas columnas **deja de andar
+lo que ya funcionaba** —leer y escribir cualquier justificación de cualquier OT
+sale 500 o 400—. Al revés no rompe nada: con la migración puesta, el código
+viejo no nombra las columnas nuevas y los inserts viven del `default`. Y hasta
+correr `scripts/sembrar-consultados-de-compras.mts` la lista está vacía: el push
+no interrumpe a nadie y la pantalla lo dice.
+
 ## Iniciar una OT pregunta por el equipo
 
 Pasar una OT a "en proceso" quiere decir que alguien va a intervenir la máquina.

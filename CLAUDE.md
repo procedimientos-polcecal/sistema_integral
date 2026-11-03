@@ -44,6 +44,7 @@ código.
 |---|---|
 | Compras | [docs/COMPRAS-ESTADO.md](docs/COMPRAS-ESTADO.md) · [COMPRAS.md](docs/COMPRAS.md) · [COMPRAS-SINCRONIZACION.md](docs/COMPRAS-SINCRONIZACION.md) |
 | Mantenimiento | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md) — GUT (21/10): la sección `## La matriz GUT` de ese documento y el [spec](docs/superpowers/specs/2026-10-21-mantenimiento-gut-design.md). Tres cosas que no se deducen del código: `gut_orden` es una columna generada y **no es el puntaje** (lleva el 27 de "sin puntaje" y el +1000 de las abiertas: imprimirla muestra 1027); el 27 está escrito en dos lugares, el `coalesce` de la migración y `lib/mantenimiento/gut.ts`, con un test que los ata; y el GUT **no se exporta a ninguna planilla** — MTBF: [spec](docs/superpowers/specs/2026-10-16-mantenimiento-mtbf-design.md) · [plan](docs/superpowers/plans/2026-10-16-mantenimiento-mtbf.md) — partes de contratista: [spec](docs/superpowers/specs/2026-10-20-mantenimiento-partes-de-contratista-design.md) |
+| Mantenimiento — preguntarle a Compras por un repuesto | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## Preguntarle a Compras por un repuesto` · [spec](docs/superpowers/specs/2026-10-26-mantenimiento-preguntar-a-compras-design.md) · [plan](docs/superpowers/plans/2026-10-29-mantenimiento-preguntar-a-compras.md). Tres cosas que no se deducen del código: la conversación vive en `ordenes_trabajo_notas`, **la misma tabla que las justificaciones**, separada por `tipo` —así que para «por qué sigue abierta» hay que filtrar `tipo = 'JUSTIFICACION'`, porque la última fila puede ser una pregunta—; **«abierta» se calcula en TypeScript y nunca en SQL**, porque es una anti-unión que PostgREST no sabe expresar y escribirla allá sería una segunda definición separada de la que tiene los tests; y el conteo del resumen **lee con el cliente admin a propósito**, porque quien contesta está en Compras y no tiene Mantenimiento —medido: con su sesión la campana decía 0 sin error mientras el push decía 3— |
 | Mantenimiento — programación del taller | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## La programación semanal del taller` · [spec](docs/superpowers/specs/2026-10-22-mantenimiento-disponibilidad-y-turnos-design.md) · [plan](docs/superpowers/plans/2026-10-23-mantenimiento-programacion-del-taller.md). Dos cosas que no se deducen del código: el cuadro entero se repite a las **6** semanas y no a las 2 ni a las 3 —son dos ciclos, de período 2 y de período 3—, y `francos` **entra al cruce por `fecha_descanso` y nunca por `fecha_tomado`**. Son dos cosas distintas y confundirlas fue el bug: `fecha_tomado` es el día en que alguien apretó el botón —los 56 francos tomados de antes del 26/10/2026 caen en tres fechas, y cruzar ésa pintaría 35 huecos un lunes—, mientras que `fecha_descanso` es el día que la persona no viene, que se carga al marcarlo y suele estar adelante. Los 56 viejos quedaron con `fecha_descanso` en null y **no abren hueco**: el sistema no sabe cuándo descansaron y decirlo es mejor que inventarlo |
 | Mantenimiento — el cuaderno de Piparo | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## El cuaderno de Piparo` · [spec](docs/superpowers/specs/2026-10-30-mantenimiento-cuaderno-de-piparo-design.md) · [plan](docs/superpowers/plans/2026-11-01-mantenimiento-cuaderno-de-piparo.md). Lo que no se deduce del código: **el modo de carga lo decide `proveedores.modo_de_carga`** y no el nombre ni un id —PIPARO en `cuaderno`, CANDIA en `parte_diario`—; **el costo vive en dos lugares que nadie ata** —`ordenes_trabajo.costo` y el texto de `REPUESTO UTILIZADO` en la planilla, donde 58 de las 380 OT de PIPARO ya traían el monto a mano— y **`costoEquipo.ts` no lo suma**, porque saltea toda OT con contratista; **septiembre de 2026 ya está cargado a mano** (29 OT, 28 el 01/09) y generarlo las duplica, así que hay un freno que se niega con un 409 y se levanta con `confirmar_duplicados`: **la primera prueba real no puede ser septiembre**; la columna I del master es derrame y no guarda lo que se le escribe, por eso al sumar horas a una OT existente se corrige en «Altas del sistema» (`corregirLaAlta`); `en_llave` **no es una columna**, y por eso una llave que nadie junta no se frena: el renglón que trae las 46 h sale solo como una OT de 46 h y los otros dos quedan pendientes; y **primero se juntan los renglones y después se confirma el sector**, porque confirmar saca al renglón de la propuesta de acumulación. Medido contra las diez fotos reales el 02/11/2026: el tier gratuito del AI Gateway **no incluye Sonnet 5** (403), así que se midió con `google/gemini-2.5-flash` y **eso no dice cómo lee el modelo que manda**; una página tardó 201 y 214 s en las dos corridas —el tope de la ruta es 240—, y un «= 18 Hs» salió como 1.845 horas sin ninguna marca —por eso `normalizarRenglones` marca dudoso todo renglón de más de 200 h, que es lo que ya no se pasa de largo. `AI_GATEWAY_API_KEY` tiene que estar en Vercel y `CUADERNO_MODELO` es opcional. **Un mes también puede entrar por un `.xlsx`** (02/11/2026), como alternativa a las fotos y no como otro modo: lo que dice de dónde vino no es una columna sino la extensión de la ruta (`esRutaDeExcel`), y **las fórmulas de la columna N del resumen —`=C47+C50+C51`— son los grupos**, o sea las OT. El control es que las horas del resumen den las del detalle: si no cierra, los renglones entran y los grupos no. `lib/core/excel.ts` **no sirve** para leerlo porque aplana las fórmulas, que acá son el dato |
 | RRHH | [docs/RRHH-ACTUALIZACION.md](docs/RRHH-ACTUALIZACION.md) · marcaciones desde Lenox: [spec](docs/superpowers/specs/2026-10-07-rrhh-marcaciones-desde-lenox-design.md) · [plan](docs/superpowers/plans/2026-10-07-rrhh-marcaciones-desde-lenox.md) |
@@ -615,8 +616,10 @@ sin señal y cargar sin señal (sin empezar).
 
 **El tercer lado es el aviso al instante, y no se hereda: se pide a mano.**
 Desde el 18/10/2026, cuando algo queda esperando la decisión de una persona
-—hoy un requerimiento de compra y una orden de servicio— quien tiene que
-decidir recibe un push en el momento, sin esperar al resumen. Lo manda
+—hoy **tres** cosas: un requerimiento de compra, una orden de servicio y, desde
+el 31/10/2026, una pregunta de Mantenimiento a Compras por un repuesto que
+falta— quien tiene que decidir recibe un push en el momento, sin esperar al
+resumen. Lo manda
 `avisarAQuienDecide()` de [lib/core/avisoAlInstante.ts](lib/core/avisoAlInstante.ts),
 y lo importante es lo que **no** hace: **agregar un aviso a `lib/home/avisos.ts`
 no lo vuelve instantáneo**. Eso se decide ahí, a mano, y pasando las tres
@@ -877,32 +880,35 @@ es lo que hizo `repartirRegistroDeOT` después de que un campo se colara del lad
 equivocado sin que nada lo notara. **Ésa sigue siendo la estrategia y no
 cambió.**
 
-Lo que cambió el 30/10/2026 es que dejó de ser cierto que *no haya* ni un test
-de ruta ni uno de pantalla: hay **dos de ruta y uno de pantalla**, y los tres
-existen por el mismo motivo, que es el único que los justifica. Son para el
-**residuo que no se puede mover a `lib/`**:
+Lo que cambió entre el 30 y el 31/10/2026 es que dejó de ser cierto que *no
+haya* ni un test de ruta ni uno de pantalla: hay **tres de ruta y uno de
+pantalla**, y los cuatro existen por el mismo motivo, que es el único que los
+justifica — el **cableado**, que no se puede mover a `lib/` porque no es una
+regla sino la unión entre dos piezas que por separado están bien:
 
 - `lib/mantenimiento/rutaDeNotas.test.ts` y `lib/compras/rutaDeConsultas.test.ts`
-  — las cadenas del `select` van literales por obligación de la casa (armadas en
-  una variable se pierde la inferencia de Supabase), así que la lista de columnas
-  **no puede ser una constante que un test compare**; y el cliente admin **no
-  recibe el tipo `Database`**, así que la ruta castea lo que trae. Entre las dos
-  cosas, **ni `tsc` ni ningún test de `lib/` pueden ver un `select` al que le
-  falte una columna** — y ése es el fallo más caro que tiene esta forma de
-  trabajar, porque **no se parece a un error**: sin `tipo`, `preguntasAbiertas`
-  devuelve `[]`; sin `orden_id`, ninguna nota se agrupa con su orden. En los dos
-  casos la pantalla sale vacía, que se lee igual que «no hay nada pendiente».
-  Compras deja de ver preguntas, Mantenimiento sigue preguntando, y nadie se
-  entera.
-- `lib/mantenimiento/historialDeLaOT.test.ts` — una regla que vive en el
-  *cableado* de la pantalla: a qué entradas del historial se les ofrece «Ya
-  llegó». Se dibuja con `renderToStaticMarkup` en el entorno node, sin jsdom y
-  sin tocar la configuración de vitest. Sólo se mira el HTML que sale, nunca los
-  clics.
+  — que lo que la regla rechaza **no se inserte, no escriba la planilla y no
+  avise**, la forma del `insert`, y que un push caído no voltee lo ya guardado.
+  `lib/` no lo ve: las reglas reciben datos y devuelven un veredicto, y que la
+  ruta le haga caso es otra cosa.
+- `lib/compras/rutaDeLaListaDeConsultados.test.ts` — que escriba
+  `compras_consultados` y **no** `compras_aprobadores`. Las dos tablas tienen la
+  misma forma y viven en secciones contiguas de la misma pantalla; confundirlas
+  no rompe nada y es el error que el diseño del 26/10/2026 existe para no
+  cometer. No hay nada que sacar a `lib/`: la ruta es una guardia, el nombre de
+  una tabla y la ausencia de una comprobación.
+- `lib/mantenimiento/historialDeLaOT.test.ts` — a qué entradas del historial se
+  les ofrece «Ya llegó». Se dibuja con `renderToStaticMarkup` en el entorno
+  node, sin jsdom y sin tocar la configuración de vitest. Sólo se mira el HTML
+  que sale, nunca los clics.
 
-**Ninguno es una plantilla**, y los tres lo dicen en su encabezado. La vara para
-el próximo es la misma: que la regla no se pueda sacar a `lib/`, no que probarla
-ahí sea incómodo.
+**Ninguno es una plantilla**, y los cuatro lo dicen en su encabezado. La vara
+para el próximo es la misma: que la regla no se pueda sacar a `lib/`, no que
+probarla ahí sea incómodo. Y los cuatro usan el mismo Supabase de mentira,
+`lib/core/supabaseDeMentira.ts`, que aplica los filtros de verdad y **castiga
+las dos trampas de PostgREST**: corta en 1.000 filas y rechaza un `.in()` de más
+de 200 ids. Eso no es decorado — sin lo segundo, un `traerTodo` tapaba la falta
+de lotes y la mutación sobrevivía igual.
 
 **Y la parte que NO se prueba así, porque ya se intentó y falló:** que un
 `select` traiga las columnas que su consumidor necesita. Eso lo comprueba

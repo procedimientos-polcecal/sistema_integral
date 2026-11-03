@@ -133,6 +133,7 @@ export const MODULO_DE_TABLA: Record<string, Ambito> = {
   compras_sincronizaciones: "compras",
   compras_ubicaciones: "compras",
   compras_aprobadores: "compras",
+  compras_consultados: "compras",
   compras_odoo_ordenes: "compras",
   compras_producto_odoo: "compras",
   usuario_areas_compras: "compras",

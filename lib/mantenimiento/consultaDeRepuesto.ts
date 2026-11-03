@@ -19,10 +19,15 @@
  * la ruta de notas, comprobarlo contra la orden, cuándo se ofrece preguntar y qué
  * se le dice a quien preguntó—, por la misma razón: la ruta y los componentes casi
  * no tienen tests, y una regla escrita adentro de ellos es una segunda definición
- * que se separa de la que sí está probada. Las dos excepciones prueban lo único que
- * esto no puede ver: `rutaDeNotas.test.ts` (qué columnas lee la ruta y qué hace con
- * lo que rechaza) e `historialDeLaOT.test.ts` (a qué entradas de la lista les
- * ofrece «Ya llegó»).
+ * que se separa de la que sí está probada. Las excepciones prueban lo único que
+ * esto no puede ver: `rutaDeNotas.test.ts` (qué hace la ruta con lo que rechaza:
+ * no inserta, no escribe la planilla, no avisa) e `historialDeLaOT.test.ts` (a
+ * qué entradas de la lista les ofrece «Ya llegó»).
+ *
+ * **Qué columnas pide el `select` ya no se prueba ahí**, aunque este comentario lo
+ * dijera hasta el 31/10/2026: esa guarda era una lista escrita a mano en cada test
+ * de ruta y falló la segunda vez que se usó —le faltaba `creado_en`—. Ahora la
+ * hace `selectsDeLasNotas.ts`, leyendo el texto de todos los archivos de una vez.
  *
  * POR QUÉ NO HAY UNA COLUMNA `cerrada_en`
  *
