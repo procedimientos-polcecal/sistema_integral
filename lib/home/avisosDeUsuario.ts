@@ -143,7 +143,7 @@ async function avisosDeLosModulos(
     // Tampoco por módulo: es de la salud del cron. Ver `agendaPasosCaidos`.
     opciones.saludDeLaAgenda
       ? leerLaSaludDeLaAgenda(supabase)
-      : Promise.resolve({ caidos: 0, sinComprobar: false }),
+      : Promise.resolve({ caidos: 0, sinComprobar: false, corridas: [] }),
   ]);
 
   const conteos: Partial<ConteosParaAvisos> = {

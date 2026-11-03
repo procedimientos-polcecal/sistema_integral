@@ -71,8 +71,8 @@ export async function POST(request: Request) {
     // El aviso al instante: `divergencias` es lo que **esta** revisión acaba de
     // anotar, y sólo eso, así que un aviso repetido de Google (un eco, o el mismo
     // cambio dos veces) no vuelve a nombrar lo que ya se avisó. Una notificación
-    // por persona y no una por evento, dentro de 7:00–21:00 y sin encolar lo que
-    // cae afuera; por qué esto no pasa por `avisarAQuienDecide` está en el
+    // por persona y por invocación —no por evento, pero sí una por webhook: ver el
+    // encabezado—, dentro de 7:00–21:00 y sin encolar lo que cae afuera; por qué esto no pasa por `avisarAQuienDecide` está en el
     // encabezado de `avisoDeDivergencia.ts`. **Nunca tira**: la divergencia ya
     // quedó anotada y un push service caído no puede hacer que Google reintente.
     const aviso = await avisarDeLasDivergencias(supabase, divergencias);

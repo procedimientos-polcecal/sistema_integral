@@ -33,9 +33,24 @@ import type { Divergencia } from "./divergencia";
  * Las demás reglas de ese archivo **sí** se respetan, y son las que
  * evitan que alguien apague las notificaciones:
  *
- *  - **Una por corrida y por persona, no una por evento.** Si alguien borra diez
- *    eventos de una vez en Google, `revisarLaCasilla` devuelve diez divergencias
- *    juntas y cada persona recibe un push que dice «10 eventos…», no diez.
+ *  - **Una por invocación y por persona, no una por evento.** Y hay que decir
+ *    qué es una invocación, porque acá no es lo que en el aviso hermano: es **un
+ *    webhook de Google**. Si alguien borra diez eventos de una vez y el cliente
+ *    de Calendar lo manda como un solo cambio, `revisarLaCasilla` devuelve diez
+ *    divergencias juntas y cada persona recibe un push que dice «10 eventos…».
+ *    **Pero si los borra de a uno —que es lo normal en la interfaz de
+ *    Calendar— Google manda un webhook por cada uno, cada webhook encuentra una
+ *    divergencia nueva, y salen tantos pushes como borrados.** Nada serializa
+ *    por casilla, así que webhooks concurrentes pueden además repartirse los
+ *    eventos y mandar varios seguidos al mismo teléfono. El agrupamiento vale
+ *    **dentro** de una invocación y no entre ellas.
+ *
+ *    **No hay freno y es una decisión, no un olvido**: frenar pide persistir «el
+ *    último push por casilla», que es maquinaria para un volumen que hoy son
+ *    unas pocas decenas de OT futuras. Si esto resulta ruidoso, **ése es el
+ *    freno** —una fila por casilla con la hora del último push y una espera
+ *    antes del siguiente— y lo que hay que construir; no se arregla agrupando
+ *    más acá, porque lo que falta no está en este archivo.
  *  - **Ventana 7:00–21:00 de Argentina** (`esHoraDeAvisar`, la misma función:
  *    una sola definición de la franja). Fuera de ella **no se manda y no se
  *    encola**.

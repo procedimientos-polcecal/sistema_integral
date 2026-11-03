@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  lineasDeSalud,
+  haceCuanto,
   divergenciasSinVer,
   pasosCaidos,
   leerLaSaludDeLaAgenda,
@@ -123,9 +125,28 @@ describe("pasosCaidos", () => {
     expect(pasosCaidos(corridas, AHORA)).toEqual(["canales"]);
   });
 
-  it("un día perdido no suena", () => {
-    const corridas = sana.map((c) => ({ ...c, created_at: haceHoras(30) }));
-    expect(pasosCaidos(corridas, AHORA)).toEqual([]);
+  /*
+   * Con el cron REAL: corre a las 05:00 UTC (vercel.json). Un día salteado no
+   * suena; el segundo seguido sí, y no antes de las 07:00 UTC del segundo día.
+   * Con 36 h una sola corrida salteada ya cruzaba el umbral a las 17:00 UTC del
+   * día siguiente, doce horas antes de la próxima corrida.
+   */
+  describe("un día perdido no suena, el segundo seguido sí", () => {
+    const ULTIMA = "2026-11-03T05:00:00Z";
+    const corridasDesde = (ultima: string) => sana.map((c) => ({ ...c, created_at: ultima }));
+    const a = (iso: string) => pasosCaidos(corridasDesde(ULTIMA), new Date(iso));
+
+    it("la corrida de mañana no corrió y son las 17:00 UTC: es el caso que con 36 h sonaba", () => {
+      expect(a("2026-11-04T17:00:00Z")).toEqual([]);
+    });
+
+    it("sigue sin sonar cuando ya debería haber corrido la de pasado mañana", () => {
+      expect(a("2026-11-05T06:00:00Z")).toEqual([]);
+    });
+
+    it("suena cuando la segunda seguida tampoco corrió", () => {
+      expect(a("2026-11-05T08:00:00Z")).toEqual(["canales", "barrido"]);
+    });
   });
 
   it("un paso que nunca corrió está caído", () => {
@@ -166,7 +187,7 @@ describe("leerLaSaludDeLaAgenda", () => {
       ],
       error: null,
     }));
-    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toEqual({ caidos: 0, sinComprobar: false });
+    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toMatchObject({ caidos: 0, sinComprobar: false });
   });
 
   it("con un paso caído lo cuenta", async () => {
@@ -174,7 +195,7 @@ describe("leerLaSaludDeLaAgenda", () => {
       data: [{ recurso: "canales", ok: false, created_at: reciente }, { recurso: "barrido", ok: true, created_at: reciente }],
       error: null,
     }));
-    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toEqual({ caidos: 1, sinComprobar: false });
+    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toMatchObject({ caidos: 1, sinComprobar: false });
   });
 
   /*
@@ -184,7 +205,7 @@ describe("leerLaSaludDeLaAgenda", () => {
   it("si la lectura devuelve error NO es un cero: es una comprobación que falló", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const c = clienteQue(async () => ({ data: null, error: { message: "relation does not exist" } }));
-    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toEqual({ caidos: 0, sinComprobar: true });
+    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toEqual({ caidos: 0, sinComprobar: true, corridas: [] });
   });
 
   it("si la lectura tira una excepción tampoco calla, y no tira", async () => {
@@ -192,6 +213,42 @@ describe("leerLaSaludDeLaAgenda", () => {
     const c = clienteQue(async () => {
       throw new Error("fetch failed");
     });
-    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toEqual({ caidos: 0, sinComprobar: true });
+    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toEqual({ caidos: 0, sinComprobar: true, corridas: [] });
+  });
+});
+
+describe("lineasDeSalud: lo que ve admin_sistema en /agenda", () => {
+  const AHORA = new Date("2026-11-03T12:00:00Z");
+  const haceHoras = (h: number) => new Date(AHORA.getTime() - h * 3_600_000).toISOString();
+
+  it("dice cuándo corrió cada paso y cuál está caído", () => {
+    const lineas = lineasDeSalud(
+      [
+        { recurso: "canales", ok: false, created_at: haceHoras(7), error: "Se cortó por tiempo: quedaron sin renovar a@x.com" },
+        { recurso: "barrido", ok: true, created_at: haceHoras(7) },
+      ],
+      AHORA
+    );
+    expect(lineas.map((l) => [l.paso, l.estado])).toEqual([["canales", "fallo"], ["barrido", "sana"]]);
+    expect(lineas[0].texto).toBe("Falló la última corrida (hace 7 h): Se cortó por tiempo: quedaron sin renovar a@x.com");
+    expect(lineas[1].texto).toBe("Corrió hace 7 h, sin fallos.");
+  });
+
+  it("un paso que nunca corrió lo dice, y uno viejo dice desde cuándo", () => {
+    const lineas = lineasDeSalud([{ recurso: "barrido", ok: true, created_at: haceHoras(60) }], AHORA);
+    expect(lineas[0]).toMatchObject({ paso: "canales", estado: "nunca", texto: "Nunca corrió." });
+    expect(lineas[1].estado).toBe("vieja");
+    expect(lineas[1].texto).toContain("hace 2 días");
+  });
+
+  it("el estado de cada línea coincide con lo que cuenta el aviso", () => {
+    const corridas = [{ recurso: "canales", ok: false, created_at: haceHoras(1) }];
+    const caidas = lineasDeSalud(corridas, AHORA).filter((l) => l.estado !== "sana").map((l) => l.paso);
+    expect(caidas).toEqual(pasosCaidos(corridas, AHORA));
+  });
+
+  it("haceCuanto pasa a días cuando son muchas horas", () => {
+    expect(haceCuanto(haceHoras(5), AHORA)).toBe("hace 5 h");
+    expect(haceCuanto(haceHoras(72), AHORA)).toBe("hace 3 días");
   });
 });

@@ -4,7 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { usuarioActual } from "@/lib/core/sesion";
 import { traerTodo } from "@/lib/core/paginado";
 import { traerEventos } from "@/lib/agenda/listar";
+import { leerLaSaludDeLaAgenda, lineasDeSalud } from "@/lib/agenda/avisosDeLaAgenda";
 import AgendaClient from "./AgendaClient";
+import SaludDeLaAgenda from "./SaludDeLaAgenda";
 
 /**
  * La Agenda: la puerta de los eventos propios y de aquellos a los que la
@@ -95,6 +97,13 @@ export default async function AgendaPage({
     for (const o of data ?? []) numerosDeOT[o.id as string] = o.ot_number as number;
   }
 
+  // La salud de la conexión con Google, **sólo para admin_sistema**: es adonde
+  // llevan los dos avisos de salud de la campana. Se lee con el cliente de la
+  // persona (`ultima_sincronizacion` la leen todos los autenticados) y no tumba
+  // la pantalla: si la lectura falla, `sinComprobar` lo dice en vez de callar.
+  const { data: yoMismo } = await supabase.from("usuarios").select("rol").eq("id", user.id).maybeSingle();
+  const salud = yoMismo?.rol === "admin_sistema" ? await leerLaSaludDeLaAgenda(supabase) : null;
+
   const yo = user.email?.toLowerCase();
   const invitables = directorio
     .filter((u) => u.email && u.id !== user.id && u.email.toLowerCase() !== yo)
@@ -102,6 +111,7 @@ export default async function AgendaPage({
 
   return (
     <div className="space-y-4">
+      {salud && <SaludDeLaAgenda lineas={lineasDeSalud(salud.corridas)} sinComprobar={salud.sinComprobar} />}
       {errorDeEventos && (
         <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
           No se pudieron leer los eventos: {errorDeEventos}. Lo que se ve abajo no es tu agenda completa: recargá la

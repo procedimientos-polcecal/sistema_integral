@@ -1,5 +1,6 @@
 import type { Notificacion } from "./notificaciones";
 import type { Aviso } from "@/lib/core/webpush";
+import { ES_BANDERA } from "./avisos";
 
 /** Cuántos avisos se nombran en el cuerpo antes de resumir el resto. */
 const CUANTOS_SE_NOMBRAN = 3;
@@ -13,7 +14,11 @@ const CUANTOS_SE_NOMBRAN = 3;
  * "9 · Trituración: hace 36 días que no se carga", que no significa nada. El
  * título de esos avisos ya es la frase completa, así que va solo.
  */
-const esDeRitmo = (n: Notificacion) => n.id.startsWith("ritmo-");
+/**
+ * **Tampoco una bandera** (`ES_BANDERA`): `agenda-salud-sin-comprobar` usa
+ * `cantidad: 1` como «pasa», no como cuántos. Sale igual de sin número.
+ */
+const esDeRitmo = (n: Notificacion) => n.id.startsWith("ritmo-") || ES_BANDERA.has(n.id);
 
 const comoLinea = (n: Notificacion) => (esDeRitmo(n) ? n.titulo : `${n.cantidad} · ${n.titulo}`);
 

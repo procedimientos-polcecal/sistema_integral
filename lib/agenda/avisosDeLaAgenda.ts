@@ -113,22 +113,37 @@ export const PASOS_CON_GOOGLE = ["canales", "barrido"] as const;
 
 /**
  * Cuánto puede pasar sin que un paso corra antes de darlo por caído. El cron es
- * diario (5 UTC): 36 horas es un día más medio de margen para una corrida
- * atrasada, y deja pasar un día perdido sin sonar. Dos días seguidos sin correr
- * no son un parpadeo.
+ * diario, a las 05:00 UTC, y la cuenta está hecha sobre eso:
+ *
+ *  - Con **36 h** una sola corrida salteada ya sonaba, a las 17:00 UTC del día
+ *    siguiente, doce horas antes de que le tocara correr de nuevo. Eso no es
+ *    «un día perdido sin sonar»: es sonar por un día perdido.
+ *  - Con **50 h** una corrida salteada **no suena**, y la segunda seguida sí: si
+ *    la última fue a las 05:00 del día D, el umbral se cruza a las 07:00 UTC de
+ *    D+2, dos horas después de la corrida que debió repararlo. Los dos días de
+ *    margen tienen la hora de sobra para que una corrida lenta termine y se
+ *    registre antes de que alguien mire.
+ *
+ * Está fijado con el cron real en el test (`pasosCaidos`), no con una cifra
+ * redonda: si el horario del cron en `vercel.json` cambia, esto se revisa.
  */
-export const HORAS_SIN_CORRER = 36;
+export const HORAS_SIN_CORRER = 50;
 
 /** Lo que `ultima_sincronizacion` dice de una corrida. */
 export interface CorridaDeLaAgenda {
   recurso: string;
   ok: boolean;
   created_at: string;
+  /** Lo que dijo el cron al fallar, sin traducir. Sólo lo lee la pantalla. */
+  error?: string | null;
 }
 
+/** Cómo está un paso. `sana` es la única que no es un problema. */
+export type EstadoDelPaso = "nunca" | "fallo" | "vieja" | "sana";
+
 /**
- * Qué pasos están caídos. **Tres cosas lo son**, y la tercera es la que
- * justifica que esto exista:
+ * **Tres cosas dejan caído a un paso**, y la tercera es la que justifica que
+ * esto exista:
  *
  *  1. La última corrida **falló** (`ok = false`): el cron ya lo anotó, con la
  *     casilla y lo que dijo Google.
@@ -137,9 +152,19 @@ export interface CorridaDeLaAgenda {
  *     verde para siempre. Es el canal muerto que no se distingue de uno sano,
  *     pero un nivel más arriba: el cron mismo.
  *  3. **Nunca corrió**: no hay fila. Suena el primer día —hasta que corra el
- *     cron— y es correcto: una Agenda que nunca miró Google no está sana. Si
- *     sonara por una Agenda que se despliega sin las credenciales de Google, es
- *     lo que tiene que hacer.
+ *     cron— y es correcto: una Agenda que nunca miró Google no está sana.
+ */
+export function estadoDelPaso(corrida: CorridaDeLaAgenda | undefined, ahora: Date): EstadoDelPaso {
+  if (!corrida) return "nunca";
+  if (!corrida.ok) return "fallo";
+  const cuando = new Date(corrida.created_at).getTime();
+  const corte = ahora.getTime() - HORAS_SIN_CORRER * 3_600_000;
+  // Una fecha ilegible no puede contar como «corrió hace un rato».
+  return Number.isNaN(cuando) || cuando < corte ? "vieja" : "sana";
+}
+
+/**
+ * Qué pasos están caídos.
  *
  * **Qué cuenta:** la cantidad de pasos caídos, de 0 a 2. No es un conteo de cosas
  * —no cuenta casillas, porque la fila sólo trae el texto del error— y por eso su
@@ -151,14 +176,55 @@ export function pasosCaidos(
   corridas: CorridaDeLaAgenda[],
   ahora: Date = new Date()
 ): (typeof PASOS_CON_GOOGLE)[number][] {
-  const corte = ahora.getTime() - HORAS_SIN_CORRER * 3_600_000;
-  return PASOS_CON_GOOGLE.filter((paso) => {
-    const ultima = corridas.find((c) => c.recurso === paso);
-    if (!ultima) return true;
-    if (!ultima.ok) return true;
-    const cuando = new Date(ultima.created_at).getTime();
-    // Una fecha ilegible no puede contar como «corrió hace un rato».
-    return Number.isNaN(cuando) || cuando < corte;
+  return PASOS_CON_GOOGLE.filter(
+    (paso) => estadoDelPaso(corridas.find((c) => c.recurso === paso), ahora) !== "sana"
+  );
+}
+
+// ── La línea de estado que ve admin_sistema en /agenda ──────────────────────
+
+const ETIQUETA_DEL_PASO: Record<(typeof PASOS_CON_GOOGLE)[number], string> = {
+  canales: "Canales de Google",
+  barrido: "Barrido de las casillas",
+};
+
+/** «hace 5 h», «hace 2 días»: lo justo para saber si un paso está al día. */
+export function haceCuanto(desde: string, ahora: Date): string {
+  const ms = ahora.getTime() - new Date(desde).getTime();
+  if (Number.isNaN(ms)) return "en una fecha ilegible";
+  const horas = Math.max(0, Math.round(ms / 3_600_000));
+  if (horas < 48) return `hace ${horas} h`;
+  return `hace ${Math.floor(horas / 24)} días`;
+}
+
+export interface LineaDeSalud {
+  paso: (typeof PASOS_CON_GOOGLE)[number];
+  etiqueta: string;
+  estado: EstadoDelPaso;
+  /** La frase completa: cuándo corrió por última vez y qué pasó. */
+  texto: string;
+}
+
+/**
+ * Una línea por paso: cuándo corrió por última vez y cuál está caído. Es lo que
+ * muestra `/agenda` a `admin_sistema`, y existe porque **los dos avisos de salud
+ * llevan ahí**: un push que aterriza en una pantalla donde no hay rastro del
+ * problema es el bug de las notificaciones que no llevaban a ningún lado.
+ */
+export function lineasDeSalud(corridas: CorridaDeLaAgenda[], ahora: Date = new Date()): LineaDeSalud[] {
+  return PASOS_CON_GOOGLE.map((paso) => {
+    const corrida = corridas.find((c) => c.recurso === paso);
+    const estado = estadoDelPaso(corrida, ahora);
+    const cuando = corrida ? haceCuanto(corrida.created_at, ahora) : "";
+    const texto =
+      estado === "nunca"
+        ? "Nunca corrió."
+        : estado === "fallo"
+          ? `Falló la última corrida (${cuando}): ${corrida?.error?.trim() || "sin detalle"}`
+          : estado === "vieja"
+            ? `No corre desde ${cuando} (más de ${HORAS_SIN_CORRER} h sin correr; el cron es diario).`
+            : `Corrió ${cuando}, sin fallos.`;
+    return { paso, etiqueta: ETIQUETA_DEL_PASO[paso], estado, texto };
   });
 }
 
@@ -171,6 +237,8 @@ export interface SaludDeLaAgenda {
    * no se sabe. Es un estado aparte, con su propio aviso, y no un 0.
    */
   sinComprobar: boolean;
+  /** Lo leído, para dibujar la línea de estado de `/agenda`. Vacío si no se pudo leer. */
+  corridas: CorridaDeLaAgenda[];
 }
 
 /**
@@ -193,14 +261,14 @@ export async function leerLaSaludDeLaAgenda(
   try {
     const { data, error } = await supabase
       .from("ultima_sincronizacion")
-      .select("recurso, ok, created_at")
+      .select("recurso, ok, error, created_at")
       .eq("modulo", "agenda")
       .in("recurso", [...PASOS_CON_GOOGLE])
       .returns<CorridaDeLaAgenda[]>();
     if (error) throw new Error(error.message);
-    return { caidos: pasosCaidos(data ?? [], ahora).length, sinComprobar: false };
+    return { caidos: pasosCaidos(data ?? [], ahora).length, sinComprobar: false, corridas: data ?? [] };
   } catch (e) {
     console.error("agenda: no se pudo comprobar la salud de la Agenda:", e instanceof Error ? e.message : e);
-    return { caidos: 0, sinComprobar: true };
+    return { caidos: 0, sinComprobar: true, corridas: [] };
   }
 }
