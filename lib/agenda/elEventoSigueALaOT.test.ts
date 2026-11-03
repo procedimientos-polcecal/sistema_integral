@@ -10,7 +10,7 @@ vi.mock("@/lib/core/calendar", () => ({
 
 import { crearEvento, actualizarEvento, borrarEvento } from "@/lib/core/calendar";
 import {
-  queHacerConElEvento, planDelEvento, seguirALasOT, borrarLosEventosDeLasOT, fechaDelEvento,
+  queHacerConElEvento, planDelEvento, seguirALasOT, borrarLosEventosDeLasOT, fechaDelEvento, AVISO_DE_BORRADO,
 } from "./elEventoSigueALaOT";
 
 beforeEach(() => {
@@ -104,6 +104,13 @@ describe("planDelEvento", () => {
       expect(planDelEvento(fila({}, { fecha_cierre: "2026-11-04", fecha_ejecucion })))
         .toEqual({ tipo: "nada", mover: null, aviso: undefined, volverAAlertar: false });
     }
+  });
+
+  it("una OT REALIZADA sin fecha_cierre tampoco se toca (168 de 986 están así)", () => {
+    expect(planDelEvento(fila({}, { fecha_cierre: null, estado: "REALIZADO" })))
+      .toEqual({ tipo: "nada", mover: null, aviso: undefined, volverAAlertar: false });
+    // SUSPENDIDA es una pausa y no una terminación: su evento sigue a la fecha.
+    expect(planDelEvento(fila({}, { fecha_cierre: null, estado: "SUSPENDIDA" })).tipo).toBe("mover");
   });
 
   it("mueve, y se lleva el aviso viejo si lo había", () => {
@@ -293,6 +300,22 @@ describe("seguirALasOT", () => {
     expect(hechos.filter((h) => h.op === "update")).toEqual([]);
   });
 
+  it("una OT REALIZADA sin fecha_cierre, con su evento y la fecha cambiada: no se mueve", async () => {
+    const { cliente, hechos } = clienteFalso({
+      eventos: [FILA_DE_EVENTO({
+        ordenes_trabajo: {
+          ot_number: 2900, fecha_ejecucion: "2026-11-10", fecha_ejecucion_pendiente: null,
+          fecha_cierre: null, estado: "REALIZADO",
+        },
+      })],
+    });
+    const r = await seguirALasOT(cliente);
+    expect(r).toMatchObject({ movidos: 0, avisados: 0, respetados: 0, pendientes: 0, fallos: [] });
+    expect(hechos.filter((h) => h.op === "update")).toEqual([]);
+    expect(actualizarEvento).not.toHaveBeenCalled();
+    expect(crearEvento).not.toHaveBeenCalled();
+  });
+
   it("si no puede guardar la fila, no escribe en Google y lo dice", async () => {
     const { cliente } = clienteFalso({ eventos: [FILA_DE_EVENTO()], falla: { update: "boom" } });
     const r = await seguirALasOT(cliente);
@@ -307,6 +330,9 @@ describe("seguirALasOT", () => {
     expect(r.fallos[0]).toContain("no existe la tabla");
   });
 });
+
+/** Un aviso como el que deja un borrado fallido. */
+const r_aviso = () => `${AVISO_DE_BORRADO}. Google dijo: Google respondió 503`;
 
 describe("borrarLosEventosDeLasOT", () => {
   it("borra en Google y devuelve vacío cuando todo salió bien", async () => {
@@ -324,14 +350,27 @@ describe("borrarLosEventosDeLasOT", () => {
     expect(borrarEvento).toHaveBeenCalledWith("mantenimiento@polcecal.com", "0123456789abcdef0123456789abcdef");
   });
 
-  it("si el borrado en Google falla, esa OT queda en la lista de las que no se borran, y el fallo se encola", async () => {
+  it("si el borrado en Google falla, esa OT queda en la lista de las que no se borran, y el fallo va a `aviso`, no a la cola", async () => {
     vi.mocked(borrarEvento).mockRejectedValue(new Error("Google respondió 503"));
     const { cliente, hechos } = clienteFalso({ eventos: [FILA_DE_EVENTO()] });
     const r = await borrarLosEventosDeLasOT(cliente, ["ot-1"]);
     expect([...r.keys()]).toEqual(["ot-1"]);
     expect(r.get("ot-1")).toContain("Google respondió 503");
     const [u] = hechos.filter((h) => h.op === "update");
-    expect(u.columnas).toEqual({ google_pendiente: expect.stringContaining("503"), google_pendiente_el: expect.any(String) });
+    // El cron de reintento lee `google_pendiente` como «falta escribir» y resucitaría el evento.
+    expect(u.columnas).toEqual({ aviso: expect.stringContaining("Google respondió 503") });
+    expect(u.columnas).not.toHaveProperty("google_pendiente");
+    expect(u.columnas).not.toHaveProperty("google_pendiente_el");
+  });
+
+  it("la sincronización no limpia ese aviso en la misma corrida que lo escribió", () => {
+    // Después del borrado corre `seguirALasOT` y la orden sigue en la base con su fecha sin cambios.
+    const aviso = r_aviso();
+    const p = planDelEvento({
+      ...evento(), aviso,
+      orden: { fecha_ejecucion: "2026-11-03", fecha_ejecucion_pendiente: null, fecha_cierre: null },
+    });
+    expect(p).toEqual({ tipo: "nada", mover: null, aviso: undefined, volverAAlertar: false });
   });
 
   it("si no puede ni mirar los eventos, ninguna OT del lote se borra", async () => {

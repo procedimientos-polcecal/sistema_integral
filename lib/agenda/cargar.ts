@@ -56,12 +56,14 @@ export const POR_SI_YA_ESCRIBIO =
  *
  * **El evento de una OT no es de quien lo mira: es de la orden.** Su horario
  * sale de la `fecha_ejecucion` y la sincronización lo reescribe cuando la
- * planilla la mueve. Si la Agenda dejara editarlo, la persona vería que su
- * cambio se guardó y después, en la corrida siguiente, desaparecer sin que nada
- * avise: la misma mentira que este diseño evita al no pisar un evento
- * divergido. Por eso es de sólo lectura en todas sus partes, no sólo en la hora
- * —el título, los invitados y el lugar los reescribe la OT igual—, y por eso la
- * condición es `ot_id` y no «cambió el horario».
+ * planilla la mueve. **La sincronización mueve sólo el horario**: el título, el
+ * lugar y los invitados no los toca; los reescribe volver a mandar la orden
+ * desde Mantenimiento. Si la Agenda dejara editar el horario, la persona vería
+ * que su cambio se guardó y después, en la corrida siguiente, desaparecer sin
+ * que nada avise: la misma mentira que este diseño evita al no pisar un evento
+ * divergido. Por eso es de sólo lectura en todas sus partes y no sólo en la
+ * hora —un evento de la orden se cambia desde la orden—, y por eso la condición
+ * es `ot_id` y no «cambió el horario».
  *
  * No alcanza a `visto` ni a `destrabar` con `reescribir`: son la forma de
  * resolver una divergencia, y `reescribir` es lo único que resucita un evento de

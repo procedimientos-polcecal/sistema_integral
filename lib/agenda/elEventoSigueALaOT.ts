@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import { traerTodo } from "@/lib/core/paginado";
-import { fechaParaElCalendario, horarioDeLaOT, instanteDe, TURNOS_DEL_TALLER } from "./evento";
+import { fechaParaElCalendario, horarioDeLaOT, instanteDe, laOTEstaCerrada, TURNOS_DEL_TALLER } from "./evento";
 import { aHoraDePared, aInstanteISO, eventoParaGoogle, idDeGoogleDe } from "./pedido";
 import { columnasDespuesDeEscribir, escribirEnGoogle, parDivergencia, parPendiente } from "./escribirEnGoogle";
 import { anotarEnLaFila } from "./cargar";
@@ -39,6 +39,15 @@ import { anotarEnLaFila } from "./cargar";
  *    (`columnasDespuesDeEscribir`): es lo único que distingue el eco de una
  *    escritura propia de un cambio hecho por una persona.
  */
+
+/**
+ * Cómo empieza el `aviso` de un borrado que Google rechazó. **Lo escribe
+ * `borrarLosEventosDeLasOT` y `planDelEvento` no lo toca**: la sincronización
+ * corre `seguirALasOT` justo después del borrado, y sin esta marca limpiaría ese
+ * aviso en la misma corrida que lo escribió (la orden sigue en la base y su
+ * fecha no cambió, así que «el aviso ya no corresponde» parecería cierto).
+ */
+export const AVISO_DE_BORRADO = "No se pudo borrar en Google el evento de una orden que ya no está en la planilla";
 
 export type QueHacer =
   | { accion: "mover"; inicio: string; fin: string }
@@ -143,6 +152,7 @@ export interface FilaDeEventoDeOT {
     fecha_ejecucion: string | null;
     fecha_ejecucion_pendiente?: string | null;
     fecha_cierre: string | null;
+    estado?: string | null;
   };
 }
 
@@ -162,7 +172,14 @@ const NADA: Plan = { tipo: "nada", mover: null, aviso: undefined, volverAAlertar
  */
 export function planDelEvento(fila: FilaDeEventoDeOT): Plan {
   // Cerrada: el evento pasado es el registro de lo que se planificó.
-  if (fila.orden.fecha_cierre) return NADA;
+  //
+  // **El predicado es `laOTEstaCerrada` de `evento.ts` y no se vuelve a escribir
+  // a mano**: lo usan también la pantalla de mandar la OT y su ruta, y una regla
+  // repetida se separa en la tercera copia. Esta ya se separó una vez: mirar sólo
+  // `fecha_cierre` dejaba pasar 168 de 986 OT en `REALIZADO` (17 %, medido el
+  // 03/11/2026), que seguían moviendo su evento futuro cada vez que la planilla
+  // les tocaba la fecha.
+  if (laOTEstaCerrada(fila.orden)) return NADA;
 
   const decision = queHacerConElEvento(fila, fechaParaElCalendario(fila.orden));
 
@@ -170,7 +187,7 @@ export function planDelEvento(fila: FilaDeEventoDeOT): Plan {
     return {
       tipo: "mover",
       mover: { inicio: decision.inicio, fin: decision.fin },
-      aviso: fila.aviso ? null : undefined,
+      aviso: limpiable(fila.aviso) ? null : undefined,
       volverAAlertar: false,
     };
   }
@@ -188,7 +205,12 @@ export function planDelEvento(fila: FilaDeEventoDeOT): Plan {
     return { tipo: "respetar", mover: null, aviso: decision.motivo, volverAAlertar: true };
   }
 
-  return fila.aviso ? { ...NADA, aviso: null } : NADA;
+  return limpiable(fila.aviso) ? { ...NADA, aviso: null } : NADA;
+}
+
+/** ¿Hay un aviso que esta lógica escribió y que ya no corresponde? El de un borrado fallido no es de ella. */
+function limpiable(aviso: string | null): boolean {
+  return Boolean(aviso) && !aviso!.startsWith(AVISO_DE_BORRADO);
 }
 
 // ── La sincronización de OT mueve los eventos ───────────────────────────────
@@ -218,8 +240,8 @@ interface FilaLeida {
   turno: string | null;
   ot_id: string;
   ordenes_trabajo:
-    | { ot_number: number; fecha_ejecucion: string | null; fecha_ejecucion_pendiente: string | null; fecha_cierre: string | null }
-    | { ot_number: number; fecha_ejecucion: string | null; fecha_ejecucion_pendiente: string | null; fecha_cierre: string | null }[]
+    | { ot_number: number; fecha_ejecucion: string | null; fecha_ejecucion_pendiente: string | null; fecha_cierre: string | null; estado: string | null }
+    | { ot_number: number; fecha_ejecucion: string | null; fecha_ejecucion_pendiente: string | null; fecha_cierre: string | null; estado: string | null }[]
     | null;
 }
 
@@ -240,7 +262,7 @@ export async function seguirALasOT(cliente: SupabaseClient, ahora: Date = new Da
   try {
     filas = await traerTodo<FilaLeida>((desde, hasta) =>
       cliente.from("agenda_eventos")
-        .select("id, titulo, descripcion, lugar, inicio, fin, casilla, google_event_id, divergencia, aviso, turno, ot_id, ordenes_trabajo!ot_id(ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_cierre)")
+        .select("id, titulo, descripcion, lugar, inicio, fin, casilla, google_event_id, divergencia, aviso, turno, ot_id, ordenes_trabajo!ot_id(ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_cierre, estado)")
         .not("ot_id", "is", null)
         .order("id").range(desde, hasta).returns<FilaLeida[]>()
     );
@@ -392,11 +414,13 @@ async function moverElEvento(
  * Se borra aunque el evento haya divergido, o la OT esté cerrada: lo que se
  * decidió no pisar es **mover** un evento, y acá la orden ya no existe.
  *
- * Un fallo se anota también en el evento (`google_pendiente`) para que se vea
- * en la Agenda. **Ojo, quien reintenta pendientes (el cron de la Tarea 9) lo
- * va a leer como una escritura que falta**: la próxima sincronización de OT
- * reintenta el borrado antes, pero el texto de la Agenda dice «no llegó» y no
- * «no se pudo borrar».
+ * Un fallo se anota también en el evento, para que se vea en la Agenda, **en
+ * `aviso` y NO en `google_pendiente`**. `google_pendiente` significa «falta
+ * escribir esto en Google» y el cron de la Tarea 9 lo reintenta escribiendo: a
+ * un evento que se quería borrar lo resucitaría. `aviso` es justamente lo que
+ * una persona tiene que mirar y no es ni un fallo de escritura ni una
+ * divergencia, y el reintento no lo necesita: lo hace la próxima sincronización
+ * de OT, que vuelve a encontrar a la OT como candidata.
  *
  * Sin `google_event_id` igual se intenta: crear usa un id que sale de la fila
  * (`idDeGoogleDe`), así que un alta que llegó a Google y no se pudo anotar
@@ -440,11 +464,11 @@ export async function borrarLosEventosDeLasOT(
       });
       if (!r.pendiente) continue;
 
-      const texto = `No se pudo borrar en Google el evento de una orden que ya no está en la planilla: ${r.pendiente}`;
-      const sinAnotar = await anotarEnLaFila(cliente, ev.id, parPendiente(texto, marca));
+      const texto = `${AVISO_DE_BORRADO}. Google dijo: ${r.pendiente}`;
+      const sinAnotar = await anotarEnLaFila(cliente, ev.id, { aviso: texto });
       noSePuede.set(
         ev.ot_id,
-        sinAnotar ? `${texto} (y tampoco se pudo anotar el pendiente: ${sinAnotar})` : texto
+        sinAnotar ? `${texto} (y tampoco se pudo anotar el aviso en el evento: ${sinAnotar})` : texto
       );
     }
   }
