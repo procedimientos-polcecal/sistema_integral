@@ -2481,9 +2481,7 @@ Tres cosas de esa corrida que vale la pena saber:
   que dejar el texto largo.
 - **Primero la planilla y después la base.** Si la planilla sale y la base no,
   la próxima sincronización las empareja; al revés, la planilla pisaría la base.
-- **La que falta es la 2983**, y no es de esto: es la órden que quedó escrita en
-  la planilla y nunca entró al sistema (ver más arriba). Como no existe en
-  `ordenes_trabajo`, no hay de dónde sacarle el estado ni las horas.
+- **La que faltaba era la 2983**, y se cargó a mano después (ver abajo).
 
 **Y una medida que va a volver: el drenaje pega contra la cuota de Google.**
 `exportarLoPendiente` lee la columna A del master **una vez por orden en la
@@ -2497,6 +2495,51 @@ existe para que pase. No se tocó nada por ahora —el reintento lo resuelve—,
 pero con un mes de 100 órdenes esto va a dejar varias para la segunda vuelta: el
 día que moleste, lo que hay que cambiar es que el drenaje lea la columna A **una
 vez por pasada** y no una por orden.
+
+#### La OT 2983, cargada a mano (03/11/2026)
+
+Era la única de las 48 sin K/M/N/O, y la hipótesis que teníamos era falsa: **sí
+estaba en `ordenes_trabajo`**. Lo que le había pasado es otra cosa, y es la que
+conviene recordar.
+
+La generación le escribió el alta en la planilla a las **14:08:21** y algo se
+cortó antes de guardar el resto. La fila quedó en «Altas del sistema» y en el
+master, y la **sincronización de las 14:44 la trajo a la base** —con lo único
+que la planilla tenía: descripción, sector, equipo y prioridad—. Por eso no
+estaba en la cola: `sheets_pendiente` nunca se le puso, así que el drenaje que
+terminó a las otras 47 ni la miraba.
+
+Comparada con sus hermanas le faltaban exactamente cuatro campos, y los cuatro
+salían de su propio renglón —línea 11, «Pasar 1400 barras/cuadrados rompedores»,
+del 07/10 al 21/10, 28 h—:
+
+| | tenía | quedó |
+|---|---|---|
+| `fecha_cierre` | null | 2026-10-21 |
+| `estado` | `POR_HACER` | `REALIZADO` |
+| `contratista` | null | PIPARO |
+| `horas` | null | 28 |
+
+Lo hizo
+[scripts/cargar-a-mano-la-ot-2983.mts](../scripts/cargar-a-mano-la-ot-2983.mts),
+que antes de escribir **comprueba que no haya otra orden con la misma
+descripción**: completar una que ya estuviera cubierta por otra sería darle dos
+órdenes al mismo trabajo, y a PIPARO se le paga por esto.
+
+Dos cosas que no se deducen del código:
+
+- **`fecha` no se tocó, y dice 2026-11-03.** No es un error de esta orden: **las
+  48 dicen lo mismo**, porque la sincronización la trae de la marca temporal
+  (columna B del master, derrame de la hoja de respuestas). Corregirla sólo en
+  ésta la habría dejado distinta de sus hermanas y la próxima corrida la pisaba
+  igual. La fecha del trabajo vive en `fecha_cierre` y en `fecha_ejecucion`.
+- **La columna L dice «Atrasado» en las 48, y está bien así.** Es la
+  `ARRAYFORMULA` del master, que compara la fecha de inicio con hoy y no mira el
+  estado: medido, **56 OT viejas de PIPARO ya «Realizado» dicen lo mismo**. No
+  lo causó esta carga y no hay nada que arreglar ahí.
+
+Después de esto, de las 48: **0 incompletas en la base, 0 en la cola, 0 con el
+texto viejo, y 48 de 48 con K, M, N y O en el master.**
 
 ### Lo que quedó anotado
 
