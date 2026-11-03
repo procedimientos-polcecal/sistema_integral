@@ -91,7 +91,7 @@ export default function DisponibilidadClient({
           personalPorSector={personalPorSector}
         />
       ) : (
-        <Reportes />
+        <Reportes personalPorSector={personalPorSector} />
       )}
     </div>
   );
