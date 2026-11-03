@@ -148,8 +148,45 @@ export async function escribirEnGoogle(
  * que los dos caminos de fallo —la excepción y el cancelado— devuelven el
  * `google_event_id`: omitirlo en uno dejaría a la fila sin saber dónde está un
  * evento que Google sí tiene.
+ *
+ * ── UN `PUT` SIN INVITADOS BORRA LOS INVITADOS ─────────────────────────────
+ *
+ * **`undefined` en `evento.invitados` no significa lo mismo en un `PATCH` que en
+ * un `PUT`, y la asimetría no se unifica.** En un `PATCH`
+ * (`actualizarEvento`), omitir `attendees` es «no los toques»: es la forma de
+ * decir «no sé quiénes son» sin consecuencias. En un `PUT`, que reemplaza el
+ * recurso entero, omitirlos es «no hay»: Google los saca del evento y **les manda
+ * la cancelación a cada uno**. Quien unifique los dos —«total, `undefined` es lo
+ * mismo»— hace que un evento restaurado pierda a sus cinco invitados, y nadie se
+ * entera hasta que alguien pregunta por qué lo sacaron de una reunión.
+ *
+ * Por eso el cuidado vive **acá, que es por donde pasan todos los caminos al
+ * `PUT`** —`restaurar`, `crear` cuando el id ya estaba, y el `reescribir` de
+ * `destrabar`—, y no en cada llamador, donde sería una convención que alguien
+ * olvida repetir: con `invitados` en `undefined`, se leen los de Google y se
+ * reusan antes de escribir.
+ *
+ * - Si Google **no conoce** el evento (`null`), no hay nada que perder y se sigue.
+ * - Si la lectura **falla**, no se escribe a ciegas: queda pendiente con lo que
+ *   dijo Google, y el reintento vuelve a leer. Es la misma garantía que
+ *   `moverElEvento` ya daba una capa más arriba, que con esto queda redundante
+ *   pero inofensiva.
  */
 async function restaurar(casilla: string, id: string, evento: EventoParaGoogle): Promise<ResultadoDeEscritura> {
+  if (evento.invitados === undefined) {
+    try {
+      const enGoogle = await leerEvento(casilla, id);
+      if (enGoogle) evento = { ...evento, invitados: enGoogle.invitados.map((i) => i.email.toLowerCase()) };
+    } catch (e) {
+      return {
+        google_event_id: id,
+        pendiente:
+          `No se pudieron leer los invitados que el evento ya tiene en Google, y escribirlo sin ellos los ` +
+          `borraría y les mandaría la cancelación: ${textoDelFallo(e) || SIN_MENSAJE}`,
+      };
+    }
+  }
+
   let r: EventoEnGoogle;
   try {
     r = await restaurarEvento(casilla, id, evento);

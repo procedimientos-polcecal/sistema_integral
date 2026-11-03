@@ -481,3 +481,85 @@ describe("avisoDeUnBorradoFallido", () => {
     expect(avisoDeUnBorradoFallido("")).toMatch(/Google falló sin dar un mensaje/);
   });
 });
+
+describe("escribirEnGoogle — un PUT sin invitados conocidos los lee de Google antes de escribir", () => {
+  const conId = { ...FILA, google_event_id: EVENTO.id };
+  const sinInvitados = { ...EVENTO, invitados: undefined };
+  const enGoogleConCinco = {
+    ...ENGOOGLE,
+    invitados: ["Ana@polcecal.com", "b@polcecal.com", "c@polcecal.com", "d@polcecal.com", "e@polcecal.com"].map((email) => ({ email })),
+  };
+
+  it("restaurar con invitados undefined reusa los de Google: un PUT sin attendees los cancelaría", async () => {
+    vi.mocked(leerEvento).mockResolvedValue(enGoogleConCinco);
+    vi.mocked(restaurarEvento).mockResolvedValue(ENGOOGLE);
+
+    const r = await escribirEnGoogle("restaurar", conId, sinInvitados);
+
+    expect(r.pendiente).toBeUndefined();
+    expect(vi.mocked(restaurarEvento).mock.calls[0][2].invitados).toEqual([
+      "ana@polcecal.com", "b@polcecal.com", "c@polcecal.com", "d@polcecal.com", "e@polcecal.com",
+    ]);
+  });
+
+  it("crear sobre un id que ya estaba (termina en PUT) también los reusa", async () => {
+    vi.mocked(crearEvento).mockResolvedValue({ ...ENGOOGLE, yaEstaba: true });
+    vi.mocked(leerEvento).mockResolvedValue(enGoogleConCinco);
+    vi.mocked(restaurarEvento).mockResolvedValue(ENGOOGLE);
+
+    await escribirEnGoogle("crear", FILA, sinInvitados);
+
+    expect(vi.mocked(restaurarEvento).mock.calls[0][2].invitados).toHaveLength(5);
+  });
+
+  it("el reescribir de destrabar sobre un borrado también pasa por la misma guarda", async () => {
+    vi.mocked(leerEvento).mockResolvedValue({ ...enGoogleConCinco, cancelado: true });
+    vi.mocked(restaurarEvento).mockResolvedValue(ENGOOGLE);
+    const divergida: FilaDivergida = { ...conId, divergencia: "borrado" };
+
+    const r = await destrabar("reescribir", divergida, sinInvitados);
+
+    expect(r.ok).toBe(true);
+    expect(vi.mocked(restaurarEvento).mock.calls[0][2].invitados).toHaveLength(5);
+  });
+
+  it("si Google no conoce el evento no hay nada que perder y se sigue de largo", async () => {
+    vi.mocked(leerEvento).mockResolvedValue(null);
+    vi.mocked(restaurarEvento).mockResolvedValue(ENGOOGLE);
+
+    const r = await escribirEnGoogle("restaurar", conId, sinInvitados);
+
+    expect(r.pendiente).toBeUndefined();
+    expect(restaurarEvento).toHaveBeenCalledOnce();
+    expect(vi.mocked(restaurarEvento).mock.calls[0][2].invitados).toBeUndefined();
+  });
+
+  it("si la lectura falla no se escribe a ciegas: queda pendiente con lo que dijo Google", async () => {
+    vi.mocked(leerEvento).mockRejectedValue(new Error("Google dijo: 503"));
+
+    const r = await escribirEnGoogle("restaurar", conId, sinInvitados);
+
+    expect(restaurarEvento).not.toHaveBeenCalled();
+    expect(r.google_event_id).toBe(EVENTO.id);
+    expect(r.pendiente).toContain("Google dijo: 503");
+    expect(r.pendiente).toMatch(/borraría/);
+  });
+
+  it("con invitados conocidos, aun una lista vacía, no lee nada: ya se sabe quiénes son", async () => {
+    vi.mocked(restaurarEvento).mockResolvedValue(ENGOOGLE);
+
+    await escribirEnGoogle("restaurar", conId, EVENTO);
+    await escribirEnGoogle("restaurar", conId, { ...EVENTO, invitados: [] });
+
+    expect(leerEvento).not.toHaveBeenCalled();
+  });
+
+  it("un PATCH con invitados undefined no lee nada: ahí omitirlos es «no los toques»", async () => {
+    vi.mocked(actualizarEvento).mockResolvedValue(ENGOOGLE);
+
+    await escribirEnGoogle("actualizar", conId, sinInvitados);
+
+    expect(leerEvento).not.toHaveBeenCalled();
+    expect(actualizarEvento).toHaveBeenCalledOnce();
+  });
+});

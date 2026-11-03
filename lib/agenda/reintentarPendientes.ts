@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
+import type { EventoParaGoogle } from "@/lib/core/calendar";
 import { anotarEnLaFila } from "./cargar";
 import { escribirEnGoogle, columnasDespuesDeEscribir } from "./escribirEnGoogle";
 import { eventoParaGoogle } from "./pedido";
@@ -142,13 +143,17 @@ export async function reintentarLosPendientes(
       continue;
     }
 
-    let evento;
+    let evento: EventoParaGoogle;
     try {
-      evento = eventoParaGoogle(
-        f,
-        (invitados ?? []).map((i: { email: string }) => i.email.toLowerCase()),
-        f.casilla
-      );
+      const correos = (invitados ?? []).map((i: { email: string }) => i.email.toLowerCase());
+      const completo = eventoParaGoogle(f, correos, f.casilla);
+      // Cero filas no es «no hay invitados»: la cola existe, entre otras cosas, para
+      // eventos cuyos invitados no se pudieron guardar, y mandar `[]` en un PATCH
+      // los borra de Google y les manda la cancelación. Sin saber quiénes son se
+      // deja `undefined`: un PATCH no los toca y un PUT los lee de Google antes de
+      // escribir (ver `restaurar` en `escribirEnGoogle.ts`). Es la misma regla que
+      // `moverElEvento`.
+      evento = correos.length > 0 ? completo : { ...completo, invitados: undefined };
     } catch (e) {
       r.fallos.push(`${nombrar(f)}: ${textoDe(e)}`);
       continue;

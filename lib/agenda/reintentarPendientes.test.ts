@@ -147,6 +147,18 @@ describe("reintentarLosPendientes", () => {
     expect(vi.mocked(escribirEnGoogle).mock.calls[0][2]?.invitados).toEqual(["ana@polcecal.com"]);
   });
 
+  it("cero filas de invitados no es «no hay invitados»: no se manda [] que los borraría de Google", async () => {
+    const base = baseEnMemoria({
+      agenda_eventos: [pendiente("1", { google_event_id: "g1" })],
+      agenda_invitados: [],
+    });
+    vi.mocked(escribirEnGoogle).mockResolvedValue({ pendiente: "x" });
+
+    await reintentarLosPendientes(base.cliente, AHORA);
+
+    expect(vi.mocked(escribirEnGoogle).mock.calls[0][2]?.invitados).toBeUndefined();
+  });
+
   it("un fallo con un evento no corta a los demás", async () => {
     const base = baseEnMemoria({
       agenda_eventos: [pendiente("1"), pendiente("2")],
