@@ -9,7 +9,7 @@ vi.mock("@/lib/core/calendar", () => ({
 import { abrirCanal, cerrarCanal, leerEvento } from "@/lib/core/calendar";
 import {
   canalesARenovar, tokenValido, urlDelWebhook, revisarLaCasilla, ponerAlDiaLosCanales, barrerLasCasillas,
-  conteoVacio, resumenDelConteo, veredictoDeCeroEventos, limitesDeLaCorrida,
+  conteoVacio, fraseDePendienteDivergido, resumenDelConteo, veredictoDeCeroEventos, limitesDeLaCorrida,
   PRESUPUESTO_DE_LA_CORRIDA_MS,
   ANTICIPO_DE_RENOVACION_MS,
 } from "./canales";
@@ -208,6 +208,45 @@ describe("revisarLaCasilla", () => {
     expect(leerEvento).toHaveBeenCalledWith(CASILLA, "g1");
   });
 
+  it("una divergencia en una fila que ya tenía google_pendiente se nombra en fallos, con el evento y la casilla", async () => {
+    const base = baseEnMemoria({
+      agenda_eventos: [
+        evento("1", { google_pendiente: "se movió en el SdG pero no se anotó" }),
+        evento("2"),
+      ],
+    });
+    vi.mocked(leerEvento).mockResolvedValue({
+      id: "g", ...IGUAL, inicio: "2026-11-04T10:00:00-03:00", fin: "2026-11-04T11:30:00-03:00",
+    });
+    const fallos: string[] = [];
+
+    const r = await revisarLaCasilla(base.cliente, CASILLA, fallos, AHORA);
+
+    // La divergencia se anota y se avisa como siempre, en las dos filas...
+    expect(r.map((d) => d.evento_id).sort()).toEqual(["1", "2"]);
+    // ...y sólo la que tenía pendiente deja una frase.
+    expect(fallos).toHaveLength(1);
+    expect(fallos[0]).toContain(CASILLA);
+    expect(fallos[0]).toContain("evento 1");
+    expect(fallos[0]).toContain("se movió en el SdG pero no se anotó");
+    expect(fallos[0]).toContain("NO se va a reintentar");
+  });
+
+  it("no se filtra por google_pendiente: la fila con pendiente se mira igual", async () => {
+    const base = baseEnMemoria({ agenda_eventos: [evento("1", { google_pendiente: "x" })] });
+    vi.mocked(leerEvento).mockResolvedValue({ id: "g1", ...IGUAL });
+    await revisarLaCasilla(base.cliente, CASILLA, [], AHORA);
+    expect(leerEvento).toHaveBeenCalledTimes(1);
+  });
+
+  it("una fila con pendiente que NO divergió no deja ninguna frase", async () => {
+    const base = baseEnMemoria({ agenda_eventos: [evento("1", { google_pendiente: "x" })] });
+    vi.mocked(leerEvento).mockResolvedValue({ id: "g1", ...IGUAL });
+    const fallos: string[] = [];
+    await revisarLaCasilla(base.cliente, CASILLA, fallos, AHORA);
+    expect(fallos).toEqual([]);
+  });
+
   it("uno ya divergido no vuelve a marcarse: su divergencia_el es lo que hace reaparecer la alerta", async () => {
     const vieja = "2026-11-02T10:00:00+00:00";
     const base = baseEnMemoria({ agenda_eventos: [evento("1", { divergencia: "borrado", divergencia_el: vieja })] });
@@ -280,6 +319,17 @@ describe("revisarLaCasilla", () => {
 
 const APP = "https://www.polcecalpolysan.app";
 const URL_WEBHOOK = `${APP}/api/agenda/google`;
+
+describe("fraseDePendienteDivergido", () => {
+  it("dice qué se movió o se borró, y que ese pendiente ya no se reintenta", () => {
+    expect(fraseDePendienteDivergido(CASILLA, "e1", "movido", "boom")).toContain("lo movieron");
+    expect(fraseDePendienteDivergido(CASILLA, "e1", "borrado", "boom")).toContain("lo borraron");
+    const t = fraseDePendienteDivergido(CASILLA, "e1", "movido", "boom");
+    expect(t).toContain("e1");
+    expect(t).toContain("boom");
+    expect(t).toContain("destrabar");
+  });
+});
 
 describe("ponerAlDiaLosCanales", () => {
   it("abre el canal de una casilla que no tiene, con la URL pública y un secreto propio", async () => {

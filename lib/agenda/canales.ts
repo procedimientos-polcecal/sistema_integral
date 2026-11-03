@@ -408,6 +408,41 @@ interface FilaARevisar {
   google_event_id: string;
   inicio_escrito: string;
   fin_escrito: string;
+  /** Sólo para nombrar el estado «pendiente + divergencia»: ver `fraseDePendienteDivergido`. */
+  google_pendiente: string | null;
+}
+
+/**
+ * La frase para `fallos` cuando una fila que **ya tenía `google_pendiente`**
+ * acaba de divergir. Es un estado que no estaba nombrado en ningún lado y que
+ * congela la cola:
+ *
+ * `moverElEvento` escribe horario + pendiente, Google acepta, y después
+ * `anotarEnLaFila` falla las dos veces: queda `escrito` viejo, Google nuevo y
+ * `google_pendiente` puesto. Esa noche la revisión compara viejo contra nuevo,
+ * da «movido» y avisa a cinco personas de un movimiento que nadie hizo. Y como
+ * ahora hay divergencia, `quePendientesReintentar` salta la fila: **el pendiente
+ * no se reintenta nunca más**.
+ *
+ * **No se arregla filtrando `google_pendiente` fuera del `select`**: abriría el
+ * agujero por el otro lado, porque si además una persona movió el evento el
+ * reintento la pisaría. Lo que hace falta es que se vea, y este texto es eso:
+ * dice el evento, la casilla, qué significa y qué mirar. Merece su propia vuelta
+ * de diseño; lo que no puede es seguir siendo invisible.
+ */
+export function fraseDePendienteDivergido(
+  casilla: string,
+  eventoId: string,
+  divergencia: Divergencia,
+  pendiente: string
+): string {
+  return (
+    `${casilla}: el evento ${eventoId} ${divergencia === "borrado" ? "lo borraron" : "lo movieron"} en Google ` +
+    `y ya tenía una escritura pendiente (google_pendiente: «${pendiente}»). Esa escritura NO se va a reintentar ` +
+    `nunca más —un evento divergido se saltea para no pisar lo que se hizo en Google—, y el aviso de ` +
+    `movimiento puede ser falso: si Google había aceptado el cambio pero el SdG no llegó a anotarlo, ` +
+    `no lo movió nadie. Hay que mirarlo a mano y resolverlo con «destrabar».`
+  );
 }
 
 /**
@@ -618,6 +653,11 @@ async function porQueNoSeAnoto(
  * correr varias revisiones juntas (diez avisos seguidos de Google) sin que se
  * pisen.
  *
+ * **Una fila que ya tenía `google_pendiente` y acaba de divergir se nombra en
+ * `fallos`** (`fraseDePendienteDivergido`). El `select` la trae igual —no se
+ * filtra por `google_pendiente`: ver esa función—, y el aviso de la divergencia
+ * sale como siempre; lo que se agrega es que ese estado deja de ser invisible.
+ *
  * **Un fallo no corta la revisión**: se agrega a `fallos`, con el evento y lo que
  * dijo Google sin traducir, y se sigue con el resto. Quien llama tiene que
  * registrarlos. Tira sólo si no puede leer la base, porque entonces no se miró
@@ -648,7 +688,7 @@ export async function revisarLaCasilla(
   const filas = await traerTodo<FilaARevisar>((desde, hasta) =>
     supabase
       .from("agenda_eventos")
-      .select("id, google_event_id, inicio_escrito, fin_escrito")
+      .select("id, google_event_id, inicio_escrito, fin_escrito, google_pendiente")
       .eq("casilla", casilla)
       .not("google_event_id", "is", null)
       .not("inicio_escrito", "is", null)
@@ -724,6 +764,10 @@ export async function revisarLaCasilla(
     }
 
     conteo.anotadas++;
+    // Una fila que ya tenía pendiente y ahora diverge queda congelada: se nombra.
+    if (f.google_pendiente) {
+      fallos.push(fraseDePendienteDivergido(casilla, f.id, divergencia, f.google_pendiente));
+    }
     nuevas.push({ evento_id: f.id, divergencia });
   }
   return nuevas;
