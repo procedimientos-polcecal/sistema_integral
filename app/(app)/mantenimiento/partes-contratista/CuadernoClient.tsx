@@ -235,6 +235,8 @@ export default function CuadernoClient({
   const [resultado, setResultado] = useState<ResultadoDeGenerar | null>(null);
 
   const [filtro, setFiltro] = useState<IdDeFiltro>("todos");
+  /** "" todos · "sin" los que no tienen sector · si no, el id del sector. */
+  const [sectorFiltrado, setSectorFiltrado] = useState<string>("");
   const [seleccion, setSeleccion] = useState<ReadonlySet<string>>(new Set());
   const [renglonActivo, setRenglonActivo] = useState<string | null>(null);
   const [fotoElegida, setFotoElegida] = useState<string | null>(null);
@@ -402,7 +404,28 @@ export default function CuadernoClient({
     { id: "juntados", etiqueta: "Ya juntados", pasa: (r) => !!r.grupo_id },
   ];
   const filtroActual = filtros.find((f) => f.id === filtro) ?? filtros[0];
-  const visibles = renglones.filter(filtroActual.pasa);
+  /**
+   * Los sectores que de verdad hay en esta carga, con cuántos renglones cada
+   * uno. Son los de la carga y no los 60 y pico de la planta: filtrar sirve
+   * para juntar lo que está acá, y una lista con 50 opciones vacías es ruido.
+   */
+  const sectoresDeLaCarga = useMemo(() => {
+    const cuenta = new Map<string, number>();
+    for (const r of renglones) if (r.sector_id) cuenta.set(r.sector_id, (cuenta.get(r.sector_id) ?? 0) + 1);
+    return [...cuenta]
+      .map(([id, n]) => ({ id, nombre: nombreDeSector.get(id) ?? "(sector que ya no está)", n }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  }, [renglones, nombreDeSector]);
+
+  const sinSector = renglones.filter((r) => !r.sector_id).length;
+
+  const pasaElSector = (r: Renglon) =>
+    sectorFiltrado === "" ? true : sectorFiltrado === "sin" ? !r.sector_id : r.sector_id === sectorFiltrado;
+
+  const visibles = renglones.filter(filtroActual.pasa).filter(pasaElSector);
+
+  /** Los que se ven y todavía se pueden juntar: los que ya son OT no entran. */
+  const elegiblesALaVista = visibles.filter((r) => !r.orden_trabajo_id);
 
   const fotoDe = useMemo(() => new Map(fotos.map((f) => [f.id, f])), [fotos]);
   const renglonesPorFoto = useMemo(() => {
@@ -995,6 +1018,7 @@ export default function CuadernoClient({
     setRepetidos(null);
     setCola([]);
     setFiltro("todos");
+    setSectorFiltrado("");
     setMesElegido(null);
   }
 
@@ -1270,25 +1294,71 @@ export default function CuadernoClient({
       {abierta && (
         <>
           {/* ── Filtros ─────────────────────────────────── */}
-          <div className="flex flex-wrap gap-2">
-            {filtros.map((f) => {
-              const n = renglones.filter(f.pasa).length;
-              const marcado = f.id === filtro;
-              return (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {filtros.map((f) => {
+                // La cuenta del chip ya mira el sector elegido: si no, diría
+                // «Sin sector (35)» mientras abajo se ven tres.
+                const n = renglones.filter(f.pasa).filter(pasaElSector).length;
+                const marcado = f.id === filtro;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setFiltro(f.id)}
+                    className={`rounded-full border px-3 py-1 text-sm ${
+                      marcado
+                        ? "border-slate-800 bg-slate-800 text-white"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {f.etiqueta} ({n})
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Filtrar por sector es lo que hace manejable juntar: se ve de a un
+                sector por vez y se eligen todos los que quedan a la vista. */}
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500">Sector</span>
+                <div className="w-full sm:w-72">
+                  <Select
+                    value={sectorFiltrado}
+                    onChange={(e) => setSectorFiltrado(e.target.value)}
+                    aria-label="Filtrar por sector"
+                    className={CLASE_CAMPO}
+                  >
+                    <option value="">Todos los sectores ({renglones.length})</option>
+                    {sinSector > 0 && <option value="sin">— sin sector — ({sinSector})</option>}
+                    {sectoresDeLaCarga.map((s) => (
+                      <option key={s.id} value={s.id}>{s.nombre} ({s.n})</option>
+                    ))}
+                  </Select>
+                </div>
+              </label>
+
+              {puedeEditar && elegiblesALaVista.length > 0 && (
                 <button
-                  key={f.id}
                   type="button"
-                  onClick={() => setFiltro(f.id)}
-                  className={`rounded-full border px-3 py-1 text-sm ${
-                    marcado
-                      ? "border-slate-800 bg-slate-800 text-white"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
+                  onClick={() => setSeleccion(new Set(elegiblesALaVista.map((r) => r.id)))}
+                  className="rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
                 >
-                  {f.etiqueta} ({n})
+                  Elegir {elegiblesALaVista.length === 1 ? "el que se ve" : `los ${elegiblesALaVista.length} que se ven`}
                 </button>
-              );
-            })}
+              )}
+
+              {sectorFiltrado !== "" && (
+                <button
+                  type="button"
+                  onClick={() => setSectorFiltrado("")}
+                  className="px-2 py-2 text-sm text-slate-500 underline"
+                >
+                  Quitar el filtro de sector
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">

@@ -2166,11 +2166,16 @@ siguen en la pantalla para el caso raro.
   renglones entran igual**: no hay nada que retener, la tabla *es* el dato. Se
   dice fuerte, con los dos números y la diferencia. Si no hay fila de TOTALES,
   también se avisa: no hay contra qué comparar.
-- **`fecha_hasta` en null quiere decir «duró un día», no que falte.** Los ~1.400
-  renglones que entraron por foto no la tienen y no es que les falte: una línea
-  del cuaderno manuscrito es de un día. El código lo lee como
-  `fecha_hasta ?? fecha` (`totalesDeRenglones`), que es exactamente lo que hacía
-  antes de que la columna existiera (migración `20261103083610`).
+- **El Excel guarda «Fecha Hasta» tal como viene, aunque sea igual a la
+  «Desde».** La primera versión guardaba null cuando las dos coincidían —«duró
+  un día», más prolijo— y estaba mal: de las 63 filas del archivo real, **45
+  quedaban con el campo vacío en pantalla, que es indistinguible de un dato que
+  se perdió**, y quien había tipeado las 63 fechas lo notó enseguida. Null
+  significa ahora que la celda no traía nada. (Los ~1.400 renglones que
+  entraron por foto siguen con null y tampoco les falta: una línea del cuaderno
+  manuscrito es de un día.) El código lo lee como `fecha_hasta ?? fecha`
+  (`totalesDeRenglones`), que es lo que hacía antes de que la columna existiera
+  (migración `20261103083610`).
 - **No hay check de que `fecha_hasta >= fecha`.** Un rango dado vuelta es un
   error de quien tipeó y hay que **mostrárselo**: el intérprete lo marca dudoso
   con su motivo y el renglón entra. Un check en la base haría fallar el insert
@@ -2213,6 +2218,16 @@ qué fila salió cada renglón, y dos campos de fecha por renglón en vez de uno
 filtro de «dudosos» **se dejó**, aunque el plan decía sacarlo: el Excel también
 produce dudosos —un `#REF!`, una fecha que no existe, unas horas que no son un
 número— y esconderlos sería tapar problemas reales.
+
+**Hay además un filtro por sector, y existe para poder juntar** (03/11/2026).
+Con 63 tareas sueltas, juntar las que van en una misma OT obligaba a buscarlas a
+ojo por toda la lista. El desplegable lista **sólo los sectores que esa carga
+tiene**, con cuántos renglones cada uno, más «sin sector»; se combina con los
+chips —y **la cuenta de cada chip ya mira el sector elegido**, porque un chip que
+dijera «Sin sector (35)» con tres renglones abajo es peor que no tener número—.
+Al lado está **«Elegir los N que se ven»**, que es lo que convierte el filtro en
+una forma de juntar: se filtra por sector, se eligen todos, se juntan. Los
+renglones que ya son OT no entran en esa selección.
 
 ### Lo que quedó anotado
 

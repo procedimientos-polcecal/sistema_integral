@@ -470,10 +470,18 @@ orden**: no hay nada que agrupar.
 2. **El rango de días se guarda, no se deduce.** 18 de las 63 filas del archivo
    real abarcan más de un día; una va del 24 al 31. Sin guardarlo, la OT diría
    «El 24/10». Es una columna nueva, `fecha_hasta`, **nullable para siempre**:
-   null quiere decir «duró un día», que es lo que pasa con todos los renglones
-   que entran por foto. Sin check de `fecha_hasta >= fecha`: un rango dado
-   vuelta hay que mostrárselo a quien tipeó, no hacer fallar el insert de las 63
-   filas por una.
+   null quiere decir que no hay segunda fecha, que es lo que pasa con todos los
+   renglones que entran por foto. Sin check de `fecha_hasta >= fecha`: un rango
+   dado vuelta hay que mostrárselo a quien tipeó, no hacer fallar el insert de
+   las 63 filas por una.
+
+   **Corregido el 03/11, el mismo día**: la primera versión guardaba null cuando
+   «Fecha Hasta» era igual a «Fecha Desde» —«duró un día», más prolijo—. En
+   pantalla eso dejó **45 de 63 campos vacíos**, que es indistinguible de un dato
+   que se perdió, y quien había tipeado las 63 fechas lo notó al primer vistazo.
+   La lección general: **una optimización de almacenamiento que cambia lo que la
+   persona ve no es una optimización.** Lo que está en el archivo se guarda como
+   está.
 3. **La procedencia no lleva columna nueva.** El archivo va al mismo bucket y a
    la misma tabla que las fotos (`mant_cuadernos_fotos`, con `orden: 1`), y lo
    único que lo distingue es la extensión de la ruta. Eso dejó intactos el

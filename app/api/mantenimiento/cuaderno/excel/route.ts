@@ -33,8 +33,9 @@ import {
  *   a mano siguen estando en la pantalla para el caso raro, pero el archivo no
  *   los necesita.
  * - **El renglón trae su rango de días.** «Fecha Desde» y «Fecha Hasta» van a
- *   `fecha` y `fecha_hasta`. Medido sobre el archivo real de octubre, 18 de las
- *   63 filas abarcan más de un día.
+ *   `fecha` y `fecha_hasta`, tal como vienen: una tarea de un día las trae
+ *   iguales y las dos se guardan. Medido sobre el archivo real de octubre, 18
+ *   de las 63 filas abarcan más de un día y las otras 45 son de un solo día.
  *
  * EL CONTROL ES EL DE QUIEN CARGA: la suma de las horas de las filas tiene que
  * dar el total declarado en la fila de TOTALES. Si no da, **los renglones entran
@@ -302,8 +303,12 @@ export async function POST(request: Request) {
       // La fila del Excel: es la única forma de volver del renglón a la planilla.
       linea: r.fila,
       fecha: r.desde,
-      // Null cuando la tarea duró un día: no es que falte, es que no existe.
-      fecha_hasta: r.hasta && r.hasta !== r.desde ? r.hasta : null,
+      // **Se guarda lo que dice la celda, aunque sea igual a la de desde.**
+      // Guardar null cuando las dos fechas coincidían parecía más prolijo y era
+      // peor: de las 63 filas del archivo real, 45 quedaban con el campo vacío
+      // en pantalla, que es indistinguible de un dato que se perdió. Null acá
+      // quiere decir que la celda no traía nada.
+      fecha_hasta: r.hasta,
       tarea: r.tarea,
       lugar_raw: null,
       sector_id: enganches[i].sector_id,
