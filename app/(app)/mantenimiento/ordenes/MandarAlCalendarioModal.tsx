@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Select from "@/components/Select";
 import { comoSeLee } from "@/lib/core/fechas";
 import {
@@ -20,7 +20,28 @@ import type { Turno } from "@/lib/mantenimiento/programacion";
  *
  * La fecha no se elige acá: sale de la orden (`fechaParaElCalendario`). Una
  * orden sin fecha ni siquiera llega a abrir este modal; el botón lo explica.
+ *
+ * ── SI ALGUIEN TOCÓ EL EVENTO EN GOOGLE, SE DICE ANTES ──────────────────────
+ *
+ * Mandar una orden cuyo evento divergió (lo movieron o lo borraron desde
+ * Google) lo pisa. Está bien que lo haga —para una OT la verdad es la orden—,
+ * pero avisar después no alcanza: quien reenvía probablemente no sabe que
+ * alguien lo cambió. Al abrirse, el modal pregunta cómo está el evento, y si
+ * divergió muestra el horario que Google tiene hoy contra el que se va a
+ * escribir, y no deja mandar hasta que la persona confirme que pisa.
  */
+
+/** `2026-11-03T08:00:00` como se lee: «03/11/2026 08:00». */
+function comoSeLeeLaHora(paredDeArgentina: string): string {
+  return `${comoSeLee(paredDeArgentina.slice(0, 10))} ${paredDeArgentina.slice(11, 16)}`;
+}
+
+interface EstadoDelEvento {
+  divergencia: "borrado" | "movido" | null;
+  google: { inicio: string; fin: string } | null;
+  google_error: string | null;
+}
+
 export default function MandarAlCalendarioModal({
   orden, onCerrar, onMandada,
 }: {
@@ -42,6 +63,27 @@ export default function MandarAlCalendarioModal({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [listo, setListo] = useState<{ reemplazo: boolean; advertencia: string | null } | null>(null);
+  // `undefined` es que todavía no se sabe; `null`, que no se pudo saber.
+  const [estado, setEstado] = useState<EstadoDelEvento | null | undefined>(undefined);
+  const [errorDelEstado, setErrorDelEstado] = useState("");
+  const [pisar, setPisar] = useState(false);
+
+  useEffect(() => {
+    let vigente = true;
+    fetch(`/api/mantenimiento/ordenes/${orden.id}/calendario`)
+      .then(async (r) => {
+        const b = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(b.error ?? `El servidor contestó ${r.status}`);
+        return b as EstadoDelEvento;
+      })
+      .then((b) => { if (vigente) setEstado(b); })
+      .catch((e) => {
+        if (!vigente) return;
+        setEstado(null);
+        setErrorDelEstado(e instanceof Error ? e.message : String(e));
+      });
+    return () => { vigente = false; };
+  }, [orden.id]);
 
   const horario = fecha ? horarioDeLaOT(fecha, turno) : null;
   const horas = horario ? `${horario.inicio.slice(11, 16)} a ${horario.fin.slice(11, 16)}` : null;
@@ -69,11 +111,15 @@ export default function MandarAlCalendarioModal({
       const res = await fetch(`/api/mantenimiento/ordenes/${orden.id}/calendario`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ turno, invitados: extras }),
+        body: JSON.stringify({ turno, invitados: extras, pisar }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(body.error ?? "No se pudo mandar la orden al calendario.");
+        // Divergió entre que se abrió el modal y ahora: no hay casilla que marcar todavía.
+        setError(
+          (body.error ?? "No se pudo mandar la orden al calendario.") +
+            (body.requiere_confirmacion ? " Cerrá esta ventana y volvé a abrirla para verlo." : "")
+        );
         return;
       }
       setListo({ reemplazo: Boolean(body.reemplazo), advertencia: body.advertencia ?? null });
@@ -175,6 +221,44 @@ export default function MandarAlCalendarioModal({
               no lo duplica, pero cada invitado recibe de nuevo el aviso.
             </p>
 
+            {estado === undefined && <p className="text-xs text-slate-400">Comprobando el evento…</p>}
+            {estado === null && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                No se pudo comprobar si la orden ya está en el calendario, y sin eso no se manda: {errorDelEstado}
+              </div>
+            )}
+
+            {estado?.divergencia && (
+              <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <p className="font-semibold">
+                  {estado.divergencia === "borrado"
+                    ? "Alguien borró este evento desde Google."
+                    : "Alguien movió este evento desde Google."}
+                </p>
+                {estado.divergencia === "movido" && (
+                  <p>
+                    {estado.google
+                      ? `Hoy Google lo tiene el ${comoSeLeeLaHora(estado.google.inicio)} a ${estado.google.fin.slice(11, 16)}.`
+                      : `No se pudo leer qué horario tiene Google hoy${estado.google_error ? `: ${estado.google_error}` : "."}`}
+                  </p>
+                )}
+                {horario && (
+                  <p>
+                    Si seguís, queda el {comoSeLeeLaHora(horario.inicio)} a {horario.fin.slice(11, 16)}
+                    {estado.divergencia === "borrado" ? " (se vuelve a crear)" : ""} y lo que se hizo en
+                    Google se pierde.
+                  </p>
+                )}
+                <label className="flex cursor-pointer items-start gap-2">
+                  <input
+                    type="checkbox" className="mt-0.5" checked={pisar}
+                    onChange={(e) => setPisar(e.target.checked)}
+                  />
+                  <span>Entiendo que se pisa lo que se hizo en Google</span>
+                </label>
+              </div>
+            )}
+
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                 {error}
@@ -186,7 +270,8 @@ export default function MandarAlCalendarioModal({
                 Cancelar
               </button>
               <button
-                onClick={mandar} disabled={!fecha || guardando}
+                onClick={mandar}
+                disabled={!fecha || guardando || !estado || (Boolean(estado.divergencia) && !pisar)}
                 className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
               >
                 {guardando ? "Mandando…" : "Mandar al calendario"}

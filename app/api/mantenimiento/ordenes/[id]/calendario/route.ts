@@ -5,10 +5,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
 import {
-  INVITADOS_DE_UNA_OT, datosDeLaOT, duenoDelEventoDeLaOT, fechaParaElCalendario,
+  INVITADOS_DE_UNA_OT, datosDeLaOT, duenoDelEventoDeLaOT, faltaConfirmarElPisado, fechaParaElCalendario,
   horarioDeLaOT, problemasDeMandarLaOT, problemasDelEvento,
 } from "@/lib/agenda/evento";
-import { aInstanteISO, eventoParaGoogle, invitadosLimpios } from "@/lib/agenda/pedido";
+import { aHoraDePared, aInstanteISO, eventoParaGoogle, invitadosLimpios } from "@/lib/agenda/pedido";
+import { leerEvento } from "@/lib/core/calendar";
 import {
   escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura, parDivergencia, parPendiente,
 } from "@/lib/agenda/escribirEnGoogle";
@@ -26,7 +27,59 @@ type Params = { params: Promise<{ id: string }> };
 const esquemaDeMandar = z.object({
   turno: z.string().default(""),
   invitados: z.array(z.string()).max(50).default([]),
+  /** Confirma que se pisa lo que alguien hizo en Google (ver `faltaConfirmarElPisado`). */
+  pisar: z.boolean().default(false),
 });
+
+/**
+ * El estado del evento de una OT, para que el modal lo muestre **antes** de
+ * mandar (GET): si ya hay evento y si alguien lo tocó en Google. Con
+ * `divergencia: "movido"` trae el horario que Google tiene hoy, leído en vivo y
+ * como hora de pared de Argentina (`2026-11-03T08:00:00`); con `"borrado"`, o si
+ * Google ya no lo conoce, `google` es `null`. Una lectura que falla no tira el
+ * pedido: vuelve en `google_error` con lo que dijo Google, sin traducir.
+ */
+export async function GET(_request: Request, { params }: Params) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const quien = await quienLlama(supabase);
+  if (!quien.ok) return quien.respuesta;
+  if (!(await puedeEditarMantenimiento(supabase, quien.id))) {
+    return NextResponse.json({ error: "Requiere nivel de edición en Mantenimiento" }, { status: 403 });
+  }
+  if (!ES_UUID.test(id)) return NextResponse.json({ error: "No existe esa orden" }, { status: 404 });
+
+  const admin = createAdminClient();
+  const { data: evento, error } = await admin
+    .from("agenda_eventos")
+    .select("id, casilla, google_event_id, divergencia")
+    .eq("ot_id", id)
+    .maybeSingle();
+  if (error) {
+    return NextResponse.json({ error: `No se pudo leer el evento de la orden: ${error.message}` }, { status: 500 });
+  }
+  if (!evento) return NextResponse.json({ existe: false, divergencia: null, google: null, google_error: null });
+
+  let google: { inicio: string; fin: string } | null = null;
+  let googleError: string | null = null;
+  if (evento.divergencia === "movido" && evento.google_event_id) {
+    try {
+      const enGoogle = await leerEvento(evento.casilla, evento.google_event_id);
+      const inicio = enGoogle && !enGoogle.cancelado ? aHoraDePared(enGoogle.inicio) : null;
+      const fin = enGoogle && !enGoogle.cancelado ? aHoraDePared(enGoogle.fin) : null;
+      if (inicio && fin) google = { inicio, fin };
+    } catch (e) {
+      googleError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  return NextResponse.json({
+    existe: true,
+    divergencia: evento.divergencia,
+    google,
+    google_error: googleError,
+  });
+}
 
 /**
  * Mandar una OT al calendario (POST): se elige el turno, el evento arranca con
@@ -35,9 +88,10 @@ const esquemaDeMandar = z.object({
  *
  * ── EL EVENTO ES DE LA ORDEN, NO DE QUIEN APRIETA EL BOTÓN ──────────────────
  *
- * Con el alta, el dueño es la casilla que generó la OT (`created_by`). Con un
- * evento que ya existía, **el dueño no cambia**, aunque lo reenvíe otra
- * persona u otra casilla. Por eso esta ruta escribe con el cliente admin y no
+ * Con el alta, el dueño es la casilla que generó la OT (`created_by`) y, si no
+ * la tiene —el 96 % de las OT, medido el 03/11/2026: los números están en
+ * `duenoDelEventoDeLaOT`—, `mantenimiento@`. Con un evento que ya existía,
+ * **el dueño no cambia**, aunque lo reenvíe otra persona u otra casilla. Por eso esta ruta escribe con el cliente admin y no
  * con el de la sesión: la policy de editar sólo deja al dueño, y el insert sólo
  * deja crear a nombre propio. El permiso se comprueba acá, en el código: quien
  * edita Mantenimiento.
@@ -61,7 +115,13 @@ const esquemaDeMandar = z.object({
  * estaba lo pisa entero, y si estaba borrado lo resucita. Mandar una OT es una
  * orden explícita de que el evento esté donde dice el SdG, así que **resuelve
  * una divergencia** en vez de respetarla (lo que el SdG no hace es pisar solo,
- * y esto no es solo): la respuesta lo dice.
+ * y esto no es solo). **Pero sabiendo**: con el evento divergido el pedido
+ * tiene que traer `pisar: true` o contesta 409 (`faltaConfirmarElPisado`), y el
+ * modal lo pide mostrando antes qué horario tiene Google hoy (el `GET` de abajo).
+ * Mandarlo a destrabar sería un callejón sin salida: destrabar es del dueño, y el
+ * dueño va a ser `mantenimiento@`, no quien aprieta.
+ *
+ * Una OT con `fecha_cierre` no se manda: sería un evento futuro de algo que pasó.
  */
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
@@ -92,7 +152,7 @@ export async function POST(request: Request, { params }: Params) {
     .from("ordenes_trabajo")
     // La cadena va literal y en una sola pieza: partida con `+` pierde la
     // inferencia de tipos de Supabase.
-    .select("id, ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, created_by, equipo_raw, equipo_code, sector_raw, especialidad, tipo, descripcion")
+    .select("id, ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_cierre, created_by, equipo_raw, equipo_code, sector_raw, especialidad, tipo, descripcion")
     .eq("id", id)
     .maybeSingle();
   if (errorDeOrden) {
@@ -110,9 +170,9 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: `No se pudo leer el evento de la orden: ${errorDeEvento.message}` }, { status: 500 });
   }
 
-  let dueno: { id: string; casilla: string; deQuienLlama: boolean };
+  let dueno: { id: string; casilla: string };
   if (actual) {
-    dueno = { id: actual.dueno_id, casilla: actual.casilla, deQuienLlama: false };
+    dueno = { id: actual.dueno_id, casilla: actual.casilla };
   } else {
     let generador: { id: string; email: string | null } | null = null;
     if (orden.created_by) {
@@ -129,14 +189,49 @@ export async function POST(request: Request, { params }: Params) {
       }
       generador = u ?? null;
     }
-    dueno = duenoDelEventoDeLaOT(generador, quien);
+    const elegido = duenoDelEventoDeLaOT(generador);
+    if (elegido.id) {
+      dueno = { id: elegido.id, casilla: elegido.casilla };
+    } else {
+      // Sin `created_by`: es la casilla del área, y `dueno_id` pide un usuario.
+      const { data: delArea, error: errorDelArea } = await admin
+        .from("usuarios")
+        .select("id")
+        .eq("email", elegido.casilla)
+        .maybeSingle();
+      if (errorDelArea) {
+        return NextResponse.json(
+          { error: `No se pudo buscar al usuario ${elegido.casilla}: ${errorDelArea.message}` },
+          { status: 500 }
+        );
+      }
+      if (!delArea) {
+        return NextResponse.json(
+          {
+            error:
+              `Esta orden no tiene quién la haya generado, así que su evento es de ${elegido.casilla}, ` +
+              `pero en el SdG no hay un usuario con ese correo. Hay que crearlo antes de mandarla.`,
+          },
+          { status: 409 }
+        );
+      }
+      dueno = { id: delArea.id, casilla: elegido.casilla };
+    }
   }
 
   // ── Validar todo junto, antes de guardar nada ─────────────────────────────
   const extras = datos.invitados.map((c) => c.trim()).filter((c) => c !== "");
   const fecha = fechaParaElCalendario(orden);
-  const delPedido = problemasDeMandarLaOT({ fecha_ejecucion: fecha, turno: datos.turno, invitados: extras });
+  const delPedido = problemasDeMandarLaOT({
+    fecha_ejecucion: fecha, turno: datos.turno, invitados: extras, fecha_cierre: orden.fecha_cierre,
+  });
   if (delPedido.length > 0) return errorDeValidacion(delPedido);
+
+  // Pisar un evento que alguien tocó en Google se hace sabiendo (ver la función).
+  const sinConfirmar = faltaConfirmarElPisado(actual?.divergencia, datos.pisar);
+  if (sinConfirmar) {
+    return NextResponse.json({ error: sinConfirmar, requiere_confirmacion: true }, { status: 409 });
+  }
 
   const turno = datos.turno as Turno;
   const texto = datosDeLaOT(orden);
@@ -228,13 +323,6 @@ export async function POST(request: Request, { params }: Params) {
               : ""),
         },
         { status: 500 }
-      );
-    }
-
-    if (dueno.deQuienLlama) {
-      advertencias.push(
-        `Esta orden no la cargó nadie en el sistema (entró por el formulario), así que no hay una casilla ` +
-          `que la haya generado: el evento quedó a nombre de ${dueno.casilla}.`
       );
     }
   }

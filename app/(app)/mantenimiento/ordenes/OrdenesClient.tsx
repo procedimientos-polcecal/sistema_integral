@@ -1106,7 +1106,9 @@ function OTDetail({
             no se distingue de uno roto. La fecha que cuenta es la pendiente
             cuando la hay (`fechaParaElCalendario`), la misma que usa el
             servidor. */}
-        {canEdit && (
+        {/* Una orden cerrada (con `fecha_cierre`) no lleva el botón: crearía un
+            evento futuro de algo que ya pasó. El servidor lo vuelve a negar. */}
+        {canEdit && !o.fecha_cierre && (
           fechaParaElCalendario(o) ? (
             <button
               onClick={() => setMandandoAlCalendario(true)}

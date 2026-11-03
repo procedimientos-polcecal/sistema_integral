@@ -166,8 +166,14 @@ export function problemasDeMandarLaOT(e: {
   fecha_ejecucion: string | null;
   turno: string;
   invitados?: string[];
+  fecha_cierre?: string | null;
 }): string[] {
   const problemas: string[] = [];
+
+  // Mandar una orden que ya se hizo crearía un evento futuro de algo que pasó.
+  if (e.fecha_cierre) {
+    problemas.push("La OT ya está cerrada: no se manda al calendario una orden que ya se hizo");
+  }
 
   if (!e.fecha_ejecucion) {
     problemas.push("La OT no tiene fecha de ejecución: primero hay que ponerle una");
@@ -227,17 +233,47 @@ export function datosDeLaOT(o: OTParaElEvento): { titulo: string; descripcion: s
  * pertenece a la orden y no a la agenda de nadie; lo prueban los cinco
  * invitados fijos.
  *
- * Una OT que entró por el formulario no tiene `created_by` (ni nadie que la
- * haya cargado en el sistema): ahí no hay una casilla que la haya generado, y
- * el evento queda a nombre de quien la manda. `deQuienLlama` dice cuándo pasó,
- * para que la respuesta se lo avise a la persona en vez de dejarlo como un
- * hecho consumado.
+ * **Y si `created_by` es null, de `mantenimiento@`.** No es un caso de borde:
+ * medido contra producción el 03/11/2026, de 2.349 OT sólo 91 (3,9 %) tienen
+ * `created_by`, y de las 26 con fecha de ejecución futura —las que alguien va a
+ * querer mandar al calendario— 18 no lo tienen: el 70 %. Quienes crearon OT
+ * desde la app son `soporte.mantenimiento@` (78) y `procedimientos@` (13). Sin
+ * este `coalesce`, el evento caería en el calendario personal de quien apretó el
+ * botón, y `nicolaslenzetti@` o `gerencia@` terminarían siendo dueños de eventos
+ * de mantenimiento. Las OT sin autor las genera el área, la casilla ya es uno
+ * de los cinco invitados fijos y a nadie le cambia lo que recibe.
+ *
+ * Devuelve `id: null` cuando el dueño es la casilla del área: la ruta busca ese
+ * usuario por correo (`dueno_id` es una referencia a `usuarios`). `delArea` dice
+ * que se cayó en el default.
  */
 export function duenoDelEventoDeLaOT(
-  generador: { id: string; email: string | null } | null,
-  quienLlama: { id: string; casilla: string }
-): { id: string; casilla: string; deQuienLlama: boolean } {
+  generador: { id: string; email: string | null } | null
+): { id: string | null; casilla: string; delArea: boolean } {
   const casilla = generador?.email?.trim().toLowerCase();
-  if (generador && casilla) return { id: generador.id, casilla, deQuienLlama: false };
-  return { id: quienLlama.id, casilla: quienLlama.casilla, deQuienLlama: true };
+  if (generador && casilla) return { id: generador.id, casilla, delArea: false };
+  return { id: null, casilla: CASILLA_DE_MANTENIMIENTO, delArea: true };
+}
+
+/** La casilla del área, dueña de los eventos de las OT que nadie cargó en el sistema. */
+export const CASILLA_DE_MANTENIMIENTO = "mantenimiento@polcecal.com";
+
+/**
+ * Lo que se le contesta a quien reenvía una OT cuyo evento divergió en Google
+ * sin haber confirmado que pisa, o `null` si puede seguir.
+ *
+ * Reenviar **pisa** lo que una persona hizo del otro lado, y apretar el botón
+ * es la decisión explícita —para una OT la verdad es la orden—, pero tiene que
+ * ser **sabiendo**. Avisar después no alcanza: quien reenvía probablemente no
+ * sabe que alguien lo movió. La pantalla lo muestra antes, con el horario que
+ * Google tiene hoy, y manda `pisar: true`; el servidor lo vuelve a exigir
+ * porque una regla que vive sólo en la pantalla no es una regla.
+ */
+export function faltaConfirmarElPisado(divergencia: string | null | undefined, pisar: boolean): string | null {
+  if (!divergencia || pisar) return null;
+  const que = divergencia === "borrado" ? "lo borraron" : "lo movieron";
+  return (
+    `Este evento ${que} desde Google. Mandar la orden de nuevo escribe encima lo que se hizo allá: ` +
+    `hay que confirmarlo (pisar) sabiendo qué horario tiene Google hoy.`
+  );
 }

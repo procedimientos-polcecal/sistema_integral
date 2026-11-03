@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DURACION_OT_MINUTOS, INVITADOS_DE_UNA_OT, TURNOS_DEL_TALLER, datosDeLaOT, fechaParaElCalendario,
-  duenoDelEventoDeLaOT, horarioDeLaOT, instanteDe, problemasDeMandarLaOT, problemasDelEvento,
+  CASILLA_DE_MANTENIMIENTO, duenoDelEventoDeLaOT, faltaConfirmarElPisado, horarioDeLaOT, instanteDe, problemasDeMandarLaOT, problemasDelEvento,
 } from "./evento";
 
 const bueno = { titulo: "x", inicio: "2026-11-03T08:00:00", fin: "2026-11-03T09:30:00", invitados: ["ok@polcecal.com"] };
@@ -182,16 +182,43 @@ describe("datosDeLaOT", () => {
 });
 
 describe("duenoDelEventoDeLaOT", () => {
-  const llama = { id: "u-llama", casilla: "persona@polcecal.com" };
-  it("es la casilla que generó la OT, no quien aprieta el botón", () => {
-    expect(duenoDelEventoDeLaOT({ id: "u-gen", email: "Mantenimiento@polcecal.com " }, llama))
-      .toEqual({ id: "u-gen", casilla: "mantenimiento@polcecal.com", deQuienLlama: false });
+  it("es la casilla que generó la OT", () => {
+    expect(duenoDelEventoDeLaOT({ id: "u-gen", email: "Soporte.Mantenimiento@polcecal.com " }))
+      .toEqual({ id: "u-gen", casilla: "soporte.mantenimiento@polcecal.com", delArea: false });
   });
-  it("una OT que nadie cargó en el sistema queda a nombre de quien la manda, y lo dice", () => {
-    expect(duenoDelEventoDeLaOT(null, llama)).toEqual({ id: "u-llama", casilla: "persona@polcecal.com", deQuienLlama: true });
+  it("una OT sin created_by es de mantenimiento@, y no de quien la manda", () => {
+    expect(duenoDelEventoDeLaOT(null))
+      .toEqual({ id: null, casilla: "mantenimiento@polcecal.com", delArea: true });
   });
-  it("un generador sin correo no sirve de casilla", () => {
-    expect(duenoDelEventoDeLaOT({ id: "u-gen", email: " " }, llama).deQuienLlama).toBe(true);
-    expect(duenoDelEventoDeLaOT({ id: "u-gen", email: null }, llama).id).toBe("u-llama");
+  it("un generador sin correo no sirve de casilla: también cae en mantenimiento@", () => {
+    expect(duenoDelEventoDeLaOT({ id: "u-gen", email: " " }).casilla).toBe(CASILLA_DE_MANTENIMIENTO);
+    expect(duenoDelEventoDeLaOT({ id: "u-gen", email: null }).id).toBeNull();
+  });
+  it("la casilla del área es uno de los cinco invitados fijos: a nadie le cambia lo que recibe", () => {
+    expect(INVITADOS_DE_UNA_OT).toContain(CASILLA_DE_MANTENIMIENTO);
+  });
+});
+
+describe("una OT cerrada no se manda", () => {
+  it("con fecha de cierre, no", () => {
+    expect(problemasDeMandarLaOT({ fecha_ejecucion: "2026-11-03", turno: "8-16", fecha_cierre: "2026-11-04" }))
+      .toContain("La OT ya está cerrada: no se manda al calendario una orden que ya se hizo");
+  });
+  it("sin fecha de cierre, sí", () => {
+    expect(problemasDeMandarLaOT({ fecha_ejecucion: "2026-11-03", turno: "8-16", fecha_cierre: null })).toEqual([]);
+  });
+});
+
+describe("faltaConfirmarElPisado", () => {
+  it("un evento sin divergencia se manda sin preguntar", () => {
+    expect(faltaConfirmarElPisado(null, false)).toBeNull();
+  });
+  it("uno divergido sin confirmar se frena y dice qué le hicieron", () => {
+    expect(faltaConfirmarElPisado("movido", false)).toContain("lo movieron");
+    expect(faltaConfirmarElPisado("borrado", false)).toContain("lo borraron");
+  });
+  it("confirmado, pasa", () => {
+    expect(faltaConfirmarElPisado("movido", true)).toBeNull();
+    expect(faltaConfirmarElPisado("borrado", true)).toBeNull();
   });
 });
