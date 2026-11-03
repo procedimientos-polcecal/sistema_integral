@@ -598,6 +598,20 @@ está cargado pero avisar no alcanza.
   eso: el `delete` con la guarda `orden_trabajo_id is null` borra 1, el estado
   queda `EN_CHEQUEO` con un pendiente y pasa a `GENERADA` cuando no queda ninguno.
 
+### El error que casi se va, y cómo quedó frenado
+
+`pedirGenerar(simular, confirmarDuplicados, claves)` tenía `claves` con valor
+por defecto en null, y la llamada de la **generación de verdad** se quedó sin
+pasarlas. La vista previa filtraba y la escritura no: el cartel decía
+«Generar 1» y se habrían escrito las 46 órdenes, en la planilla de producción,
+que se borran a mano fila por fila. Es exactamente el fallo contra el que está
+armado todo lo demás de esta ruta, y no lo habría visto ningún test ni el
+compilador.
+
+Lo que lo frena ahora es que **los tres argumentos son obligatorios**: sin valor
+por defecto, una punta que filtre y otra que no, no compila. Un comentario
+pidiendo acordarse no habría servido —era justo lo que falló—.
+
 ### El riesgo que queda asumido
 
 **Sacar un renglón es palabra de quien lo saca.** El sistema no puede comprobar

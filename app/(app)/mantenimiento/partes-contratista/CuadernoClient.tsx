@@ -923,7 +923,13 @@ export default function CuadernoClient({
 
   // ── Generar las órdenes ───────────────────────────────────
 
-  async function pedirGenerar(simular: boolean, confirmarDuplicados = false, claves: string[] | null = null) {
+  /**
+   * Los tres argumentos son **obligatorios a propósito**. Con `claves` por
+   * defecto en null, la vista previa filtraba y la generación no: el cartel
+   * decía «Generar 1» y se escribían las 46. No compilar es la única defensa
+   * contra eso que no depende de que alguien se acuerde.
+   */
+  async function pedirGenerar(simular: boolean, confirmarDuplicados: boolean, claves: string[] | null) {
     const res = await fetch("/api/mantenimiento/cuaderno/generar", {
       method: "POST", headers: JSON_HEADERS,
       body: JSON.stringify({
@@ -1052,7 +1058,7 @@ export default function CuadernoClient({
       });
       if (!ok) return;
 
-      const hecho = await pedirGenerar(false, Boolean(duplicados));
+      const hecho = await pedirGenerar(false, Boolean(duplicados), claves);
       if (hecho.error && !hecho.creadas) {
         setError(hecho.error);
         return;
