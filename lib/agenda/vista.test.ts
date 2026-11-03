@@ -33,7 +33,7 @@ describe("aEventoVista: una sola forma para filas de forma distinta", () => {
     expect(v.duenoNombre).toBeNull();
   });
 
-  it("la fila del GET trae todo, y la de PATCH no trae divergencia_vista", () => {
+  it("la fila de la lectura de la pantalla trae todo, y la de PATCH no trae divergencia_vista", () => {
     const get = aEventoVista(
       { ...base, divergencia: "movido", divergencia_vista: true, agenda_invitados: [{ email: "A@x.com" }] },
       sinDirectorio

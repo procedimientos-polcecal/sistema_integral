@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
-import { traerTodo } from "@/lib/core/paginado";
 import { problemasDelEvento } from "@/lib/agenda/evento";
 import {
-  aInstanteISO, esquemaDeAlta, eventoParaGoogle, invitadosLimpios, divergenciaVista,
+  aInstanteISO, esquemaDeAlta, eventoParaGoogle, invitadosLimpios,
 } from "@/lib/agenda/pedido";
 import {
   escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura,
@@ -14,11 +13,10 @@ import { anotarEnLaFila } from "@/lib/agenda/cargar";
 import { quienLlama } from "@/lib/agenda/sesion";
 
 /**
- * Eventos de la Agenda: crear uno (POST) y listar los míos (GET).
+ * Crear un evento de la Agenda (POST).
  *
- * Las dos van con el cliente del usuario y **no** con el admin, para que corran
- * las policies: el alta sólo deja crear a nombre propio, y el listado ya viene
- * recortado a «los que creé o donde estoy invitado».
+ * Va con el cliente del usuario y **no** con el admin, para que corran las
+ * policies: el alta sólo deja crear a nombre propio.
  *
  * ── EL ORDEN DEL ALTA, Y POR QUÉ ────────────────────────────────────────────
  *
@@ -49,46 +47,13 @@ import { quienLlama } from "@/lib/agenda/sesion";
  */
 
 /**
- * Los eventos del que llama, con `traerTodo` porque una agenda crece y
- * PostgREST corta en 1000 sin avisar. `usuarios!dueno_id` y no `usuarios`:
- * `agenda_divergencias_vistas` es una tabla puente entre `agenda_eventos` y
- * `usuarios`, así que el embed pelado contesta `PGRST201`.
+ * **Esta ruta no tiene GET, a propósito.** La pantalla lee los eventos desde su
+ * Server Component (`lib/agenda/listar.ts`), con ventana, y no hay nadie más que
+ * los pida. Una ruta que nadie llama se pudre: alguien la cambia sin saber que
+ * no se usa y, mientras tanto, le dice al próximo lector que la pantalla pasa
+ * por ahí. Si algún día hace falta una API de lectura, se escribe con su
+ * consumidor adelante.
  */
-export async function GET() {
-  const supabase = await createClient();
-  const quien = await quienLlama(supabase);
-  if (!quien.ok) return quien.respuesta;
-
-  let filas;
-  try {
-    filas = await traerTodo((desde, hasta) =>
-      supabase
-        .from("agenda_eventos")
-        .select(
-          "*, agenda_invitados(email, usuario_id), usuarios!dueno_id(nombre, apellido, email), agenda_divergencias_vistas(divergencia_el)"
-        )
-        // El id desempata: sin un orden total, la paginación puede repetir o saltear filas.
-        .order("inicio", { ascending: true })
-        .order("id", { ascending: true })
-        .range(desde, hasta)
-    );
-  } catch (e) {
-    return NextResponse.json(
-      { error: `No se pudieron leer los eventos: ${e instanceof Error ? e.message : String(e)}` },
-      { status: 500 }
-    );
-  }
-
-  // `agenda_divergencias_vistas` ya viene recortada a las del que mira (RLS):
-  // cada uno da por vistas las suyas. Acá se resuelve si **esta** divergencia es
-  // una de ellas, y la pantalla no tiene que comparar fechas.
-  const data = filas.map(({ agenda_divergencias_vistas, ...fila }) => ({
-    ...fila,
-    divergencia_vista: divergenciaVista(fila.divergencia_el, agenda_divergencias_vistas ?? []),
-  }));
-  return NextResponse.json({ data });
-}
-
 export async function POST(request: Request) {
   const supabase = await createClient();
   const quien = await quienLlama(supabase);

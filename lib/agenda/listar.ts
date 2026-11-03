@@ -6,11 +6,11 @@ import { aEventoVista, corteDelHistorial, type EventoVista, type FilaCruda } fro
 /**
  * Los eventos que muestra la pantalla de la Agenda.
  *
- * **Es la lectura del `GET /api/agenda/eventos` con una ventana**, y por eso
- * existe: ese GET trae todo lo que la persona ve desde siempre, y una agenda no
- * tiene techo. Se lee acá con el cliente del usuario —las mismas policies que la
- * ruta: cada uno ve lo que creó y aquello a lo que lo invitaron— y no con el
- * admin. El `select` es el de la ruta; si uno cambia, el otro también.
+ * **Es la única lectura de eventos del sistema**: no hay un `GET` en
+ * `/api/agenda/eventos` (se borró, nadie lo llamaba) y la pantalla lee desde su
+ * Server Component. Se lee con el cliente del usuario y no con el admin, para
+ * que corran las policies: cada uno ve lo que creó y aquello a lo que lo
+ * invitaron. Una agenda no tiene techo, de ahí la ventana.
  *
  * La ventana pide **lo que no terminó, el último mes y todo lo divergido**, sea
  * de cuando sea: una alerta no puede esconderse por antigua. `historial: true`

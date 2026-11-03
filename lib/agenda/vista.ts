@@ -13,10 +13,10 @@ import type { Divergencia } from "./divergencia";
 
 /**
  * El evento como lo muestra la pantalla. **Una sola forma**, venga de donde
- * venga: las rutas de la Agenda no devuelven todas lo mismo —el GET agrega
- * `divergencia_vista` y saca el embed de las vistas, el POST, el PATCH y
- * destrabar devuelven la fila sin eso, y si la relectura del POST falla vuelve
- * una fila con ocho campos—, y repartir ese problema por los componentes es
+ * venga: la lectura de la pantalla agrega `divergencia_vista` y saca el embed
+ * de las vistas, el POST, el PATCH y destrabar devuelven la fila sin eso, y si
+ * la relectura del POST falla vuelve una fila con ocho campos—, y repartir ese
+ * problema por los componentes es
  * cómo uno termina con un `?.` en cada uno y un error distinto en cada caso.
  *
  * La pantalla **no usa la fila que devuelve una escritura**: después de
@@ -121,10 +121,9 @@ export const DIAS_DE_HISTORIAL = 30;
 /**
  * Desde cuándo se piden los eventos: los que terminan después de este instante.
  *
- * **El GET de la ruta no tiene ventana** —trae todo lo que la persona ve desde
- * siempre— y una agenda crece sin techo, así que la pantalla no lo usa: lee
- * ella misma, con el cliente del usuario (mismas policies), lo que importa.
- * Lo que importa es lo que viene y el último mes. Quedan afuera los eventos
+ * Una agenda crece sin techo, así que la pantalla no pide todo lo que la
+ * persona ve desde siempre sino lo que importa: lo que viene y el último mes.
+ * Quedan afuera los eventos
  * viejos; **no los divergidos**, que se piden siempre (ver `traerEventos`):
  * una alerta no puede esconderse por antigua.
  */

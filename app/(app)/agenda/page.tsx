@@ -14,21 +14,23 @@ import AgendaClient from "./AgendaClient";
  * único que se pide es sesión (el layout de `(app)` ya rechaza al desactivado).
  * Qué ve cada uno lo resuelve RLS en `agenda_eventos`.
  *
- * ── POR QUÉ NO USA EL `GET /api/agenda/eventos` ─────────────────────────────
+ * ── LOS EVENTOS SE LEEN ACÁ, Y NO HAY UN GET ────────────────────────────────
  *
- * Ese GET no tiene ventana: trae todo lo que la persona ve desde siempre, y una
- * agenda crece sin techo. Acá se lee con la misma consulta y el mismo cliente
- * del usuario, pero pidiendo lo que importa (ver `traerEventos`). `?historial=1`
- * saca la ventana. Las rutas siguen siendo las de las escrituras.
+ * Con el cliente del usuario y pidiendo lo que importa (ver `traerEventos`):
+ * una agenda crece sin techo. `?historial=1` saca la ventana. Las rutas de
+ * `/api/agenda` son sólo las de las escrituras; el GET de lectura se borró
+ * porque nadie lo llamaba.
  *
- * ── EL DIRECTORIO DE USUARIOS SALE DEL CLIENTE ADMIN, A PROPÓSITO ───────────
+ * ── EL DIRECTORIO DE USUARIOS SALE DEL CLIENTE ADMIN, Y LA RAZÓN ES LA POLICY ─
  *
- * `usuarios` tiene lectura **sólo propia** (y para el administrador): con el
- * cliente de la persona, la lista de «a quién invitar» vendría con una sola
- * fila y el nombre del dueño de un evento ajeno vendría vacío. Se lee entonces
- * con el admin, y a la pantalla llega **sólo** nombre, apellido y correo de los
- * usuarios activos —son casillas de la empresa y es exactamente lo que el
- * calendario de Google ya muestra—; el resto de la fila no sale del servidor.
+ * `usuarios_select_self` es `id = auth.uid() or es_admin()`: un no-admin se lee
+ * sólo a sí mismo. Con el cliente de la persona, la lista de «a quién invitar»
+ * vendría con una sola fila y el nombre del dueño de un evento ajeno vendría
+ * vacío. **No es una comodidad**: sin el admin la pantalla no funciona para
+ * casi nadie. Por eso la proyección es angosta: a la pantalla llega **sólo**
+ * nombre, apellido y correo de los usuarios activos —son casillas de la
+ * empresa y es lo que el calendario de Google ya muestra—; el resto de la fila
+ * no sale del servidor.
  */
 export default async function AgendaPage({
   searchParams,
