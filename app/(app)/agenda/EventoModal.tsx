@@ -6,7 +6,7 @@ import { esCorreo } from "@/lib/agenda/evento";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import {
   cruzaLaMedianoche, diaYHoraDe, horarioDelEvento, horarioParaGuardar, leerRespuestaDeEscritura,
-  type EventoVista, type HorarioDelFormulario,
+  type EventoVista, type HorarioOriginal,
 } from "@/lib/agenda/vista";
 
 export interface UsuarioInvitable {
@@ -52,8 +52,8 @@ export default function EventoModal({
 }) {
   const inicial = evento ? { i: diaYHoraDe(evento.inicio), f: diaYHoraDe(evento.fin) } : null;
   // Lo que el formulario cargó, para mandar al guardar sólo lo que se cambió.
-  const [original] = useState<HorarioDelFormulario | null>(
-    inicial ? { dia: inicial.i.dia, desde: inicial.i.hora, hasta: inicial.f.hora } : null
+  const [original] = useState<HorarioOriginal | null>(
+    inicial ? { dia: inicial.i.dia, desde: inicial.i.hora, hasta: inicial.f.hora, diaFin: inicial.f.dia } : null
   );
   const cruza = evento ? cruzaLaMedianoche(evento.inicio, evento.fin) : false;
 
@@ -140,8 +140,9 @@ export default function EventoModal({
         {cruza && evento && (
           <p className="rounded-lg border px-3 py-2 text-sm text-slate-800" style={{ background: "#FFFBEB", borderColor: "#FCD34D" }}>
             Este evento cruza la medianoche ({horarioDelEvento(evento.inicio, evento.fin)}) y el formulario es de un
-            solo día. Mientras no toques el día ni las horas, el horario se queda como está. Si cambiás el día o la
-            hora de fin, el evento va a terminar el mismo día en que empieza.
+            solo día, así que no se puede elegir otro día de fin. Mientras no toques el día ni las horas, el horario
+            se queda como está; si cambiás el día, el fin se corre los mismos días y el evento dura lo mismo; si
+            cambiás la hora de fin, termina el mismo día en que terminaba.
           </p>
         )}
 

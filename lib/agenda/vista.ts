@@ -1,4 +1,4 @@
-import { ahoraEnArgentina, fechaEnArgentina } from "@/lib/core/fechas";
+import { ahoraEnArgentina, fechaEnArgentina, sumarDias } from "@/lib/core/fechas";
 import type { Divergencia } from "./divergencia";
 
 /**
@@ -269,22 +269,45 @@ export interface HorarioDelFormulario {
  * inicio; `fin`, si cambió el día o la hora de fin. En un alta (`original`
  * null) van los dos.
  *
- * Queda un caso sin resolver y por eso el modal avisa: si el original cruza la
- * medianoche y se cambia el **día**, `fin` se reconstruye en el mismo día que
- * `inicio`.
+ * **El día de `fin` sale del original y no del formulario**, que sólo tiene un
+ * día. Al cambiar el día, `fin` se **corre los mismos días** que `inicio`: un
+ * evento de 08:00 a 10:00 del día siguiente, movido un día, sigue durando 26
+ * horas y no se reconstruye en el día del inicio —que lo dejaba en dos horas,
+ * guardado así y escrito así en Google, sin que nada avisara—. Para un evento de
+ * un solo día da lo mismo que reconstruirlo. Y al cambiar sólo la hora de fin,
+ * termina el mismo día que terminaba.
+ *
+ * Lo que el formulario no puede hacer es **elegir otro día de fin**: por eso el
+ * modal avisa cuando el original cruza la medianoche.
  */
 export function horarioParaGuardar(
-  original: HorarioDelFormulario | null,
+  original: HorarioOriginal | null,
   actual: HorarioDelFormulario
 ): { inicio?: string; fin?: string } {
   const inicio = `${actual.dia}T${actual.desde}`;
-  const fin = `${actual.dia}T${actual.hasta}`;
-  if (!original) return { inicio, fin };
+  if (!original) return { inicio, fin: `${actual.dia}T${actual.hasta}` };
+
   const cambioElDia = actual.dia !== original.dia;
+  const corrimiento = cambioElDia ? diasEntre(original.dia, actual.dia) : 0;
+  const fin = `${sumarDias(original.diaFin, corrimiento)}T${actual.hasta}`;
   return {
     ...(cambioElDia || actual.desde !== original.desde ? { inicio } : {}),
     ...(cambioElDia || actual.hasta !== original.hasta ? { fin } : {}),
   };
+}
+
+/** Lo que el modal cargó de un evento existente: el formulario más el día en que terminaba. */
+export interface HorarioOriginal extends HorarioDelFormulario {
+  diaFin: string;
+}
+
+/** Días de calendario de `desde` a `hasta` (negativo si es hacia atrás), de dos «YYYY-MM-DD». */
+function diasEntre(desde: string, hasta: string): number {
+  const ms = (f: string) => {
+    const [a, m, d] = f.split("-").map(Number);
+    return Date.UTC(a, m - 1, d);
+  };
+  return Math.round((ms(hasta) - ms(desde)) / 86_400_000);
 }
 
 /** ¿Empieza un día y termina otro (hora de Argentina)? El formulario no lo puede expresar. */

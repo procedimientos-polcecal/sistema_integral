@@ -171,23 +171,47 @@ describe("leerRespuestaDeEscritura: las cinco respuestas, una lectura", () => {
 });
 
 describe("horarioParaGuardar: editar el título no toca el horario", () => {
-  const original = { dia: "2026-11-03", desde: "23:00", hasta: "01:00" };
+  // 23:00 del 03/11 a 01:00 del 04/11.
+  const original = { dia: "2026-11-03", desde: "23:00", hasta: "01:00", diaFin: "2026-11-04" };
+  const form = { dia: original.dia, desde: original.desde, hasta: original.hasta };
 
   it("sin tocar día ni horas no manda ni inicio ni fin", () => {
-    // El evento de 23:00 a 01:00 de arriba se acortaría si se mandara reconstruido.
-    expect(horarioParaGuardar(original, { ...original })).toEqual({});
+    // El evento de arriba se acortaría si se mandara reconstruido.
+    expect(horarioParaGuardar(original, form)).toEqual({});
   });
   it("tocar sólo la hora de inicio manda sólo el inicio", () => {
-    expect(horarioParaGuardar(original, { ...original, desde: "22:00" })).toEqual({ inicio: "2026-11-03T22:00" });
+    expect(horarioParaGuardar(original, { ...form, desde: "22:00" })).toEqual({ inicio: "2026-11-03T22:00" });
   });
-  it("tocar sólo la hora de fin manda sólo el fin", () => {
-    expect(horarioParaGuardar(original, { ...original, hasta: "02:00" })).toEqual({ fin: "2026-11-03T02:00" });
+  it("tocar sólo la hora de fin manda sólo el fin, y termina el día en que terminaba", () => {
+    expect(horarioParaGuardar(original, { ...form, hasta: "02:00" })).toEqual({ fin: "2026-11-04T02:00" });
   });
-  it("cambiar el día manda los dos", () => {
-    expect(horarioParaGuardar(original, { ...original, dia: "2026-11-04" })).toEqual({
-      inicio: "2026-11-04T23:00",
-      fin: "2026-11-04T01:00",
+  it("cambiar el día corre el fin los mismos días: conserva la duración", () => {
+    expect(horarioParaGuardar(original, { ...form, dia: "2026-11-05" })).toEqual({
+      inicio: "2026-11-05T23:00",
+      fin: "2026-11-06T01:00",
     });
+  });
+  it("el caso que se perdía: 08:00 a 10:00 del día siguiente, movido un día, sigue durando 26 horas", () => {
+    const largo = { dia: "2026-11-03", desde: "08:00", hasta: "10:00", diaFin: "2026-11-04" };
+    expect(
+      horarioParaGuardar(largo, { dia: "2026-11-10", desde: "08:00", hasta: "10:00" })
+    ).toEqual({ inicio: "2026-11-10T08:00", fin: "2026-11-11T10:00" });
+  });
+  it("mover el día hacia atrás y cruzando un mes corre el fin igual", () => {
+    expect(
+      horarioParaGuardar(
+        { dia: "2026-12-01", desde: "08:00", hasta: "10:00", diaFin: "2026-12-02" },
+        { dia: "2026-11-29", desde: "08:00", hasta: "10:00" }
+      )
+    ).toEqual({ inicio: "2026-11-29T08:00", fin: "2026-11-30T10:00" });
+  });
+  it("para un evento de un solo día da lo mismo que reconstruirlo sobre el día nuevo", () => {
+    expect(
+      horarioParaGuardar(
+        { dia: "2026-11-03", desde: "09:00", hasta: "10:00", diaFin: "2026-11-03" },
+        { dia: "2026-11-04", desde: "09:00", hasta: "10:00" }
+      )
+    ).toEqual({ inicio: "2026-11-04T09:00", fin: "2026-11-04T10:00" });
   });
   it("un alta manda los dos", () => {
     expect(horarioParaGuardar(null, { dia: "2026-11-03", desde: "09:00", hasta: "10:00" })).toEqual({
