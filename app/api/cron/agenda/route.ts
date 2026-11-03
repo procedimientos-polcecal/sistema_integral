@@ -2,16 +2,24 @@ import { NextResponse } from "next/server";
 import { revisarElSecreto } from "@/lib/core/cron";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
-import { ponerAlDiaLosCanales, barrerLasCasillas, resumenDelConteo } from "@/lib/agenda/canales";
+import { ponerAlDiaLosCanales, barrerLasCasillas, resumenDelConteo, lineaDeLosEventosMirados } from "@/lib/agenda/canales";
 import { reintentarLosPendientes } from "@/lib/agenda/reintentarPendientes";
 
-// Tres cosas con Google, una detrás de otra. Los cortes propios (el barrido a
-// los 120 s, los pendientes a lo que quede de `LIMITE_TOTAL_MS`) anotan antes de
-// que Vercel mate la función.
 export const maxDuration = 300;
 
-/** Lo que se le deja a la función antes de que Vercel la mate, para anotar. */
-const LIMITE_TOTAL_MS = 280_000;
+/**
+ * **Un solo presupuesto por corrida**, que se cuenta desde que arranca la función
+ * y se le pasa a las **tres** fases: cada una deja de empezar trabajo al llegar.
+ *
+ * Por qué 200 s y no 280: un corte sólo se mira entre una llamada y la siguiente, y
+ * una llamada a Google puede tardar hasta 30 s (`CORTE_MS` de `calendar.ts`). Abrir
+ * o renovar un canal son hasta tres, así que una casilla empezada justo al límite
+ * llega a 200 + 90 s. El margen que queda hasta los 300 s es para **registrar**: si
+ * Vercel mata la función antes de que cada fase anote su fila en `sincronizaciones`,
+ * el día que Google se cae —justo cuando hace falta— no queda ningún rastro y el
+ * cartel sigue mostrando la corrida de ayer.
+ */
+const PRESUPUESTO_DE_LA_CORRIDA_MS = 200_000;
 
 /**
  * Agenda: abre y renueva los canales de Google, barre todas las casillas y
@@ -55,13 +63,13 @@ export async function GET(request: Request) {
   const rechazo = revisarElSecreto(request);
   if (rechazo) return rechazo;
 
-  const empezo = Date.now();
+  const limite = Date.now() + PRESUPUESTO_DE_LA_CORRIDA_MS;
   const supabase = createAdminClient();
   const respuesta: Record<string, unknown> = {};
   let huboError = false;
 
   try {
-    const c = await ponerAlDiaLosCanales(supabase, process.env.NEXT_PUBLIC_APP_URL);
+    const c = await ponerAlDiaLosCanales(supabase, process.env.NEXT_PUBLIC_APP_URL, new Date(), limite);
     await registrarSincronizacion({
       modulo: "agenda",
       recurso: "canales",
@@ -78,17 +86,25 @@ export async function GET(request: Request) {
   }
 
   try {
-    const b = await barrerLasCasillas(supabase);
+    const b = await barrerLasCasillas(supabase, new Date(), limite);
     await registrarSincronizacion({
       modulo: "agenda",
       recurso: "barrido",
       ok: b.fallos.length === 0,
-      // Las divergencias que **anotó**: son un hallazgo y no un fallo.
-      filas: b.conteo.anotadas,
+      // Los eventos que **miró**: es la señal de salud. «14 casillas, 0 eventos mirados»
+      // es lo que se vería si el select de `revisarLaCasilla` no encontrara nada, y de
+      // otro modo se vería idéntico a un día sano. Las divergencias anotadas son un
+      // hallazgo y no un fallo, y van en la respuesta.
+      filas: b.conteo.revisadas,
       // «3 divergencias detectadas, 0 anotadas» tiene que saltar a la vista el primer
       // día: si el update condicional no tocara nunca la fila, todo se vería verde y
       // la campana en cero. Ver `ConteoDeLaRevision`.
-      error: [resumenDelConteo(b.conteo), ...b.fallos].filter(Boolean).join(" · ").slice(0, 2000) || null,
+      error:
+        [
+          resumenDelConteo(b.conteo),
+          lineaDeLosEventosMirados(b.casillas, b.conteo.revisadas),
+          ...b.fallos,
+        ].filter(Boolean).join(" · ").slice(0, 2000) || null,
     });
     respuesta.barrido = b;
   } catch (e) {
@@ -99,11 +115,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const p = await reintentarLosPendientes(
-      supabase,
-      new Date(),
-      Math.min(240_000, LIMITE_TOTAL_MS - (Date.now() - empezo))
-    );
+    const p = await reintentarLosPendientes(supabase, new Date(), limite);
     await registrarSincronizacion({
       modulo: "agenda",
       recurso: "pendientes",

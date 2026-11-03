@@ -80,9 +80,6 @@ export interface DeLosPendientes {
   fallos: string[];
 }
 
-/** Corta antes de los 300 s de la función para alcanzar a registrar lo que pasó. */
-const PRESUPUESTO_MS = 240_000;
-
 const textoDe = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const nombrar = (f: { id: string; titulo: string; casilla: string }) => `«${f.titulo}» (${f.id}, ${f.casilla})`;
 
@@ -104,10 +101,9 @@ const nombrar = (f: { id: string; titulo: string; casilla: string }) => `«${f.t
 export async function reintentarLosPendientes(
   supabase: SupabaseClient,
   ahora: Date = new Date(),
-  presupuestoMs: number = PRESUPUESTO_MS
+  limite: number = Infinity
 ): Promise<DeLosPendientes> {
   const r: DeLosPendientes = { limpiados: 0, siguen: 0, divergidos: 0, saltados: 0, fallos: [] };
-  const empezo = Date.now();
 
   const filas = await traerTodo<PendienteLeido>((desde, hasta) =>
     supabase
@@ -125,7 +121,7 @@ export async function reintentarLosPendientes(
   const marca = ahora.toISOString();
   for (let i = 0; i < reintentar.length; i++) {
     const f = reintentar[i];
-    if (Date.now() - empezo > presupuestoMs) {
+    if (Date.now() >= limite) {
       r.fallos.push(
         `Se cortó la corrida por tiempo: quedaron ${reintentar.length - i} pendientes sin reintentar; ` +
           `siguen en la cola para mañana.`
@@ -153,7 +149,12 @@ export async function reintentarLosPendientes(
       // deja `undefined`: un PATCH no los toca y un PUT los lee de Google antes de
       // escribir (ver `restaurar` en `escribirEnGoogle.ts`). Es la misma regla que
       // `moverElEvento`.
-      evento = correos.length > 0 ? completo : { ...completo, invitados: undefined };
+      //
+      // **Se pregunta por `completo.invitados` y no por `correos`**: `eventoParaGoogle`
+      // les aplica `invitadosLimpios` y saca al dueño, así que una fila cuyo único
+      // invitado fuera la propia casilla da `correos` de uno y un `completo` vacío, y
+      // el `PATCH` con `attendees: []` borraría a todos y les mandaría la cancelación.
+      evento = completo.invitados && completo.invitados.length > 0 ? completo : { ...completo, invitados: undefined };
     } catch (e) {
       r.fallos.push(`${nombrar(f)}: ${textoDe(e)}`);
       continue;

@@ -263,11 +263,16 @@ async function casillasActivas(supabase: SupabaseClient): Promise<string[]> {
  *
  * Sólo lee `usuarios` y `agenda_canales`; si eso falla sí tira, porque no hay
  * nada que decir sobre ninguna casilla.
+ *
+ * `limite` es el instante (en ms de época) en que hay que dejar de empezar
+ * casillas: **un solo presupuesto por corrida**, que el cron reparte entre sus
+ * tres fases. Lo que no se alcanza va nombrado en `fallos`.
  */
 export async function ponerAlDiaLosCanales(
   supabase: SupabaseClient,
   appUrl: string | undefined,
-  ahora: Date = new Date()
+  ahora: Date = new Date(),
+  limite: number = Infinity
 ): Promise<DeLosCanales> {
   const r: DeLosCanales = { abiertos: [], renovados: [], fallos: [] };
 
@@ -289,7 +294,17 @@ export async function ponerAlDiaLosCanales(
   }
 
   const actuales = new Map(canales.map((c) => [comoCasilla(c.casilla), c]));
-  for (const { casilla, motivo } of hoy) {
+  for (let i = 0; i < hoy.length; i++) {
+    const { casilla, motivo } = hoy[i];
+    if (Date.now() >= limite) {
+      // Cada casilla son hasta tres llamadas a Google de hasta 30 s: sin este corte
+      // la fase puede matar la función antes de que nada quede registrado.
+      r.fallos.push(
+        `Se cortó por tiempo: quedaron sin abrir o renovar ${hoy.slice(i).map((c) => c.casilla).join(", ")}. ` +
+          `Se reintenta mañana, y mientras tanto esas casillas no avisan.`
+      );
+      break;
+    }
     const existente = actuales.get(casilla) ?? null;
     const { error, avisoDelViejo } = await abrirUno(
       supabase,
@@ -331,6 +346,15 @@ interface FilaARevisar {
  * funcionara**. Es el anti-objetivo del diseño cumplido por un detalle. Contar
  * lo que se detectó contra lo que se anotó es lo que lo hace visible.
  *
+ * **`revisadas` es un escalón más arriba: los eventos que efectivamente se
+ * compararon contra Google.** Si el `select` de `revisarLaCasilla` no devolviera
+ * filas (el `.gte("fin", …)` sobre un `timestamptz`, los filtros de null), no
+ * habría nada que detectar, `detectadas` sería 0, el resumen daría `null` y el
+ * barrido se vería **idéntico a un día sano**. «14 casillas, 0 eventos mirados»
+ * en cambio salta a la vista. Un 0 es legítimo mientras no haya eventos futuros
+ * escritos en Google; con eventos en la Agenda, es que la consulta no los
+ * encuentra.
+ *
  * `detectadas = anotadas + porCarrera + sinExplicar + conError`. Un cero en
  * `anotadas` con `detectadas` mayor que cero **es sospechoso**, y lo que se mira
  * es `sinExplicar`:
@@ -347,6 +371,8 @@ interface FilaARevisar {
  *  - `conError`: la base devolvió un error al anotar (también va a `fallos`).
  */
 export interface ConteoDeLaRevision {
+  /** Eventos comparados contra Google (la lectura salió bien). */
+  revisadas: number;
   detectadas: number;
   anotadas: number;
   porCarrera: number;
@@ -355,7 +381,7 @@ export interface ConteoDeLaRevision {
 }
 
 export const conteoVacio = (): ConteoDeLaRevision => ({
-  detectadas: 0, anotadas: 0, porCarrera: 0, sinExplicar: 0, conError: 0,
+  revisadas: 0, detectadas: 0, anotadas: 0, porCarrera: 0, sinExplicar: 0, conError: 0,
 });
 
 /**
@@ -378,6 +404,21 @@ export function resumenDelConteo(c: ConteoDeLaRevision): string | null {
     );
   }
   return partes.join(", ");
+}
+
+/**
+ * La frase que hace visible un barrido que no miró ningún evento, o `null` si miró
+ * alguno (o no había casillas). Ver `revisadas` en `ConteoDeLaRevision`: un `select`
+ * que no devuelve filas no detecta nada y es idéntico a un día sano, salvo por este
+ * número. **No marca el registro como fallido**, porque un 0 es legítimo mientras no
+ * haya eventos futuros escritos en Google, pero queda a la vista.
+ */
+export function lineaDeLosEventosMirados(casillas: number, revisadas: number): string | null {
+  if (casillas === 0 || revisadas > 0) return null;
+  return (
+    `${casillas} casillas, 0 eventos mirados: si ya hay eventos futuros escritos en Google, el select de ` +
+    `revisarLaCasilla no los está encontrando (mirar el filtro de fin sobre timestamptz y los de null)`
+  );
 }
 
 /**
@@ -447,13 +488,18 @@ async function porQueNoSeAnoto(
  * condicional no toca nada se vuelve a leer la fila, y si no cambió, ese caso va a
  * `sinExplicar` **y también a `fallos`, nombrando la casilla y el evento**: el
  * predicado está roto. Ver `ConteoDeLaRevision` para qué mirar.
+ *
+ * `limite` (ms de época) corta la revisión entre evento y evento: lo que queda
+ * sin mirar va nombrado en `fallos`, con la casilla y cuántos eran. Cada lectura
+ * a Google puede tardar hasta 30 s, así que quien lo pasa tiene que dejar margen.
  */
 export async function revisarLaCasilla(
   supabase: SupabaseClient,
   casilla: string,
   fallos: string[] = [],
   ahora: Date = new Date(),
-  conteo: ConteoDeLaRevision = conteoVacio()
+  conteo: ConteoDeLaRevision = conteoVacio(),
+  limite: number = Infinity
 ): Promise<{ evento_id: string; divergencia: Divergencia }[]> {
   const filas = await traerTodo<FilaARevisar>((desde, hasta) =>
     supabase
@@ -472,7 +518,15 @@ export async function revisarLaCasilla(
   const nuevas: { evento_id: string; divergencia: Divergencia }[] = [];
   const marca = ahora.toISOString();
 
-  for (const f of filas) {
+  for (let i = 0; i < filas.length; i++) {
+    const f = filas[i];
+    if (Date.now() >= limite) {
+      fallos.push(
+        `${casilla}: se cortó por tiempo y quedaron ${filas.length - i} eventos sin revisar. ` +
+          `Se vuelven a ver con el próximo aviso de Google o con el barrido de mañana.`
+      );
+      break;
+    }
     let enGoogle;
     try {
       enGoogle = await leerEvento(casilla, f.google_event_id);
@@ -481,6 +535,7 @@ export async function revisarLaCasilla(
       continue;
     }
 
+    conteo.revisadas++;
     const divergencia = queDivergio({ inicio: f.inicio_escrito, fin: f.fin_escrito }, enGoogle);
     if (!divergencia) continue;
     conteo.detectadas++;
@@ -550,7 +605,8 @@ export interface DelBarrido {
  * quede**: la campana la levanta de la fila.
  *
  * **Nunca tira por una casilla**: cada una va por su cuenta y lo que falle vuelve
- * en `fallos` nombrándola. Con `presupuestoMs` corta antes de que Vercel mate la
+ * en `fallos` nombrándola. Con `limite` (ms de época, **el mismo de toda la
+ * corrida** y no uno propio del barrido) corta antes de que Vercel mate la
  * función, y **lo dice**: las casillas que no se alcanzaron a mirar van nombradas.
  * El orden es el de `usuarios`, así que si se cortara seguido se miraría siempre
  * a las mismas primero y habría que rotarlas. Tira sólo si no puede leer
@@ -559,21 +615,20 @@ export interface DelBarrido {
 export async function barrerLasCasillas(
   supabase: SupabaseClient,
   ahora: Date = new Date(),
-  presupuestoMs: number = 120_000
+  limite: number = Infinity
 ): Promise<DelBarrido> {
   const casillas = [...new Set((await casillasActivas(supabase)).map(comoCasilla))];
   const r: DelBarrido = { casillas: 0, divergencias: [], fallos: [], conteo: conteoVacio() };
-  const empezo = Date.now();
 
   for (let i = 0; i < casillas.length; i++) {
     const casilla = casillas[i];
-    if (Date.now() - empezo > presupuestoMs) {
+    if (Date.now() >= limite) {
       r.fallos.push(`Se cortó el barrido por tiempo: no se miraron ${casillas.slice(i).join(", ")}.`);
       break;
     }
     r.casillas++;
     try {
-      for (const d of await revisarLaCasilla(supabase, casilla, r.fallos, ahora, r.conteo)) {
+      for (const d of await revisarLaCasilla(supabase, casilla, r.fallos, ahora, r.conteo, limite)) {
         r.divergencias.push({ casilla, ...d });
       }
     } catch (e) {

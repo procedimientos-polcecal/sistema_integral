@@ -60,9 +60,12 @@ export async function POST(request: Request) {
   if (estado === "sync") return NextResponse.json({ ok: true, ignorado: "sync" });
 
   const fallos: string[] = [];
+  // Con `maxDuration` de 60 s y hasta 30 s por lectura a Google, el corte tiene
+  // que llegar antes: dos eventos lentos sin él matan la función sin dejar rastro.
+  const limite = Date.now() + 25_000;
   try {
     const conteo = conteoVacio();
-    const divergencias = await revisarLaCasilla(supabase, canal.casilla, fallos, new Date(), conteo);
+    const divergencias = await revisarLaCasilla(supabase, canal.casilla, fallos, new Date(), conteo, limite);
 
     // Lo detectado contra lo anotado: si no coinciden queda escrito, con la casilla.
     // Una carrera legítima es `ok` con la frase; un predicado roto además va a

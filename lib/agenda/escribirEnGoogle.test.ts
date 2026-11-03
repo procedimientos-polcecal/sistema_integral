@@ -12,7 +12,7 @@ import {
   crearEvento, actualizarEvento, restaurarEvento, borrarEvento, leerEvento,
 } from "@/lib/core/calendar";
 import {
-  escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura, destrabar, parPendiente, parDivergencia, parEscrito, avisoDeUnBorradoFallido, type FilaDivergida,
+  escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura, destrabar, parPendiente, parDivergencia, parEscrito, avisoDeUnBorradoFallido, columnasDeUnBorradoFallido, type FilaDivergida,
 } from "./escribirEnGoogle";
 
 const EVENTO = {
@@ -579,5 +579,19 @@ describe("escribirEnGoogle — un PUT sin invitados conocidos los lee de Google 
 
     expect(leerEvento).not.toHaveBeenCalled();
     expect(actualizarEvento).toHaveBeenCalledOnce();
+  });
+});
+
+describe("columnasDeUnBorradoFallido", () => {
+  it("anota el aviso Y limpia el pendiente viejo, en el mismo update: el cron no puede reescribir lo que se quería borrar", () => {
+    const c = columnasDeUnBorradoFallido("Google respondió 503", "2026-11-03T05:00:00.000Z");
+    expect(c.aviso).toContain("Google respondió 503");
+    expect(c.google_pendiente).toBeNull();
+    expect(c.google_pendiente_el).toBeNull();
+  });
+
+  it("el par del pendiente va entero: las dos columnas en null, nunca una sola", () => {
+    const c = columnasDeUnBorradoFallido("x", "2026-11-03T05:00:00.000Z");
+    expect(Object.keys(c).sort()).toEqual(["aviso", "google_pendiente", "google_pendiente_el"]);
   });
 });

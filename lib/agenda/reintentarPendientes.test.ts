@@ -159,6 +159,19 @@ describe("reintentarLosPendientes", () => {
     expect(vi.mocked(escribirEnGoogle).mock.calls[0][2]?.invitados).toBeUndefined();
   });
 
+  it("si el único invitado de la fila es la propia casilla, tampoco se manda [] que borraría a todos", async () => {
+    // `invitadosLimpios` saca al dueño: `correos` tiene uno y lo que se manda queda vacío.
+    const base = baseEnMemoria({
+      agenda_eventos: [pendiente("1", { google_event_id: "g1" })],
+      agenda_invitados: invitados("mantenimiento@polcecal.com"),
+    });
+    vi.mocked(escribirEnGoogle).mockResolvedValue({ pendiente: "x" });
+
+    await reintentarLosPendientes(base.cliente, AHORA);
+
+    expect(vi.mocked(escribirEnGoogle).mock.calls[0][2]?.invitados).toBeUndefined();
+  });
+
   it("un fallo con un evento no corta a los demás", async () => {
     const base = baseEnMemoria({
       agenda_eventos: [pendiente("1"), pendiente("2")],
@@ -204,7 +217,7 @@ describe("reintentarLosPendientes", () => {
     const base = baseEnMemoria({ agenda_eventos: [pendiente("1"), pendiente("2")], agenda_invitados: [] });
     vi.mocked(escribirEnGoogle).mockResolvedValue({ pendiente: "x" });
 
-    const r = await reintentarLosPendientes(base.cliente, AHORA, -1);
+    const r = await reintentarLosPendientes(base.cliente, AHORA, 0);
 
     expect(escribirEnGoogle).not.toHaveBeenCalled();
     expect(r.fallos[0]).toMatch(/2 pendientes sin reintentar/);

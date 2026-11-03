@@ -9,7 +9,7 @@ vi.mock("@/lib/core/calendar", () => ({
 import { abrirCanal, cerrarCanal, leerEvento } from "@/lib/core/calendar";
 import {
   canalesARenovar, tokenValido, urlDelWebhook, revisarLaCasilla, ponerAlDiaLosCanales, barrerLasCasillas,
-  conteoVacio, resumenDelConteo,
+  conteoVacio, resumenDelConteo, lineaDeLosEventosMirados,
   ANTICIPO_DE_RENOVACION_MS,
 } from "./canales";
 import { baseEnMemoria, type Fila } from "./baseEnMemoria.testhelper";
@@ -499,7 +499,7 @@ describe("barrerLasCasillas", () => {
       agenda_eventos: [],
     });
 
-    const r = await barrerLasCasillas(base.cliente, AHORA, -1);
+    const r = await barrerLasCasillas(base.cliente, AHORA, 0);
 
     expect(r.casillas).toBe(0);
     expect(r.fallos[0]).toContain(CASILLA);
@@ -522,7 +522,7 @@ describe("el conteo de lo detectado contra lo anotado", () => {
 
     await revisarLaCasilla(base.cliente, CASILLA, [], AHORA, conteo);
 
-    expect(conteo).toEqual({ detectadas: 1, anotadas: 1, porCarrera: 0, sinExplicar: 0, conError: 0 });
+    expect(conteo).toEqual({ revisadas: 1, detectadas: 1, anotadas: 1, porCarrera: 0, sinExplicar: 0, conError: 0 });
     expect(resumenDelConteo(conteo)).toBeNull();
   });
 
@@ -540,7 +540,7 @@ describe("el conteo de lo detectado contra lo anotado", () => {
 
     await revisarLaCasilla(base.cliente, CASILLA, fallos, AHORA, conteo);
 
-    expect(conteo).toEqual({ detectadas: 1, anotadas: 0, porCarrera: 1, sinExplicar: 0, conError: 0 });
+    expect(conteo).toEqual({ revisadas: 1, detectadas: 1, anotadas: 0, porCarrera: 1, sinExplicar: 0, conError: 0 });
     expect(fallos).toEqual([]);
     expect(resumenDelConteo(conteo)).toMatch(/1 divergencias detectadas, 0 anotadas.*carrera legítima/);
     expect(resumenDelConteo(conteo)).not.toMatch(/SIN EXPLICACIÓN/);
@@ -573,7 +573,7 @@ describe("el conteo de lo detectado contra lo anotado", () => {
     const r = await revisarLaCasilla(base.cliente, CASILLA, fallos, AHORA, conteo);
 
     expect(r).toEqual([]);
-    expect(conteo).toEqual({ detectadas: 2, anotadas: 0, porCarrera: 0, sinExplicar: 2, conError: 0 });
+    expect(conteo).toEqual({ revisadas: 2, detectadas: 2, anotadas: 0, porCarrera: 0, sinExplicar: 2, conError: 0 });
     expect(fallos).toHaveLength(2);
     expect(fallos[0]).toContain(CASILLA);
     expect(fallos[0]).toMatch(/sin explicación/);
@@ -593,7 +593,7 @@ describe("el conteo de lo detectado contra lo anotado", () => {
 
     await revisarLaCasilla(base.cliente, CASILLA, [], AHORA, conteo);
 
-    expect(conteo).toEqual({ detectadas: 1, anotadas: 0, porCarrera: 0, sinExplicar: 0, conError: 1 });
+    expect(conteo).toEqual({ revisadas: 1, detectadas: 1, anotadas: 0, porCarrera: 0, sinExplicar: 0, conError: 1 });
     expect(resumenDelConteo(conteo)).toMatch(/error de la base/);
   });
 
@@ -626,7 +626,7 @@ describe("el conteo de lo detectado contra lo anotado", () => {
 
     const r = await barrerLasCasillas(base.cliente, AHORA);
 
-    expect(r.conteo).toEqual({ detectadas: 2, anotadas: 2, porCarrera: 0, sinExplicar: 0, conError: 0 });
+    expect(r.conteo).toEqual({ revisadas: 2, detectadas: 2, anotadas: 2, porCarrera: 0, sinExplicar: 0, conError: 0 });
   });
 
   it("el barrido con el predicado roto lo dice en fallos y en el resumen: 2 detectadas, 0 anotadas", async () => {
@@ -644,5 +644,106 @@ describe("el conteo de lo detectado contra lo anotado", () => {
     expect(r.divergencias).toEqual([]);
     expect(r.fallos.length).toBeGreaterThan(0);
     expect(resumenDelConteo(r.conteo)).toContain("2 divergencias detectadas, 0 anotadas");
+  });
+});
+
+// ── El presupuesto único de la corrida ──────────────────────────────────────
+
+describe("el límite de la corrida", () => {
+  it("ponerAlDiaLosCanales no empieza ninguna casilla pasado el límite, y las nombra", async () => {
+    const base = baseEnMemoria({
+      usuarios: [
+        { id: "u1", email: "ana@polcecal.com", activo: true },
+        { id: "u2", email: "beto@polcecal.com", activo: true },
+      ],
+      agenda_canales: [],
+    });
+
+    const r = await ponerAlDiaLosCanales(base.cliente, APP, AHORA, 0);
+
+    expect(abrirCanal).not.toHaveBeenCalled();
+    expect(r.abiertos).toEqual([]);
+    expect(r.fallos).toHaveLength(1);
+    expect(r.fallos[0]).toMatch(/cortó por tiempo/);
+    expect(r.fallos[0]).toContain("ana@polcecal.com");
+    expect(r.fallos[0]).toContain("beto@polcecal.com");
+  });
+
+  it("revisarLaCasilla corta entre evento y evento y dice cuántos quedaron sin mirar", async () => {
+    const base = baseEnMemoria({ agenda_eventos: [evento("1"), evento("2"), evento("3")] });
+    const fallos: string[] = [];
+
+    await revisarLaCasilla(base.cliente, CASILLA, fallos, AHORA, conteoVacio(), 0);
+
+    expect(leerEvento).not.toHaveBeenCalled();
+    expect(fallos).toHaveLength(1);
+    expect(fallos[0]).toContain(CASILLA);
+    expect(fallos[0]).toMatch(/3 eventos sin revisar/);
+  });
+
+  it("el barrido le pasa el mismo límite a cada revisión: una casilla larga se corta a la mitad", async () => {
+    const base = baseEnMemoria({
+      usuarios: [{ id: "u1", email: CASILLA, activo: true }],
+      agenda_eventos: [evento("1"), evento("2"), evento("3")],
+    });
+    let ahoraFalso = 0;
+    const reloj = vi.spyOn(Date, "now").mockImplementation(() => ahoraFalso);
+    // La primera lectura a Google consume todo el tiempo que había.
+    vi.mocked(leerEvento).mockImplementation(async (_c, id) => {
+      ahoraFalso = 2000;
+      return { id, ...IGUAL };
+    });
+
+    try {
+      const r = await barrerLasCasillas(base.cliente, AHORA, 1000);
+      expect(leerEvento).toHaveBeenCalledTimes(1);
+      expect(r.conteo.revisadas).toBe(1);
+      expect(r.fallos.some((f) => /2 eventos sin revisar/.test(f))).toBe(true);
+    } finally {
+      reloj.mockRestore();
+    }
+  });
+});
+
+// ── revisadas: el escalón de más arriba ─────────────────────────────────────
+
+describe("los eventos mirados", () => {
+  it("cuenta los eventos que se compararon contra Google, haya o no divergencia", async () => {
+    const base = baseEnMemoria({ agenda_eventos: [evento("1"), evento("2")] });
+    vi.mocked(leerEvento).mockResolvedValue({ id: "g", ...IGUAL });
+    const conteo = conteoVacio();
+
+    await revisarLaCasilla(base.cliente, CASILLA, [], AHORA, conteo);
+
+    expect(conteo.revisadas).toBe(2);
+    expect(conteo.detectadas).toBe(0);
+  });
+
+  it("un evento que Google no deja leer no cuenta como mirado", async () => {
+    const base = baseEnMemoria({ agenda_eventos: [evento("1")] });
+    vi.mocked(leerEvento).mockRejectedValue(new Error("503"));
+    const conteo = conteoVacio();
+
+    await revisarLaCasilla(base.cliente, CASILLA, [], AHORA, conteo);
+
+    expect(conteo.revisadas).toBe(0);
+  });
+
+  it("un barrido de catorce casillas con cero eventos mirados lo dice: no se ve igual que un día sano", async () => {
+    const usuarios = Array.from({ length: 14 }, (_, i) => ({ id: `u${i}`, email: `c${i}@polcecal.com`, activo: true }));
+    // Hay eventos, pero ninguno que el select devuelva (todos con un fin ya vencido).
+    const base = baseEnMemoria({ usuarios, agenda_eventos: [evento("1", { casilla: "c0@polcecal.com", fin: "2020-01-01T00:00:00+00:00" })] });
+
+    const r = await barrerLasCasillas(base.cliente, AHORA);
+
+    expect(r.casillas).toBe(14);
+    expect(r.conteo.revisadas).toBe(0);
+    expect(lineaDeLosEventosMirados(r.casillas, r.conteo.revisadas)).toMatch(/14 casillas, 0 eventos mirados/);
+    expect(resumenDelConteo(r.conteo)).toBeNull(); // el conteo solo no lo ve: por eso existe la línea
+  });
+
+  it("no dice nada si miró eventos, ni si no había casillas", () => {
+    expect(lineaDeLosEventosMirados(14, 31)).toBeNull();
+    expect(lineaDeLosEventosMirados(0, 0)).toBeNull();
   });
 });

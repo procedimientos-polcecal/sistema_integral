@@ -302,6 +302,23 @@ export function avisoDeUnBorradoFallido(dijoGoogle: string): string {
 }
 
 /**
+ * Lo que se escribe en la fila cuando Google rechazó un borrado: el `aviso` **y el
+ * `google_pendiente` limpio**, en el mismo `update`.
+ *
+ * Limpiar el pendiente no es prolijidad. Si la fila traía uno de una escritura
+ * fallida anterior (Google se cae, queda un pendiente al crear o editar, la
+ * persona intenta borrar y el borrado falla por lo mismo), esa columna quedaría
+ * intacta, la fila sin `divergencia`, y el reintento de la cola haría
+ * `crear`/`actualizar` **sobre el evento que la persona pidió borrar** y mandaría
+ * la invitación o la modificación a los invitados. Es el daño que usar `aviso`
+ * vino a evitar, alcanzado por la otra puerta. El diagnóstico viejo se pierde, y
+ * no importa: es el de una escritura que ya no se quiere.
+ */
+export function columnasDeUnBorradoFallido(dijoGoogle: string, ahora: string) {
+  return { ...parPendiente(null, ahora), aviso: avisoDeUnBorradoFallido(dijoGoogle) };
+}
+
+/**
  * Lo que hay que decirle a quien hizo la acción cuando la escritura a Google no
  * quedó bien, o `null` si quedó bien. **La respuesta de la ruta lo lleva
  * siempre**: el evento está guardado en el SdG y eso, sin esta frase, parecería
