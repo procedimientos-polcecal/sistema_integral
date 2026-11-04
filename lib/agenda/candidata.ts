@@ -21,8 +21,19 @@ export interface OTCandidata {
  * - **El filtro es por día y no por hora.** Una OT cargada a las 15:00 con fecha
  *   de hoy entra aunque las 08:00 ya hayan pasado; sólo las de un día anterior
  *   se descartan.
- * - **La fecha puede ser cualquier cosa**: viene de una planilla. Una mal
- *   formada no entra, porque armaría un evento ilegible.
+ * - **Una fecha mal formada no entra**, porque armaría un evento ilegible. **Hoy
+ *   no puede llegar desde la base**: `fecha_ejecucion` y
+ *   `fecha_ejecucion_pendiente` son `date` en Postgres
+ *   (`supabase/migrations/005_mantenimiento_schema.sql` y
+ *   `20261029111915_periodicas_y_postergacion.sql`), que normaliza a
+ *   `AAAA-MM-DD` a la salida. Este rechazo está porque la función es pura y
+ *   recibe lo que le den, **no por un caso observado**: si alguien lo ve como
+ *   una defensa que importa, está razonando sobre un riesgo que acá no existe.
+ *   El riesgo de verdad vive **aguas arriba**: una celda mal escrita en el
+ *   master no llega a esta función, hace fallar el `upsert` entero de las
+ *   ~2.300 órdenes cuando el importador la manda. Eso es ruidoso —la
+ *   sincronización falla y se registra—, pero es otro problema y no se resuelve
+ *   acá.
  *
  * `hoy` y la fecha son `AAAA-MM-DD` y se comparan **como texto**: en ese formato
  * el orden alfabético es el cronológico, y parsearlas a `Date` metería la zona
@@ -47,7 +58,9 @@ export function esCandidataAlCalendario(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || instanteDe(`${fecha}T00:00:00`) === null) {
     // `fechaIlegible` separa este rechazo de los otros: las cerradas, las que no
     // tienen fecha y las pasadas son lo normal y quien barre las calla; ésta es
-    // un dato roto de la planilla y es la que tiene que nombrarse.
+    // la que tiene que nombrarse. **Hoy es inalcanzable desde la base** (las
+    // columnas son `date`; ver el encabezado): es un guardián de una función
+    // pura, no la respuesta a un caso real.
     return {
       ok: false,
       fechaIlegible: true,

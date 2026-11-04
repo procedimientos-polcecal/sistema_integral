@@ -108,12 +108,22 @@ export interface LoQueBarrio {
   fallos: string[];
   /**
    * Órdenes sin evento cuya fecha no se pudo leer, con el motivo. **No es un
-   * fallo del barrido** (no pone la corrida en rojo): es un dato roto de la
-   * planilla. Las fechas sucias vienen de ahí, o sea de las que entran por el
-   * formulario, y éste es el único camino que las ve; sin esta lista una orden
-   * así desaparece sin una palabra. Las otras dos que no entran —cerrada sin
-   * fecha de cierre y sin fecha— son lo normal y **no se listan**: en cada
-   * corrida serían el ruido que hace que nadie mire el informe.
+   * fallo del barrido** (no pone la corrida en rojo). **Hoy esta lista no puede
+   * llenarse con datos reales**: las dos columnas de fecha son `date` en
+   * Postgres (`005_mantenimiento_schema.sql` y
+   * `20261029111915_periodicas_y_postergacion.sql`), que devuelve siempre
+   * `AAAA-MM-DD`, así que una fecha ilegible no llega desde la base. Está
+   * porque `esCandidataAlCalendario` es pura y la rechaza, y un rechazo que
+   * nadie nombra es una OT que desaparece sin una palabra: es un guardián, no un
+   * caso observado. Las otras dos que no entran —cerrada sin fecha de cierre y
+   * sin fecha— son lo normal y **no se listan**: en cada corrida serían el
+   * ruido que hace que nadie mire el informe.
+   *
+   * **El riesgo de verdad con las fechas sucias está aguas arriba**: una celda
+   * mal escrita en el master no llega al barrido, hace fallar el `upsert`
+   * entero de las ~2.300 órdenes cuando el importador la manda. Eso es ruidoso
+   * —la sincronización falla y se registra—, pero es otro problema, anotado
+   * aparte, y esta lista no lo cubre.
    */
   fechasIlegibles: string[];
 }

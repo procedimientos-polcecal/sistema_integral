@@ -148,15 +148,16 @@ describe("el barrido de las que faltan", () => {
   });
 
   /**
-   * Las fechas sucias vienen de la planilla, y éste es el único camino que las
-   * ve: una orden con la fecha ilegible no puede desaparecer sin una palabra.
-   * Las otras dos que quedan afuera —cerrada sin fecha de cierre y sin fecha—
+   * Una orden con la fecha ilegible no puede desaparecer sin una palabra, aunque
+   * hoy la base no pueda devolverla (ver el comentario de adentro). Las otras dos que quedan afuera —cerrada sin fecha de cierre y sin fecha—
    * son lo normal (168 de 986 `REALIZADO`) y se callan: informarlas en cada
    * corrida es el ruido que hace que nadie mire el informe.
    */
   it("una con la fecha mal formada se nombra, y las cerradas o sin fecha no", async () => {
-    // La base en memoria no tipa las columnas, así que cualquier texto entra:
-    // «2026-11-6» pasa el filtro de fechas y no es AAAA-MM-DD.
+    // OJO: esto fabrica un valor que la base real **no produciría**. Las
+    // columnas son `date` y Postgres siempre devuelve AAAA-MM-DD; la base en
+    // memoria no tipa, así que «2026-11-6» entra. No es evidencia de un caso
+    // real: prueba el guardián de una función pura, nada más.
     const b = base([
       orden(1, { fecha_ejecucion: "2026-11-6" }),
       orden(2, { estado: "REALIZADO" }),
