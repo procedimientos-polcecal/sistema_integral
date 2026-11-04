@@ -2555,6 +2555,52 @@ texto viejo, y 48 de 48 con K, M, N y O en el master.**
   día sale fuera de orden. (El tope a las horas de un renglón ya está: ver más
   arriba.)
 
+## Corregir un parte de contratista (04/11/2026)
+
+Un parte cargado se puede corregir desde la lista, **mientras ninguno de sus
+renglones haya generado una orden de trabajo**. Es la misma condición que ya
+tenía el borrado, y por el mismo motivo: una vez que el renglón es una OT,
+cambiarle las horas dejaría a la orden contando algo que el papel ya no dice, y
+la OT no se deshace desde el sistema —se borra a mano en la planilla, fila por
+fila—. En la lista, los que no se pueden corregir dicen «ya generó» en vez de
+ofrecer un botón que va a fallar.
+
+Cuatro cosas que no se deducen del código:
+
+- **Es el mismo formulario, no uno nuevo.** Corregir trae el parte al formulario
+  de carga y el botón cambia de texto. Dos formularios parecidos serían dos
+  controles que se separan, y el control —los renglones dan el total del
+  papel— es para lo que existe todo esto.
+- **`horasAMano` arranca en `true` al traer un parte.** Las horas que tiene las
+  escribió una persona mirando la hoja; con la propuesta encendida, el primer
+  cambio —agregar un renglón, tocar el total— las habría repartido parejas y
+  pisado lo que alguien decidió. Es exactamente la regla que `horasTrasUnCambio`
+  existe para defender, aplicada a la otra punta.
+- **El PUT reescribe el parte entero**, cabecera y renglones, y no por campo. El
+  control es del parte y no de la celda: un PATCH que cambiara unas horas
+  sueltas dejaría el parte sin cerrar sin que nada lo note. El POST y el PUT
+  leen el cuerpo con **la misma función** —`leerElParte`, pura y con tests—,
+  así que un parte corregido cierra o no se guarda, igual que uno nuevo.
+  Los renglones se borran y se vuelven a insertar; es seguro porque **nada
+  cuelga de `mant_partes_contratista_renglones` por clave foránea** y porque sus
+  ids no los usa nadie (a un renglón se lo nombra por su `orden`).
+- **Al corregir no se adelantan el número ni la fecha.** Eso es para la carga en
+  serie —quince hojas de una quincena—; después de una corrección dejaría el
+  formulario pidiendo un parte que nadie pedía.
+
+La ventana que queda abierta, dicha: entre comprobar que ningún renglón generó
+y borrarlos hay dos sentencias. Si justo ahí alguien genera la quincena, el
+borrado lleva su propia guarda (`orden_trabajo_id is null`) y, si no se llevó
+todo lo que había, **no se inserta nada** y sale un 409 que lo dice. Es la misma
+ventana que ya tenía el DELETE y el mismo riesgo asumido del módulo: generar lo
+aprieta una persona.
+
+Medido el 04/11/2026: 16 partes cargados, todos de CANDIA; **6 sin OT** —los que
+se pueden corregir— y 10 ya generados. El camino entero se corrió sobre un parte
+de mentira creado y limpiado para eso: la cabecera se actualiza, los dos
+renglones viejos se borran y entran los dos nuevos, y con un renglón enlazado a
+una OT la guarda cuenta 1 y las dos rutas se niegan.
+
 ## Los datos: qué está y qué no
 
 **Todo lo que viene de las planillas está.** Avisos 138, órdenes de trabajo
