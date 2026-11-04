@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import { traerTodo } from "@/lib/core/paginado";
+// La misma que usan `alNacerLaOT` y el barrido: la elección de candidatas
+// depende de que las tres digan el mismo «hoy».
+import { hoyEnArgentina } from "@/lib/core/fechas";
 import {
   INVITADOS_DE_UNA_OT, advertenciaDeReenviarDivergido, datosDeLaOT, faltaConfirmarElPisado,
   fechaParaElCalendario, horarioDeLaOT, problemasDeMandarLaOT, problemasDelEvento,
@@ -8,7 +11,7 @@ import {
 import { AVISO_DE_TOPE, claveDelHueco, horarioApilado } from "./apilado";
 import { AVISO_DE_BORRADO } from "./elEventoSigueALaOT";
 import { esCandidataAlCalendario } from "./candidata";
-import { aHoraDePared, aInstanteISO, eventoParaGoogle, invitadosLimpios } from "./pedido";
+import { aInstanteISO, eventoParaGoogle, invitadosLimpios } from "./pedido";
 import {
   escribirEnGoogle, columnasDespuesDeEscribir, advertenciaDeLaEscritura, parDivergencia, parPendiente,
 } from "./escribirEnGoogle";
@@ -110,12 +113,6 @@ export type ResultadoDeMandar =
   | { ok: false; estado: 400 | 404 | 409 | 500; error: string; requiereConfirmacion?: boolean };
 
 const mal = (estado: 400 | 404 | 409 | 500, error: string): ResultadoDeMandar => ({ ok: false, estado, error });
-
-/** Hoy en Argentina (AAAA-MM-DD), que es el día contra el que se mide si una fecha ya pasó. */
-function hoyEnArgentina(ahora: Date): string {
-  // Nunca es null: lo que entra es lo que devuelve `toISOString()`.
-  return aHoraDePared(ahora.toISOString())!.slice(0, 10);
-}
 
 /** Lo que de un evento del día hace falta para saber en qué grupo cae. */
 interface EventoDelDia {

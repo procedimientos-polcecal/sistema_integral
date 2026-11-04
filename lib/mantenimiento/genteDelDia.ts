@@ -78,6 +78,11 @@ export type GenteDelDia =
  * viejos tienen `fecha_descanso` en null y no abren nada: el sistema no sabe
  * cuándo descansaron), y **una `TARDANZA` no es falta**.
  *
+ * **Se cuentan personas distintas y no filas del padrón**: `mant_personal_taller`
+ * no tiene restricción que impida dos filas vigentes de la misma persona, y el
+ * padrón se está por cargar por primera vez. Una persona en dos filas del mismo
+ * oficio cuenta una; si estuviera en dos oficios, cuenta en cada uno.
+ *
  * `sabemos: false` sólo cuando el padrón no tiene a nadie. Un padrón cargado en
  * el que ese día no queda nadie de un oficio sí es un dato, y da cero.
  */
@@ -89,15 +94,22 @@ export function genteDelDia(
 ): GenteDelDia {
   if (padron.length === 0) return { sabemos: false };
 
-  const porOficio: Record<Oficio, number> = {
-    mecanico: 0,
-    electricista: 0,
-    lubricador: 0,
+  // Personas y no filas: el esquema no impide dos filas vigentes de la misma
+  // persona, y contarlas por fila la duplicaría.
+  const personas: Record<Oficio, Set<string>> = {
+    mecanico: new Set(),
+    electricista: new Set(),
+    lubricador: new Set(),
   };
   for (const persona of padron) {
     if (!estaVigente(persona, dia)) continue;
     if (noViene(ausencias, francos, persona.empleadoId, dia)) continue;
-    porOficio[persona.oficio] += 1;
+    personas[persona.oficio].add(persona.empleadoId);
   }
+  const porOficio: Record<Oficio, number> = {
+    mecanico: personas.mecanico.size,
+    electricista: personas.electricista.size,
+    lubricador: personas.lubricador.size,
+  };
   return { sabemos: true, porOficio };
 }

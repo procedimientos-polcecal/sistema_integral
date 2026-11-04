@@ -38,7 +38,7 @@ import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlace
 import { filaDeAviso } from "@/lib/mantenimiento/avisos";
 import { resolverElArea, repartirPorArea } from "@/lib/mantenimiento/areaDelAviso";
 import {
-  filaDeOrden, paraLaBase, columnaDeFechaFin, fechaFinDeLaFila, celdasParaRegistrar, COLUMNA_ESTADO, COLUMNA_OT,
+  filaDeOrden, paraLaBase, columnaDeFechaFin, fechaFinDeLaFila, faltaLaColumna, celdasParaRegistrar, COLUMNA_ESTADO, COLUMNA_OT,
   type OrdenLeida,
 } from "@/lib/mantenimiento/ordenes";
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
@@ -686,6 +686,7 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   // secundario.
   const columnaDeFin = columnaDeFechaFin(filas[0] ?? []);
   let finDelSistema: Map<number, string> | null = null;
+  let fechaFinSinImportar: string | null = null;
   try {
     const conFin = await traerTodo<{ ot_number: number; fecha_fin: string }>((desde, hasta) =>
       admin
@@ -696,8 +697,14 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
         .range(desde, hasta)
     );
     finDelSistema = new Map(conFin.map((o) => [o.ot_number, String(o.fecha_fin)]));
-  } catch {
+  } catch (e) {
     finDelSistema = null;
+    // Sin la columna es lo esperado (la migración no corrió). Cualquier otra
+    // cosa es un fallo de esta corrida, y se dice: si no, tras aplicar la
+    // migración un corte pasajero dejaría de importar `fecha_fin` sin que nadie
+    // lo sepa.
+    const mensaje = e instanceof Error ? e.message : String(e);
+    if (!faltaLaColumna(mensaje, "fecha_fin")) fechaFinSinImportar = mensaje;
   }
 
   for (let i = 0; i < filas.length - 1; i++) {
@@ -885,6 +892,9 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     // Un fallo acá no frena la corrida —anotar es secundario, importar no—, así
     // que se dice. Mientras la migración no esté corrida, esto dice por qué.
     ...(divergencias.error ? { divergencias_sin_anotar: divergencias.error } : {}),
+    // Las órdenes entraron, pero esta corrida no trajo `fecha_fin`: la lectura
+    // falló por algo que no es la migración sin correr.
+    ...(fechaFinSinImportar ? { fecha_fin_sin_importar: fechaFinSinImportar } : {}),
   });
 }
 

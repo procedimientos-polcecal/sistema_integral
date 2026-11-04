@@ -202,6 +202,24 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
     if (ok) await mandarAlCalendario();
   }
 
+  /**
+   * Mandar una sola orden manda el mismo correo que el plan entero —a cada uno
+   * de los invitados—, y un correo no se retira. Por eso pide confirmación igual
+   * que el botón de arriba: era el único camino a un envío que no la tenía.
+   */
+  async function mandarUnItem(item: any) {
+    const invitados = INVITADOS_DE_UNA_OT.length;
+    const ok = await confirm({
+      title: `¿Mandar la OT #${item.ot_number} al calendario?`,
+      message:
+        `Se van a mandar hasta ${invitados} invitaciones por correo.\n` +
+        `Si la orden está cerrada o su fecha ya pasó, se saltea y no invita a nadie. ` +
+        `Al dueño del evento no se lo invita a sí mismo.`,
+      confirmText: "Mandar",
+    });
+    if (ok) await mandarAlCalendario(item.id);
+  }
+
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-5">
       <Link href="/mantenimiento/planificacion" className="text-sm text-slate-400 hover:text-slate-700">← Planificación</Link>
@@ -331,7 +349,7 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
                     )}
                     {canEdit && (
                       <div className="flex justify-end">
-                        <button onClick={() => mandarAlCalendario(item.id)} disabled={mandando !== null}
+                        <button onClick={() => mandarUnItem(item)} disabled={mandando !== null}
                           className="text-xs text-slate-400 hover:text-blue-600 transition-colors disabled:opacity-50">
                           {mandando === item.id ? "Mandando…" : "Al calendario"}
                         </button>

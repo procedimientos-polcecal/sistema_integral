@@ -7,7 +7,8 @@ describe("donde cae una OT en su dia", () => {
     expect(HORA_DE_ARRANQUE).toBe("08:00");
     expect(TOPE_DE_ARRANQUE).toBe("20:00");
     expect(DURACION_OT_MINUTOS).toBe(90);
-    expect(AVISO_DE_TOPE).toMatch(/nueve/);
+    // Sin número: depende del turno (nueve desde las 08:00, once desde las 04:00, seis desde las 12:00).
+    expect(AVISO_DE_TOPE).not.toMatch(/nueve|once|seis|\d+ órdenes/);
     expect(AVISO_DE_TOPE).toMatch(/20:00/);
   });
 
@@ -89,6 +90,15 @@ describe("el arranque no siempre es las 08:00", () => {
 });
 
 describe("como se agrupa el apilado", () => {
+  /** Lo que clasifica la misma columna en el resto de la rama (`oficioDeLaEspecialidad`,
+      `colorDeEspecialidad`) usa `norm`, que también saca los acentos. Con una
+      clave más débil, las dos grafías caían en grupos distintos y las dos
+      ordenes a las 08:00, que es la colision que el apilado existe para evitar. */
+  it("la clave no distingue acentos: MECANICO y MECÁNICO son el mismo grupo", () => {
+    expect(claveDeApilado("MECANICO")).toBe(claveDeApilado("MECÁNICO"));
+    expect(claveDeApilado("  mecánico ")).toBe(claveDeApilado("MECANICO"));
+  });
+
   it("la especialidad decide el grupo", () => {
     expect(claveDeApilado("MECÁNICO")).toBe(claveDeApilado("MECÁNICO"));
     expect(claveDeApilado("MECÁNICO")).not.toBe(claveDeApilado("ELÉCTRICO"));

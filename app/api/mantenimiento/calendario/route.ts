@@ -30,7 +30,13 @@ import {
  * viajes para un mes que casi siempre está vacío.
  */
 
-/** Los que mira la grilla caben en seis semanas; más que eso es un pedido que no es de la grilla. */
+/**
+ * La grilla pide un mes, y un mes con las semanas parciales de los bordes llega
+ * a 42 días (seis semanas). 62 deja margen sobre ese caso, para quien pida dos
+ * meses corridos; más que eso es un pedido que no es de la grilla. La
+ * comparación admite `hasta` = `desde` + 62 días, o sea 63 días contando los
+ * dos extremos.
+ */
 const MAXIMO_DE_DIAS = 62;
 
 /** Una fecha de la base como `YYYY-MM-DD` pelado, igual que en las rutas hermanas. */
@@ -110,15 +116,32 @@ export async function GET(request: Request) {
   // ── La gente: una lectura para todo el rango ───────────────
   const db = createAdminClient();
 
-  const { data: filasPadron, error: errPadron } = await db
-    .from("mant_personal_taller")
-    .select("empleado_id, oficio, grupo, desde, hasta")
-    .lte("desde", hasta)
-    .or(`hasta.is.null,hasta.gte.${desde}`)
-    .order("desde");
-  if (errPadron) return NextResponse.json({ error: errPadron.message }, { status: 500 });
+  // `traerTodo` y no un `.select()` pelado: PostgREST corta en 1000 filas sin
+  // avisar, y «el padrón es chico» es el razonamiento que la regla prohíbe. El
+  // orden lleva `id` para que las páginas no repitan ni salteen filas.
+  let filasPadron: {
+    empleado_id: string;
+    oficio: string;
+    grupo: string | null;
+    desde: string;
+    hasta: string | null;
+  }[];
+  try {
+    filasPadron = await traerTodo((d, h) =>
+      db
+        .from("mant_personal_taller")
+        .select("empleado_id, oficio, grupo, desde, hasta")
+        .lte("desde", hasta)
+        .or(`hasta.is.null,hasta.gte.${desde}`)
+        .order("desde")
+        .order("id")
+        .range(d, h)
+    );
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
 
-  const padron: PersonaDelTaller[] = (filasPadron ?? []).map((f) => ({
+  const padron: PersonaDelTaller[] = filasPadron.map((f) => ({
     empleadoId: f.empleado_id,
     oficio: f.oficio as Oficio,
     grupo: f.grupo as Grupo | null,

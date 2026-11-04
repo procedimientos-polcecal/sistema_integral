@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   estadoDeTexto, filaDeOrden, paraLaBase, celdasParaRegistrar,
   repartirRegistroDeOT,
-  columnaDeFechaFin, fechaFinDeLaFila,
+  columnaDeFechaFin, fechaFinDeLaFila, faltaLaColumna,
   esEstadoDeOT,
   ESTADOS_DE_OT,
 } from "./ordenes";
@@ -404,5 +404,23 @@ describe("la fecha de fin que trae el master", () => {
   it("sin la columna en el master, queda lo que el sistema tenga", () => {
     expect(fechaFinDeLaFila([1, 0, 0], -1, "2026-11-05")).toBe("2026-11-05");
     expect(fechaFinDeLaFila([1, 0, 0], -1, null)).toBeNull();
+  });
+});
+
+describe("faltaLaColumna", () => {
+  it("reconoce los dos textos de «la migración no corrió»", () => {
+    expect(faltaLaColumna("column ordenes_trabajo.fecha_fin does not exist", "fecha_fin")).toBe(true);
+    expect(
+      faltaLaColumna("Could not find the 'fecha_fin' column of 'ordenes_trabajo' in the schema cache", "fecha_fin")
+    ).toBe(true);
+  });
+
+  it("un corte o un timeout no es una columna que falta", () => {
+    expect(faltaLaColumna("fetch failed", "fecha_fin")).toBe(false);
+    expect(faltaLaColumna("canceling statement due to statement timeout", "fecha_fin")).toBe(false);
+  });
+
+  it("que falte otra columna tampoco es ésta", () => {
+    expect(faltaLaColumna("column ordenes_trabajo.otra does not exist", "fecha_fin")).toBe(false);
   });
 });

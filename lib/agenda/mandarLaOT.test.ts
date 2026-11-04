@@ -109,7 +109,7 @@ beforeEach(() => {
 
 describe("claveDelHueco", () => {
   it("normaliza la especialidad como el apilado, para que nadie rearme la clave a mano", () => {
-    expect(claveDelHueco("2026-11-06", "  mecánico ", "8-16")).toBe("2026-11-06|MECÁNICO|8-16");
+    expect(claveDelHueco("2026-11-06", "  mecánico ", "8-16")).toBe("2026-11-06|MECANICO|8-16");
     expect(claveDelHueco("2026-11-06", null, "8-16")).toBe("2026-11-06|(sin especialidad)|8-16");
   });
 
@@ -271,6 +271,23 @@ describe("mandar una OT al calendario", () => {
     const r = await mandarLaOTAlCalendario(b.cliente, LA_OT, AUTOMATICO, AHORA);
 
     expect(r).toMatchObject({ ok: true, inicio: instante("2026-11-06T14:00:00") });
+  });
+
+  /**
+   * El evento de la propia orden no cuenta para su hueco. Es el camino que la
+   * pantalla del plan recorre sin saberlo: reenvía con `turno: null` cuando el
+   * evento que ya existe es `8-16`. Si se contara, cada reenvío la correría
+   * 1:30 —y avisaría por correo a cuatro personas cada vez—.
+   */
+  it("al reenviarla en automático, su propio evento no cuenta y sigue a las 08:00", async () => {
+    const b = base({ agenda_eventos: [eventoDeLaOT()] });
+
+    const r = await mandarLaOTAlCalendario(b.cliente, LA_OT, AUTOMATICO, AHORA);
+    expect(r).toMatchObject({ ok: true, reemplazo: true, inicio: A_LAS_8 });
+
+    // Y dos veces seguidas da lo mismo: no deriva.
+    const otraVez = await mandarLaOTAlCalendario(b.cliente, LA_OT, AUTOMATICO, AHORA);
+    expect(otraVez).toMatchObject({ ok: true, inicio: A_LAS_8 });
   });
 
   it("la décima del día comparte las 20:00 y lo dice en la advertencia y en el aviso", async () => {

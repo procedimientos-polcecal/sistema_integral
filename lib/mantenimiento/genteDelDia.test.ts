@@ -138,6 +138,25 @@ describe("cuanta gente del taller hay un dia", () => {
     expect(r.mecanico).toBe(1);
   });
 
+  /**
+   * El esquema no impide dos filas vigentes de la misma persona (no hay unique
+   * ni exclusion), y el padron esta vacio: cargarlo es lo primero que se va a
+   * hacer. Contar filas duplicaria a quien tenga dos.
+   */
+  it("una persona con dos filas vigentes del padron cuenta una sola vez", () => {
+    const padron = [
+      persona("m1", "mecanico"),
+      persona("m1", "mecanico", { desde: "2026-06-01" }),
+      persona("m2", "mecanico"),
+    ];
+    expect(porOficio(genteDelDia(padron, [], [], DIA)).mecanico).toBe(2);
+  });
+
+  it("y si esa persona falta ese dia, no cuenta ninguna de sus dos filas", () => {
+    const padron = [persona("m1", "mecanico"), persona("m1", "mecanico", { desde: "2026-06-01" })];
+    expect(porOficio(genteDelDia(padron, [ausencia("m1", DIA, DIA)], [], DIA)).mecanico).toBe(0);
+  });
+
   /** La distincion que el anti-objetivo exige: cero no es lo mismo que no se. */
   it("con el padron vacio contesta que no sabe, no cero", () => {
     expect(genteDelDia([], [], [], "2026-11-06")).toEqual({ sabemos: false });

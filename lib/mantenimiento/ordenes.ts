@@ -418,6 +418,25 @@ export function fechaFinDeLaFila(
 }
 
 /**
+ * Si un error de la base dice que **esa columna no existe** —que la migración
+ * todavía no corrió—, y no cualquier otra cosa.
+ *
+ * Lo necesita la importación de OT para decidir si el silencio sobre
+ * `fecha_fin` es esperable. Antes de la migración, la lectura falla y no pasa
+ * nada que contar. Después de la migración, la misma lectura puede fallar por
+ * un corte de red o un timeout, y ahí **esa corrida no importa `fecha_fin`** y
+ * hay que decirlo: un `catch` pelado no distingue una cosa de la otra.
+ *
+ * Los dos textos son los que da el sistema: el de PostgreSQL («column
+ * ordenes_trabajo.fecha_fin does not exist») y el del caché de esquema de
+ * PostgREST («Could not find the 'fecha_fin' column of … in the schema cache»).
+ */
+export function faltaLaColumna(mensaje: string, columna: string): boolean {
+  if (!mensaje.includes(columna)) return false;
+  return /does not exist|could not find/i.test(mensaje);
+}
+
+/**
  * La orden **como la espera la tabla**: sin los campos que existen sólo para
  * leer la planilla.
  *

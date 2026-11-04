@@ -1,4 +1,5 @@
 import { DURACION_OT_MINUTOS, instanteDe } from "@/lib/agenda/evento";
+import { norm } from "@/lib/core/texto";
 
 /**
  * Dónde cae, dentro de su día, el evento de una OT que entra sola al calendario.
@@ -21,11 +22,16 @@ export const TOPE_DE_ARRANQUE = "20:00";
 
 /**
  * Lo que se le dice a quien abre una OT que quedó contra el tope. Vive acá y no
- * en la ruta porque el número nueve es el de `TOPE_DE_ARRANQUE`: si uno cambia,
- * el otro tiene que cambiar con él.
+ * en la ruta porque habla de `TOPE_DE_ARRANQUE`: si uno cambia, el otro tiene
+ * que cambiar con él.
+ *
+ * **No nombra una cantidad**, a propósito: cuántas órdenes entran antes del
+ * tope depende de dónde arranca el turno —nueve desde las 08:00, once desde las
+ * 04:00, seis desde las 12:00— y el texto se guarda en la columna `aviso`, donde
+ * una persona lo lee. Un número fijo era falso en dos de los tres caminos.
  */
 export const AVISO_DE_TOPE =
-  "Ese día ya tiene nueve órdenes de esa especialidad: ésta comparte las 20:00 con las que no entraron.";
+  "Ese día ya tiene órdenes de esa especialidad hasta el tope: ésta comparte las 20:00 con las que no entraron.";
 
 const aMinutos = (hhmm: string): number => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -57,9 +63,8 @@ const ES_HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
  * orden cambia de fecha, su evento se vuelve a ubicar **desde el turno que
  * tiene guardado**, que puede arrancar a las 04:00 o a las 12:00. El tope de
  * reloj es el mismo, así que desde las 04:00 entran once y desde las 12:00
- * seis. Lo que no acompaña es el texto de `AVISO_DE_TOPE`, que dice «nueve»:
- * es el número del arranque de las 08:00, y se dejó así a propósito —el camino
- * automático, que es donde ese aviso es el único canal, siempre arranca ahí—.
+ * seis. El texto de `AVISO_DE_TOPE` no nombra ninguna cantidad justamente por
+ * eso: sirve igual para los tres arranques.
  */
 export function horarioApilado(
   fecha: string,
@@ -85,12 +90,15 @@ export function horarioApilado(
 
 /**
  * La clave del grupo dentro del cual se apila: la especialidad, sin importar
- * mayúsculas ni espacios de más. Una especialidad vacía o ausente es **su propio
+ * mayúsculas, acentos ni espacios de más (`norm`, la misma que usan
+ * `oficioDeLaEspecialidad` y `colorDeEspecialidad` sobre esta columna: con una
+ * más débil, «MECANICO» y «MECÁNICO» serían grupos distintos y las dos órdenes
+ * caerían a las 08:00). Una especialidad vacía o ausente es **su propio
  * grupo**: hay una OT en producción así y no puede reventar ni caer en el
  * montón de las mecánicas.
  */
 export function claveDeApilado(especialidad: string | null | undefined): string {
-  const limpia = especialidad?.trim().toUpperCase();
+  const limpia = norm(especialidad);
   return limpia ? limpia : "(sin especialidad)";
 }
 

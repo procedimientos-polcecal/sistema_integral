@@ -192,6 +192,9 @@ function CalendarioDeFecha({
   function irAlMes(delta: number) {
     setMes((m) => mesRelativo(m, delta));
     setDiaAbierto(null);
+    // Un fallo es de un mes: si se vuelve a ese mes, el efecto lo pide de nuevo
+    // y mientras tanto tiene que decir «Cargando…» y no el error de la vez pasada.
+    setFallo(null);
   }
 
   const semanas = useMemo(() => {
