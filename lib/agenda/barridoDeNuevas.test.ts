@@ -160,9 +160,10 @@ describe("el barrido de las que faltan", () => {
    * cuentan entre sí, las dos ven cero ocupados y las dos caen a las 08:00 —
    * que es exactamente lo que este diseño evita.
    *
-   * Y la otra cara, que es la que obligó a no pasar `yaTomados`: con una base
-   * que sí muestra lo recién escrito, sumarlo también por ese lado cuenta cada
-   * orden dos veces y deja huecos (08:00 y 11:00, no 09:30).
+   * Y la otra cara: con una base que sí muestra lo recién escrito —que es como
+   * se porta la de verdad—, adelantar los huecos por otro lado cuenta cada
+   * orden dos veces y deja huecos (08:00 y 11:00, no 09:30). Por eso no hay
+   * ningún mapa de «ya tomados»: la base es la única fuente.
    */
   it("dos de la misma especialidad y día en una corrida no comparten hora", async () => {
     const b = base([orden(1), orden(2)]);
@@ -258,6 +259,43 @@ describe("el barrido de las que faltan", () => {
     expect(r.fallos[0]).toContain("3001");
     expect(r.fallos[0]).toContain("boom");
     expect(r.fallos[1]).toContain("3002");
+  });
+
+  /**
+   * El tope acota **cuántas invitaciones caen en las casillas de la gente**, y un
+   * intento fallido no manda ninguna. Si los fallos gastaran cupo, 25 órdenes
+   * con un fallo permanente —por ejemplo, sin usuario para su casilla—
+   * agotarían el tope en cada corrida y dejarían sin intentar a todas las demás,
+   * para siempre.
+   */
+  it("las que fallan no consumen cupo del tope", async () => {
+    const b = base(
+      [1, 2, 3, 4, 5, 6].map((n) =>
+        orden(n, { especialidad: `ESP-${n}`, fecha_ejecucion: `2026-11-${String(n + 4).padStart(2, "0")}` })
+      )
+    );
+    // Las tres más cercanas no se pueden guardar nunca.
+    const fallan = [idDe(1), idDe(2), idDe(3)];
+    const desdeAca = b.cliente.from.bind(b.cliente);
+    const cliente = {
+      from: (tabla: string) => {
+        const q = desdeAca(tabla) as unknown as { insert: (c: Fila) => unknown };
+        if (tabla !== "agenda_eventos") return q;
+        const insertar = q.insert.bind(q);
+        q.insert = (c: Fila) =>
+          fallan.includes(String(c.ot_id))
+            ? { then: (alCumplir: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: "boom" } }).then(alCumplir) }
+            : insertar(c);
+        return q;
+      },
+    } as unknown as typeof b.cliente;
+
+    const r = await barrerLasQueFaltan(cliente, AHORA, 2);
+
+    expect(r.creados).toBe(2);
+    expect(r.fallos).toHaveLength(3);
+    expect(r.quedaron).toBe(1);
+    expect(b.tablas.agenda_eventos.map((e) => e.ot_id).sort()).toEqual([idDe(4), idDe(5)].sort());
   });
 
   it("si lo que lanza es una excepción, tampoco frena a las demás ni sale del barrido", async () => {

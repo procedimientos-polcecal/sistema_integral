@@ -94,11 +94,6 @@ export interface PedidoDeMandar {
   invitadosExtra: string[];
   /** Confirmación de pisar un evento divergido. El automático nunca pisa. */
   pisar: boolean;
-  /**
-   * Huecos ya tomados por esta misma corrida y que todavía no están en la base.
-   * La clave es `claveDelHueco(fecha, especialidad, turno)`, de `apilado.ts`.
-   */
-  yaTomados?: ReadonlyMap<string, number>;
 }
 
 export type ResultadoDeMandar =
@@ -134,8 +129,10 @@ interface EventoDelDia {
 
 /**
  * Cuántos eventos de OT del mismo grupo ya hay ese día. **Interno**: quien
- * barre no cuenta por su cuenta, pasa `yaTomados` y deja que esta función haga
- * la cuenta, que es lo que evita dos criterios para lo mismo.
+ * barre no cuenta por su cuenta ni adelanta nada, deja que esta función haga la
+ * cuenta, que es lo que evita dos criterios para lo mismo. Y no hay nada que
+ * adelantar: cada orden se escribe antes de contar la siguiente, así que la
+ * base ya tiene la anterior (ver el encabezado de `barridoDeNuevas`).
  *
  * El grupo es el de `claveDelHueco` —día, especialidad **y turno**—, la misma
  * definición que usa el barrido de `elEventoSigueALaOT`. Con dos claves
@@ -271,14 +268,13 @@ export async function mandarLaOTAlCalendario(
   if (pedido.turno !== null) {
     horario = horarioDeLaOT(fechaElegida, pedido.turno);
   } else {
-    const clave = claveDelHueco(fechaElegida, orden.especialidad, turno);
     let ocupados: number;
     try {
       ocupados = await huecosOcupados(admin, fechaElegida, orden.especialidad, turno, ordenId);
     } catch (e) {
       return mal(500, `No se pudo contar lo que ya hay en el calendario del ${fechaElegida}: ${(e as Error).message}`);
     }
-    const apilado = horarioApilado(fechaElegida, ocupados + (pedido.yaTomados?.get(clave) ?? 0));
+    const apilado = horarioApilado(fechaElegida, ocupados);
     if (!apilado) {
       // No debería pasar: `esCandidataAlCalendario` ya validó la fecha.
       return mal(500, `No se pudo calcular el horario del ${fechaElegida}: es un error del SdG, no de Google`);

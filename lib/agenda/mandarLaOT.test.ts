@@ -91,6 +91,10 @@ function base(tablas: Record<string, Fila[]> = {}) {
   });
 }
 
+/** Nueve mecánicas ya puestas el 06/11: el día está completo hasta las 20:00. */
+const nueveYaPuestas = () =>
+  Array.from({ length: 9 }, (_, i) => eventoDeOtraOT(`e${i + 1}`, A_LAS_8, "MECÁNICO"));
+
 /** El automático: sin turno, sin invitados extra y sin pisar nada. */
 const AUTOMATICO: PedidoDeMandar = { turno: null, invitadosExtra: [], pisar: false };
 
@@ -251,26 +255,33 @@ describe("mandar una OT al calendario", () => {
     expect(b.tablas.agenda_eventos).toHaveLength(0);
   });
 
-  /** Review Focus 4, la mitad de una corrida: `yaTomados` adelanta el hueco. */
-  it("`yaTomados` corre el hueco aunque la base todavía no lo tenga", async () => {
-    const b = base();
-    const yaTomados = new Map([[claveDelHueco("2026-11-06", "MECÁNICO", "8-16"), 2]]);
+  /**
+   * El hueco sale de lo que **hay en la base**: no existe otra fuente. Un barrido
+   * que manda varias en una pasada no necesita adelantar nada, porque cada
+   * orden se escribe antes de contar la siguiente (ver `barridoDeNuevas`).
+   */
+  it("con dos mecánicas ya puestas ese día, la tercera arranca a las 11:00", async () => {
+    const b = base({
+      agenda_eventos: [
+        eventoDeOtraOT("e1", A_LAS_8, "MECÁNICO"),
+        eventoDeOtraOT("e2", A_LAS_9_30, "MECÁNICO"),
+      ],
+    });
 
-    const r = await mandarLaOTAlCalendario(b.cliente, LA_OT, { ...AUTOMATICO, yaTomados }, AHORA);
+    const r = await mandarLaOTAlCalendario(b.cliente, LA_OT, AUTOMATICO, AHORA);
 
     expect(r).toMatchObject({ ok: true, inicio: instante("2026-11-06T14:00:00") });
   });
 
   it("la décima del día comparte las 20:00 y lo dice en la advertencia y en el aviso", async () => {
-    const b = base();
-    const yaTomados = new Map([[claveDelHueco("2026-11-06", "MECÁNICO", "8-16"), 9]]);
+    const b = base({ agenda_eventos: nueveYaPuestas() });
 
-    const r = await mandarLaOTAlCalendario(b.cliente, LA_OT, { ...AUTOMATICO, yaTomados }, AHORA);
+    const r = await mandarLaOTAlCalendario(b.cliente, LA_OT, AUTOMATICO, AHORA);
 
     expect(r).toMatchObject({ ok: true, inicio: instante("2026-11-06T23:00:00") });
     expect(r.ok && r.advertencias).toContain(AVISO_DE_TOPE);
     // Va a `aviso` y no a `google_pendiente`: hay algo que mirar, no algo que escribir.
-    expect(b.tablas.agenda_eventos[0]).toMatchObject({ aviso: AVISO_DE_TOPE, google_pendiente: null });
+    expect(b.tablas.agenda_eventos.find((e) => e.ot_id === LA_OT)).toMatchObject({ aviso: AVISO_DE_TOPE, google_pendiente: null });
   });
 
   it("reenviarla fuera del tope limpia ese aviso, pero no el de un borrado que Google rechazó", async () => {
@@ -293,10 +304,9 @@ describe("mandar una OT al calendario", () => {
     // vivo en cinco calendarios que ya ninguna fila nombra; el del tope se
     // vuelve a deducir del horario. La advertencia en pantalla igual lo dice.
     const deBorrado = `${AVISO_DE_BORRADO}. Google dijo: 503`;
-    const b = base({ agenda_eventos: [eventoDeLaOT({ aviso: deBorrado })] });
-    const yaTomados = new Map([[claveDelHueco("2026-11-06", "MECÁNICO", "8-16"), 9]]);
+    const b = base({ agenda_eventos: [eventoDeLaOT({ aviso: deBorrado }), ...nueveYaPuestas()] });
 
-    const r = await mandarLaOTAlCalendario(b.cliente, LA_OT, { ...AUTOMATICO, yaTomados }, AHORA);
+    const r = await mandarLaOTAlCalendario(b.cliente, LA_OT, AUTOMATICO, AHORA);
 
     expect(r).toMatchObject({ ok: true, inicio: instante("2026-11-06T23:00:00") });
     expect(r.ok && r.advertencias).toContain(AVISO_DE_TOPE);

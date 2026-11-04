@@ -37,14 +37,17 @@ import type { PresupuestoDeGoogle } from "./elEventoSigueALaOT";
  * mecánicas del mismo día salen a las 08:00 y a las 09:30 sin que nadie lleve
  * la cuenta aparte.
  *
- * **Por eso este barrido NO pasa `yaTomados`**, aunque el parámetro exista y
- * éste sea su primer llamador natural. `yaTomados` es para huecos que todavía
- * no están en la base, y acá no hay ninguno: sumarlos cuenta cada orden dos
- * veces y apila 08:00, 11:00, 14:00 en vez de 08:00, 09:30, 11:00 —medido
- * contra una base en memoria que muestra lo recién insertado, que es como se
- * porta la de verdad—. Es el tipo de error que no rompe nada: los eventos
- * entran, sólo que con un hueco de 1:30 detrás de cada uno. El test «dos de la
- * misma especialidad…» lo fija: si alguien lo vuelve a agregar, falla.
+ * **Por eso no hay nada que adelantar.** La cuenta sale de la base y la base ya
+ * tiene la fila anterior: el bucle no corre dentro de una transacción, así que
+ * el insert de la primera orden está confirmado cuando la segunda lee. Una
+ * versión anterior de `mandarLaOTAlCalendario` aceptaba además un mapa de
+ * «huecos ya tomados en esta corrida» para sumarlo a esa cuenta, pensado para
+ * este barrido; se sacó porque **cuenta cada orden dos veces** y apila 08:00,
+ * 11:00, 14:00 en vez de 08:00, 09:30, 11:00 —medido contra una base en memoria
+ * que muestra lo recién insertado, que es como se porta la de verdad—. Es el
+ * tipo de error que no rompe nada: los eventos entran, sólo que con un hueco de
+ * 1:30 detrás de cada uno. Los tests «dos de la misma especialidad…» y «tres
+ * seguidas…» lo fijan: si alguien reintroduce el adelanto, fallan.
  *
  * ── EL TOPE: 25 POR CORRIDA ──────────────────────────────────────────────────
  *
@@ -56,19 +59,30 @@ import type { PresupuestoDeGoogle } from "./elEventoSigueALaOT";
  * evento y entra en la corrida siguiente. Y se va por **fecha ascendente**, así
  * que si corta, corta lo más lejano, que es lo que menos apura.
  *
- * Un intento que falla **gasta** su lugar del tope. Si no, una Google caída
- * convertiría el barrido en un bucle sobre todas las candidatas.
+ * **El tope cuenta eventos creados, no intentos.** Acota lo que de verdad le
+ * llega a la gente —las invitaciones—, y un intento fallido no manda ninguna.
+ * Contando intentos, 25 órdenes con un fallo permanente (por ejemplo, sin
+ * usuario activo para su casilla) agotarían el tope en cada corrida y dejarían
+ * sin intentar a todas las demás, para siempre.
+ *
+ * ── LO QUE ACOTA EL TIEMPO ES EL PRESUPUESTO, NO EL TOPE ─────────────────────
+ *
+ * Con los fallos fuera de la cuenta, el tope ya no limita cuántas llamadas se
+ * hacen a Google. Eso lo limita el tiempo de Google que se reparte entre las
+ * sincronizaciones (`presupuestoDeGoogle`), que se mira **antes** de empezar
+ * cada orden: con Google caído el barrido intenta unas pocas, agota su tramo y
+ * corta, en vez de recorrer todas las candidatas. Son dos guardianes de dos
+ * cosas distintas, y ninguno reemplaza al otro.
  *
  * ── NUNCA FALLA LA SINCRONIZACIÓN ────────────────────────────────────────────
  *
  * No lanza: todo lo que sale mal queda en `fallos` y quien llama lo suma al
- * informe de la corrida. Y respeta el tiempo de Google que ya se reparte entre
- * las sincronizaciones (`presupuestoDeGoogle`): se mira **antes** de empezar
- * cada orden, y lo que no se alcanzó entra en `quedaron`.
+ * informe de la corrida.
  *
  * `quedaron` junta lo que cortó el tope y lo que cortó el tiempo: para quien
  * lee el informe es lo mismo —no entró todavía—, y la causa se deduce del
- * número (cuando es el tope, `creados` es igual a 25).
+ * número (cuando es el tope, `creados` es igual a 25). **Cuenta candidatas sin
+ * intentar**: las que se intentaron y fallaron están en `fallos`, no acá.
  *
  * Una advertencia de `mandarLaOTAlCalendario` (el evento quedó pendiente en
  * Google, comparte las 20:00 por el tope del día) **no se cuenta acá**: las dos
@@ -160,7 +174,8 @@ export async function barrerLasQueFaltan(
 
   let intentadas = 0;
   for (const { orden } of faltan) {
-    if (intentadas >= tope || presupuesto?.agotado()) break;
+    // El tope mira lo creado y el tiempo lo mira el presupuesto: ver el encabezado.
+    if (r.creados >= tope || presupuesto?.agotado()) break;
     intentadas++;
     const numero = orden.ot_number ?? orden.id;
     try {
