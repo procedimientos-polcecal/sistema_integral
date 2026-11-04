@@ -209,7 +209,12 @@ const sinIntentar = faltan.map((f) => numeroDe(f.orden)).filter((n) => !intentad
 
 console.log("");
 console.log(`Eventos creados: ${r.creados}`);
-if (salieron.length > 0) console.log(`  Quedaron creadas: ${salieron.map((n) => `OT ${n}`).join(", ")}`);
+// Cada OT bajo un solo título: «creadas» sin las que no llegaron a Google, que
+// tienen su línea aparte. Quien leyera sólo la primera daría por mandadas las que no.
+const creadasYEnviadas = salieron.filter((n) => !pendientesEnGoogle.includes(n));
+if (creadasYEnviadas.length > 0) {
+  console.log(`  Quedaron creadas y en Google: ${creadasYEnviadas.map((n) => `OT ${n}`).join(", ")}`);
+}
 if (pendientesEnGoogle.length > 0) {
   console.log(`  Creadas en el SdG pero todavía sin llegar a Google (se reintentan solas): ${pendientesEnGoogle.map((n) => `OT ${n}`).join(", ")}`);
 }

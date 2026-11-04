@@ -360,6 +360,8 @@ describe("el barrido de las que faltan", () => {
     const b = base([orden(1), orden(2, { especialidad: "CIVIL" })]);
     const r = await barrerLasQueFaltan(b.cliente, AHORA, 25, undefined, () => { throw new Error("pantalla rota"); });
     expect(r.creados).toBe(2);
+    // Sin el try/catch del aviso, el throw caería en el catch de la orden y se anotaría como fallo.
+    expect(r.fallos).toEqual([]);
   });
 
   it("si lo que lanza es una excepción, tampoco frena a las demás ni sale del barrido", async () => {
