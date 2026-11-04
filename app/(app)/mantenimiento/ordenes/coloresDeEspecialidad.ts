@@ -24,6 +24,23 @@ export const COLORES_DE_ESPECIALIDAD = {
   LUBRICACION: "#9333ea",
 } as const;
 
+/**
+ * El color del texto que va **sobre** el relleno de cada especialidad.
+ *
+ * El relleno no se toca —son los cuatro que se eligieron—, pero blanco sobre
+ * ámbar da ~3,2:1 y sobre verde ~3,3:1, y el número de OT a 10 px es el contenido
+ * de la ficha, no un adorno. Oscuro sobre ámbar y verde, blanco sobre azul y
+ * violeta y sobre el gris: las seis combinaciones quedan por encima de 5:1.
+ * El ámbar importa más que ninguno: es el color de veinte de las 21 órdenes
+ * abiertas.
+ */
+export const TEXTO_SOBRE_EL_COLOR: Record<string, string> = {
+  [COLORES_DE_ESPECIALIDAD.MECANICO]: "#0f172a",
+  [COLORES_DE_ESPECIALIDAD.CIVIL]: "#0f172a",
+  [COLORES_DE_ESPECIALIDAD.ELECTRICO]: "#ffffff",
+  [COLORES_DE_ESPECIALIDAD.LUBRICACION]: "#ffffff",
+};
+
 /** El gris de una especialidad vacía o que no tiene color propio. */
 export const COLOR_SIN_ESPECIALIDAD = "#6b7280";
 
@@ -34,6 +51,11 @@ export const COLOR_SIN_ESPECIALIDAD = "#6b7280";
 export function colorDeEspecialidad(especialidad: string | null | undefined): string {
   const clave = norm(especialidad) as keyof typeof COLORES_DE_ESPECIALIDAD;
   return COLORES_DE_ESPECIALIDAD[clave] ?? COLOR_SIN_ESPECIALIDAD;
+}
+
+/** El texto legible sobre el relleno de esa especialidad (el blanco de siempre sobre el gris). */
+export function textoSobreLaEspecialidad(especialidad: string | null | undefined): string {
+  return TEXTO_SOBRE_EL_COLOR[colorDeEspecialidad(especialidad)] ?? "#ffffff";
 }
 
 /** Para la leyenda: nombre como se lee y su color. */

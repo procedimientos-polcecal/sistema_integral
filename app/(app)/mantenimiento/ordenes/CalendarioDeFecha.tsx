@@ -11,7 +11,7 @@ import { TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { oficioDeLaEspecialidad } from "@/lib/mantenimiento/genteDelDia";
 import type { DiaDelCalendario } from "@/lib/mantenimiento/calendarioDeOT";
 import type { Oficio } from "@/lib/mantenimiento/programacion";
-import { colorDeEspecialidad, LEYENDA_DE_ESPECIALIDADES } from "./coloresDeEspecialidad";
+import { colorDeEspecialidad, textoSobreLaEspecialidad, LEYENDA_DE_ESPECIALIDADES } from "./coloresDeEspecialidad";
 
 /**
  * El calendario que se abre al elegir la fecha de ejecución de una OT: qué
@@ -178,15 +178,16 @@ function CalendarioDeFecha({
   }, [dias]);
 
   const hayFiltro = Boolean(filtros.especialidad || filtros.tipo || filtros.quien);
-  // Órdenes distintas que tocan el mes: una de varios días cuenta una vez.
+  // Órdenes distintas que tocan el mes **y pasan el filtro**: es el mismo número
+  // que se pinta, no el total del mes. Una de varios días cuenta una vez.
   const totalDelMes = useMemo(() => {
     const vistas = new Set<number>();
     for (const d of dias ?? []) {
       if (!d.dia.startsWith(mes)) continue;
-      for (const o of d.ordenes) vistas.add(o.ot_number);
+      for (const o of d.ordenes) if (pasaElFiltro(o, filtros)) vistas.add(o.ot_number);
     }
     return vistas.size;
-  }, [dias, mes]);
+  }, [dias, mes, filtros]);
 
   function irAlMes(delta: number) {
     setMes((m) => mesRelativo(m, delta));
@@ -283,9 +284,8 @@ function CalendarioDeFecha({
             {dias && (
               <div className="text-[11px] text-slate-500">
                 {totalDelMes === 0
-                  ? "Ninguna orden este mes"
-                  : `${totalDelMes} ${totalDelMes === 1 ? "orden" : "órdenes"} en el mes`}
-                {hayFiltro && " · con el filtro puesto"}
+                  ? hayFiltro ? "Ninguna orden este mes con ese filtro" : "Ninguna orden este mes"
+                  : `${totalDelMes} ${totalDelMes === 1 ? "orden" : "órdenes"} en el mes${hayFiltro ? ", con ese filtro" : ""}`}
               </div>
             )}
           </div>
@@ -415,7 +415,6 @@ function CeldaDelDia({
       className="flex min-h-[4.5rem] min-w-0 flex-col gap-0.5 p-0.5 text-left"
       style={{
         background: fondoDelDia(visibles.length),
-        opacity: delMes ? 1 : 0.55,
         outline: abierto ? "2px solid #0f172a" : esElValor ? "2px solid #16a34a" : "none",
         outlineOffset: "-2px",
       }}
@@ -425,7 +424,11 @@ function CeldaDelDia({
           className="text-[11px] leading-4"
           style={{
             fontWeight: esHoy ? 800 : 500,
-            color: esHoy ? "#0f172a" : "#475569",
+            // Los días de relleno de otro mes se distinguen por el número en
+            // cursiva y más tenue, no con `opacity`: bajarle la opacidad a la
+            // celda entera le quitaba contraste al número de OT de las fichas.
+            color: esHoy ? "#0f172a" : delMes ? "#475569" : "#64748b",
+            fontStyle: delMes ? "normal" : "italic",
             textDecoration: esHoy ? "underline" : "none",
           }}
         >
@@ -448,8 +451,10 @@ function CeldaDelDia({
             className="block truncate rounded px-0.5 text-center text-[10px] font-semibold leading-4"
             style={
               o.arrastre
-                ? { background: "#ffffff", color, border: `1.5px dashed ${color}` }
-                : { background: color, color: "#ffffff", border: `1.5px solid ${color}` }
+                // Hueca: el color queda en el borde y el número va oscuro, porque
+                // el ámbar y el verde sobre blanco no se leen a 10 px.
+                ? { background: "#ffffff", color: "#0f172a", border: `1.5px dashed ${color}` }
+                : { background: color, color: textoSobreLaEspecialidad(o.especialidad), border: `1.5px solid ${color}` }
             }
           >
             {o.ot_number}
@@ -563,7 +568,7 @@ function PanelDelDia({
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span
                     className="rounded px-1.5 text-xs font-bold leading-5"
-                    style={{ background: color, color: "#ffffff" }}
+                    style={{ background: color, color: textoSobreLaEspecialidad(o.especialidad) }}
                   >
                     OT {o.ot_number}
                   </span>
