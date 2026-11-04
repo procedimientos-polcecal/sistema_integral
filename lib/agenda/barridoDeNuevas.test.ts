@@ -6,7 +6,9 @@ vi.mock("./escribirEnGoogle", async (original) => ({
 }));
 
 import { escribirEnGoogle } from "./escribirEnGoogle";
-import { barrerLasQueFaltan, juntarLoAnotado, loQueSeAnotaDelBarrido, TOPE_POR_CORRIDA } from "./barridoDeNuevas";
+import {
+  barrerLasQueFaltan, juntarLoAnotado, loQueSeAnotaDelBarrido, ordenesQueFaltan, TOPE_POR_CORRIDA,
+} from "./barridoDeNuevas";
 import { baseEnMemoria, type Fila } from "./baseEnMemoria.testhelper";
 import { CASILLA_DE_MANTENIMIENTO } from "./evento";
 
@@ -382,6 +384,53 @@ describe("el barrido de las que faltan", () => {
     const r = await barrerLasQueFaltan(b.cliente, AHORA, TOPE_POR_CORRIDA, presupuesto);
 
     expect(r).toEqual({ creados: 1, quedaron: 2, fallos: [], fechasIlegibles: [] });
+  });
+});
+
+describe("la selección que comparten el barrido y la corrida en seco", () => {
+  it("devuelve las que faltan, por fecha y número, sin las que ya tienen evento ni escribir nada", async () => {
+    const b = base(
+      [
+        orden(3, { fecha_ejecucion: "2026-11-07" }),
+        orden(1),
+        orden(2),
+        orden(4, { fecha_ejecucion: "2026-11-05" }),
+        orden(5, { fecha_ejecucion: "2026-11-01" }),
+      ],
+      [eventoDe(2)]
+    );
+
+    const r = await ordenesQueFaltan(b.cliente, AHORA);
+
+    expect(r.error).toBeNull();
+    expect(r.faltan.map((f) => [f.orden.ot_number, f.fecha])).toEqual([
+      [3004, "2026-11-05"], [3001, "2026-11-06"], [3003, "2026-11-07"],
+    ]);
+    expect(b.escrituras).toEqual([]);
+    expect(escribirEnGoogle).not.toHaveBeenCalled();
+  });
+
+  it("es la misma lista que después recorre el barrido", async () => {
+    const b = base([orden(1), orden(2, { fecha_ejecucion: "2026-11-05" }), orden(3, { fecha_ejecucion: "2026-11-01" })]);
+    const { faltan } = await ordenesQueFaltan(b.cliente, AHORA);
+
+    await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(b.tablas.agenda_eventos.map((e) => e.ot_id).sort()).toEqual(faltan.map((f) => f.orden.id).sort());
+  });
+
+  it("trae quién generó cada orden, que es de lo que depende a quién se invita", async () => {
+    const b = base([orden(1, { created_by: "u-mant" })]);
+    const { faltan } = await ordenesQueFaltan(b.cliente, AHORA);
+    expect(faltan[0].orden.created_by).toBe("u-mant");
+  });
+
+  it("si no puede leer, lo dice en `error` y no devuelve nada", async () => {
+    const b = base([orden(1)]);
+    b.cliente.from = (() => { throw new Error("se cayó la base"); }) as never;
+    const r = await ordenesQueFaltan(b.cliente, AHORA);
+    expect(r.faltan).toEqual([]);
+    expect(r.error).toMatch(/se cayó la base/);
   });
 });
 

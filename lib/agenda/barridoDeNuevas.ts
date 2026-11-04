@@ -91,9 +91,11 @@ import type { PresupuestoDeGoogle } from "./elEventoSigueALaOT";
  */
 export const TOPE_POR_CORRIDA = 25;
 
-interface OrdenLeida {
+export interface OrdenLeida {
   id: string;
   ot_number: number | null;
+  /** Quién generó la orden: de ahí sale el dueño del evento y, con él, a cuántos se invita. */
+  created_by: string | null;
   fecha_ejecucion: string | null;
   fecha_ejecucion_pendiente: string | null;
   fecha_cierre: string | null;
@@ -128,13 +130,26 @@ export interface LoQueBarrio {
   fechasIlegibles: string[];
 }
 
-export async function barrerLasQueFaltan(
+/**
+ * **La selección, separada de lo que se hace con ella.** Qué órdenes faltan en
+ * el calendario, por fecha ascendente y a igual fecha por número de OT, **sin
+ * escribir nada**. La usan dos: el barrido de arriba, que las manda, y la
+ * corrida en seco de `scripts/mandar-las-ot-futuras.mts`, que sólo dice cuáles
+ * mandaría. Con una sola definición de «cuáles califican», lo que la corrida en
+ * seco promete es lo que la de verdad recorre; con dos, se separarían sin que
+ * nada lo anunciara.
+ *
+ * No lanza: si no puede leer, devuelve `error` y ninguna orden.
+ */
+export async function ordenesQueFaltan(
   admin: SupabaseClient,
-  ahora: Date,
-  tope: number = TOPE_POR_CORRIDA,
-  presupuesto?: PresupuestoDeGoogle
-): Promise<LoQueBarrio> {
-  const r: LoQueBarrio = { creados: 0, quedaron: 0, fallos: [], fechasIlegibles: [] };
+  ahora: Date
+): Promise<{
+  faltan: { orden: OrdenLeida; fecha: string }[];
+  fechasIlegibles: string[];
+  error: string | null;
+}> {
+  const fechasIlegibles: string[] = [];
   const hoy = hoyEnArgentina(ahora);
 
   // Dos lecturas y no un `or`: la fecha que cuenta es la pendiente cuando la
@@ -148,7 +163,7 @@ export async function barrerLasQueFaltan(
         .from("ordenes_trabajo")
         // La cadena va literal y en una sola pieza: partida con `+` pierde la
         // inferencia de tipos de Supabase.
-        .select("id, ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_cierre, estado, especialidad")
+        .select("id, ot_number, created_by, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_cierre, estado, especialidad")
         .gte(columna, hoy)
         .is("fecha_cierre", null)
         .order("id")
@@ -178,8 +193,11 @@ export async function barrerLasQueFaltan(
     ordenes = [...new Map([...porEjecucion, ...porPendiente].map((o) => [o.id, o])).values()];
     conEvento = new Set(eventos.map((e) => e.ot_id));
   } catch (e) {
-    r.fallos.push(`No se pudo leer qué órdenes faltan en el calendario: ${(e as Error).message}`);
-    return r;
+    return {
+      faltan: [],
+      fechasIlegibles,
+      error: `No se pudo leer qué órdenes faltan en el calendario: ${(e as Error).message}`,
+    };
   }
 
   // Por fecha ascendente, y a igual fecha por número de OT, para que la corrida
@@ -190,10 +208,29 @@ export async function barrerLasQueFaltan(
       const c = esCandidataAlCalendario(o, hoy);
       if (c.ok) return [{ orden: o, fecha: c.fecha }];
       // Sólo la fecha ilegible se nombra; el resto de los rechazos es lo normal.
-      if (c.fechaIlegible) r.fechasIlegibles.push(`OT ${o.ot_number ?? o.id}: ${c.motivo}`);
+      if (c.fechaIlegible) fechasIlegibles.push(`OT ${o.ot_number ?? o.id}: ${c.motivo}`);
       return [];
     })
     .sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.orden.ot_number ?? 0) - (b.orden.ot_number ?? 0));
+
+  return { faltan, fechasIlegibles, error: null };
+}
+
+export async function barrerLasQueFaltan(
+  admin: SupabaseClient,
+  ahora: Date,
+  tope: number = TOPE_POR_CORRIDA,
+  presupuesto?: PresupuestoDeGoogle
+): Promise<LoQueBarrio> {
+  const r: LoQueBarrio = { creados: 0, quedaron: 0, fallos: [], fechasIlegibles: [] };
+
+  const seleccion = await ordenesQueFaltan(admin, ahora);
+  r.fechasIlegibles = seleccion.fechasIlegibles;
+  if (seleccion.error) {
+    r.fallos.push(seleccion.error);
+    return r;
+  }
+  const { faltan } = seleccion;
 
   let intentadas = 0;
   for (const { orden } of faltan) {

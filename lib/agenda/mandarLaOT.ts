@@ -128,9 +128,11 @@ interface EventoDelDia {
 }
 
 /**
- * Cuántos eventos de OT del mismo grupo ya hay ese día. **Interno**: quien
- * barre no cuenta por su cuenta ni adelanta nada, deja que esta función haga la
- * cuenta, que es lo que evita dos criterios para lo mismo. Y no hay nada que
+ * Cuántos eventos de OT del mismo grupo ya hay ese día. **Quien barre no cuenta
+ * por su cuenta ni adelanta nada**, deja que esta función haga la cuenta, que es
+ * lo que evita dos criterios para lo mismo. Se exporta para que la corrida en
+ * seco de `scripts/mandar-las-ot-futuras.mts` pregunte lo mismo que va a
+ * preguntar la de verdad, y por eso no se reescribe allá. Y no hay nada que
  * adelantar: cada orden se escribe antes de contar la siguiente, así que la
  * base ya tiene la anterior (ver el encabezado de `barridoDeNuevas`).
  *
@@ -146,7 +148,7 @@ interface EventoDelDia {
  * porque `claveDelHueco` normaliza la especialidad; y **el evento de la propia
  * orden no cuenta**: al reenviarla se correría sola.
  */
-async function huecosOcupados(
+export async function huecosOcupados(
   admin: SupabaseClient,
   fecha: string,
   especialidad: string | null | undefined,
