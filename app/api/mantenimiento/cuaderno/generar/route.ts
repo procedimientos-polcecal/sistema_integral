@@ -13,6 +13,7 @@ import {
   enOrdenes, pendientesDeOrdenes, type GrupoDeCuaderno, type RenglonDelCuaderno,
 } from "@/lib/mantenimiento/cuadernoGrupos";
 import { actualizarElEstado } from "@/lib/mantenimiento/cuadernoEstado";
+import { alNacerLaOT } from "@/lib/agenda/alNacerLaOT";
 import { exportarLoPendiente } from "@/lib/mantenimiento/sincronizar";
 import { esperasQueEntran } from "@/lib/mantenimiento/reintentoDePendientes";
 import {
@@ -343,6 +344,9 @@ export async function POST(request: Request) {
 
         if (!resultado.ok) { problemas.push(resultado.error); continue; }
         (item.existente ? actualizadas : creadas).push(resultado.resumen);
+        // La orden ya salió: lo del calendario es lo que hay que mirar del
+        // espejo y va al mismo informe, sin tirar la corrida.
+        if (resultado.calendario) problemas.push(resultado.calendario);
       } catch (e) {
         problemas.push(
           `${comoDecirla(grupo)}: falló de forma inesperada mientras se generaba ` +
@@ -589,7 +593,9 @@ function comoDecirla(grupo: GrupoDeCuaderno): string {
 }
 
 type Resumen = { ot_number: number; tarea: string; sector: string; horas: number; costo: number | null };
-type Resultado = { ok: true; resumen: Resumen } | { ok: false; error: string };
+type Resultado =
+  | { ok: true; resumen: Resumen; /** Lo que dijo `alNacerLaOT`, si la orden no entró al calendario. */ calendario?: string }
+  | { ok: false; error: string };
 
 /**
  * Marca los renglones con su orden, **sólo los que todavía no tenían una**.
@@ -871,11 +877,21 @@ async function crearLaOT(
     };
   }
 
+  // El calendario va **después de marcar los renglones**: marcarlos es lo que
+  // impide que un nuevo «generar» cree la orden otra vez, y hablar con Google es
+  // lo único de acá que puede tardar. Con la OT ya guardada y marcada, un fallo
+  // del espejo no la toca: `alNacerLaOT` no lanza y devuelve una frase o null.
+  // Hoy estas órdenes nacen cerradas —con `fecha_cierre`—, así que casi siempre
+  // es null; está porque el criterio de qué entra es de una sola función y no
+  // de cada puerta.
+  const calendario = await alNacerLaOT(admin, creada.id);
+
   return {
     ok: true,
     resumen: {
       ot_number: alta.ot_number, tarea: grupo.tarea, sector: valores.sector_nombre,
       horas: valores.horas, costo: valores.costo,
     },
+    ...(calendario ? { calendario } : {}),
   };
 }

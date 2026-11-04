@@ -38,6 +38,7 @@
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { alNacerLaOT } from "@/lib/agenda/alNacerLaOT";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { altaEnLaPlanilla } from "@/lib/mantenimiento/formulario";
 import { estadoSegunElCierre, loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
@@ -106,6 +107,12 @@ export interface ResultadoDeGenerar {
    * termina `exportarLoPendiente` en la corrida siguiente.
    */
   sinEstadoTodavia: number[];
+  /**
+   * Las que se crearon pero no entraron al calendario, con la frase que
+   * devolvió `alNacerLaOT`. No es un error de la OT —la orden existe—: es lo que
+   * hay que mirar del espejo.
+   */
+  sinCalendario: { ot_number: number; aviso: string }[];
 }
 
 /** Las columnas que hacen falta para decidir y para armar la orden. */
@@ -132,6 +139,7 @@ export async function generarLasPeriodicas(
 ): Promise<ResultadoDeGenerar> {
   const r: ResultadoDeGenerar = {
     generadas: [], incompletos: [], fallaron: [], cerrados: [], sinEstadoTodavia: [],
+    sinCalendario: [],
   };
 
   const { data } = await admin
@@ -178,7 +186,7 @@ export async function generarLasPeriodicas(
       continue;
     }
 
-    const { error } = await admin.from("ordenes_trabajo").insert({
+    const { data: creada, error } = await admin.from("ordenes_trabajo").insert({
       ot_number: alta.ot_number,
       fecha: hoy,
       sector_id: cuerpo.sector_id ?? null,
@@ -207,7 +215,7 @@ export async function generarLasPeriodicas(
       app_created: true,
       created_at_app: new Date().toISOString(),
       synced_at: new Date().toISOString(),
-    });
+    }).select("id").single();
 
     if (error) {
       // La fila de la planilla ya está escrita y el número repartido, así que
@@ -278,6 +286,19 @@ export async function generarLasPeriodicas(
         .update({ status: "completed", last_executed_at: new Date().toISOString() })
         .eq("id", p.id);
       r.cerrados.push(p.id);
+    }
+
+    // El calendario va **al final y no antes de correr la fecha**, y no es una
+    // comodidad. Hablar con Google es lo único de acá que puede tardar o colgar
+    // la función, y si ésta muriera en medio **antes** de correr `next_date`, la
+    // corrida siguiente volvería a crear la misma orden: la fecha corrida es lo
+    // que da la idempotencia (ver el encabezado). La orden ya está guardada, así
+    // que acá sólo se espeja. `alNacerLaOT` no lanza: la frase se junta en el
+    // informe y no frena a los demás. Sólo entra si la fecha del programado es
+    // hoy —una vencida de ayer ya pasó y no se manda—.
+    if (creada) {
+      const sinCalendario = await alNacerLaOT(admin, creada.id);
+      if (sinCalendario) r.sinCalendario.push({ ot_number: alta.ot_number, aviso: sinCalendario });
     }
   }
 

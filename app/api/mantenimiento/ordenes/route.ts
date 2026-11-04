@@ -31,6 +31,7 @@ import { hoyEnArgentina } from "@/lib/core/fechas";
 import { esquemaGut } from "@/lib/mantenimiento/gut";
 import { esquemaFalla } from "@/lib/mantenimiento/fallas";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
+import { alNacerLaOT } from "@/lib/agenda/alNacerLaOT";
 
 /**
  * Cinco minutos, que es lo que necesita el reintento del alta.
@@ -680,9 +681,20 @@ export async function POST(request: Request) {
     aviso_error = marca.error ?? marca.planillaError;
   }
 
+  // ── El calendario, lo último y sin poder fallar la orden ───────────────
+  //
+  // Va **después** de todo lo que guarda y fuera de cualquier transacción: la
+  // OT ya existe en la planilla y en la base, y el evento es su espejo. Un
+  // fallo de Google no puede convertirse en un error sobre una orden que sí se
+  // creó, así que `alNacerLaOT` no lanza: devuelve una frase, o null cuando no
+  // hay nada que decir —lo normal, porque sólo entra una orden abierta con
+  // fecha de hoy en adelante—. La frase viaja en la respuesta, como el resto
+  // de lo que salió a medias.
+  const calendario_aviso = await alNacerLaOT(admin, inserted.id);
+
   return NextResponse.json({
     data: inserted, ot_number, aviso_error, planilla_error, planilla_reintentando,
-    clave_error, repuestos_error,
+    clave_error, repuestos_error, calendario_aviso,
   });
 }
 
