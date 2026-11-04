@@ -612,8 +612,19 @@ tests en este repo. En cada punto va qué mirar y qué se vería si estuviera ma
 **Actualización del 04/11/2026: la migración ya está aplicada.** `agenda_eventos` existe en
 producción y tiene dos filas —una «Prueba» y la de la OT 2970—, así que los puntos 1 y 2
 (el orden de despliegue y el ruido de la campana) **quedaron cumplidos y ya no aplican**.
+**El punto 6 también se midió** y tiene la respuesta escrita adentro: Google da siete días.
 Los demás se escribieron antes y **no se tachan**: esta actualización dice que la tabla
-existe, no que el resto se haya mirado. **Ordenados por lo que más duele si falla en silencio**, salvo los dos primeros, que
+existe y que los canales abren, no que el resto se haya mirado.
+
+**Y lo que esa primera corrida dejó medido de paso, porque costó una tarde encontrarlo:**
+`NEXT_PUBLIC_APP_URL` estaba cargada en Vercel **sin el `https://`**, y con eso los catorce
+canales fallaron al abrir. El error nombró la variable —que es para lo que está escrito
+así— pero lo que no se nota es el **otro** consumidor de esa misma variable:
+`urlBase()` de [lib/core/auth-links.ts](../lib/core/auth-links.ts) la usa para los links de
+blanqueo de contraseña y **no falla con un error**; Supabase recibe un `redirectTo` que no
+matchea su lista y cae de vuelta a su propio Site URL, callado. O sea que la misma
+variable mal cargada rompe una cosa a los gritos y otra en silencio. Si alguna vez se
+toca, es `https://` completo y sin barra final. **Ordenados por lo que más duele si falla en silencio**, salvo los dos primeros, que
 son de orden de despliegue y van arriba porque se hacen antes que todo lo demás.
 
 1. **El código y la migración van en la misma ventana, y la migración no puede llegar
@@ -662,12 +673,23 @@ son de orden de despliegue y van arriba porque se hacen antes que todo lo demás
    último deja la corrida **roja** nombrando el `eq`. Primera cosa a mirar en
    `agenda / barrido`: «N divergencias detectadas, 0 anotadas». Para probarlo, borrar a
    mano un evento en Google y mirar si la fila queda con `divergencia`.
-6. **El plazo real que Google le da a un canal de `events.watch`.** `abrirCanal` devuelve
-   el `vence` real y es el que manda, pero **no se midió** (no se puede desde local). El
-   margen de renovación de 48 h y la frecuencia diaria del cron **descansan en que ese
-   plazo sea bastante mayor que dos días**. Si un día Google devuelve uno más corto, el
-   cron diario ya no alcanza y hay que cambiar la frecuencia. Mirar la columna `vence` de
-   `agenda_canales` después de la primera corrida.
+6. ~~**El plazo real que Google le da a un canal de `events.watch`.**~~ **MEDIDO el
+   04/11/2026: Google da siete días.** Las catorce casillas abrieron a las 12:37:17 UTC y
+   vencen el 11/11/2026 a las 12:37:17 — siete días justos, no un plazo negociado ni
+   proporcional a nada. Era el último supuesto sin comprobar del diseño: el margen de
+   renovación de 48 h y la frecuencia diaria del cron descansaban en que ese plazo fuera
+   «bastante mayor que dos días», sin saber cuánto.
+
+   Lo que eso deja, en concreto: con un canal de 7 días y un margen de 48 h, el cron
+   empieza a renovarlo recién el quinto día, así que tiene **tres corridas diarias** para
+   lograrlo antes de que muera. Tres fallos seguidos del cron matan un canal; uno o dos,
+   no. Y un canal muerto **no se distingue de uno sano** (ver más arriba), que es por lo
+   que el barrido existe.
+
+   Si alguna vez Google devuelve un plazo más corto, `abrirCanal` sigue siendo el que
+   manda —el `vence` sale de su respuesta, no de una constante— pero la aritmética de
+   arriba cambia y hay que subir la frecuencia del cron. Se comprueba mirando la columna
+   `vence` de `agenda_canales`.
 7. **`abrirCanal` y `cerrarCanal` contra Google.** Sus tests fijan la lectura de la API
    (forma del cuerpo, `expiration` en ms), no una medición. Y **Google valida que el
    dominio esté verificado en el proyecto de Google Cloud** antes de abrir el canal: si no
