@@ -110,7 +110,16 @@ export async function POST(request: Request) {
    */
   const Cuerpo = z.object({
     repuestos: z
-      .array(z.object({ codigo: z.string().nullable().optional(), nombre: z.string().nullable().optional() }))
+      // `cantidad` es texto libre, igual que en la planilla: con ella
+      // `buscarEnInventario` puede decir «no alcanza» y sin ella se comporta
+      // como antes, así que es opcional y nada se rompe si no viaja.
+      .array(
+        z.object({
+          codigo: z.string().nullable().optional(),
+          nombre: z.string().nullable().optional(),
+          cantidad: z.string().nullable().optional(),
+        })
+      )
       .default([]),
   });
   const validado = validar(Cuerpo, await cuerpoJson(request));

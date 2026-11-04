@@ -76,7 +76,13 @@ export function filaDeInsumo(fila: unknown[], idx: IndiceInventario): Insumo | n
  * "No está en el inventario" y "no hay stock" son cosas distintas: una se
  * compra, la otra se busca en otro lado o se pregunta en el pañol.
  */
-export type EstadoDeStock = "hay" | "bajo_minimo" | "no_hay" | "sin_dato" | "no_esta";
+export type EstadoDeStock =
+  | "hay"
+  | "no_alcanza"
+  | "bajo_minimo"
+  | "no_hay"
+  | "sin_dato"
+  | "no_esta";
 
 export interface Disponibilidad {
   codigo: string | null;
@@ -96,7 +102,7 @@ const MINIMO_PARA_BUSCAR = 4;
  * encuentran media planilla.
  */
 export function buscarEnInventario(
-  repuestos: { codigo?: string | null; nombre?: string | null }[],
+  repuestos: { codigo?: string | null; nombre?: string | null; cantidad?: string | null }[],
   inventario: Insumo[]
 ): Disponibilidad[] {
   const porCodigo = new Map<string, Insumo>();
@@ -123,15 +129,51 @@ export function buscarEnInventario(
       codigo: r.codigo ?? null,
       nombre: r.nombre ?? null,
       insumo,
-      estado: estadoDe(insumo),
+      estado: estadoDe(insumo, r.cantidad),
     };
   });
 }
 
-function estadoDe(insumo: Insumo | null): EstadoDeStock {
+/**
+ * Cuántos pide la orden, si de lo anotado sale un número.
+ *
+ * El campo es texto libre —"80", "80 u.", "un juego"— porque la planilla lo es.
+ * Lo que no tiene número devuelve `null` y **no se compara**: decir «no
+ * alcanza» sin saber cuánto hace falta es inventar.
+ *
+ * Es la misma lectura que hace `cantidadPedida` de `pedirRepuesto.ts`, que
+ * llena el formulario del requerimiento. Están separadas porque devuelven
+ * cosas distintas —aquélla el texto para un campo, ésta un número para
+ * comparar— y unirlas obligaría a una a convertir de vuelta.
+ */
+function cuantosPide(texto: string | null | undefined): number | null {
+  const m = String(texto ?? "").match(/\d+(?:[.,]\d+)?/);
+  if (!m) return null;
+  const n = Number(m[0].replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * En qué situación está un repuesto, para **esta** orden.
+ *
+ * El orden de las preguntas no es casual y se decidió el 04/11/2026:
+ *
+ *  - **No estar y no haber ganan**, porque son más graves y porque decir «no
+ *    alcanza» de algo que no existe en el pañol no significa nada.
+ *  - **«No alcanza» le gana a «queda poco»**, que es el más blando de los tres
+ *    y además el que afirma de más: «queda poco» quiere decir *alcanza para
+ *    este trabajo, pero hay que reponer*, y eso es falso justamente cuando no
+ *    alcanza. Hasta hoy ese era el único juicio sobre la cantidad que el
+ *    sistema hacía, y lo hacía sin mirar lo que la orden pide.
+ *  - **Sin cantidad legible no se compara** y queda lo de siempre.
+ */
+function estadoDe(insumo: Insumo | null, cantidad?: string | null): EstadoDeStock {
   if (!insumo) return "no_esta";
   if (insumo.stock === null) return "sin_dato";
   if (insumo.stock <= 0) return "no_hay";
+
+  const pide = cuantosPide(cantidad);
+  if (pide !== null && insumo.stock < pide) return "no_alcanza";
 
   // Al mínimo o por debajo: alcanza para este trabajo, pero hay que reponer.
   if (insumo.seguridad !== null && insumo.stock <= insumo.seguridad) return "bajo_minimo";
@@ -141,6 +183,7 @@ function estadoDe(insumo: Insumo | null): EstadoDeStock {
 /** Cómo se dice cada estado en la pantalla. */
 export const ESTADO_DE_STOCK: Record<EstadoDeStock, { label: string; color: string }> = {
   hay: { label: "Hay", color: "text-emerald-700" },
+  no_alcanza: { label: "No alcanza", color: "text-amber-700" },
   bajo_minimo: { label: "Queda poco", color: "text-amber-700" },
   no_hay: { label: "No hay", color: "text-red-600" },
   sin_dato: { label: "Sin stock informado", color: "text-slate-500" },

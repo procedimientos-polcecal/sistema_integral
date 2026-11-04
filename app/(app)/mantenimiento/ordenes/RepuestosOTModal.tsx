@@ -142,7 +142,11 @@ export default function RepuestosOTModal({
     const stock = await fetch("/api/mantenimiento/inventario", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repuestos: lista.map((r) => ({ codigo: r.codigo, nombre: r.nombre })) }),
+      // La cantidad viaja para que el inventario pueda decir «no alcanza»: con
+      // 61 en stock y una OT que pide 80, sin esto la pantalla decía «Hay».
+      body: JSON.stringify({
+        repuestos: lista.map((r) => ({ codigo: r.codigo, nombre: r.nombre, cantidad: r.cantidad })),
+      }),
     });
     if (!stock.ok) return;
 
