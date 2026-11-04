@@ -95,3 +95,17 @@ export function tituloDelRango(vista: VistaDeAgenda, dia: string): string {
   if (a.mes !== b.mes) return `${a.mes} – ${b.mes} ${a.anio}`;
   return `${a.mes} ${a.anio}`;
 }
+
+/**
+ * El enlace a una vista y un día de la Agenda: `/agenda?vista=…&dia=…`.
+ *
+ * **Conserva `historial=1` si estaba puesto.** Las flechas, «Hoy» y el selector
+ * de vista son enlaces y no estado, así que lo que no viaja en la URL se pierde:
+ * quien pidió «todo el historial» y cambia de vista volvería a los últimos 30
+ * días sin que nada se lo diga.
+ */
+export function hrefDeLaAgenda(vista: VistaDeAgenda, dia: string, historial: boolean): string {
+  const partes = new URLSearchParams({ vista, dia });
+  if (historial) partes.set("historial", "1");
+  return `/agenda?${partes.toString()}`;
+}

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   aEventoVista, avisoDelPendiente, consecuenciaDeDestrabar, corteDelHistorial, mientrasEstaDivergido, cruzaLaMedianoche, DIAS_DE_HISTORIAL, horarioDelEvento, horarioParaGuardar,
   leerRespuestaDeEscritura,
-  nombreDelDueno, permisosDelEvento, separarProximosYPasados, type EventoVista, type FilaCruda,
+  nombreDelDueno, permisosDelEvento, separarProximosYPasados, unaHoraDespues, type EventoVista, type FilaCruda,
 } from "./vista";
 
 const sinDirectorio = new Map<string, string>();
@@ -296,5 +296,15 @@ describe("horarioDelEvento", () => {
   it("un evento que cruza la medianoche dice los dos días", () => {
     expect(horarioDelEvento("2026-11-03T23:00:00Z", "2026-11-04T04:00:00Z"))
       .toBe("mar 03/11/2026 20:00 a mié 04/11/2026 01:00");
+  });
+});
+
+describe("unaHoraDespues", () => {
+  it("suma una hora", () => {
+    expect(unaHoraDespues("09:00")).toBe("10:00");
+    expect(unaHoraDespues("00:00")).toBe("01:00");
+  });
+  it("a las 23 no pasa de día", () => {
+    expect(unaHoraDespues("23:00")).toBe("23:59");
   });
 });

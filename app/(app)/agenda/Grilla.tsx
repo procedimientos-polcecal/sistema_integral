@@ -77,7 +77,13 @@ export default function Grilla({
 
   const contenedor = useRef<HTMLDivElement>(null);
   const claveDelRango = `${dias[0]}|${dias.length}`;
-  const primerMin = ubicados.length > 0 ? Math.min(...ubicados.map((p) => p.desdeMin)) : null;
+  // Un pedazo que viene de ayer arranca a las 00:00 por construcción y no dice
+  // dónde está lo que hay que mirar: contándolo, una semana con un solo evento
+  // que cruza la medianoche abría siempre en la madrugada (visto en el
+  // navegador). Sólo cuenta si no hay otra cosa.
+  const propios = ubicados.filter((p) => !p.vieneDeAntes);
+  const paraElScroll = propios.length > 0 ? propios : ubicados;
+  const primerMin = paraElScroll.length > 0 ? Math.min(...paraElScroll.map((p) => p.desdeMin)) : null;
 
   // El scroll se acomoda al cambiar de rango y no con cada cambio de eventos:
   // guardar una edición recarga la lista, y mover la grilla bajo la mano de

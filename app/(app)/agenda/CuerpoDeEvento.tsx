@@ -29,6 +29,12 @@ export interface Props {
   onBorrar: () => void;
   onVisto: () => void;
   onDestrabar: (como: "reescribir" | "aceptar") => void;
+  /**
+   * No repetir el título. Lo pone el detalle en un modal, que ya lo lleva en su
+   * cabecera: dos veces el mismo texto a tres renglones de distancia es ruido.
+   * La tarjeta no lo pone, porque en ella el título es el encabezado.
+   */
+  sinTitulo?: boolean;
 }
 
 const AMBAR = { background: "#FFFBEB", borderColor: "#FCD34D" } as const;
@@ -36,7 +42,7 @@ const GRIS = { background: "#F8FAFC", borderColor: "#CBD5E1" } as const;
 
 export default function CuerpoDeEvento({
   evento: e, miId, numeroDeOT, nombrePorCorreo, pasado, ocupado,
-  onEditar, onBorrar, onVisto, onDestrabar,
+  onEditar, onBorrar, onVisto, onDestrabar, sinTitulo,
 }: Props) {
   const p = permisosDelEvento(e, miId);
   const esMio = e.duenoId === miId;
@@ -57,7 +63,7 @@ export default function CuerpoDeEvento({
       <div className="space-y-3 p-4" style={pasado ? { opacity: 0.8 } : undefined}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
-            <h3 className="break-words text-base font-semibold text-slate-900">{e.titulo}</h3>
+            {!sinTitulo && <h3 className="break-words text-base font-semibold text-slate-900">{e.titulo}</h3>}
             <p className="text-sm text-slate-600">{horarioDelEvento(e.inicio, e.fin)}</p>
           </div>
           <div className="flex flex-wrap gap-1.5">

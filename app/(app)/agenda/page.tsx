@@ -140,6 +140,8 @@ export default async function AgendaPage({
         usuarios={invitables}
         numerosDeOT={numerosDeOT}
         historial={historial}
+        vista={vista}
+        dia={dia}
         lecturaFallo={errorDeEventos !== ""}
       />
     </div>

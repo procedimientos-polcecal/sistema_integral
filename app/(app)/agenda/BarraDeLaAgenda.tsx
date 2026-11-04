@@ -111,7 +111,13 @@ export default function BarraDeLaAgenda({
         </div>
       )}
 
-      <h2 className="min-w-0 flex-1 text-base font-semibold text-slate-900">{tituloDelRango(vista, dia)}</h2>
+      {/* En el teléfono el título lleva su renglón entero. Con `flex-1` y `min-w-0` a
+          secas su base es 0 y el título **nunca salta de línea**: se achicaba a
+          10 px y «Noviembre 2026» salía una letra por renglón (visto en el
+          navegador a 375 px). Desde `sm` comparte la fila y se estira. */}
+      <h2 className="w-full text-base font-semibold text-slate-900 sm:w-auto sm:min-w-0 sm:flex-1">
+        {tituloDelRango(vista, dia)}
+      </h2>
 
       <nav aria-label="Vista de la agenda" className="flex overflow-hidden rounded-lg border" style={{ borderColor: "#CBD5E1" }}>
         {VISTAS.map((v) => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { corteDelHistorial } from "./vista";
-import { desdeParaLeer, diasDelRango, inicioDeLaSemana, leerDia, leerVista, tituloDelRango } from "./rango";
+import { desdeParaLeer, diasDelRango, hrefDeLaAgenda, inicioDeLaSemana, leerDia, leerVista, tituloDelRango } from "./rango";
 
 describe("leerVista", () => {
   it("por defecto es la semana", () => {
@@ -88,5 +88,14 @@ describe("tituloDelRango", () => {
   });
   it("la lista no tiene rango y dice lo que es", () => {
     expect(tituloDelRango("lista", "2026-11-04")).toBe("Próximos y recientes");
+  });
+});
+
+describe("hrefDeLaAgenda", () => {
+  it("arma la vista y el día", () => {
+    expect(hrefDeLaAgenda("semana", "2026-11-04", false)).toBe("/agenda?vista=semana&dia=2026-11-04");
+  });
+  it("conserva el historial para no perderlo al cambiar de vista", () => {
+    expect(hrefDeLaAgenda("lista", "2026-11-04", true)).toBe("/agenda?vista=lista&dia=2026-11-04&historial=1");
   });
 });
