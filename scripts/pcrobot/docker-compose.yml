@@ -24,6 +24,9 @@ services:
       # tocar la carpeta del robot. Lo único que sabe hacer con ella es leer.
       - filler1:/datos/filler1:ro
       - filler2:/datos/filler2:ro
+      - planta02:/datos/planta02:ro
+      - hornos:/datos/hornos:ro
+      - porteria:/datos/porteria:ro
       # La configuración y la credencial, también de sólo lectura.
       - ./config:/config:ro
     logging:
@@ -43,16 +46,53 @@ services:
 # El `vers=3.0` está puesto a propósito y puede haber que bajarlo: un servidor
 # viejo que sólo habla SMB 1 falla con un "mount error(112)" que no dice nada
 # sobre la versión del protocolo.
+#
+# Y `domain` lleva `WORKGROUP` por defecto y NO puede quedar vacío. Un
+# `domain=` sin valor hace que el montaje falle con `invalid argument`, que no
+# dice cuál de las ocho opciones es la mala y manda a buscar por el lado
+# equivocado —parece un problema de permisos o de versión de SMB y no lo es—.
+# Comprobado el 23/10/2026: con `domain=` el error es `invalid argument`, con
+# `domain=WORKGROUP` el montaje se intenta de verdad.
 volumes:
   filler1:
     driver: local
     driver_opts:
       type: cifs
-      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO},vers=3.0,ro,uid=1000,gid=1000"
+      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO:-WORKGROUP},vers=3.0,ro,uid=1000,gid=1000"
       device: "//${SMB_SERVIDOR}/EXTERIOR/Filler1"
   filler2:
     driver: local
     driver_opts:
       type: cifs
-      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO},vers=3.0,ro,uid=1000,gid=1000"
+      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO:-WORKGROUP},vers=3.0,ro,uid=1000,gid=1000"
       device: "//${SMB_SERVIDOR}/EXTERIOR/Filler2"
+
+  # Los tres de abajo se suben para no perder el dato y el SdG todavía no los
+  # lee: Planta 02 es un PC Robot pero su CSV es un horímetro por hora y sin
+  # kilos, Hornos son planillas mensuales respaldadas a diario, y Portería es
+  # el respaldo del escritorio completo de esa PC.
+  #
+  # OJO con `Planta 02`: el nombre del recurso tiene un ESPACIO. Acá va entre
+  # comillas y así es como mount.cifs lo recibe entero, pero es el primer lugar
+  # donde mirar si ese montaje falla y los otros cuatro andan. Esta variante,
+  # la de Docker, quedó sin usar en producción —la cuenta que lee el servidor
+  # no tiene contraseña y Windows bloquea el acceso de red con clave vacía—,
+  # así que estas tres líneas no están comprobadas contra un servidor real.
+  planta02:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO:-WORKGROUP},vers=3.0,ro,uid=1000,gid=1000"
+      device: "//${SMB_SERVIDOR}/EXTERIOR/Planta 02"
+  hornos:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO:-WORKGROUP},vers=3.0,ro,uid=1000,gid=1000"
+      device: "//${SMB_SERVIDOR}/EXTERIOR/Hornos"
+  porteria:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO:-WORKGROUP},vers=3.0,ro,uid=1000,gid=1000"
+      device: "//${SMB_SERVIDOR}/EXTERIOR/Porteria"

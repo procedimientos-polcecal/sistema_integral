@@ -471,6 +471,20 @@ cron a las 13:00 UTC, y lee la carpeta de Drive de la variable
 `GOOGLE_DRIVE_PCROBOT_FOLDER_ID` (con `supportsAllDrives=true`: sin eso Drive
 contesta 404 sin explicar).
 
+**En esa carpeta hay más de lo que se lee, y conviene saberlo antes de buscar
+por qué algo "no se importó".** Desde el 04/11/2026 la misma tarea sube
+`Planta 02`, `Hornos` y `Porteria`, que se guardan para dejar de perder el dato
+y que el SdG **no** importa: Planta 02 es un PC Robot pero su CSV es un
+horímetro por hora y **sin kilos**, y las otras dos no son robots. Los tres
+están filtrados en `SE_GUARDAN_SIN_LEER` de `drive.ts` **a propósito**: sin
+eso, el aviso de «no es de ningún molino» se escribiría en el campo `error` de
+`sincronizaciones` —con `ok: true`, que es donde alguien mira si esto está al
+día— tres veces por día para siempre, y un aviso que se repite deja de ser un
+aviso. Un nombre raro que no esté en esa lista sigue saltando. Qué trae cada
+una y qué carpetas del servidor están muertas está en
+[PRODUCCION-FILLERS-SUBIDA.md](PRODUCCION-FILLERS-SUBIDA.md), sección «Qué se
+sube, y qué de eso se lee».
+
 **Y hay una ruta para correrla a mano, `POST /api/produccion/molinos/importar`,
 que ninguna pantalla llama todavía.** Está escrita y probada, pero no tiene
 botón: quien la quiera usar hoy la invoca directo. Este documento decía "y con
