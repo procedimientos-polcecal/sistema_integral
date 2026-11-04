@@ -164,12 +164,50 @@ Se llama `ORDEN DE TRABAJO`, la pestaña `OT`, y tenía 1.728 órdenes al portar
 Sus columnas coinciden con lo que leía el código de origen:
 
 `A N° OT · B fecha · C sector · D equipo · E especialidad · F tipo · G quién ·
-H descripción · I repuesto · J ejecución · K cierre · L (calculada) · M estado ·
+H descripción · I repuesto · J inicio · K cierre · L (calculada) · M estado ·
 N contratista · O horas · P/Q/R operarios · S prioridad · T frecuencia ·
-U próxima fecha · V fotos · W observaciones · X observación previa`
+U próxima fecha · V fotos · W observaciones · X observación previa ·
+Y fin (estimada)`
 
 La **X se agregó el 16/10/2026** y es la única que no estaba en el origen. Ver
 "Por qué una OT todavía no se hizo", más abajo.
+
+### Tres fechas que se confunden, y la Y que llegó el 02/11/2026
+
+Ese día la **J pasó de llamarse «FECHA DE EJECUCIÓN» a «FECHA DE INICIO»** y
+apareció la **Y, «FECHA DE FIN»**. Con eso la planilla pasó a tener tres fechas
+de trabajo y conviene leerlas juntas, porque dos son estimaciones y una no:
+
+| Columna | Qué es |
+|---|---|
+| **J — fecha de inicio** | Cuándo se compromete a **empezar**. Estimada. Es la que decide si una OT está atrasada |
+| **Y — fecha de fin** | Cuándo se calcula que **termina**. Estimada y **opcional** |
+| **K — fecha de cierre** | Cuándo se cerró **de verdad**. No es una estimación |
+
+Tres cosas que no se deducen del código:
+
+- **Por dentro la J se sigue llamando `fecha_ejecucion`**, en la base y en todo
+  `lib/mantenimiento`. Es la misma fecha con mejor nombre: renombrar la columna
+  habría arrastrado el MTBF, el contraste, el GUT y la programación del taller
+  sin cambiar nada de lo que hacen. Lo que sí se renombró es **el nombre que se
+  ve**, y vive en un solo lugar —`IMPRESCINDIBLES` de
+  [lib/mantenimiento/altaDeOT.ts](../lib/mantenimiento/altaDeOT.ts)— del que lo
+  toman los cuatro formularios, el contraste y los avisos.
+- **La Y no se guarda en `ordenes_trabajo`.** No hay columna ni migración: la
+  fecha de fin viaja del formulario a la planilla y se queda ahí, que es donde
+  manda. El día que haga falta verla en el sistema son una columna nueva y
+  leerla en `filaDeOrden`.
+- **Si el encabezado no trae «FECHA DE FIN», el dato no se escribe y el alta no
+  se cae.** Es la regla que ya valía para toda columna que el formulario puede
+  no tener, y acá tiene una consecuencia: hasta que esa columna exista en las
+  **dos** pestañas del libro de respuestas —`Respuestas de formulario` y
+  `Altas del sistema`—, cargar la fecha en la app no deja nada del otro lado.
+  El par está fijado con un test en `formulario.test.ts`.
+
+Y del lado de la planilla, la Y del master **no es derrame todavía**: nació
+vacía, sin fórmula. Para que traiga lo que cargan las dos pestañas necesita su
+propio `QUERY(IMPORTRANGE(...))` en la `Y2`, con la misma forma que la `S2` y
+—esto es lo que las alinea— el mismo `ORDER BY Col1`.
 
 **La columna L no es el estado.** Se llama "Column 19" y trae un "Atrasado / al
 día" calculado; el estado está en M. Confundirlas daría por atrasada media
@@ -2086,6 +2124,423 @@ corte de 240, y las otras nueve entre 15 y 49. Una página así puede quedar jus
 del lado equivocado y terminar en `fallo`; se reintenta. Con un modelo que no
 razona tanto no debería pasar, pero no se pudo medir.
 
+### La otra puerta: el mes en un Excel (02–03/11/2026)
+
+**No todos los meses vienen en el cuaderno.** Quien carga arma a veces la
+planilla él mismo, y en ese caso fotografiar lo que ya está tipeado para que un
+modelo lo vuelva a leer es dar una vuelta entera para perder exactitud —y mete
+los dudosos de la letra manuscrita en un dato que nunca fue manuscrito—. Así que
+un mes puede entrar por un `.xlsx` **como alternativa a las fotos**, no como
+otro modo: los renglones quedan iguales y todo lo de abajo —el enganche a sector
+y equipo, juntar y separar, confirmar el sector, el freno de duplicados,
+generar— no se entera de por dónde entraron.
+
+#### Las cinco columnas que se procesan
+
+| Columna | Obligatoria | Qué es |
+|---|---|---|
+| **Tarea** | **sí** | Qué se hizo. Es lo que va a la descripción de la OT |
+| **Fecha Desde** | no | El primer día |
+| **Fecha Hasta** | no | El último. Vacío quiere decir que duró un día |
+| **Hs** | **sí** | Las horas de esa tarea |
+| **Precio ($)** | no | Lo que se cobra por trabajo, cuando no se cobra por hora |
+
+**Se buscan por el texto del encabezado, no por la letra de la columna**, y eso
+no es comodidad. El 02/11/2026 este mismo contenido vivía en `K` a `O` —era el
+resumen de la derecha de una planilla que además traía el detalle día por día a
+la izquierda— y el 03/11 pasó a `A` a `E` al quedar la tabla sola. Leer por
+letra significa que mover la tabla una columna rompe la carga sin decir por qué.
+Se aceptan también `Descripción`, `Desde`, `Hasta`, `Horas` e `Importe`, y una
+sola columna `Fecha` se toma como el día en que empieza.
+
+**Una fila es una tarea y una tarea es una orden de trabajo.** No hay nada que
+agrupar: quien arma el archivo ya hizo la consolidación. Juntar y separar a mano
+siguen en la pantalla para el caso raro.
+
+#### Seis cosas que no se deducen del código
+
+- **El control es la fila de TOTALES**: sus horas tienen que dar la suma de las
+  filas. Medido sobre el archivo real, ese total está **escrito a mano y no es
+  una fórmula**, así que compararlo no es redundante — es lo que detecta una
+  fila tipeada de más, una de menos o un dígito cambiado. **Si no da, los
+  renglones entran igual**: no hay nada que retener, la tabla *es* el dato. Se
+  dice fuerte, con los dos números y la diferencia. Si no hay fila de TOTALES,
+  también se avisa: no hay contra qué comparar.
+- **El Excel guarda «Fecha Hasta» tal como viene, aunque sea igual a la
+  «Desde».** La primera versión guardaba null cuando las dos coincidían —«duró
+  un día», más prolijo— y estaba mal: de las 63 filas del archivo real, **45
+  quedaban con el campo vacío en pantalla, que es indistinguible de un dato que
+  se perdió**, y quien había tipeado las 63 fechas lo notó enseguida. Null
+  significa ahora que la celda no traía nada. (Los ~1.400 renglones que
+  entraron por foto siguen con null y tampoco les falta: una línea del cuaderno
+  manuscrito es de un día.) El código lo lee como `fecha_hasta ?? fecha`
+  (`totalesDeRenglones`), que es lo que hacía antes de que la columna existiera
+  (migración `20261103083610`).
+- **No hay check de que `fecha_hasta >= fecha`.** Un rango dado vuelta es un
+  error de quien tipeó y hay que **mostrárselo**: el intérprete lo marca dudoso
+  con su motivo y el renglón entra. Un check en la base haría fallar el insert
+  de las 63 filas por una.
+- **Que una carga sea de Excel no lo dice ninguna columna: lo dice la extensión
+  de la ruta** (`esRutaDeExcel` en `lib/mantenimiento/cuadernoOrigen.ts`). El
+  archivo va al mismo bucket y a la misma tabla (`mant_cuadernos_fotos`, con
+  `orden: 1`) justo para que la procedencia de cada renglón, el borrado de la
+  carga y el freno de duplicados sigan funcionando sin tocarse. Eso evitó una
+  migración de columna; la que sí hubo es `20261102115445`, porque
+  `allowed_mime_types` del bucket sólo tenía los cinco tipos de imagen y **subir
+  el `.xlsx` sin ella falla con un error de Storage que no explica nada**.
+- **No se mezclan fotos y planilla en una misma carga**, y la guarda está en las
+  dos rutas y no sólo en la pantalla: el `accept` de un campo de archivo no
+  impide elegir nada.
+- **`lib/core/excel.ts` no sirve para leerlo y por eso hay otro lector.** Ese
+  aplana cada celda a su valor, que es lo que quieren los cinco importadores que
+  lo usan. Acá esa diferencia se usa para no mentir: una celda de horas que es
+  una fórmula **sin resultado calculado** no es un cero sino un archivo que Excel
+  no recalculó, y un `#REF!` no es una celda vacía sino una referencia rota. El
+  lector propio es `cuadernoExcelArchivo.ts`, separado del intérprete
+  (`cuadernoExcel.ts`, puro) para poder probar las decisiones sin armar un
+  `.xlsx`.
+
+#### Lo que se midió (03/11/2026, `Tareas_Octubre_2026 2.xlsx`)
+
+Una hoja, 63 tareas, **1074 horas, y la fila de TOTALES dice 1074: cierra
+exacto**. La tarea más larga son 106 h y 18 de las 63 abarcan más de un día. 0
+precios. Un solo dudoso: **la fila 24 trae `#REF!` en «Fecha Desde»** —una
+referencia que quedó rota al sacar el detalle— y entra igual, marcada, usando su
+«Fecha Hasta». El tope de horas por fila es **500**: el error probable tipeando
+es el dígito de más (106 → 1060), y 500 lo atrapa dejando casi cinco veces el
+máximo visto de margen. No es el mismo número que `TOPE_DE_HORAS_POR_RENGLON`
+(200) ni tiene por qué serlo: allá una fila es un renglón de un día del cuaderno
+manuscrito, acá es una tarea entera a lo largo del mes.
+
+En pantalla, una carga de Excel **no muestra el panel de la foto**: no hay hoja
+contra la cual comparar. En su lugar van las cinco columnas que se leyeron, de
+qué fila salió cada renglón, y dos campos de fecha por renglón en vez de uno. El
+filtro de «dudosos» **se dejó**, aunque el plan decía sacarlo: el Excel también
+produce dudosos —un `#REF!`, una fecha que no existe, unas horas que no son un
+número— y esconderlos sería tapar problemas reales.
+
+**Hay además un filtro por sector, y existe para poder juntar** (03/11/2026).
+Con 63 tareas sueltas, juntar las que van en una misma OT obligaba a buscarlas a
+ojo por toda la lista. El desplegable lista **sólo los sectores que esa carga
+tiene**, con cuántos renglones cada uno, más «sin sector»; se combina con los
+chips —y **la cuenta de cada chip ya mira el sector elegido**, porque un chip que
+dijera «Sin sector (35)» con tres renglones abajo es peor que no tener número—.
+Al lado está **«Elegir los N que se ven»**, que es lo que convierte el filtro en
+una forma de juntar: se filtra por sector, se eligen todos, se juntan. Los
+renglones que ya son OT no entran en esa selección.
+
+**Y uno por equipo, que parece la gemela y no lo es** (03/11/2026). Lista sólo
+los equipos que esa carga tiene —no los 269 del catálogo—, se combina con el de
+sector y con los chips, y su razón de ser es la opción «— sin equipo —», que
+contesta de un vistazo cuántas líneas quedaron sin máquina. La diferencia que
+hay que tener presente: **sin sector un renglón no genera, y sin equipo genera
+igual** —`enOrdenes` no pide el equipo—. O sea que «sin equipo» no es una cola
+de trabajo pendiente sino una pregunta: esas horas no van a sumar al costo ni al
+MTBF de ninguna máquina. La pantalla lo dice cuando se elige ese filtro, para
+que nadie lo lea como algo que hay que completar antes de generar.
+
+Y la trampa que no se ve desde el filtro: **un grupo sólo conserva el equipo si
+todos sus renglones apuntan al mismo**. Juntar uno con equipo y uno sin deja la
+OT sin equipo —quedarse con el único que hay le daría al MTBF de esa máquina las
+horas de las otras tareas—, así que filtrar por equipo y juntar lo que queda a
+la vista no garantiza que la orden salga con él.
+
+#### Generar una sola OT sin juntar nada (03/11/2026)
+
+El botón de abajo genera **todo lo que puede salir**, y con el Excel eso no era
+lo que hacía falta. Medido sobre la carga real de octubre: de los 63 renglones,
+**46 ya salían como su propia OT y ninguno estaba juntado**; los otros 17 esperan
+el sector. O sea que el único botón ofrecía escribir 46 órdenes de una, contra
+un mes que ya tiene 91 OT de PIPARO cargadas a mano.
+
+La pregunta que llegó fue «no tengo la opción de generar una OT sin juntar», y
+revela el malentendido que había que cerrar: **juntar no es el camino para
+generar una sola**. Juntar es para cuando dos renglones son la misma tarea;
+usarlo como el botón de «generá éste» mete horas de tareas distintas en una
+orden, que es exactamente lo que el módulo evita.
+
+Así que la generación acepta `claves` —la `clave` de cada orden: el `grupo_id`,
+o `solo:<id>` si es un renglón suelto— y la barra de la selección tiene su
+propio botón. Tres cosas que no se deducen del código:
+
+- **El filtro cae sobre los grupos, no sobre los renglones.** `enOrdenes` corre
+  con la carga entera y recién después se eligen las claves. Elegir un renglón
+  juntado saca **su grupo entero**, con los compañeros que no se eligieron, y el
+  cartel los cuenta antes de escribir: una orden con la mitad de las horas de su
+  grupo sería peor que no tener el botón.
+- **El tope de 25 y el freno de duplicados se cuentan después del filtro**, o sea
+  sobre lo que de verdad se va a escribir. Generar de a uno pasa por el mismo
+  freno que generar de a 46.
+- **La comparación pantalla-contra-servidor sigue en pie.** Las dos puntas
+  filtran con la misma lista de claves, así que lo que compara es lo mismo
+  contra lo mismo. Si no coincide, no se genera.
+
+Y lo que la pantalla dice de más: cuántos de los elegidos **no salen todavía**
+(sin sector, sin fecha, o sin horas ni precio). Un botón que dijera «Generar 3»
+con 8 elegidos y no explicara los 5 restantes es la clase de número que nadie
+vuelve a creer.
+
+#### Sacar un renglón de la carga (03/11/2026)
+
+La otra mitad del mismo pedido: «que pueda borrar una línea, porque alguna de
+esas capaz ya tiene OT creada». Es el caso real de octubre —la planilla trae
+tareas cuya orden ya está escrita a mano— y hasta ahora no había qué hacer con
+ellas: dejarlas sin generar deja la carga eternamente en `EN_CHEQUEO` con
+renglones que nadie sabe por qué no salieron.
+
+Vive en `app/api/mantenimiento/cuaderno/renglones/[id]` y **no en el `DELETE` de
+`/renglones`**, que saca el `grupo_id` y deja el renglón vivo. Son dos cosas
+distintas: un `DELETE` que según el cuerpo desagrupa o destruye es la clase de
+ambigüedad que se paga una sola vez y cara.
+
+Lo que no se deduce del código:
+
+- **No se saca el que ya es una orden de trabajo del sistema**, ni el que está
+  en un grupo que ya generó. Lo segundo lo decide `sePuedeSeparar`, la misma
+  función que usa separar y no una copia: sacarlo le cambiaría el total a una
+  orden ya escrita en la planilla.
+- **Se audita, con el verbo `borrar`, y es el primero que escribe una persona.**
+  Hasta acá ese verbo lo escribían sólo las sincronizaciones
+  (`lib/core/borradoDeEspejo.ts`). El argumento no es «borrar es grave» sino
+  cuál pregunta queda sin respuesta: el archivo de origen sigue en el bucket,
+  así que **qué decía** se contesta sin la tabla; **quién lo sacó y cuándo** no.
+  Y estas filas son con lo que se le paga al contratista, así que una que
+  desaparece es una hora que no se factura por el criterio de una persona.
+  El registro se escribe **antes** del borrado —si no entra, no se borra—,
+  que es el orden que fijó `borradoDeEspejo.ts`.
+- **El estado de la carga se recalcula al sacar**, no sólo al generar: sacar el
+  último pendiente puede dejarla `GENERADA`. Por eso `actualizarElEstado` se
+  mudó de la ruta de generación a `lib/mantenimiento/cuadernoEstado.ts`: con una
+  copia en cada ruta, el día que la regla cambie una de las dos la sigue
+  diciendo vieja.
+- **Nada cuelga de `mant_cuadernos_renglones` por clave foránea** (comprobado
+  con `node scripts/que-cuelga-de.mjs`), así que borrar una fila no se lleva
+  nada en cascada.
+
+El botón va chico y abajo en el renglón, no al lado de los campos que se tocan
+todo el tiempo: es lo único irreversible de esa fila.
+
+#### La OT que queda escrita en la planilla y no entra al sistema (03/11/2026)
+
+**Crear una OT desde el cuaderno son dos escrituras que no se pueden atar.**
+Primero `altaEnLaPlanilla` toma un número y escribe la fila en «Altas del
+sistema»; después la ruta inserta en `ordenes_trabajo` y marca los renglones.
+Si lo segundo falla, **la orden ya está escrita en la planilla de producción**
+—que se borra a mano, fila por fila— y el sistema no sabe que existe. La ruta
+lo dice en la pantalla de quien generó, con esas palabras, y ahí se termina el
+rastro: si esa persona cierra la página, no queda nada.
+
+Pasó con la **OT 2983** («Pasar 1400 barras/cuadrados rompedores», fila 100).
+Lo que lo volvía peligroso no era la orden perdida sino que **su renglón seguía
+sin convertir**: la próxima generación habría creado una segunda OT por el
+mismo trabajo. Se encontró contando los números —la corrida hizo 2972..2982,
+saltó la 2983 y la siguiente arrancó en 2984— y se arregló insertando la fila
+con los mismos valores que habría armado la generación y enlazando su renglón.
+
+Ese conteo quedó como **`npx tsx scripts/ot-huerfanas-del-cuaderno.mts`**: lee
+la columna A de «Altas del sistema» y la compara contra `ordenes_trabajo` en
+ese rango. No escribe nada y no interpreta: lo que busca es estrecho a
+propósito —**un número que la planilla tiene y la base no**—, porque una OT
+sin renglón es normal (las que se cargan desde la pantalla de alta tampoco lo
+tienen) y mezclar las dos cosas lo volvería ruido. Si la pestaña no devuelve
+ninguna fila corta sin concluir nada, porque una planilla recalculando se lee
+igual que una vacía. Sale 1 si encuentra alguna; hoy da **HUÉRFANAS 0**.
+
+#### Octubre de 2026: el primer mes real que salió entero (03/11/2026)
+
+El Excel de octubre se generó completo. Los números, porque son la primera
+medición de este camino de punta a punta:
+
+- **58 renglones → 48 órdenes de trabajo**, OT **2972 a 3019**, sin saltearse
+  ningún número. 978 horas. Las 48 nacen `REALIZADO`, con horas y con fecha de
+  cierre. La carga quedó en `GENERADA`.
+- Las 63 filas originales fueron **58** porque se sacaron 5 renglones cuya OT ya
+  estaba cargada a mano (queda en `auditoria`, con quién y qué decía).
+- El **freno de duplicados saltó con 91** —las OT de PIPARO de octubre cargadas
+  por otro camino— y hubo que confirmarlo. Se cruzaron las 17 últimas contra
+  esas 91 antes de confirmar: **ninguna pisaba una real**. Las 5 que compartían
+  palabras («Rep paño zaranda», «Cambiar lateral cinta 5», «Limpieza techo 02»)
+  eran todas del **02/10**, con otras horas y otro equipo. El freno hace lo que
+  tiene que hacer —avisar— y la decisión sigue siendo de quien mira.
+- **47 de las 48 quedaron con `sheets_pendiente`** y eso es lo normal, no un
+  fallo: el master recibe la fila por `IMPORTRANGE` y tarda, así que el estado,
+  las horas y el cierre viajan en la cola. Mientras estén ahí,
+  `sincronizar.ts` **no las pisa** —es para eso que existe la marca— y
+  `exportarLoPendiente` las termina en el sync siguiente. Hasta entonces, esas
+  columnas del master se ven vacías y no hay nada perdido.
+
+**Lo que quedó sin explicar, y lo que hay que capturar la próxima vez.** No
+salió de una sola apretada: fueron **cuatro corridas de 12, 19, 8 y 9**, y
+ninguna se topó con un límite conocido —el tope son 25, el margen de tiempo son
+200 s y las corridas duraron 18, 29, 13 y 32 segundos, a 1,6 s por orden—. Se
+descartaron, midiendo contra los datos y la planilla reales: la validez de los
+renglones, la serie de números, el encabezado de altas, el armado de las
+celdas, el `INSERT` en `ordenes_trabajo` (probado con las 18, con números de
+descarte), el tamaño de la grilla (999 filas, vamos por la 119), la salud de
+las planillas y el permiso de escritura de la cuenta de servicio. **Queda la
+hipótesis de que quien genera eligió ir de a poco** —el botón de la selección
+y el filtro por sector hacen exactamente eso—, y no hay forma de distinguirlo
+en los datos. Si vuelve a pasar, **lo único que falta es el texto que muestra
+la pantalla**: la ruta deja cada fallo en `problemas`, sin traducir, y con esa
+línea se sabe dónde está. Sin ella no se puede arreglar sin adivinar, y lo que
+falla escribe en la planilla de producción.
+
+#### La descripción dice sólo qué se hizo, y lo demás va en su columna (03/11/2026)
+
+Al mirar las 48 órdenes recién generadas, lo que estaba mal era esto:
+
+    H (DESCRIPCIÓN): Resoldar chapas impacto rompedores p/ TRT Nº2 — PIPARO.
+                      El 19/10. 8 h en total. Según el cuaderno: Resoldar
+                      chapas impacto rompedores p/ TRT Nº2 (19/10, 8 h).
+    K (FECHA DE CIERRE): —    M (ESTADO): —    N (CONTRATISTA): —    O (HORAS): —
+
+Cuatro datos apilados en una celda de prosa **que tienen su propia columna**, y
+las cuatro columnas vacías. Desde un párrafo no se filtra ni se suma, y la
+planilla es de donde lee quien no entra al sistema.
+
+Son dos problemas distintos con el mismo síntoma, y conviene no confundirlos.
+
+**Uno: el texto.** `descripcionDeLaOrden` ahora devuelve sólo la tarea. Lo que
+pierde, dicho: el detalle renglón por renglón —qué día y cuántas horas cada
+uno— deja de estar en la planilla. No se pierde del sistema —vive en
+`mant_cuadernos_renglones`, enlazado a esa misma OT, y se ve en la pantalla del
+cuaderno—, pero quien mira sólo la planilla ve el total y no el reparto.
+
+**El denominador común de un grupo** vive en
+[lib/mantenimiento/cuadernoDescripcion.ts](../lib/mantenimiento/cuadernoDescripcion.ts),
+y lo que no se deduce del código es por qué no alcanzaba con «si son todas
+iguales, usar ésa»: medido sobre los **cinco grupos que una persona juntó de
+verdad, ninguno tiene las tareas idénticas**.
+
+| Las tareas del grupo | Queda |
+|---|---|
+| «Limpieza techo Hidratación» · «Limpieza techo hidratacion» · «Limpieza techos hidratacion» · «Limpieza techos hidratación» | **Limpieza techo Hidratación** |
+| «Limpieza p/ TRT Nº2» · «Limpieza y destorar pantalón en planta TRT Nº2» · «Limpieza espaldas tolvas p/ TRT Nº2 a pastareras y parte inferior» | **Limpieza TRT Nº2** |
+| «Limpieza p/ TRT Nº1» · «Limpieza túnel y pozo p/ TRT Nº1» | **Limpieza p/ TRT Nº1** |
+| «Pasillo en cinta 1 superior» · «Pasillo cinta 1» | **Pasillo cinta 1** |
+| «Limpieza en cinta tolva» · «Limpieza cola cinta 1 filer 2 parte superior» · «Limpieza en cinta 2 filer p/ sup.» · «Limpieza costado tolva filer 2» | las cuatro, con `·` |
+
+Tres cosas que no se deducen del código:
+
+- **El plural cuenta como la misma palabra** (`mismaPalabra`). Sin eso, «techo»
+  y «techos» no coinciden y el primer grupo se queda en «Limpieza Hidratación».
+  El límite es prefijo exacto, las dos de cuatro letras o más y a lo sumo dos
+  de diferencia: por eso **«Nº1» y «Nº2» no se parecen nunca**, que es lo que no
+  puede fallar —una OT de la TRT Nº1 en la Nº2 no se nota—.
+- **Con menos de dos palabras en común no se inventa un resumen**: se listan las
+  tareas distintas. Es el último caso, donde lo único compartido es «limpieza»,
+  y una orden que dijera sólo eso sería peor que no simplificar.
+- El texto sale **con las palabras de la primera tarea**, con sus acentos y sus
+  mayúsculas: es como lo escribió quien llevó el cuaderno.
+
+**Dos: las columnas, que es el problema de verdad.** De la K en adelante son
+literales del master, y para escribirlas la fila tiene que existir ahí —llega
+por `IMPORTRANGE` y tarda—. La generación lo intentaba **a medio segundo de
+crear la orden**, o sea nunca a tiempo, anotaba `sheets_pendiente` y ahí
+quedaba: lo terminaba quien abriera Órdenes o la sincronización, en la
+práctica cada 3 a 5 horas.
+
+Lo que lo cierra es que **el mecanismo ya existía y esta ruta era la única que
+no lo usaba**. Medido el 03/11/2026, el mismo día:
+
+| | |
+|---|---|
+| OT del cuaderno | **48 de 48 con K/M/N/O vacías**, 47 en la cola |
+| OT de `/api/mantenimiento/ordenes` (que sí reintenta) | **12 de 12 salieron, todas en el primer intento, a los 21 s** |
+
+Así que la generación drena su propia cola con `after()`, y lo que hay que
+saber antes de tocarlo:
+
+- **Una pasada para toda la corrida, no una por orden.** El master recibe las 25
+  juntas; esperar una vez y drenar la cola entera son 25 lecturas de la columna
+  A en vez de 25 esperas de 20 segundos.
+- Usa `exportarLoPendiente` **sin freno** —la misma función de la pantalla de
+  Órdenes y del sync—, así que drena todo lo que haya en la cola y no sólo lo
+  de esta corrida. Es lo correcto: lo viejo también hay que terminarlo.
+- **El `after()` corre dentro del mismo `maxDuration`**, así que las esperas se
+  recortan a lo que queda (`esperasQueEntran`). Pasarse no rompe nada —la cola
+  sigue siendo la red—, pero arrancar una espera de dos minutos cuando quedan
+  treinta segundos es desperdiciar el intento.
+
+**El costo no cambió**: sigue viajando en `REPUESTO UTILIZADO`, que es donde la
+práctica ya lo escribía a mano (58 de las 380 OT viejas de PIPARO). Con repuesto
+y precio queda `2 parches de 200 ($240.000)`; con precio solo, `$920.000`.
+
+**Las 48 de octubre se corrigieron a mano el 03/11/2026**, a pedido, con
+[scripts/corregir-ot-del-cuaderno.mts](../scripts/corregir-ot-del-cuaderno.mts)
+—que sin `--escribir` no toca nada—. Quedó: 48 descripciones acortadas en
+«Altas del sistema» y en la base, 0 con el texto viejo de los dos lados, 0 en la
+cola, y **47 de 48 con K/M/N/O en el master**.
+
+Tres cosas de esa corrida que vale la pena saber:
+
+- **La salvaguarda fue reconstruir el texto viejo** desde los renglones de cada
+  orden y exigir que coincidiera **exacto** con lo que la base tenía guardado.
+  Las 48 coincidieron, o sea que nadie las había editado; la que no hubiera
+  coincidido se salteaba, porque corregir lo que escribió una persona es peor
+  que dejar el texto largo.
+- **Primero la planilla y después la base.** Si la planilla sale y la base no,
+  la próxima sincronización las empareja; al revés, la planilla pisaría la base.
+- **La que faltaba era la 2983**, y se cargó a mano después (ver abajo).
+
+**Y una medida que va a volver: el drenaje pega contra la cuota de Google.**
+`exportarLoPendiente` lee la columna A del master **una vez por orden en la
+cola**; con 48 encoladas de golpe, una se cayó con
+
+    Google respondió 429: Quota exceeded for quota metric 'Read requests' and
+    limit 'Read requests per minute per user'
+
+y quedó en la cola hasta la pasada siguiente, que es exactamente lo que la cola
+existe para que pase. No se tocó nada por ahora —el reintento lo resuelve—,
+pero con un mes de 100 órdenes esto va a dejar varias para la segunda vuelta: el
+día que moleste, lo que hay que cambiar es que el drenaje lea la columna A **una
+vez por pasada** y no una por orden.
+
+#### La OT 2983, cargada a mano (03/11/2026)
+
+Era la única de las 48 sin K/M/N/O, y la hipótesis que teníamos era falsa: **sí
+estaba en `ordenes_trabajo`**. Lo que le había pasado es otra cosa, y es la que
+conviene recordar.
+
+La generación le escribió el alta en la planilla a las **14:08:21** y algo se
+cortó antes de guardar el resto. La fila quedó en «Altas del sistema» y en el
+master, y la **sincronización de las 14:44 la trajo a la base** —con lo único
+que la planilla tenía: descripción, sector, equipo y prioridad—. Por eso no
+estaba en la cola: `sheets_pendiente` nunca se le puso, así que el drenaje que
+terminó a las otras 47 ni la miraba.
+
+Comparada con sus hermanas le faltaban exactamente cuatro campos, y los cuatro
+salían de su propio renglón —línea 11, «Pasar 1400 barras/cuadrados rompedores»,
+del 07/10 al 21/10, 28 h—:
+
+| | tenía | quedó |
+|---|---|---|
+| `fecha_cierre` | null | 2026-10-21 |
+| `estado` | `POR_HACER` | `REALIZADO` |
+| `contratista` | null | PIPARO |
+| `horas` | null | 28 |
+
+Lo hizo
+[scripts/cargar-a-mano-la-ot-2983.mts](../scripts/cargar-a-mano-la-ot-2983.mts),
+que antes de escribir **comprueba que no haya otra orden con la misma
+descripción**: completar una que ya estuviera cubierta por otra sería darle dos
+órdenes al mismo trabajo, y a PIPARO se le paga por esto.
+
+Dos cosas que no se deducen del código:
+
+- **`fecha` no se tocó, y dice 2026-11-03.** No es un error de esta orden: **las
+  48 dicen lo mismo**, porque la sincronización la trae de la marca temporal
+  (columna B del master, derrame de la hoja de respuestas). Corregirla sólo en
+  ésta la habría dejado distinta de sus hermanas y la próxima corrida la pisaba
+  igual. La fecha del trabajo vive en `fecha_cierre` y en `fecha_ejecucion`.
+- **La columna L dice «Atrasado» en las 48, y está bien así.** Es la
+  `ARRAYFORMULA` del master, que compara la fecha de inicio con hoy y no mira el
+  estado: medido, **56 OT viejas de PIPARO ya «Realizado» dicen lo mismo**. No
+  lo causó esta carga y no hay nada que arreglar ahí.
+
+Después de esto, de las 48: **0 incompletas en la base, 0 en la cola, 0 con el
+texto viejo, y 48 de 48 con K, M, N y O en el master.**
+
 ### Lo que quedó anotado
 
 - **`npm run catalogo` se dejó sin correr a propósito, para cuando el árbol esté
@@ -2099,6 +2554,52 @@ razona tanto no debería pasar, pero no se pudo medir.
 - **Pendientes del plan**: qué hacer con una línea tachada, y avisar cuando un
   día sale fuera de orden. (El tope a las horas de un renglón ya está: ver más
   arriba.)
+
+## Corregir un parte de contratista (04/11/2026)
+
+Un parte cargado se puede corregir desde la lista, **mientras ninguno de sus
+renglones haya generado una orden de trabajo**. Es la misma condición que ya
+tenía el borrado, y por el mismo motivo: una vez que el renglón es una OT,
+cambiarle las horas dejaría a la orden contando algo que el papel ya no dice, y
+la OT no se deshace desde el sistema —se borra a mano en la planilla, fila por
+fila—. En la lista, los que no se pueden corregir dicen «ya generó» en vez de
+ofrecer un botón que va a fallar.
+
+Cuatro cosas que no se deducen del código:
+
+- **Es el mismo formulario, no uno nuevo.** Corregir trae el parte al formulario
+  de carga y el botón cambia de texto. Dos formularios parecidos serían dos
+  controles que se separan, y el control —los renglones dan el total del
+  papel— es para lo que existe todo esto.
+- **`horasAMano` arranca en `true` al traer un parte.** Las horas que tiene las
+  escribió una persona mirando la hoja; con la propuesta encendida, el primer
+  cambio —agregar un renglón, tocar el total— las habría repartido parejas y
+  pisado lo que alguien decidió. Es exactamente la regla que `horasTrasUnCambio`
+  existe para defender, aplicada a la otra punta.
+- **El PUT reescribe el parte entero**, cabecera y renglones, y no por campo. El
+  control es del parte y no de la celda: un PATCH que cambiara unas horas
+  sueltas dejaría el parte sin cerrar sin que nada lo note. El POST y el PUT
+  leen el cuerpo con **la misma función** —`leerElParte`, pura y con tests—,
+  así que un parte corregido cierra o no se guarda, igual que uno nuevo.
+  Los renglones se borran y se vuelven a insertar; es seguro porque **nada
+  cuelga de `mant_partes_contratista_renglones` por clave foránea** y porque sus
+  ids no los usa nadie (a un renglón se lo nombra por su `orden`).
+- **Al corregir no se adelantan el número ni la fecha.** Eso es para la carga en
+  serie —quince hojas de una quincena—; después de una corrección dejaría el
+  formulario pidiendo un parte que nadie pedía.
+
+La ventana que queda abierta, dicha: entre comprobar que ningún renglón generó
+y borrarlos hay dos sentencias. Si justo ahí alguien genera la quincena, el
+borrado lleva su propia guarda (`orden_trabajo_id is null`) y, si no se llevó
+todo lo que había, **no se inserta nada** y sale un 409 que lo dice. Es la misma
+ventana que ya tenía el DELETE y el mismo riesgo asumido del módulo: generar lo
+aprieta una persona.
+
+Medido el 04/11/2026: 16 partes cargados, todos de CANDIA; **6 sin OT** —los que
+se pueden corregir— y 10 ya generados. El camino entero se corrió sobre un parte
+de mentira creado y limpiado para eso: la cabecera se actualiza, los dos
+renglones viejos se borran y entran los dos nuevos, y con un renglón enlazado a
+una OT la guarda cuenta 1 y las dos rutas se niegan.
 
 ## Los datos: qué está y qué no
 

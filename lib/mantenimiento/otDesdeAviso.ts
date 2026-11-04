@@ -70,6 +70,11 @@ export interface RespuestasDelAviso {
   especialidad: string;
   quien: string;
   fecha_ejecucion: string;
+  /**
+   * Cuándo se estima que termina. **Opcional**, y por eso no está entre lo que
+   * se pregunta: la real es la de cierre, que una OT recién pedida no tiene.
+   */
+  fecha_fin: string;
   /** Lo que el aviso propone y se puede corregir. */
   descripcion: string;
   tipo: string;
@@ -90,7 +95,7 @@ export interface RespuestasDelAviso {
 }
 
 export const RESPUESTAS_VACIAS: RespuestasDelAviso = {
-  especialidad: "", quien: "", fecha_ejecucion: "",
+  especialidad: "", quien: "", fecha_ejecucion: "", fecha_fin: "",
   descripcion: "", tipo: "", prioridad: "",
   sector_id: "", sector_raw: "", equipment_id: "", equipo_raw: "", equipo_code: "",
   gut_gravedad: "", gut_urgencia: "", gut_tendencia: "",
@@ -134,6 +139,8 @@ export function loQuePropone(
     especialidad: "",
     quien: deEntrada.quien,
     fecha_ejecucion: deEntrada.fecha_ejecucion,
+    // El aviso dice que algo falla, no cuánto va a llevar arreglarlo.
+    fecha_fin: "",
 
     descripcion: aviso.descripcion?.trim() || `Aviso ${aviso.oa_number ?? ""}`.trim(),
     tipo: "CORRECTIVO",
@@ -166,7 +173,10 @@ export function cuerpoDeLaOT(
   aviso: AvisoParaLaOT,
   respuestas: RespuestasDelAviso
 ): Record<string, unknown> & DatosDelAltaDeOT {
-  const texto = (v: string) => v.trim();
+  // Tolera el campo ausente, y no es por prolijidad: una carga sin señal se
+  // guarda como cuerpo y se reenvía más tarde, así que una encolada **antes**
+  // de que existiera `fecha_fin` vuelve sin esa clave.
+  const texto = (v: string | undefined) => (v ?? "").trim();
 
   return {
     aviso_id: aviso.id,
@@ -193,6 +203,7 @@ export function cuerpoDeLaOT(
     especialidad: texto(respuestas.especialidad),
     quien: texto(respuestas.quien),
     fecha_ejecucion: texto(respuestas.fecha_ejecucion),
+    fecha_fin: texto(respuestas.fecha_fin),
 
     // Una OT que nace de un aviso no nace cerrada: se está pidiendo trabajo,
     // no cargando trabajo hecho. Van explícitos para que `loQueFaltaParaCrear`

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { enOrdenes, type RenglonDelCuaderno } from "./cuadernoGrupos";
 import {
   VALORES_DE_PIPARO, descripcionDeLaOrden, equipoParaLaPlanilla, valoresDeLaOrden,
-  posiblesDuplicados, avisoDeDuplicados, rangoDelFreno,
+  posiblesDuplicados, avisoDeDuplicados, rangoDelFreno, mismoContratista,
 } from "./cuadernoOrden";
 
 const SECTOR = { nombre: "Planta de trituración 3", codigo: "PO-A3" };
@@ -41,29 +41,37 @@ describe("equipoParaLaPlanilla", () => {
 });
 
 describe("descripcionDeLaOrden", () => {
-  it("un renglón: la tarea, el día, las horas y lo que escribió PIPARO", () => {
-    const d = descripcionDeLaOrden(unGrupo([renglon("a")]), "PIPARO");
-    expect(d).toContain("Reparar rodillos — PIPARO.");
-    expect(d).toContain("El 17/9.");
-    expect(d).toContain("8 h en total.");
-    expect(d).toContain("P/Trit N°3");
+  it("un renglón: la tarea y nada más", () => {
+    expect(descripcionDeLaOrden(unGrupo([renglon("a")]))).toBe("Reparar rodillos");
   });
 
-  it("un grupo: el rango de fechas y cada tarea con su día", () => {
+  it("no lleva el contratista, ni la fecha, ni las horas, ni el detalle", () => {
+    // Los tres tienen su columna en el master —N, K y O— y es ahí donde se
+    // escriben. Repetirlos acá era lo que volvía ilegible la descripción.
+    const d = descripcionDeLaOrden(unGrupo([renglon("a")]));
+    expect(d).not.toContain("PIPARO");
+    expect(d).not.toMatch(/17\/9|8 h|en total|Según el cuaderno/);
+  });
+
+  it("un grupo de la misma tarea sale una sola vez", () => {
     const g = unGrupo([
       renglon("a", { grupo_id: "g", fecha: "2026-09-17", horas: 6, tarea: "Tranqueras D6" }),
       renglon("b", { grupo_id: "g", fecha: "2026-09-23", horas: 2.5, tarea: "Tranqueras D6" }),
     ]);
-    const d = descripcionDeLaOrden(g, "PIPARO");
-    expect(d).toContain("Del 17/9 al 23/9.");
-    expect(d).toContain("8,5 h en total.");
-    expect(d).toContain("(17/9, 6 h)");
-    expect(d).toContain("(23/9, 2,5 h)");
+    expect(descripcionDeLaOrden(g)).toBe("Tranqueras D6");
   });
 
-  it("sin horas no escribe «0 h»: un renglón con precio se cobra por trabajo", () => {
+  it("un grupo de tareas parecidas sale por su denominador común", () => {
+    const g = unGrupo([
+      renglon("a", { grupo_id: "g", fecha: "2026-09-17", tarea: "Limpieza techo Hidratación" }),
+      renglon("b", { grupo_id: "g", fecha: "2026-09-23", tarea: "Limpieza techos hidratacion" }),
+    ]);
+    expect(descripcionDeLaOrden(g)).toBe("Limpieza techo Hidratación");
+  });
+
+  it("nunca queda vacía: es imprescindible para el alta", () => {
     const g = unGrupo([renglon("a", { horas: null, costo: 240000 })]);
-    expect(descripcionDeLaOrden(g, "PIPARO")).not.toMatch(/\b0 h\b|en total/);
+    expect(descripcionDeLaOrden(g).trim()).not.toBe("");
   });
 });
 
@@ -118,6 +126,18 @@ describe("valoresDeLaOrden — lo único que escribe la generación", () => {
   it("especialidad, tipo, quien y estado son los de PIPARO", () => {
     const v = valoresDeLaOrden(unGrupo([renglon("a")]), ctx);
     expect(v).toMatchObject(VALORES_DE_PIPARO);
+  });
+
+  it("una orden que pierde el precio se queda sólo con el repuesto de verdad —o con nada—", () => {
+    // La ruta escribe `repuesto` siempre que suma a una orden, y confía en esto:
+    // `null` quiere decir «ya no hay nada que mostrar», y es lo que vacía la
+    // columna I de la planilla donde antes decía «$920.000».
+    const sinPrecio = unGrupo([renglon("a")]);
+    expect(valoresDeLaOrden(sinPrecio, ctx, { costo: 920000, repuesto: "$920.000" }).repuesto).toBeNull();
+    // Y lo que una persona escribió como repuesto se conserva.
+    expect(
+      valoresDeLaOrden(sinPrecio, ctx, { costo: 240000, repuesto: "2 parches de 200 ($240.000)" }).repuesto
+    ).toBe("2 parches de 200");
   });
 
   it("si la orden ya tenía el costo anterior en el texto, el repuesto nuevo no lo repite", () => {
@@ -251,5 +271,23 @@ describe("avisoDeDuplicados", () => {
     const m = avisoDeDuplicados("PIPARO", ots);
     expect(m).toContain("29 órdenes");
     expect(m).toContain("y 19 más");
+  });
+});
+
+describe("mismoContratista — el nombre de las OT es texto libre", () => {
+  it("un espacio de más, de un lado o del otro, no lo vuelve otro contratista", () => {
+    // `ordenes_trabajo.contratista` está escrito a mano en 377 de 380 OT: sin
+    // recortar, el freno de duplicados devolvía cero en silencio.
+    expect(mismoContratista("PIPARO ", "PIPARO")).toBe(true);
+    expect(mismoContratista(" piparo", "PIPARO")).toBe(true);
+    expect(mismoContratista("PIPARO", "PIPARO  ")).toBe(true);
+  });
+  it("no distingue mayúsculas", () => {
+    expect(mismoContratista("Piparo", "PIPARO")).toBe(true);
+  });
+  it("otro nombre, o un nombre que lo contiene, no es el mismo", () => {
+    expect(mismoContratista("PIPARO HNOS", "PIPARO")).toBe(false);
+    expect(mismoContratista("CANDIA", "PIPARO")).toBe(false);
+    expect(mismoContratista(null, "PIPARO")).toBe(false);
   });
 });

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   enOrdenes,
+  estadoDeLaCarga,
   pendientesDeOrdenes,
   propuestaDeGrupos,
   sePuedenJuntar,
   sePuedeSeparar,
+  totalesDeRenglones,
   type RenglonDelCuaderno,
 } from "./cuadernoGrupos";
 
@@ -386,5 +388,80 @@ describe("pendientesDeOrdenes", () => {
       ...pendientesDeOrdenes(todos).flatMap((p) => p.renglon_ids),
     ]);
     expect([...vistos].sort()).toEqual(todos.map((x) => x.id).sort());
+  });
+});
+
+/**
+ * `totalesDeRenglones` es **la** cuenta de un grupo: la hace `enOrdenes` para la
+ * OT que sale, y la usa la pantalla para decir qué va a salir. Que sea una sola
+ * función es lo que impide que la pantalla prometa «16 h» y la OT salga con
+ * otro número.
+ */
+describe("totalesDeRenglones", () => {
+  it("suma las horas, toma el rango de fechas y junta las tareas distintas", () => {
+    const t = totalesDeRenglones([
+      { ...tranq23(), tarea: "Soldar tolva" },
+      tranq17(),
+      tranq21(),
+    ]);
+    expect(t.horas).toBe(16);
+    expect(t.desde).toBe("2026-09-17");
+    expect(t.hasta).toBe("2026-09-23");
+    // La primera por fecha es la del título; las demás, en el orden de la hoja.
+    expect(t.tarea).toBe("Tranqueras D6");
+    expect(t.tareas).toEqual(["Tranqueras D6", "Soldar tolva"]);
+  });
+
+  it("sin precio el costo es null, y un precio de cero no cuenta", () => {
+    expect(totalesDeRenglones([r({ costo: null }), r({ costo: 0 })]).costo).toBeNull();
+    expect(totalesDeRenglones([r({ costo: 240000 }), r({ costo: 680000 }), r({ costo: 0 })]).costo).toBe(920000);
+  });
+
+  it("sin arrastrar error de coma flotante", () => {
+    expect(totalesDeRenglones([r({ horas: 0.1 }), r({ horas: 0.2 })]).horas).toBe(0.3);
+  });
+
+  it("los renglones sin fecha no ponen límites: sin ninguna, el rango es null", () => {
+    expect(totalesDeRenglones([r({ fecha: null })])).toMatchObject({ desde: null, hasta: null });
+    expect(totalesDeRenglones([r({ fecha: null }), r({ fecha: "2026-09-20" })])).toMatchObject({
+      desde: "2026-09-20", hasta: "2026-09-20",
+    });
+  });
+
+  it("da lo mismo que la OT que sale de esos renglones", () => {
+    const rs = [
+      { ...tranq23(), sector_id: CANTERA, grupo_id: "g", costo: 500 },
+      { ...tranq17(), sector_id: CANTERA, grupo_id: "g", horas: 0.1 },
+      { ...tranq21(), sector_id: CANTERA, grupo_id: "g", horas: 0.2 },
+    ];
+    const [orden] = enOrdenes(rs);
+    expect(totalesDeRenglones(rs)).toMatchObject({
+      horas: orden.horas, costo: orden.costo, desde: orden.desde, hasta: orden.hasta,
+      tarea: orden.tarea, tareas: orden.tareas,
+    });
+  });
+});
+
+describe("estadoDeLaCarga", () => {
+  it("una carga recién leída está en chequeo", () => {
+    expect(estadoDeLaCarga([r(), r()])).toBe("EN_CHEQUEO");
+  });
+
+  it("sin ningún renglón no está generada: no hay nada que haya salido", () => {
+    expect(estadoDeLaCarga([])).toBe("EN_CHEQUEO");
+  });
+
+  it("con todos los renglones convertidos en orden, está generada", () => {
+    expect(estadoDeLaCarga([r({ orden_trabajo_id: "ot1" }), r({ orden_trabajo_id: "ot2" })])).toBe("GENERADA");
+  });
+
+  it("con un solo renglón sin orden todavía queda algo por generar", () => {
+    expect(estadoDeLaCarga([r({ orden_trabajo_id: "ot1" }), r({ orden_trabajo_id: null })])).toBe("EN_CHEQUEO");
+  });
+
+  it("un renglón que no puede generar (sin horas ni precio) mantiene la carga en chequeo", () => {
+    // Es un pendiente que alguien tiene que juntar o corregir: dar la carga por
+    // generada lo taparía.
+    expect(estadoDeLaCarga([r({ orden_trabajo_id: "ot1" }), r({ horas: null, costo: null })])).toBe("EN_CHEQUEO");
   });
 });

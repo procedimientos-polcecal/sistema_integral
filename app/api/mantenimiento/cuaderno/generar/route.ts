@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
@@ -12,8 +12,11 @@ import { prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import {
   enOrdenes, pendientesDeOrdenes, type GrupoDeCuaderno, type RenglonDelCuaderno,
 } from "@/lib/mantenimiento/cuadernoGrupos";
+import { actualizarElEstado } from "@/lib/mantenimiento/cuadernoEstado";
+import { exportarLoPendiente } from "@/lib/mantenimiento/sincronizar";
+import { esperasQueEntran } from "@/lib/mantenimiento/reintentoDePendientes";
 import {
-  valoresDeLaOrden, posiblesDuplicados, avisoDeDuplicados, rangoDelFreno,
+  valoresDeLaOrden, posiblesDuplicados, avisoDeDuplicados, rangoDelFreno, mismoContratista,
   type EquipoConNombre, type OrdenParaComparar, type SectorConNombre, type ValoresDeLaOrden,
 } from "@/lib/mantenimiento/cuadernoOrden";
 
@@ -91,6 +94,24 @@ import {
  * de la misma carga, o de otra del mismo contratista, **no se frena contra lo
  * que generó el sistema**: está enlazado a renglones de algún cuaderno.
  *
+ * ── GENERAR SÓLO ALGUNAS: `claves` ──────────────────────────────────
+ *
+ * Sin `claves` sale todo lo que puede salir, que es lo de siempre. Con
+ * `claves` salen **sólo esas** —la `clave` de un grupo: su `grupo_id`, o
+ * `solo:<id>` si es un renglón suelto—. Existe porque la alternativa, para
+ * sacar una sola OT, era juntar el renglón con algo: juntar es para cuando dos
+ * renglones son la misma tarea, y usarlo como el botón de «generar éste»
+ * mezclaba horas de tareas distintas en una orden.
+ *
+ * El filtro cae sobre **los grupos, no sobre los renglones**: `enOrdenes` corre
+ * con la carga entera y recién después se eligen las claves. Elegir un renglón
+ * de un grupo saca el grupo entero, con los compañeros que no se eligieron, y
+ * la vista previa los muestra: una orden con la mitad de las horas de su grupo
+ * sería peor que no tener este filtro.
+ *
+ * El tope de 25 y el freno de duplicados se cuentan **después** del filtro, o
+ * sea sobre lo que de verdad se va a escribir.
+ *
  * ── SIN AUDITORÍA, A PROPÓSITO ──────────────────────────────────────────────
  *
  * La lista de acciones que pasan por `auditar()` es corta y deliberada, y la
@@ -108,6 +129,13 @@ import {
 const TOPE_POR_CORRIDA = 25;
 
 /**
+ * Cuántas claves se aceptan en un pedido. No van a ningún `.in()` —se filtran
+ * en memoria—, así que no es el límite de PostgREST: es para que un cuerpo
+ * absurdo no entre, nada más. Una carga de un mes no pasa de un par de cientos.
+ */
+const TOPE_DE_CLAVES = 500;
+
+/**
  * Cuánto puede tardar la función, y cuándo dejar de empezar órdenes nuevas.
  *
  * 25 altas en serie son del orden de minutos y la función corta a los 300 s: si
@@ -118,6 +146,13 @@ const TOPE_POR_CORRIDA = 25;
  */
 export const maxDuration = 300;
 const MARGEN_EN_MS = 200_000;
+
+/**
+ * El mismo techo, en milisegundos, para repartirlo. Lo que la corrida no gastó
+ * creando órdenes es lo que le queda al drenaje de `after()`, que corre dentro
+ * del mismo `maxDuration`.
+ */
+const TECHO_DE_LA_FUNCION_MS = maxDuration * 1000;
 
 /** Un `.in()` con muchos ids arma una URL que PostgREST rechaza con un 400. */
 const LOTE = 200;
@@ -157,6 +192,19 @@ export async function POST(request: Request) {
   const simular = body?.simular === true;
   // El freno de los duplicados se levanta con esto, y sólo esto.
   const confirmarDuplicados = body?.confirmar_duplicados === true;
+  // Qué claves salen. Ausente o vacío quiere decir «todas», que es lo de
+  // siempre: el botón de abajo de la pantalla no manda nada.
+  const crudas = body?.claves;
+  if (crudas !== undefined && (!Array.isArray(crudas) || !crudas.every((c) => typeof c === "string" && c.trim() !== ""))) {
+    return NextResponse.json({ error: "«claves» tiene que ser una lista de claves de orden." }, { status: 400 });
+  }
+  const claves = Array.isArray(crudas) ? [...new Set((crudas as string[]).map((c) => c.trim()))] : null;
+  if (claves && claves.length > TOPE_DE_CLAVES) {
+    return NextResponse.json(
+      { error: `Se pueden pedir hasta ${TOPE_DE_CLAVES} órdenes por vez.` },
+      { status: 400 }
+    );
+  }
 
   if (!cuaderno_id) {
     return NextResponse.json({ error: "Falta decir de qué carga" }, { status: 400 });
@@ -189,15 +237,28 @@ export async function POST(request: Request) {
         .from("mant_cuadernos_renglones")
         // La cadena va literal: un `select()` armado en una variable pierde la
         // inferencia de tipos de Supabase.
-        .select("id, cuaderno_id, foto_id, linea, fecha, tarea, lugar_raw, sector_id, sector_propuesto, equipo_id, horas, costo, dudoso, motivo_dudoso, heredado, grupo_id, orden_trabajo_id")
+        .select("id, cuaderno_id, foto_id, linea, fecha, fecha_hasta, tarea, lugar_raw, sector_id, sector_propuesto, equipo_id, horas, costo, dudoso, motivo_dudoso, heredado, grupo_id, orden_trabajo_id")
         .eq("cuaderno_id", cuaderno_id)
         .order("id")
         .range(d, h)
     );
     const renglones = filas as unknown as RenglonDelCuaderno[];
 
-    const plan = await armarElPlan(admin, renglones, contratista);
+    const plan = await armarElPlan(admin, renglones, contratista, claves);
     const pendientes = pendientesDeOrdenes(renglones);
+
+    // Pidieron claves y ninguna salió como orden. Decirlo es la diferencia
+    // entre «no había nada» y «lo que elegías todavía no puede generar».
+    if (claves && plan.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Lo que elegíste no sale como orden de trabajo todavía: le falta el sector, la fecha, " +
+            "o las horas y el precio. Mirá el motivo en la lista de renglones.",
+        },
+        { status: 400 }
+      );
+    }
 
     // Sobre lo que **entra en esta corrida**: es lo que se va a crear de verdad.
     const duplicados = await buscarPosiblesDuplicados(
@@ -293,6 +354,55 @@ export async function POST(request: Request) {
       }
     }
 
+    // **El estado de la carga se mueve cuando sale algo**: `GENERADA` si ya no
+    // queda ningún renglón sin orden. Se lee de nuevo en vez de deducirlo de lo
+    // que se hizo recién, porque lo que importa es lo que quedó en la base. Si
+    // falla no tira la corrida —las OT ya están escritas y eso es lo que
+    // cuenta—: se dice en `problemas` para que no pase por silencio.
+    if (creadas.length + actualizadas.length > 0) {
+      const falloElEstado = await actualizarElEstado(admin, cuaderno_id);
+      if (falloElEstado) {
+        problemas.push(`Las órdenes se generaron, pero no se pudo actualizar el estado de la carga: ${falloElEstado}`);
+      }
+    }
+
+    // ── Y LAS COLUMNAS DEL MASTER, QUE NO SE ESCRIBEN EN EL MOMENTO ─────────
+    //
+    // De la K en adelante las columnas son **literales del master** —K FECHA DE
+    // CIERRE, M ESTADO, N CONTRATISTA, O HORAS— y para escribirlas la fila
+    // tiene que existir ahí, cosa que tarda: llega por `IMPORTRANGE`. El
+    // intento de arriba, a medio segundo de crear la orden, **no puede salir
+    // nunca**, y hasta hoy eso era todo: quedaba en `sheets_pendiente` y lo
+    // terminaba quien abriera Órdenes o la sincronización —en la práctica,
+    // cada 3 a 5 horas—.
+    //
+    // Medido el 03/11/2026: **las 31 OT que el cuaderno generó tenían las
+    // cuatro columnas vacías**, y 30 seguían en la cola. Al mismo tiempo, de
+    // las 12 OT creadas por `/api/mantenimiento/ordenes` —que sí reintenta—
+    // **12 de 12 habían salido, todas en el primer intento, a los 21 s**. O
+    // sea: el mecanismo existía y esta ruta era la única que no lo usaba.
+    //
+    // Va **una pasada para toda la corrida y no una por orden**: el master
+    // recibe las 25 juntas, así que esperar una vez y drenar la cola entera es
+    // una lectura de la columna A por orden en vez de veinticinco esperas.
+    // `exportarLoPendiente` sin freno es la misma función que usan la pantalla
+    // de Órdenes y la sincronización; drena todo lo que haya en la cola, no
+    // sólo lo de esta corrida, que es lo correcto.
+    //
+    // Y si no alcanza el tiempo, no pasa nada: la cola sigue siendo la red.
+    if (creadas.length + actualizadas.length > 0) {
+      const esperas = esperasQueEntran(TECHO_DE_LA_FUNCION_MS - (Date.now() - inicio));
+      if (esperas.length > 0) {
+        after(async () => {
+          for (const espera of esperas) {
+            await new Promise((r) => setTimeout(r, espera));
+            const siguen = await exportarLoPendiente(admin);
+            if (siguen.size === 0) return;
+          }
+        });
+      }
+    }
+
     const quedaron = plan.filter((p) => p.grupo.accion !== "denunciar" && !p.entra).length + sinEmpezar;
 
     return NextResponse.json({ creadas, actualizadas, problemas, quedaron, pendientes });
@@ -313,9 +423,14 @@ export async function POST(request: Request) {
 async function armarElPlan(
   admin: Admin,
   renglones: readonly RenglonDelCuaderno[],
-  contratista: string
+  contratista: string,
+  /** Sólo estas claves, o null por todas. Ver «Generar sólo algunas». */
+  claves: readonly string[] | null
 ): Promise<ItemDelPlan[]> {
-  const grupos = enOrdenes(renglones);
+  // `enOrdenes` corre con la carga entera y el filtro cae después: un grupo se
+  // arma con todos sus renglones o no se arma.
+  const elegidas = claves ? new Set(claves) : null;
+  const grupos = enOrdenes(renglones).filter((g) => !elegidas || elegidas.has(g.clave));
 
   const sectorIds = [...new Set(grupos.map((g) => g.sector_id).filter((s): s is string => !!s))];
   const equipoIds = [...new Set(grupos.map((g) => g.equipo_id).filter((e): e is string => !!e))];
@@ -397,18 +512,26 @@ async function buscarPosiblesDuplicados(
   if (!rango) return [];
 
   // \, % y _ son comodines de ilike: un nombre con uno no debe leerse como patrón.
-  const patron = contratista.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const patron = contratista.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
 
-  const candidatas = await traerTodo<{ id: string; ot_number: number; fecha: string | null }>((d, h) =>
+  // `ordenes_trabajo.contratista` es texto libre escrito a mano (377 de 380 OT):
+  // un espacio de más y `ilike` con el nombre exacto devolvería cero **en
+  // silencio**, y éste es el único freno contra duplicar. Por eso la consulta
+  // trae de más (`%nombre%`, que tolera cualquier espacio alrededor) y la
+  // igualdad —recortada de los dos lados— se decide acá con `mismoContratista`.
+  const traidas = await traerTodo<{ id: string; ot_number: number; fecha: string | null; contratista: string | null }>((d, h) =>
     admin
       .from("ordenes_trabajo")
-      .select("id, ot_number, fecha")
-      .ilike("contratista", patron)
+      .select("id, ot_number, fecha, contratista")
+      .ilike("contratista", `%${patron}%`)
       .gte("fecha", rango.desde)
       .lte("fecha", rango.hasta)
       .order("id")
       .range(d, h)
   );
+  const candidatas = traidas
+    .filter((o) => mismoContratista(o.contratista, contratista))
+    .map(({ id, ot_number, fecha }) => ({ id, ot_number, fecha }));
 
   // Las OT que salieron de **cualquier** carga del contratista, no sólo de ésta.
   const deCuadernos = await traerTodo<{ orden_trabajo_id: string }>((d, h) =>
@@ -431,7 +554,17 @@ async function buscarPosiblesDuplicados(
   return posiblesDuplicados(nuevas, candidatas, generadas);
 }
 
-/** Lo que la pantalla muestra de cada orden de la vista previa. */
+/**
+ * Lo que la pantalla muestra de cada orden de la vista previa: **sólo lo que
+ * usa**. Antes viajaban catorce campos y la pantalla leía cinco; los demás
+ * (sector, equipo, descripción, especialidad…) eran una promesa de que alguien
+ * los iba a mostrar, y un payload que dice más de lo que se usa es el que el
+ * próximo lector cree que importa.
+ *
+ * Lo que decide el confirm es esto: qué orden (`ot_existente`, para las que
+ * suman a una que ya existe), cuánto (`horas`, `costo`) y qué va a quedar en
+ * `REPUESTO UTILIZADO` (`repuesto`, el mismo texto que se escribe).
+ */
 function paraMostrar({ grupo, valores, existente, entra }: ItemDelPlan) {
   return {
     clave: grupo.clave,
@@ -439,24 +572,12 @@ function paraMostrar({ grupo, valores, existente, entra }: ItemDelPlan) {
     /** Va en esta corrida; el resto queda para apretar de nuevo. */
     entra,
     tarea: grupo.tarea,
-    sector: valores.sector_nombre,
-    equipo: valores.equipo_raw,
-    tiene_equipo: Boolean(valores.equipment_id),
     horas: valores.horas,
     costo: valores.costo,
-    /** Lo que va en `REPUESTO UTILIZADO`: el mismo texto que se escribe. */
     repuesto: valores.repuesto,
-    fecha_cierre: valores.fecha_cierre,
-    renglones: grupo.renglon_ids.length,
-    renglones_nuevos: grupo.renglon_ids_sin_ot.length,
+    /** El N° de la OT a la que suma; null si crea una o la denuncia. */
     ot_existente: existente?.ot_number ?? null,
-    descripcion: valores.descripcion,
-    ...valoresFijos(valores),
   };
-}
-
-function valoresFijos(v: ValoresDeLaOrden) {
-  return { especialidad: v.especialidad, tipo: v.tipo, quien: v.quien, estado: v.estado };
 }
 
 /** Cómo nombrar un grupo en un mensaje de error. */
@@ -547,8 +668,12 @@ async function actualizarLaOT(
 
   const falloLaPlanilla = await corregirLaAlta(existente.ot_number, {
     descripcion: valores.descripcion,
-    // Sin repuesto no hay nada que escribir: vaciarlo no es una decisión de acá.
-    ...(valores.repuesto !== null ? { repuesto: valores.repuesto } : {}),
+    // **Siempre**, también cuando es null. `valoresDeLaOrden` ya sacó el monto
+    // viejo y conservó el repuesto de verdad, así que null quiere decir «no
+    // queda nada»: no escribirlo dejaría «$920.000» en la columna I de la
+    // planilla —de donde lee quien no entra al sistema— mientras la base dice
+    // `costo = null`. «» es como se vacía la celda.
+    repuesto: valores.repuesto ?? "",
     fecha_ejecucion: cierre,
   });
   if (falloLaPlanilla) {
@@ -565,7 +690,7 @@ async function actualizarLaOT(
     .update({
       horas: valores.horas,
       costo: valores.costo,
-      ...(valores.repuesto !== null ? { repuesto: valores.repuesto } : {}),
+      repuesto: valores.repuesto,
       descripcion: valores.descripcion,
       fecha_cierre: cierre,
       fecha_ejecucion: cierre,
@@ -666,6 +791,8 @@ async function crearLaOT(
     // El costo viaja acá: es la columna I, donde ya se lo escribía a mano.
     repuesto: valores.repuesto,
     fecha_ejecucion: valores.fecha_cierre,
+    // Nadie estima el fin acá: la OT nace de un renglón ya trabajado.
+    fecha_fin: null,
     prioridad,
   });
 

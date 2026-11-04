@@ -22,7 +22,7 @@ const ENCABEZADO = [
   "EQUIPO QUE SOLICITA", "EQUIPO QUE SOLICITA",
   "ESPECIALIDAD", "TIPO DE TRABAJO", "QUIÉN LO REALIZA",
   "DESCRIPCIÓN DEL TRABAJO", "REPUESTO UTILIZADO", "FECHA COMPROMETIDA",
-  "Puntuación", "PRIORIDAD",
+  "Puntuación", "PRIORIDAD", "Frecuencia", "Próxima fecha", "FECHA DE FIN",
 ];
 
 const datos = {
@@ -39,6 +39,7 @@ const datos = {
   descripcion: "Reemplazo de grillas",
   repuesto: null,
   fecha_ejecucion: "2026-10-20",
+  fecha_fin: "2026-10-25",
   prioridad: "🟠 Alta",
 };
 
@@ -55,6 +56,7 @@ describe("en que columna esta cada cosa", () => {
     expect(i.descripcion).toBe(24);  // Y
     expect(i.fecha).toBe(26);        // AA
     expect(i.prioridad).toBe(28);    // AC
+    expect(i.fechaFin).toBe(31);     // AF
   });
 
   /** Catorce columnas iguales; al master llegan aplanadas, asi que da igual. */
@@ -129,6 +131,35 @@ describe("las celdas del alta", () => {
     if (!r.ok) throw new Error("no armó");
     expect(typeof valorDe(r.celdas, 1)).toBe("number");  // marca temporal
     expect(typeof valorDe(r.celdas, 26)).toBe("number"); // fecha comprometida
+  });
+
+  /**
+   * La fecha de fin, desde el 02/11/2026. Es una estimacion -cuando se calcula
+   * que termina- y por eso no es la de cierre, que es la real.
+   */
+  it("la fecha de fin va como serial en su columna", () => {
+    const r = celdasDelAlta(ENCABEZADO, datos);
+    if (!r.ok) throw new Error(r.motivos.join(" · "));
+    expect(valorDe(r.celdas, 31)).toBe(serialDelDia("2026-10-25"));
+  });
+
+  it("sin fecha de fin esa celda no se escribe", () => {
+    const r = celdasDelAlta(ENCABEZADO, { ...datos, fecha_fin: null });
+    if (!r.ok) throw new Error(r.motivos.join(" · "));
+    expect(valorDe(r.celdas, 31)).toBeUndefined();
+  });
+
+  /**
+   * Hasta que el encabezado no tenga la columna, el dato no se escribe y el
+   * alta no se cae: es la misma regla que ya vale para toda columna que el
+   * formulario puede no tener.
+   */
+  it("sin la columna en el encabezado la OT se crea igual", () => {
+    const sinLaColumna = ENCABEZADO.filter((h) => h !== "FECHA DE FIN");
+    const r = celdasDelAlta(sinLaColumna, datos);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.celdas.some((c) => c.valor === serialDelDia("2026-10-25"))).toBe(false);
   });
 
   /**

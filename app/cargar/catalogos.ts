@@ -28,8 +28,6 @@
  */
 
 import { guardarCatalogo, leerCatalogo } from "@/public/cola/idb.js";
-import { recordarQuienEs, type SesionRecordada } from "@/lib/core/sesionDelTelefono";
-import { createClient } from "@/lib/supabase/client";
 import {
   SIN_GLOSARIO,
   queHacerConElGlosario,
@@ -164,52 +162,11 @@ export async function refrescarCatalogos(guardados: Catalogos): Promise<Catalogo
 }
 
 /**
- * Quién tiene la sesión abierta ahora, y lo deja anotado para cuando no haya
- * red. Devuelve null si no se pudo **averiguar**; ahí vale lo que ya estaba
- * guardado, que es de la última persona que entró.
- *
- * **LOS DOS FALLOS NO SE MEZCLAN, Y ESO ES EL ARREGLO DEL 19/10/2026.** No
- * poder averiguar quién sos es normal —no hay red, y esta pantalla existe para
- * eso— y se contesta con null. No poder **anotarlo** es otra cosa: el
- * almacenamiento está lleno o bloqueado, que es justo el modo de falla que esta
- * pantalla existe para contar. Eso sale como rechazo, igual que todo `idb.js`.
- * Antes los dos `guardarCatalogo` quedaban fuera del `try` y su rechazo lo
- * descartaba el `void` de `useCargar`: la pantalla se quedaba con los
- * formularios apagados y el cartel «Viendo quién tiene la sesión abierta…»
- * fijo para siempre, sin una palabra de diagnóstico.
- *
- * `getSession()` y no `getUser()`: el segundo le pregunta al servidor de
- * Supabase, y esta pantalla existe para los momentos en que no hay servidor que
- * conteste. `getSession()` lee la sesión que el navegador ya tiene.
+ * Se re-exporta desde `lib/core/sesionParaCargar.ts`, adonde se mudó el
+ * 02/11/2026: los botones de siempre también encolan, así que averiguar
+ * quién firma la carga dejó de ser de esta pantalla.
  */
-export async function recordarLaSesion(): Promise<SesionRecordada | null> {
-  const supabase = createClient();
-
-  let id: string;
-  let nombre: string;
-  try {
-    const { data } = await supabase.auth.getSession();
-    const usuario = data.session?.user;
-    if (!usuario) return null;
-    id = usuario.id;
-    // El correo alcanza para nombrar a alguien y está en la sesión misma; el
-    // nombre de verdad hay que ir a buscarlo, y puede no llegar.
-    nombre = usuario.email ?? usuario.id;
-
-    const { data: fila } = await supabase
-      .from("usuarios")
-      .select("nombre, apellido")
-      .eq("id", usuario.id)
-      .maybeSingle();
-    if (fila) nombre = `${fila.nombre ?? ""} ${fila.apellido ?? ""}`.trim() || nombre;
-  } catch {
-    // Sin red no se puede averiguar nada nuevo, y eso no es un error que haya
-    // que mostrar: lo guardado sigue valiendo.
-    return null;
-  }
-
-  return await recordarQuienEs(id, nombre);
-}
+export { recordarLaSesion } from "@/lib/core/sesionParaCargar";
 
 /**
  * Un GET que devuelve null en vez de fallar.

@@ -15,7 +15,7 @@ import {
 } from "@/lib/mantenimiento/claveDeCarga";
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import { estadoSegunElCierre, loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
-import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
+import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
 import { elPendienteDelIntento } from "@/lib/mantenimiento/pendienteDeLaOT";
 import {
   reintentarHastaQueSalga, hacePocoQueSeDreno,
@@ -212,7 +212,7 @@ export async function POST(request: Request) {
   const {
     equipment_id, sector_id, sector_raw, equipo_raw, equipo_code,
     especialidad, tipo, quien, descripcion,
-    fecha, fecha_ejecucion, fecha_cierre,
+    fecha, fecha_ejecucion, fecha_fin, fecha_cierre,
     estado, contratista, horas, operario_1, operario_2, operario_3, prioridad,
     schedule_id, aviso_id,
   } = body;
@@ -313,6 +313,19 @@ export async function POST(request: Request) {
   });
   if (falta.length > 0) {
     const error = `Falta cargar ${falta.join(", ")}.`;
+    avisarDeLaCarga(request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
+    return NextResponse.json({ error }, { status: 400 });
+  }
+
+  // Aparte de lo que falta, y con otro verbo: acá los datos están, lo que no
+  // cierra es lo que dicen entre ellos. Ver `loQueSeContradice`.
+  const contradice = loQueSeContradice({
+    sector_id, equipment_id, descripcion, especialidad, tipo, quien,
+    fecha_ejecucion, fecha_fin,
+    fecha_cierre, horas, contratista, operario_1, operario_2, operario_3,
+  });
+  if (contradice.length > 0) {
+    const error = `No se puede guardar porque ${contradice.join(", ")}.`;
     avisarDeLaCarga(request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
     return NextResponse.json({ error }, { status: 400 });
   }
@@ -471,6 +484,10 @@ export async function POST(request: Request) {
     descripcion: descripcion.trim(),
     repuesto: losRepuestos.texto,
     fecha_ejecucion: fecha_ejecucion || null,
+    // Va a la planilla y **no** al `record` de abajo: `ordenes_trabajo` no
+    // tiene columna para esto, y mandársela a PostgREST corta el insert
+    // entero —es el mismo 400 que dio `estado_raw` el 29/10/2026—.
+    fecha_fin: fecha_fin || null,
     prioridad: laPrioridad,
   });
 

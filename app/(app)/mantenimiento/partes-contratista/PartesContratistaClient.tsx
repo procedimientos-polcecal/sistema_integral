@@ -51,7 +51,10 @@ export interface RenglonCargado {
 export interface ParteCargado {
   id: string; proveedor_id: string; numero: number; fecha: string;
   dirigido_a: string | null; hora_entrada: string | null; hora_salida: string | null;
-  horas_declaradas: number; materiales: string | null;
+  horas_declaradas: number;
+  /** Las extras del papel. Vienen en el `select *` y hacen falta para corregir. */
+  horas_50: number | null; horas_100: number | null;
+  materiales: string | null;
   mant_partes_contratista_renglones: RenglonCargado[] | null;
 }
 
@@ -125,6 +128,13 @@ export default function PartesContratistaClient({
    * acomoda quien carga. Se vuelve atrás a pedido, con «Repartir parejo».
    */
   const [horasAMano, setHorasAMano] = useState(false);
+  /**
+   * El id del parte que se está corrigiendo, o null si se está cargando uno
+   * nuevo. Es el mismo formulario: un parte corregido tiene que pasar por el
+   * mismo control que uno nuevo —los renglones dan el total del papel—, y dos
+   * formularios parecidos serían dos controles que se separan.
+   */
+  const [editando, setEditando] = useState<string | null>(null);
 
   // ── La generación ───────────────────────────────────────────
   const [desde, setDesde] = useState("");
@@ -234,14 +244,56 @@ export default function PartesContratistaClient({
     setHoras50(""); setHoras100(""); setMateriales("");
     setRenglones([{ ...RENGLON_VACIO }]);
     setHorasAMano(false);
+    setEditando(null);
+  }
+
+  /**
+   * Traer un parte ya cargado al formulario para corregirlo.
+   *
+   * **`horasAMano` arranca en true** y eso no es un detalle: las horas que
+   * tiene ese parte las escribió una persona mirando la hoja, y dejar la
+   * propuesta encendida haría que el primer cambio —agregar un renglón, tocar
+   * el total— las repartiera parejas y pisara lo que alguien decidió. Se puede
+   * volver a repartir a mano con el botón de siempre.
+   */
+  function editarParte(p: ParteCargado) {
+    setError(""); setAviso("");
+    setEditando(p.id);
+    setNumero(String(p.numero));
+    setFecha(p.fecha);
+    setDirigidoA(p.dirigido_a ?? "");
+    setHoraEntrada(p.hora_entrada ?? "");
+    setHoraSalida(p.hora_salida ?? "");
+    setDeclaradas(String(p.horas_declaradas));
+    setHoras50(p.horas_50 == null ? "" : String(p.horas_50));
+    setHoras100(p.horas_100 == null ? "" : String(p.horas_100));
+    setMateriales(p.materiales ?? "");
+    setRenglones(
+      [...(p.mant_partes_contratista_renglones ?? [])]
+        .sort((a, b) => a.orden - b.orden)
+        .map((r) => ({
+          actividad: r.actividad,
+          lugar_raw: r.lugar_raw,
+          sector_id: r.sector_id ?? "",
+          equipo_id: r.equipo_id ?? "",
+          horas: String(r.horas),
+        }))
+    );
+    setHorasAMano(true);
+    setAbierto(null);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function guardar() {
     setError(""); setAviso(""); setCargando(true);
+    // Corregir y cargar van por la misma puerta: la ruta lee el cuerpo con la
+    // misma función y corre el mismo control, así que un parte corregido
+    // cierra o no se guarda.
     const res = await fetch("/api/mantenimiento/partes-contratista", {
-      method: "POST",
+      method: editando ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        ...(editando ? { id: editando } : {}),
         proveedor_id: contratista,
         numero, fecha,
         dirigido_a: dirigidoA,
@@ -263,15 +315,24 @@ export default function PartesContratistaClient({
 
     if (!res.ok) { setError(body.error ?? "No se pudo guardar el parte"); return; }
 
-    // El número que sigue, ya puesto: son correlativos y se cargan quince de
-    // una. La fecha también avanza un día, que es lo que pasa quince veces.
-    const siguiente = String(Number(numero) + 1);
-    const otroDia = sumarUnDia(fecha);
-    limpiar();
-    setNumero(siguiente);
-    setFecha(otroDia);
+    const numeroGuardado = numero;
+    const corregido = editando !== null;
+    // **Al corregir no se adelanta nada.** El número y la fecha que siguen son
+    // para la carga en serie —quince hojas de una quincena—; después de una
+    // corrección dejarían el formulario pidiendo un parte que nadie pedía.
+    if (corregido) {
+      limpiar();
+    } else {
+      const siguiente = String(Number(numero) + 1);
+      const otroDia = sumarUnDia(fecha);
+      limpiar();
+      setNumero(siguiente);
+      setFecha(otroDia);
+    }
     setAviso(
-      `Parte guardado, ${body.horas} h repartidas.` +
+      (corregido
+        ? `Parte ${numeroGuardado} corregido, ${body.horas} h.`
+        : `Parte guardado, ${body.horas} h repartidas.`) +
       (body.catalogo_error ? ` ${body.catalogo_error}` : "")
     );
     router.refresh();
@@ -387,8 +448,14 @@ export default function PartesContratistaClient({
           {puedeEditar && (
             <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
               <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">
-                Cargar un parte
+                {editando ? `Corregir el parte ${numero}` : "Cargar un parte"}
               </h2>
+              {editando && (
+                <p className="-mt-2 mb-4 rounded border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                  Estás corrigiendo un parte ya cargado: al guardar se reemplaza entero, cabecera y
+                  renglones. Tiene que volver a cerrar contra el total del papel, igual que uno nuevo.
+                </p>
+              )}
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Campo etiqueta="N° de parte">
@@ -591,14 +658,14 @@ export default function PartesContratistaClient({
                   disabled={cargando || !control.ok}
                   className="rounded bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
                 >
-                  {cargando ? "Guardando…" : "Guardar parte"}
+                  {cargando ? "Guardando…" : editando ? "Guardar la corrección" : "Guardar parte"}
                 </button>
                 <button
                   type="button"
                   onClick={limpiar}
                   className="rounded px-3 py-2 text-sm text-slate-500 hover:underline"
                 >
-                  Limpiar
+                  {editando ? "Cancelar la corrección" : "Limpiar"}
                 </button>
               </div>
             </section>
@@ -672,6 +739,7 @@ export default function PartesContratistaClient({
                       <th className="px-3 py-2">Horas</th>
                       <th className="px-3 py-2">Renglones</th>
                       <th className="px-3 py-2">OT</th>
+                      {puedeEditar && <th className="px-3 py-2"><span className="sr-only">Corregir</span></th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -682,7 +750,9 @@ export default function PartesContratistaClient({
                         <tr
                           key={p.id}
                           onClick={() => setAbierto(abierto === p.id ? null : p.id)}
-                          className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
+                          className={`cursor-pointer border-t border-slate-100 hover:bg-slate-50 ${
+                            editando === p.id ? "bg-sky-50" : ""
+                          }`}
                         >
                           <td className="px-3 py-2 font-medium">{p.numero}</td>
                           <td className="px-3 py-2">{enDiaMes(p.fecha)}</td>
@@ -700,6 +770,27 @@ export default function PartesContratistaClient({
                               ? "—"
                               : generados === rs.length ? "todas" : `${generados}/${rs.length}`}
                           </td>
+                          {/* Corregir sólo mientras ningún renglón sea una OT. Después el
+                              botón no está, y la columna de al lado dice por qué: cambiarle
+                              las horas dejaría a la orden contando algo que ya no dice el
+                              papel, y la OT no se deshace desde acá. */}
+                          {puedeEditar && (
+                            <td className="px-3 py-2 text-right">
+                              {generados === 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); editarParte(p); }}
+                                  className="text-sm text-sky-700 underline"
+                                >
+                                  {editando === p.id ? "Corrigiendo…" : "Corregir"}
+                                </button>
+                              ) : (
+                                <span className="text-xs text-slate-400" title="Ya generó órdenes de trabajo">
+                                  ya generó
+                                </span>
+                              )}
+                            </td>
+                          )}
                         </tr>
                       );
                     })}

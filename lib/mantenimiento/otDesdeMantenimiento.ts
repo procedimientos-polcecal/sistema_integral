@@ -205,10 +205,15 @@ export interface RespuestasDelMantenimiento {
   especialidad: string;
   quien: string;
   fecha_ejecucion: string;
+  /**
+   * Cuándo se estima que termina. **Opcional**: el mantenimiento sabe cuándo
+   * arranca —su próxima fecha— y no cuánto dura.
+   */
+  fecha_fin: string;
 }
 
 export const RESPUESTAS_VACIAS: RespuestasDelMantenimiento = {
-  especialidad: "", quien: "", fecha_ejecucion: "",
+  especialidad: "", quien: "", fecha_ejecucion: "", fecha_fin: "",
 };
 
 /** El nombre de la persona asignada, o `""`. Sin el "—" de la pantalla. */
@@ -236,6 +241,8 @@ export function respuestasIniciales(m: MantenimientoParaLaOT): RespuestasDelMant
     // La que el mantenimiento ya tiene puesta. Puede estar en el pasado —la de
     // hoy vence el 08/08/2026— y se ve, así que se corrige antes de generar.
     fecha_ejecucion: String(m.next_date ?? ""),
+    // El preventivo dice cuándo toca, no cuánto dura: la estima quien genera.
+    fecha_fin: "",
   };
 }
 
@@ -270,6 +277,7 @@ export function cuerpoDeLaOT(
     especialidad: respuestas.especialidad,
     quien: respuestas.quien,
     fecha_ejecucion: respuestas.fecha_ejecucion,
+    fecha_fin: respuestas.fecha_fin ?? "",
 
     /**
      * Las horas **estimadas** del mantenimiento, que la planilla recibe en su

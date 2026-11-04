@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   normalizarLugar, repartoParejo, horasTrasUnCambio, controlarHoras,
   inicioDeLaQuincena, finDeLaQuincena, claveDeOT,
-  agruparEnOrdenes, descripcionDeLaOT,
+  agruparEnOrdenes, descripcionDeLaOT, leerElParte,
   type RenglonParaAgrupar,
 } from "./partesDeContratista";
 
@@ -436,5 +436,104 @@ describe("lo que dice la OT", () => {
       lugar_raw: "Horno N°1", sector_id: "s1", equipo_id: null, horas: 4,
     }]);
     expect(descripcionDeLaOT(grupos[0], "CANDIA")).toContain("quien cargó el parte");
+  });
+});
+
+/**
+ * `leerElParte` es la puerta por donde entran el alta y la corrección de un
+ * parte. Lo que se prueba acá es que las dos lean igual: que un parte que no
+ * cierra no se guarde, venga por donde venga, y que lo que sale de la lectura
+ * sea lo que se escribe en la base.
+ */
+describe("leer el cuerpo de un parte", () => {
+  const BUENO = {
+    proveedor_id: "p1",
+    numero: 1301,
+    fecha: "2026-10-01",
+    horas_declaradas: 8,
+    renglones: [
+      { actividad: "Limpieza", lugar_raw: "Horno N°1", horas: 5, sector_id: "s1", equipo_id: null },
+      { actividad: "Limpieza", lugar_raw: "Bajo cintas", horas: 3, sector_id: null, equipo_id: null },
+    ],
+  };
+
+  it("un parte que cierra sale limpio y con su total", () => {
+    const leido = leerElParte(BUENO);
+    expect(leido.ok).toBe(true);
+    if (!leido.ok) return;
+    expect(leido.total).toBe(8);
+    expect(leido.cabecera.numero).toBe(1301);
+    expect(leido.renglones.map((r) => r.horas)).toEqual([5, 3]);
+    expect(leido.renglones[1].sector_id).toBeNull();
+  });
+
+  it("los campos de texto vacíos quedan en null y no en cadena vacía", () => {
+    const leido = leerElParte({ ...BUENO, dirigido_a: "   ", materiales: "", hora_entrada: "07:00" });
+    expect(leido.ok).toBe(true);
+    if (!leido.ok) return;
+    expect(leido.cabecera.dirigido_a).toBeNull();
+    expect(leido.cabecera.materiales).toBeNull();
+    expect(leido.cabecera.hora_entrada).toBe("07:00");
+  });
+
+  it("las horas al 50 y al 100 distinguen «no vino» de cero", () => {
+    const vacias = leerElParte({ ...BUENO, horas_50: "", horas_100: 0 });
+    expect(vacias.ok).toBe(true);
+    if (!vacias.ok) return;
+    expect(vacias.cabecera.horas_50).toBeNull();
+    expect(vacias.cabecera.horas_100).toBe(0);
+  });
+
+  it("lo que falta se dice todo junto y en una sola frase", () => {
+    const leido = leerElParte({ renglones: [{ actividad: "", lugar_raw: "" }] });
+    expect(leido.ok).toBe(false);
+    if (leido.ok) return;
+    expect(leido.problemas).toHaveLength(1);
+    const dice = leido.problemas[0];
+    expect(dice).toContain("el contratista");
+    expect(dice).toContain("el número del parte");
+    expect(dice).toContain("la fecha");
+    expect(dice).toContain("la actividad del renglón 1");
+    expect(dice).toContain("el lugar del renglón 1");
+  });
+
+  /**
+   * Es el control de la factura, y es el motivo por el que corregir un parte
+   * pasa por la misma función que cargarlo: una corrección que no cierre no se
+   * guarda, igual que un alta.
+   */
+  it("un parte que no cierra no pasa, y dice por cuánto", () => {
+    const leido = leerElParte({ ...BUENO, horas_declaradas: 10 });
+    expect(leido.ok).toBe(false);
+    if (leido.ok) return;
+    expect(leido.problemas.join(" ")).toContain("faltan 2 h");
+  });
+
+  it("un renglón sin horas no pasa aunque la suma dé", () => {
+    const leido = leerElParte({
+      ...BUENO,
+      renglones: [
+        { actividad: "Limpieza", lugar_raw: "Horno N°1", horas: 8 },
+        { actividad: "Limpieza", lugar_raw: "Bajo cintas", horas: 0 },
+      ],
+    });
+    expect(leido.ok).toBe(false);
+    if (leido.ok) return;
+    expect(leido.problemas.join(" ")).toContain("Bajo cintas");
+  });
+
+  it("sin renglones no hay parte", () => {
+    const leido = leerElParte({ ...BUENO, renglones: [] });
+    expect(leido.ok).toBe(false);
+    if (leido.ok) return;
+    expect(leido.problemas.join(" ")).toContain("detalle del trabajo está vacío");
+  });
+
+  it("un cuerpo vacío no revienta: dice qué falta", () => {
+    for (const cuerpo of [null, undefined, {}]) {
+      const leido = leerElParte(cuerpo);
+      expect(leido.ok).toBe(false);
+      if (!leido.ok) expect(leido.problemas[0]).toContain("Falta cargar");
+    }
   });
 });

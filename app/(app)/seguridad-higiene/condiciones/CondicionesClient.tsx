@@ -27,6 +27,7 @@ import {
 } from "@/lib/seguridadHigiene/ordenDeColumna";
 import FichaDeCondicion, { type Catalogos } from "./FichaDeCondicion";
 import { InsigniaDeClasificacion, InsigniaDeEstado, InsigniaDeFalta } from "./Insignias";
+import NuevaCondicionModal from "./NuevaCondicionModal";
 
 /**
  * La tabla de condiciones inseguras.
@@ -139,6 +140,8 @@ export default function CondicionesClient({
   const [filtros, setFiltros] = useState<FiltrosDeGestion>(filtrosIniciales);
   const [orden, setOrden] = useState<OrdenDeColumna>(ordenInicial);
   const [abierta, setAbierta] = useState<string | null>(null);
+  /** Si está abierto el alta. */
+  const [cargando, setCargando] = useState(false);
 
   const sectorDeEquipo = useMemo(
     () => new Map(equipos.map((e) => [e.id, e.sector_id] as const)),
@@ -211,18 +214,51 @@ export default function CondicionesClient({
     setFiltros((f) => ({ ...f, [campo]: valor }));
   }
 
+  /**
+   * Vuelve a leer la lista después de un alta.
+   *
+   * No alcanza con `router.refresh()`: las filas viven en un `useState` que se
+   * inicializa una sola vez con lo que trajo el servidor, así que un
+   * re-render del Server Component no las toca. Y no se recarga la página
+   * entera porque esto se usa cargando una tanda, y perder la posición de la
+   * tabla en cada alta es exactamente lo que haría que se deje de usar.
+   */
+  async function volverALeer() {
+    setCargando(false);
+    try {
+      const res = await fetch("/api/seguridad-higiene/condiciones");
+      if (!res.ok) return;
+      const { data } = await res.json();
+      if (Array.isArray(data)) setFilas(data as FilaDeCondicion[]);
+    } catch {
+      // La condición ya entró; que la tabla tarde un refresco en mostrarla no
+      // vale un cartel de error sobre un alta que salió bien.
+    }
+  }
+
   function guardada(fila: FilaDeCondicion) {
     setFilas((todas) => todas.map((c) => (c.id === fila.id ? fila : c)));
   }
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 md:p-6">
-      <div>
+      {/* El alta va acá arriba y no escondida al final de la tabla: hasta el
+          02/11/2026 **no existía en ninguna pantalla** —el único camino era
+          `/cargar`, cuyo link vive en el menú de Mantenimiento—, así que quien
+          tenía este módulo y no aquél no tenía forma de cargar nada. */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
         <h1 className="text-xl font-bold text-slate-900">Condiciones inseguras</h1>
         <p className="text-sm text-slate-500">
           {visibles.length} de {filas.length} condiciones.
           {resumen.cerradas > 0 && ` ${resumen.cerradas} cerradas.`}
         </p>
+        </div>
+        {puedeEditar && (
+          <button type="button" className="btn-primary shrink-0" onClick={() => setCargando(true)}>
+            + Nueva condición
+          </button>
+        )}
       </div>
 
       {/* Lo que hay para hacer, antes que nada. */}
@@ -446,6 +482,25 @@ export default function CondicionesClient({
           </ul>
         </>
       )}
+
+      {cargando && (
+
+        <NuevaCondicionModal
+
+          sectores={sectores}
+
+          equipos={equipos}
+
+          peligros={peligros}
+
+          onCerrar={() => setCargando(false)}
+
+          onCargada={volverALeer}
+
+        />
+
+      )}
+
 
       {fichaAbierta && (
         <FichaDeCondicion

@@ -28,6 +28,12 @@ export type RenglonDelCuaderno = {
   foto_id?: string | null;
   linea?: number | null;
   fecha: string | null;
+  /**
+   * El último día, cuando la tarea duró más de uno. **Null quiere decir que
+   * duró un día**, no que falte: una línea del cuaderno manuscrito es de un día
+   * y nunca lo trae. Lo trae el Excel, donde cada fila ya viene consolidada.
+   */
+  fecha_hasta?: string | null;
   tarea: string;
   /** Lo que escribió PIPARO. Es el papel: nunca se edita, sólo se lee. */
   lugar_raw: string | null;
@@ -272,6 +278,45 @@ function unidades(renglones: readonly RenglonDelCuaderno[]): { grupo_id: string 
 const porFechaYLinea = (a: RenglonDelCuaderno, b: RenglonDelCuaderno) =>
   (a.fecha ?? "9999").localeCompare(b.fecha ?? "9999") || numero(a.linea) - numero(b.linea);
 
+/** Lo que suman y abarcan los renglones de una orden: la cuenta, sin decidir nada. */
+export type TotalesDeRenglones = Pick<
+  GrupoDeCuaderno, "tarea" | "tareas" | "horas" | "costo" | "desde" | "hasta"
+>;
+
+/**
+ * **La cuenta de una orden, hecha una sola vez.** Horas, precio, rango de
+ * fechas y tareas de un conjunto de renglones.
+ *
+ * La usan `enOrdenes` —para la OT que sale— y la pantalla del cuaderno —para
+ * decir qué va a salir al juntar renglones—. No es un detalle de estilo: con dos
+ * copias de la cuenta, el día que una cambie la pantalla promete «16 h» y la OT
+ * sale con otro número, y eso es lo que la vista previa del servidor existe para
+ * evitar. Por eso es pública y pura, y no mira sector ni permisos: eso lo
+ * decide `enOrdenes` aparte.
+ *
+ * Ordena por fecha y línea ella misma, así que sirve en cualquier orden. Un
+ * precio de cero o negativo no cuenta como precio; sin ninguno el costo es null.
+ */
+export function totalesDeRenglones(renglones: readonly RenglonDelCuaderno[]): TotalesDeRenglones {
+  const miembros = [...renglones].sort(porFechaYLinea);
+  // Las dos puntas de cada renglón, no sólo su primer día: un renglón que duró
+  // del 24 al 31 tiene que empujar el `hasta` del grupo hasta el 31. Para los
+  // que vienen de una foto `fecha_hasta` es null y esto queda igual que antes.
+  const fechas = miembros
+    .flatMap((m) => [m.fecha, m.fecha_hasta ?? null])
+    .filter((f): f is string => !!f)
+    .sort();
+  const costos = miembros.filter((m) => numero(m.costo) > 0);
+  return {
+    tarea: miembros[0]?.tarea.trim() ?? "",
+    tareas: distintos(miembros.map((m) => m.tarea.trim())),
+    horas: redondear(miembros.reduce((s, m) => s + numero(m.horas), 0)),
+    costo: costos.length > 0 ? redondear(costos.reduce((s, m) => s + numero(m.costo), 0)) : null,
+    desde: fechas[0] ?? null,
+    hasta: fechas[fechas.length - 1] ?? null,
+  };
+}
+
 function resolver(renglones: readonly RenglonDelCuaderno[]): Resolucion {
   const ordenes: GrupoDeCuaderno[] = [];
   const pendientes: PendienteDeCuaderno[] = [];
@@ -297,10 +342,9 @@ function resolver(renglones: readonly RenglonDelCuaderno[]): Resolucion {
     const sector_id = sectores.length === 1 ? sectores[0] : null;
 
     const primero = miembros[0];
-    const fechas = miembros.map((m) => m.fecha).filter((f): f is string => !!f).sort();
-    const horas = redondear(miembros.reduce((s, m) => s + numero(m.horas), 0));
-    const costos = miembros.filter((m) => numero(m.costo) > 0);
-    const costo = costos.length > 0 ? redondear(costos.reduce((s, m) => s + numero(m.costo), 0)) : null;
+    const totales = totalesDeRenglones(miembros);
+    const { horas, costo } = totales;
+    const fechas = miembros.map((m) => m.fecha).filter((f): f is string => !!f);
 
     const equipos = distintos(miembros.map((m) => m.equipo_id));
     const equipo_id = equipos.length === 1 ? equipos[0] : null;
@@ -310,12 +354,7 @@ function resolver(renglones: readonly RenglonDelCuaderno[]): Resolucion {
       grupo_id,
       sector_id,
       equipo_id,
-      tarea: primero.tarea.trim(),
-      tareas: distintos(miembros.map((m) => m.tarea.trim())),
-      horas,
-      costo,
-      desde: fechas[0] ?? null,
-      hasta: fechas[fechas.length - 1] ?? null,
+      ...totales,
       renglon_ids: ids,
       renglon_ids_sin_ot: sinOT.map((m) => m.id),
       ot_existentes,
@@ -425,4 +464,25 @@ export function enOrdenes(renglones: readonly RenglonDelCuaderno[]): GrupoDeCuad
  */
 export function pendientesDeOrdenes(renglones: readonly RenglonDelCuaderno[]): PendienteDeCuaderno[] {
   return resolver(renglones).pendientes;
+}
+
+/**
+ * En qué paso está una carga: `EN_CHEQUEO` mientras quede algún renglón sin
+ * orden, `GENERADA` cuando **todos** salieron.
+ *
+ * Lo escribe `mant_cuadernos.estado`, y existe porque una columna de estado que
+ * nunca se mueve es la que el próximo lector va a creer. Es deliberadamente
+ * estricta: un renglón que no puede generar —sin horas ni precio, sin sector—
+ * es un pendiente que alguien tiene que resolver, y dar la carga por terminada
+ * con él adentro lo taparía. Una carga sin renglones no está generada: no salió
+ * nada de ella. Y vuelve a `EN_CHEQUEO` sola si después entra otra foto, porque
+ * la ruta de fotos la reabre al guardar renglones nuevos.
+ */
+export type EstadoDeCarga = "EN_CHEQUEO" | "GENERADA";
+
+export function estadoDeLaCarga(
+  renglones: readonly Pick<RenglonDelCuaderno, "orden_trabajo_id">[]
+): EstadoDeCarga {
+  if (renglones.length === 0) return "EN_CHEQUEO";
+  return renglones.every((r) => !!r.orden_trabajo_id) ? "GENERADA" : "EN_CHEQUEO";
 }

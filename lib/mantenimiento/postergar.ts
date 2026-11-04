@@ -1,5 +1,5 @@
 /**
- * Postergar una orden de trabajo: correrle la fecha de ejecución.
+ * Postergar una orden de trabajo: correrle la fecha de inicio.
  *
  * ── LO QUE HAY QUE SABER ANTES DE TOCAR ESTO ────────────────────────────────
  *

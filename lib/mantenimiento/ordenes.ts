@@ -119,6 +119,12 @@ export const COLUMNAS_DE_DERRAME: readonly number[] = [
 /** La que calcula la planilla sola. No se escribe, pero no es derrame. */
 export const COLUMNA_CALCULADA = 11;
 
+/** La del ESTADO. Se exporta porque la rellena también la sincronización. */
+export const COLUMNA_ESTADO: number = COL.estado;
+
+/** La del N° de OT, que es la que dice si una fila es una orden. */
+export const COLUMNA_OT: number = COL.otNumber;
+
 /** Las que sí son literales del master y el sistema puede escribir. */
 export const COLUMNAS_ESCRIBIBLES: readonly number[] = [
   COL.fechaCierre, COL.estado, COL.contratista, COL.horas,
@@ -139,7 +145,7 @@ export const TODAS_LAS_COLUMNAS: readonly number[] = Object.values(COL);
 export const LO_QUE_NO_SE_CORRIGE_EN_EL_MASTER: readonly string[] = [
   "la fecha de la orden", "el sector", "el equipo", "la especialidad",
   "el tipo", "quién lo realiza", "la descripción", "el repuesto",
-  "la fecha de ejecución", "la prioridad",
+  "la fecha de inicio", "la prioridad",
 ];
 
 /**

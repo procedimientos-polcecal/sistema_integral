@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { textoDeRepuesto } from "./costoEnRepuesto";
 import { costoParaElCampo, horasParaElCampo, leerNumeroDelCampo } from "./cuadernoNumero";
 
 const num = (t: string, dinero: boolean) => {
@@ -45,6 +46,15 @@ describe("cómo se muestra", () => {
     expect(horasParaElCampo(null)).toBe("");
     expect(costoParaElCampo(920000)).toBe("920.000");
     expect(costoParaElCampo(null)).toBe("");
+  });
+  it("un precio de cuatro cifras lleva el punto, igual que en la planilla", () => {
+    // `Intl` con es-AR no agrupa los de cuatro cifras («1000»), y la columna de la
+    // planilla —`textoDeRepuesto`— sí lo hace («$1.000»): la pantalla tiene que
+    // decir lo mismo que va a quedar escrito.
+    expect(costoParaElCampo(1000)).toBe("1.000");
+    expect(costoParaElCampo(1000.5)).toBe("1.000,5");
+    expect(textoDeRepuesto(1000, null)).toBe(`$${costoParaElCampo(1000)}`);
+    expect(num(costoParaElCampo(1000), true)).toBe(1000);
   });
   it("lo que se muestra se vuelve a leer igual", () => {
     expect(num(costoParaElCampo(1234567.5), true)).toBe(1234567.5);

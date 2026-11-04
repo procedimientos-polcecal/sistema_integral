@@ -166,6 +166,8 @@ export async function generarLasPeriodicas(
       descripcion: String(cuerpo.descripcion ?? "").trim(),
       repuesto: null,
       fecha_ejecucion: respuestas.fecha_ejecucion || null,
+      // El periódico sabe cuándo arranca, no cuánto dura.
+      fecha_fin: null,
       // Un preventivo no tiene urgencia de donde sacarla, y ponerle una sería
       // inventar el dato del que sale el orden del tablero.
       prioridad: null,

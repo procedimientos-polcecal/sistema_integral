@@ -1,5 +1,6 @@
 import type { GrupoDeCuaderno } from "./cuadernoGrupos";
 import { repuestoSinElCosto, textoDeRepuesto } from "./costoEnRepuesto";
+import { denominadorComun } from "./cuadernoDescripcion";
 
 /**
  * Qué escribe la generación del cuaderno en cada OT.
@@ -47,41 +48,34 @@ export function equipoParaLaPlanilla(
   return sector?.codigo ? `${sector.codigo} - Edificio` : "Edificio";
 }
 
-/** "2026-09-17" → "17/9". El día y el mes, que es como se nombra una fecha acá. */
-function fechaCorta(fecha: string | null): string {
-  const [, mes, dia] = String(fecha ?? "").split("-");
-  return mes && dia ? `${Number(dia)}/${Number(mes)}` : "sin fecha";
-}
-
-const verHoras = (n: number) => String(Math.round(n * 100) / 100).replace(".", ",");
-
 /**
- * El texto de la orden: qué se hizo, cuándo, cuántas horas y lo que escribió
- * PIPARO en el cuaderno.
+ * El texto de la orden: **sólo qué se hizo**.
  *
- * Lleva el rango de fechas **del grupo entero**, así que al sumarle un renglón
- * a una orden que ya existe se reescribe con el rango nuevo. El precio no va
- * acá: viaja en `REPUESTO UTILIZADO` (ver `costoEnRepuesto`).
+ * Hasta el 03/11/2026 era esto:
  *
- * Sin horas no dice «0 h»: un renglón con precio se cobra por trabajo y un cero
- * ahí es un dato que nadie midió.
+ *     Resoldar chapas impacto rompedores p/ TRT Nº2 — PIPARO. El 19/10.
+ *     8 h en total. Según el cuaderno: Resoldar chapas impacto rompedores
+ *     p/ TRT Nº2 (19/10, 8 h).
+ *
+ * Cuatro datos metidos en una celda de texto **que tienen su propia columna en
+ * el master**: N CONTRATISTA, K FECHA DE CIERRE, O HORAS. Desde una celda de
+ * prosa no se filtra ni se suma, y la planilla es de donde lee quien no entra
+ * al sistema; que esas columnas lleguen vacías era el problema de verdad, y se
+ * arregla donde se escriben y no repitiendo el dato acá.
+ *
+ * El precio sigue viajando aparte, en `REPUESTO UTILIZADO` (ver
+ * `costoEnRepuesto`), que es donde la práctica ya lo ponía a mano.
+ *
+ * Con varios renglones junta las tareas por su denominador común —ver
+ * `cuadernoDescripcion.ts`, que tiene medidos los cinco grupos reales—.
+ *
+ * **Lo que esto pierde, dicho**: el detalle renglón por renglón (qué día y
+ * cuántas horas cada uno) deja de estar en la planilla. No se pierde —vive en
+ * `mant_cuadernos_renglones` y se ve en la pantalla del cuaderno, enlazado a
+ * esta misma OT—, pero quien mira sólo la planilla ve el total y no el reparto.
  */
-export function descripcionDeLaOrden(grupo: GrupoDeCuaderno, contratista: string): string {
-  const cuando = grupo.desde && grupo.hasta && grupo.desde !== grupo.hasta
-    ? `Del ${fechaCorta(grupo.desde)} al ${fechaCorta(grupo.hasta)}`
-    : `El ${fechaCorta(grupo.hasta ?? grupo.desde)}`;
-
-  const horas = grupo.horas > 0 ? ` ${verHoras(grupo.horas)} h en total.` : "";
-
-  const detalle = grupo.detalle
-    .map((d) => {
-      const lugar = d.lugar_raw?.trim();
-      const h = Number(d.horas) > 0 ? `, ${verHoras(Number(d.horas))} h` : "";
-      return `${d.tarea}${lugar ? ` — ${lugar}` : ""} (${fechaCorta(d.fecha)}${h})`;
-    })
-    .join("; ");
-
-  return `${grupo.tarea} — ${contratista}. ${cuando}.${horas} Según el cuaderno: ${detalle}.`;
+export function descripcionDeLaOrden(grupo: GrupoDeCuaderno): string {
+  return denominadorComun(grupo.tareas);
 }
 
 /**
@@ -130,7 +124,7 @@ export function valoresDeLaOrden(
     equipment_id: grupo.equipo_id,
     equipo_raw: equipoParaLaPlanilla(grupo.equipo_id ? contexto.equipo : null, contexto.sector),
     equipo_code: grupo.equipo_id ? contexto.equipo?.code ?? null : null,
-    descripcion: descripcionDeLaOrden(grupo, contexto.contratista),
+    descripcion: descripcionDeLaOrden(grupo),
     horas: grupo.horas,
     costo: grupo.costo,
     repuesto: textoDeRepuesto(grupo.costo, base),
@@ -138,6 +132,20 @@ export function valoresDeLaOrden(
 }
 
 // ── El freno de los duplicados ──────────────────────────────
+
+/**
+ * ¿Es el mismo contratista? Sin mayúsculas y **sin los espacios de los
+ * costados**: `ordenes_trabajo.contratista` es texto libre escrito a mano en 377
+ * de 380 OT, y un «PIPARO » con un espacio de más hacía que el freno de
+ * duplicados no viera la OT y devolviera cero **en silencio**, siendo la única
+ * defensa contra duplicar. Es igualdad y no «contiene»: «PIPARO HNOS» no es
+ * PIPARO.
+ */
+export function mismoContratista(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (a == null || b == null) return false;
+  const x = a.trim().toLowerCase();
+  return x !== "" && x === b.trim().toLowerCase();
+}
 
 /** Una OT que ya existe, vista sólo para decidir si es un duplicado. */
 export type OrdenParaComparar = { id: string; ot_number: number; fecha: string | null };

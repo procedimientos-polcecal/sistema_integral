@@ -28,12 +28,18 @@ import { borrarLoQueLaPlanillaNoTrajo } from "@/lib/core/borradoDeEspejo";
 import {
   borrarLosEventosDeLasOT, loQueSeAnotaDeLosEventos, presupuestoDeGoogle, seguirALasOT,
 } from "@/lib/agenda/elEventoSigueALaOT";
-import { leerValores, leerFormulas, listarPestanas } from "@/lib/core/sheets";
+import { leerValores, leerFormulas, listarPestanas, escribirCeldas, leerFormulasDeRango
+} from "@/lib/core/sheets";
 import { linkDeCelda } from "@/lib/core/links";
 import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
 import { filaDeAviso } from "@/lib/mantenimiento/avisos";
 import { resolverElArea, repartirPorArea } from "@/lib/mantenimiento/areaDelAviso";
-import { filaDeOrden, paraLaBase, celdasParaRegistrar, type OrdenLeida } from "@/lib/mantenimiento/ordenes";
+import {
+  filaDeOrden, paraLaBase, celdasParaRegistrar, COLUMNA_ESTADO, COLUMNA_OT,
+  type OrdenLeida,
+} from "@/lib/mantenimiento/ordenes";
+import { letraDeColumna } from "@/lib/core/columnaDeSheets";
+import { lasQueLesFaltaLaFormula } from "@/lib/mantenimiento/formulaDelEstado";
 import { contrastar, type OrdenDelSistema } from "@/lib/mantenimiento/contraste";
 import { loQueSeGuardaDelContraste } from "@/lib/mantenimiento/divergencias";
 import { generarLasPeriodicas } from "@/lib/mantenimiento/generarPeriodicas";
@@ -564,6 +570,40 @@ async function anotarLasDivergencias(
   }
 }
 
+/**
+ * Les escribe la fórmula del ESTADO a las órdenes que nacieron sin ella.
+ *
+ * Qué celdas son lo decide `lasQueLesFaltaLaFormula`, en `lib/` y con tests; lo
+ * de acá es hablar con Google. **Nunca tira**: la sincronización no puede
+ * fallar porque una escritura de más no salga, así que devuelve el motivo.
+ */
+async function ponerLaFormulaDelEstado(
+  planilla: string,
+  pestana: string,
+  filas: readonly (readonly unknown[])[]
+): Promise<{ escritas: number; freno: string | null; error: string | null }> {
+  try {
+    const letra = letraDeColumna(COLUMNA_ESTADO);
+    const formulas = await leerFormulasDeRango(
+      planilla, pestana, `${letra}1:${letra}${filas.length}`
+    );
+
+    const { celdas, freno } = lasQueLesFaltaLaFormula(
+      filas, formulas, COLUMNA_OT, COLUMNA_ESTADO
+    );
+    if (freno) return { escritas: 0, freno, error: null };
+    if (celdas.length === 0) return { escritas: 0, freno: null, error: null };
+
+    await escribirCeldas(
+      planilla,
+      celdas.map((c) => ({ pestana, fila: c.fila, columna: c.columna, valor: c.valor }))
+    );
+    return { escritas: celdas.length, freno: null, error: null };
+  } catch (e) {
+    return { escritas: 0, freno: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_OT_ID ?? "";
   const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
@@ -711,6 +751,22 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
       .in("ot_number", yaDerramaron);
   }
 
+  // ── Y SE LES PONE LA FÓRMULA A LAS QUE NACIERON SIN ESTADO ───────────────
+  //
+  // Una OT que entra por el formulario no pasa por ninguna ruta del SdG, así
+  // que nadie le escribe la `M`: nace con el ESTADO en blanco y se queda así
+  // para siempre. Medido el 02/11/2026: tres en tres días, las tres
+  // `app_created = false`. Mientras esa celda está vacía esa orden **no tiene
+  // estado para quien mira la planilla**, ni siquiera cuando se vence.
+  //
+  // Va acá, al final y después del upsert, porque necesita las dos lecturas y
+  // porque escribir es lo último que conviene hacer. Cuesta una lectura más
+  // —las fórmulas de la columna M, que `leerValores` no trae—, y tiene el
+  // mismo freno que el borrado: si hubiera demasiadas, no escribe ninguna y
+  // dice por qué, porque una planilla recalculando devuelve vacío lo que no
+  // resolvió y «vacío» es justo el criterio de esto.
+  const estadosPuestos = await ponerLaFormulaDelEstado(planilla, pestana, filas);
+
   const presupuestoDeLaAgenda = presupuestoDeGoogle();
   const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_OT, {
     clavesLeidas: trajoLaPlanilla,
@@ -765,6 +821,9 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     eventos_pendientes_de_google: eventos.pendientes,
     eventos_sin_alcanzar: eventos.sinAlcanzar,
     ...(eventos.fallos.length > 0 ? { eventos_con_fallos: eventos.fallos } : {}),
+    estados_sin_formula: estadosPuestos.escritas,
+    ...(estadosPuestos.freno ? { estado_freno: estadosPuestos.freno } : {}),
+    ...(estadosPuestos.error ? { estado_error: estadosPuestos.error } : {}),
     divergencias: divergencias.cuantas,
     ...(divergencias.recortadas > 0 ? { divergencias_recortadas: divergencias.recortadas } : {}),
     // Un fallo acá no frena la corrida —anotar es secundario, importar no—, así

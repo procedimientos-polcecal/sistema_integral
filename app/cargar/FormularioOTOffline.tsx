@@ -323,11 +323,21 @@ export default function FormularioOTOffline({
         </F>
         {/* Obligatoria y no un adorno: sin ella la OT no se atrasa nunca, así
             que no aparece en ningún listado de lo que está vencido. */}
-        <F label="Fecha ejecución" required>
+        <F label="Fecha de inicio" required>
           <input
             type="date"
             value={form.fecha_ejecucion}
             onChange={(e) => f("fecha_ejecucion", e.target.value)}
+            disabled={deshabilitado}
+            className="input"
+          />
+        </F>
+        {/* Estimada, y por eso opcional: la real es la de cierre. */}
+        <F label="Fecha de fin (estimada)">
+          <input
+            type="date"
+            value={form.fecha_fin}
+            onChange={(e) => f("fecha_fin", e.target.value)}
             disabled={deshabilitado}
             className="input"
           />
@@ -497,6 +507,7 @@ function vacio() {
     descripcion: "",
     fecha: hoyEnArgentina(),
     fecha_ejecucion: "",
+    fecha_fin: "",
     fecha_cierre: "",
     estado: "POR_HACER",
     contratista: "",
