@@ -252,7 +252,7 @@ export default function AgendaClient({
 
       <BarraDeLaAgenda vista={vista} dia={dia} hoy={hoy} hrefDe={hrefDe} onNuevo={() => setModal({ evento: null })} />
 
-      <BandaDeAlertas entradas={entradas} onEntrada={setDetalleId} />
+      <BandaDeAlertas entradas={entradas} onEntrada={setDetalleId} hrefDeLaLista={hrefDe("lista", dia)} />
 
       {vista === "semana" && (
         <>

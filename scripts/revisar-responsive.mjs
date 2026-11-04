@@ -87,12 +87,11 @@ export const CALENDARIOS = [
   { ruta: "app/(app)/trituracion/partes/PartesClient.tsx", cantidad: 2 },
   // La semana de la Agenda: no es un calendario del mes sino la cuadrícula de
   // siete días con sus horas, y el motivo es el mismo —la semana tiene siete
-  // días y con menos columnas deja de ser la semana—. Son unos 43 px por día
-  // con la columna de horas, apretado a propósito: lo que entra en una columna
-  // es el título de un evento cortado con `truncate`, y el detalle está a un
-  // toque, en el modal. La vista de día (`grid-cols-1`) es la de verdad para el
-  // teléfono. Una sola ocurrencia porque el encabezado y el cuerpo comparten la
-  // misma constante `columnas`.
+  // días y con menos columnas deja de ser la semana—. En un teléfono esta
+  // grilla no se dibuja (`AgendaClient` la envuelve en `hidden sm:block` y ahí
+  // muestra la de un día, `grid-cols-1`), así que el ancho mínimo real es el
+  // de `sm` y no los 343 px que mira el script. Una sola ocurrencia porque el
+  // encabezado y el cuerpo comparten la misma constante `columnas`.
   { ruta: "app/(app)/agenda/Grilla.tsx", cantidad: 1 },
 ];
 

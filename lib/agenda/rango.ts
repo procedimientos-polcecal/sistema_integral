@@ -1,4 +1,4 @@
-import { esFechaIso, sumarDias, diaDeLaSemana } from "@/lib/core/fechas";
+import { esFechaIso, semanaDe } from "@/lib/core/fechas";
 import { corteDelHistorial, etiquetaDelDia } from "./vista";
 
 /**
@@ -33,20 +33,16 @@ export function leerDia(crudo: string | string[] | undefined, hoy: string): stri
 }
 
 /**
- * El lunes de la semana que contiene a `dia`. El domingo cierra la semana y no
- * la abre, así que retrocede seis días y no cero.
+ * Los días que se dibujan como columnas. La lista no tiene grilla.
+ *
+ * Dónde empieza una semana lo decide `semanaDe` de `lib/core/fechas.ts`, la
+ * misma que usan Disponibilidad y la programación del taller: acá no se vuelve
+ * a derivar el lunes.
  */
-export function inicioDeLaSemana(dia: string): string {
-  const dow = diaDeLaSemana(dia);
-  return sumarDias(dia, -(dow === 0 ? 6 : dow - 1));
-}
-
-/** Los días que se dibujan como columnas. La lista no tiene grilla. */
 export function diasDelRango(vista: VistaDeAgenda, dia: string): string[] {
   if (vista === "dia") return [dia];
   if (vista === "lista") return [];
-  const lunes = inicioDeLaSemana(dia);
-  return Array.from({ length: 7 }, (_, i) => sumarDias(lunes, i));
+  return semanaDe(dia);
 }
 
 /**

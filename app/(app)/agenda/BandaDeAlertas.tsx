@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { EntradaDeLaBanda } from "@/lib/agenda/banda";
 
 /**
@@ -12,16 +13,26 @@ import type { EntradaDeLaBanda } from "@/lib/agenda/banda";
  * tests; esto sólo muestra las primeras y dice cuántas quedaron afuera, porque
  * una banda que crece sin tope empuja la grilla fuera de la pantalla.
  *
+ * **«y N más» es un enlace a la Lista y no un texto**: una alerta que no entró
+ * en las tres de arriba sólo tendría su bloque en la grilla, y ese bloque existe
+ * únicamente si el evento cae en los días que se están dibujando. Las divergencias
+ * no se van con «Ya lo vi» y van primero, así que tres de ellas dejan a todas las
+ * demás sin otro camino. La Lista es la vista que ya muestra cada evento con
+ * alerta con su texto completo y sus botones para destrabar, que la banda no
+ * puede mostrar.
+ *
  * Sin entradas no dibuja nada: una franja vacía enseñaría a ignorarla.
  */
 
 const MOSTRADAS = 3;
 
 export default function BandaDeAlertas({
-  entradas, onEntrada,
+  entradas, onEntrada, hrefDeLaLista,
 }: {
   entradas: EntradaDeLaBanda[];
   onEntrada: (eventoId: string) => void;
+  /** Adónde lleva «y N más»: la vista Lista, con el día y el historial que ya se miran. */
+  hrefDeLaLista: string;
 }) {
   if (entradas.length === 0) return null;
 
@@ -52,7 +63,11 @@ export default function BandaDeAlertas({
           </li>
         ))}
       </ul>
-      {restantes > 0 && <p className="mt-0.5">y {restantes} más</p>}
+      {restantes > 0 && (
+        <Link href={hrefDeLaLista} className="mt-0.5 block font-medium underline">
+          y {restantes} más
+        </Link>
+      )}
     </div>
   );
 }

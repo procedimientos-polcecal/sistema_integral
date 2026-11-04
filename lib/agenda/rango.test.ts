@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { corteDelHistorial } from "./vista";
-import { desdeParaLeer, diasDelRango, hrefDeLaAgenda, inicioDeLaSemana, leerDia, leerVista, tituloDelRango } from "./rango";
+import { desdeParaLeer, diasDelRango, hrefDeLaAgenda, leerDia, leerVista, tituloDelRango } from "./rango";
 
 describe("leerVista", () => {
   it("por defecto es la semana", () => {
@@ -30,22 +30,20 @@ describe("leerDia", () => {
   });
 });
 
-describe("inicioDeLaSemana", () => {
-  it("la semana arranca el lunes", () => {
-    expect(inicioDeLaSemana("2026-11-04")).toBe("2026-11-02"); // miércoles
-    expect(inicioDeLaSemana("2026-11-02")).toBe("2026-11-02"); // el lunes mismo
-  });
-  it("un domingo pertenece a la semana que termina, no a la que empieza", () => {
-    expect(inicioDeLaSemana("2026-11-08")).toBe("2026-11-02");
-  });
-});
-
 describe("diasDelRango", () => {
   it("la semana son siete días, de lunes a domingo", () => {
     expect(diasDelRango("semana", "2026-11-04")).toEqual([
       "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05",
       "2026-11-06", "2026-11-07", "2026-11-08",
     ]);
+  });
+  it("la semana arranca el lunes, también si el día mirado es el lunes", () => {
+    expect(diasDelRango("semana", "2026-11-02")[0]).toBe("2026-11-02");
+  });
+  it("un domingo pertenece a la semana que termina, no a la que empieza", () => {
+    const dias = diasDelRango("semana", "2026-11-08");
+    expect(dias[0]).toBe("2026-11-02");
+    expect(dias[6]).toBe("2026-11-08");
   });
   it("el día es uno solo", () => {
     expect(diasDelRango("dia", "2026-11-04")).toEqual(["2026-11-04"]);

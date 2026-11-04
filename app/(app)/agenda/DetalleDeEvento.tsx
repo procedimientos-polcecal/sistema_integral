@@ -70,7 +70,7 @@ export default function DetalleDeEvento({
         </div>
 
         <div className="flex justify-end border-t border-slate-200 px-4 py-3">
-          <button type="button" className="btn-secondary" disabled={cuerpo.ocupado} onClick={cerrar}>Cerrar</button>
+          <button type="button" className="btn-secondary disabled:opacity-50" disabled={cuerpo.ocupado} onClick={cerrar}>Cerrar</button>
         </div>
       </div>
     </div>
