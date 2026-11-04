@@ -17,6 +17,7 @@ import FallaDeLaOT, { FALLA_VACIA, type LaFalla } from "@/components/FallaDeLaOT
 import type { LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { CartelDelResultado } from "@/app/cargar/envio";
 import { mandarOEncolar, type Resultado } from "@/lib/core/mandarOEncolar";
+import CalendarioDeFecha from "./CalendarioDeFecha";
 
 /**
  * Los cuatro vocabularios, de `lib/`, no una copia.
@@ -155,6 +156,9 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
    * campo listo para escribir— y no como una lista que hay que estrenar.
    */
   const [repuestos, setRepuestos] = useState<LineaDeRepuesto[]>([{ cantidad: "", nombre: "" }]);
+
+  /** El calendario que se abre desde la fecha de inicio para ver qué tiene cada día. */
+  const [verCalendario, setVerCalendario] = useState(false);
 
   const [form, setForm] = useState({
     equipment_id:   "",
@@ -380,7 +384,19 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               <input type="date" value={form.fecha} onChange={e => f("fecha", e.target.value)} className="input" />
             </F>
             <F label="Fecha de inicio" required>
-              <input type="date" value={form.fecha_ejecucion} onChange={e => f("fecha_ejecucion", e.target.value)} className="input" />
+              {/* El campo sigue siendo escribible: el calendario es para
+                  decidir viendo qué hay cada día, no para reemplazarlo. */}
+              <div className="flex gap-2">
+                <input type="date" value={form.fecha_ejecucion} onChange={e => f("fecha_ejecucion", e.target.value)} className="input flex-1 min-w-0" />
+                <button
+                  type="button"
+                  onClick={() => setVerCalendario(true)}
+                  className="btn-secondary shrink-0"
+                  title="Ver qué órdenes tiene cada día antes de elegir"
+                >
+                  Ver el mes
+                </button>
+              </div>
             </F>
             {/* Estimada —la real es la de cierre— y obligatoria desde el
                 04/11/2026, a pedido. Nació opcional dos días antes con el
@@ -532,6 +548,14 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           </div>
         </form>
       </div>
+
+      {verCalendario && (
+        <CalendarioDeFecha
+          valor={form.fecha_ejecucion}
+          onElegir={(dia) => { f("fecha_ejecucion", dia); setVerCalendario(false); }}
+          onCerrar={() => setVerCalendario(false)}
+        />
+      )}
     </div>
   );
 }
