@@ -1,0 +1,80 @@
+import { DURACION_OT_MINUTOS, instanteDe } from "@/lib/agenda/evento";
+
+/**
+ * Dónde cae, dentro de su día, el evento de una OT que entra sola al calendario.
+ *
+ * Sin red y sin base. Las OT de una misma especialidad **no pueden caer todas a
+ * las 08:00**: dos mecánicos con dos órdenes a la misma hora son un conflicto
+ * que el calendario muestra como superposición. Por eso se **apilan**: la
+ * primera arranca a las 08:00, la siguiente 1:30 después, y así.
+ */
+
+/** Hora de pared a la que arranca la primera OT del día. */
+export const HORA_DE_ARRANQUE = "08:00";
+
+/**
+ * La última hora a la que puede arrancar una OT. Es el fin del octavo turno de
+ * 1:30 contando desde las 08:00 (08:00 + 8 × 1:30), así que **nueve** órdenes
+ * entran sin tocar el tope.
+ */
+export const TOPE_DE_ARRANQUE = "20:00";
+
+/**
+ * Lo que se le dice a quien abre una OT que quedó contra el tope. Vive acá y no
+ * en la ruta porque el número nueve es el de `TOPE_DE_ARRANQUE`: si uno cambia,
+ * el otro tiene que cambiar con él.
+ */
+export const AVISO_DE_TOPE =
+  "Ese día ya tiene nueve órdenes de esa especialidad: ésta comparte las 20:00 con las que no entraron.";
+
+const aMinutos = (hhmm: string): number => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+};
+
+const dos = (n: number) => String(n).padStart(2, "0");
+const aHoraDePared = (minutos: number) => `${dos(Math.floor(minutos / 60))}:${dos(minutos % 60)}`;
+
+/**
+ * El horario de una OT que tiene `ocupados` órdenes de su misma especialidad ya
+ * puestas ese día, o `null` si la fecha no es un día válido (`AAAA-MM-DD`).
+ *
+ * **El tope no es opcional.** Sin él, la undécima caería a las 24:30 y
+ * `instanteDe` rechazaría esa fecha-hora: la OT se quedaría **sin evento y sin
+ * que nada lo avise**. De la décima en adelante comparten las 20:00 y salen con
+ * `topeado: true`, para que quien llama lo anote (`AVISO_DE_TOPE`).
+ *
+ * Las cadenas se arman con aritmética sobre minutos y **sin `Date`**, como
+ * `horarioDeLaOT`: el servidor corre en UTC y una `Date` metería su zona en una
+ * hora que es de pared de Argentina. El fin más alto es 21:30, así que ningún
+ * horario cruza la medianoche. Sale sin zona (`2026-11-06T08:00:00`).
+ */
+export function horarioApilado(
+  fecha: string,
+  ocupados: number
+): { inicio: string; fin: string; topeado: boolean } | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || instanteDe(`${fecha}T00:00:00`) === null) return null;
+  if (!Number.isInteger(ocupados) || ocupados < 0) return null;
+
+  const tope = aMinutos(TOPE_DE_ARRANQUE);
+  const sinTopear = aMinutos(HORA_DE_ARRANQUE) + ocupados * DURACION_OT_MINUTOS;
+  const topeado = sinTopear > tope;
+  const arranque = topeado ? tope : sinTopear;
+
+  return {
+    inicio: `${fecha}T${aHoraDePared(arranque)}:00`,
+    fin: `${fecha}T${aHoraDePared(arranque + DURACION_OT_MINUTOS)}:00`,
+    topeado,
+  };
+}
+
+/**
+ * La clave del grupo dentro del cual se apila: la especialidad, sin importar
+ * mayúsculas ni espacios de más. Una especialidad vacía o ausente es **su propio
+ * grupo**: hay una OT en producción así y no puede reventar ni caer en el
+ * montón de las mecánicas.
+ */
+export function claveDeApilado(especialidad: string | null | undefined): string {
+  const limpia = especialidad?.trim().toUpperCase();
+  return limpia ? limpia : "(sin especialidad)";
+}
