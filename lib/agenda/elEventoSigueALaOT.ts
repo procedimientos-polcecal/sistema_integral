@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import { traerTodo } from "@/lib/core/paginado";
 import { fechaParaElCalendario, horarioDeLaOT, instanteDe, laOTEstaCerrada, TURNOS_DEL_TALLER } from "./evento";
+import { AVISO_DE_TOPE } from "./apilado";
 import { leerEvento, type EventoParaGoogle } from "@/lib/core/calendar";
 import { aHoraDePared, aInstanteISO, eventoParaGoogle, idDeGoogleDe, invitadosLimpios } from "./pedido";
 import {
@@ -211,9 +212,25 @@ export function planDelEvento(fila: FilaDeEventoDeOT): Plan {
   return limpiable(fila.aviso) ? { ...NADA, aviso: null } : NADA;
 }
 
-/** ¿Hay un aviso que esta lógica escribió y que ya no corresponde? El de un borrado fallido no es de ella. */
+/**
+ * ¿Hay un aviso que esta lógica escribió y que ya no corresponde?
+ *
+ * **La columna `aviso` de un evento de OT tiene tres escritores y cada uno
+ * limpia sólo lo suyo.** Dos no son de esta lógica y por eso están exceptuados:
+ *
+ * - El de un **borrado que Google rechazó** (`AVISO_DE_BORRADO`, por prefijo:
+ *   el texto le agrega lo que dijo Google). Lo escribe `borrarLosEventosDeLasOT`
+ *   justo antes de que esta pasada corra, así que sin la excepción se limpiaría
+ *   en la misma corrida que lo escribió.
+ * - El de **la orden que quedó contra el tope de las 20:00** (`AVISO_DE_TOPE`,
+ *   por igualdad: se escribe tal cual). Lo escribe `mandarLaOTAlCalendario`, y
+ *   para una OT en estado normal —nada que mover, sin divergencia— esta pasada
+ *   lo borraba en la primera corrida. Eso importa porque **en el camino
+ *   automático la copia en `aviso` es el único canal**: `alNacerLaOT` devuelve
+ *   una advertencia en texto y el importador no tiene a quién mostrársela.
+ */
 function limpiable(aviso: string | null): boolean {
-  return Boolean(aviso) && !aviso!.startsWith(AVISO_DE_BORRADO);
+  return Boolean(aviso) && !aviso!.startsWith(AVISO_DE_BORRADO) && aviso !== AVISO_DE_TOPE;
 }
 
 // ── La sincronización de OT mueve los eventos ───────────────────────────────

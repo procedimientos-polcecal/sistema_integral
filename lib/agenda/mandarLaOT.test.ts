@@ -9,6 +9,7 @@ import { escribirEnGoogle } from "./escribirEnGoogle";
 import { claveDelHueco, mandarLaOTAlCalendario, type PedidoDeMandar } from "./mandarLaOT";
 import { baseEnMemoria, type Fila } from "./baseEnMemoria.testhelper";
 import { AVISO_DE_TOPE } from "./apilado";
+import { AVISO_DE_BORRADO } from "./elEventoSigueALaOT";
 import { CASILLA_DE_MANTENIMIENTO } from "./evento";
 
 /** Las 09:00 de Argentina del 04/11/2026, o sea «hoy» es el 04. */
@@ -243,5 +244,19 @@ describe("mandar una OT al calendario", () => {
     expect(r.ok && r.advertencias).toContain(AVISO_DE_TOPE);
     // Va a `aviso` y no a `google_pendiente`: hay algo que mirar, no algo que escribir.
     expect(b.tablas.agenda_eventos[0]).toMatchObject({ aviso: AVISO_DE_TOPE, google_pendiente: null });
+  });
+
+  it("reenviarla fuera del tope limpia ese aviso, pero no el de un borrado que Google rechazó", async () => {
+    // Dos escritores de la misma columna, y cada uno limpia sólo lo suyo:
+    // pisar el del borrado perdería lo único que dice que quedó un evento vivo
+    // en cinco calendarios.
+    const conTope = base({ agenda_eventos: [eventoDeLaOT({ aviso: AVISO_DE_TOPE })] });
+    await mandarLaOTAlCalendario(conTope.cliente, LA_OT, AUTOMATICO, AHORA);
+    expect(conTope.tablas.agenda_eventos[0].aviso).toBeNull();
+
+    const deBorrado = `${AVISO_DE_BORRADO}. Google dijo: 503`;
+    const conBorrado = base({ agenda_eventos: [eventoDeLaOT({ aviso: deBorrado })] });
+    await mandarLaOTAlCalendario(conBorrado.cliente, LA_OT, AUTOMATICO, AHORA);
+    expect(conBorrado.tablas.agenda_eventos[0].aviso).toBe(deBorrado);
   });
 });

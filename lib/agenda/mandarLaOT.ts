@@ -201,7 +201,7 @@ export async function mandarLaOTAlCalendario(
   // ── ¿Ya tenía evento? Entonces el dueño es el que ya es ───────────────────
   const { data: actual, error: errorDeEvento } = await admin
     .from("agenda_eventos")
-    .select("id, dueno_id, casilla, google_event_id, divergencia")
+    .select("id, dueno_id, casilla, google_event_id, divergencia, aviso")
     .eq("ot_id", ordenId)
     .maybeSingle();
   if (errorDeEvento) return mal(500, `No se pudo leer el evento de la orden: ${errorDeEvento.message}`);
@@ -298,10 +298,23 @@ export async function mandarLaOTAlCalendario(
   const eventoId = actual?.id ?? crypto.randomUUID();
   const fila = { id: eventoId, titulo: texto.titulo, descripcion: texto.descripcion, lugar: texto.lugar, inicio, fin };
   const advertencias: string[] = [];
-  // El tope va a `aviso` y **nunca a `google_pendiente`**: es algo que mirar, no
-  // algo que todavía falte escribir, y el cron de pendientes no lo levanta.
-  const delTope = topeado ? { aviso: AVISO_DE_TOPE } : {};
   if (topeado) advertencias.push(AVISO_DE_TOPE);
+  // El tope va a `aviso` y **nunca a `google_pendiente`**: es algo que mirar, no
+  // algo que todavía falte escribir, y el cron de pendientes no lo levanta. La
+  // advertencia de arriba no alcanza: en el camino automático no hay pantalla
+  // que la lea —`alNacerLaOT` devuelve un texto y el importador no tiene a quién
+  // mostrárselo—, así que la copia en la columna **es** el canal.
+  //
+  // Sin tope se limpia **sólo si lo guardado es el aviso del tope**. Limpiar a
+  // ciegas pisaría el de un borrado que Google rechazó, que es lo único que dice
+  // que quedó un evento vivo en cinco calendarios. Son los dos únicos escritores
+  // de esta columna en un evento de OT, y cada uno limpia lo suyo (ver
+  // `limpiable` en `elEventoSigueALaOT.ts`, que es la otra mitad de esta regla).
+  const delTope = topeado
+    ? { aviso: AVISO_DE_TOPE }
+    : actual?.aviso === AVISO_DE_TOPE
+      ? { aviso: null }
+      : {};
 
   if (actual) {
     // ── Reemplazar: se mueve al turno nuevo, no se duplica ──────────────────

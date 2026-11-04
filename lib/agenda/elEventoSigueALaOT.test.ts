@@ -13,6 +13,7 @@ import {
   queHacerConElEvento, planDelEvento, seguirALasOT, borrarLosEventosDeLasOT, fechaDelEvento, AVISO_DE_BORRADO,
   presupuestoDeGoogle, loQueSeAnotaDeLosEventos,
 } from "./elEventoSigueALaOT";
+import { AVISO_DE_TOPE } from "./apilado";
 
 beforeEach(() => {
   vi.mocked(crearEvento).mockReset();
@@ -158,6 +159,17 @@ describe("planDelEvento", () => {
   it("al volver la fecha al día del evento, el aviso que ya no es cierto se limpia", () => {
     const p = planDelEvento(fila({ aviso: "La orden pasó al…" }, { fecha_ejecucion: "2026-11-03" }));
     expect(p).toEqual({ tipo: "nada", mover: null, aviso: null, volverAAlertar: false });
+  });
+
+  it("el aviso del tope no es de esta lógica y no se limpia, ni con nada que hacer ni al mover", () => {
+    // Lo escribe `mandarLaOTAlCalendario` y en el camino automático es el único
+    // canal: nadie lee la advertencia que devuelve. Un evento de OT en estado
+    // normal —misma fecha, sin divergencia— perdía esa mitad en la primera pasada.
+    const quieto = planDelEvento(fila({ aviso: AVISO_DE_TOPE }, { fecha_ejecucion: "2026-11-03" }));
+    expect(quieto).toEqual({ tipo: "nada", mover: null, aviso: undefined, volverAAlertar: false });
+
+    // Y moverlo de día tampoco se lo lleva: sigue compartiendo las 20:00.
+    expect(planDelEvento(fila({ aviso: AVISO_DE_TOPE })).aviso).toBeUndefined();
   });
 });
 
@@ -343,6 +355,15 @@ describe("seguirALasOT", () => {
     const viejo = clienteFalso({ eventos: [FILA_DE_EVENTO({ aviso: "La planilla dejó la orden sin fecha de ejecución…" })] });
     await seguirALasOT(viejo.cliente);
     expect(viejo.hechos.find((h) => h.op === "update")?.columnas).toMatchObject({ aviso: null });
+  });
+
+  it("el aviso del tope sobrevive una pasada: es la única copia que lee quien mira el evento", async () => {
+    vi.mocked(actualizarEvento).mockResolvedValue(ENGOOGLE("2026-11-10T08:00:00-03:00", "2026-11-10T09:30:00-03:00"));
+
+    const delTope = clienteFalso({ eventos: [FILA_DE_EVENTO({ aviso: AVISO_DE_TOPE })] });
+    await seguirALasOT(delTope.cliente);
+
+    expect(delTope.hechos.find((h) => h.op === "update")?.columnas).not.toHaveProperty("aviso");
   });
 
   it("con Google lento corta a los 60 s: lo que falta queda para la próxima corrida", async () => {
