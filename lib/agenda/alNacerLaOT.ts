@@ -41,6 +41,21 @@ import { mandarLaOTAlCalendario } from "./mandarLaOT";
  * que decir. Callar un fallo sería peor: un evento que no se creó y que nadie
  * sabe que no se creó es una OT que el taller no ve en su calendario.
  *
+ * **Quién escucha esa frase, que es lo que decide si callar sería peor.** Son
+ * dos mitades y no la misma:
+ *
+ * - En el **camino manual** la escucha quien cargó la OT, por la respuesta:
+ *   `calendario_aviso` entra a `loQueQuedoPendiente` y el modal de Nueva OT lo
+ *   dice con las demás advertencias.
+ * - En los **automáticos** —los periódicos y las dos generaciones, que corren
+ *   sin nadie mirando— no hay pantalla, y la frase queda en el informe de la
+ *   corrida. Lo que los cubre es **el barrido**, que toma *cualquier* OT con
+ *   fecha futura, no cerrada y sin evento: un `!ok` de acá se reintenta solo en
+ *   la próxima sincronización. Por eso es tolerable que estas ramas no persistan
+ *   nada del fallo —ni una fila, ni un `console`—: no hay nada que perder, sólo
+ *   algo que tardar. Si alguna vez el barrido deja de tomar «cualquier OT sin
+ *   evento», esa tolerancia se va con él y hay que persistir el fallo acá.
+ *
  * `null` quiere decir dos cosas distintas y las dos son «nada que avisar»: que
  * la orden **no corresponde** (cerrada, sin fecha o con fecha que ya pasó: es
  * lo normal, y la inmensa mayoría) o que **entró sin novedad**. Todo lo demás

@@ -451,19 +451,34 @@ describe("loQueQuedoPendiente", () => {
     expect(loQueQuedoPendiente({ advertencia: "Ya estaba." })).toBe("Ya estaba.");
   });
 
-  it("los cinco salen juntos: decir uno dejaría los otros sin que nadie se entere", () => {
+  it("los seis salen juntos: decir uno dejaría los otros sin que nadie se entere", () => {
     const texto = loQueQuedoPendiente({
       advertencia: "Ya estaba.",
       clave_error: "no estaba reservada",
       planilla_error: "429 de Google",
       aviso_error: "El aviso quedó sin el enlace.",
       repuestos_error: "Dos repuestos no entraron.",
+      calendario_aviso: "La OT 2951 se guardó, pero no entró al calendario: Google dijo 500.",
     });
     expect(texto).toContain("Ya estaba.");
     expect(texto).toContain("no estaba reservada");
     expect(texto).toContain("429 de Google");
     expect(texto).toContain("El aviso quedó sin el enlace.");
     expect(texto).toContain("Dos repuestos no entraron.");
+    expect(texto).toContain("no entró al calendario");
+  });
+
+  /*
+   * Lo manda el alta de una OT cuando el evento del calendario no salió
+   * (`alNacerLaOT`). La orden sí se creó, así que el modal se cierra igual: sin
+   * esto la frase viajaba en la respuesta y nadie la leía, que es el mismo
+   * silencio de `repuestos_error` por otra puerta.
+   */
+  it("el aviso del calendario se dice: la OT se creó pero su evento no", () => {
+    const frase = "La OT 2951 se guardó, pero no entró al calendario: Google dijo 500.";
+    expect(loQueQuedoPendiente({ calendario_aviso: frase })).toBe(frase);
+    expect(loQueQuedoPendiente({ calendario_aviso: null })).toBe(null);
+    expect(loQueQuedoPendiente({ calendario_aviso: 7 })).toBe(null);
   });
 
   /*
