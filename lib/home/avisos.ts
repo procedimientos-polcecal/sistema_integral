@@ -25,6 +25,9 @@ export interface ConteosParaAvisos {
   syhVencidas: number;
   syhSinCompletar: number;
   syhFotosSinRespaldar: number;
+  agendaDivergencias: number;
+  agendaPasosCaidos: number;
+  agendaSaludSinComprobar: number;
 }
 
 /**
@@ -118,7 +121,90 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * está en `corteDeFotosAtascadas`, que tiene su test.
    */
   { clave: "syhFotosSinRespaldar", id: "syh-fotos-sin-respaldar", titulo: "Fotos de condiciones inseguras sin copia de respaldo en Drive", href: "/seguridad-higiene" },
+  /*
+   * LA AGENDA: dos avisos, de dos naturalezas distintas, y los dos con id nuevo.
+   *
+   * **`agenda-divergencias` es de quien mira.** Un evento que el SdG escribió en
+   * Google y alguien movió o borró desde allá: el calendario y la OT dicen cosas
+   * distintas y la sincronización dejó de pisarlo. Cuenta los eventos suyos —dueño
+   * o invitado con usuario del SdG— con divergencia que **todavía no dio por
+   * vista** (`contarDivergenciasSinVer`). Dar por vista apaga la campana de quien
+   * aprieta y de nadie más, así que el número depende de la persona.
+   *
+   * Por eso es **el primer aviso de esta lista que no se gatea por módulo**: la
+   * Agenda no es un módulo —la ven todos los que tienen sesión—, no pasa por
+   * `contarSiTiene` y el conteo necesita el id de quien mira. Y por lo mismo
+   * **no puede estar en la foto diaria**, que es global: ver `ES_POR_PERSONA`.
+   *
+   * Además de este aviso hay un push **en el momento** (`avisarDeLasDivergencias`,
+   * en `lib/agenda/avisoDeDivergencia.ts`). Son dos avisos del mismo hecho y no se
+   * pisan: el push es la interrupción, y esto es el stock que queda en la campana
+   * hasta que se da por visto.
+   *
+   * **`agenda-pasos-caidos` es del sistema, y es el que hace que la garantía de
+   * la Agenda no sea una frase en un docstring.** Todo el diseño descansa en que
+   * «un canal muerto no se distinga de uno sano», y eso se resolvió escribiendo en
+   * `sincronizaciones` —que ninguna pantalla lee—. Es el patrón que perdió las 52
+   * fotos y por el que existe `syhFotosSinRespaldar`: un fallo que sólo queda en
+   * un log. Este aviso lo lee. Cuenta cuántos de los dos pasos del cron que hablan
+   * con Google (`canales`, `barrido`) fallaron en su última corrida, **o no
+   * corrieron en 50 horas, o nunca corrieron** (`pasosCaidos`): el cron que no
+   * corre no deja ninguna fila de fallo.
+   *
+   * Su `cantidad` **no cuenta cosas**: va de 0 a 2 y es cuántos pasos están
+   * caídos, no cuántas casillas —la fila de `sincronizaciones` trae el error como
+   * texto, no como número—. Sirve para que el resumen avise cuando pasa de 0 a
+   * algo, igual que los avisos de ritmo. Por eso el título habla de «pasos» y no
+   * de canales ni de eventos.
+   *
+   * **Y si no se pudo ni leer la salud, no es un 0**: sale `agenda-salud-sin-comprobar`,
+   * un aviso aparte con su propio id porque es otra cosa —«no sé»—, y su título
+   * dice que falló **la comprobación**, no que los canales estén caídos ni
+   * sanos. `cantidad` es 1 cuando pasa: es una bandera y no un conteo (`ES_BANDERA`), y el
+   * resumen la imprime sin número. Un aviso de salud que calla cuando no
+   * puede mirar es el fallo silencioso que esto viene a cerrar.
+   *
+   * Le llegan sólo a `admin_sistema` (`DE_UNA_LISTA`): lo arregla quien toca las
+   * credenciales de Google y las variables de Vercel, no quien usa la Agenda. El
+   * detalle de qué falló se ve en `/agenda`, que para `admin_sistema` muestra cuándo
+   * corrió por última vez cada paso (`SaludDeLaAgenda`): el aviso lleva a donde se
+   * ve el problema, que es lo que hace `syh-fotos-sin-respaldar` y lo que un push
+   * a una pantalla muda no hace.
+   */
+  { clave: "agendaDivergencias", id: "agenda-divergencias", titulo: "Eventos del calendario que alguien cambió desde Google", href: "/agenda" },
+  { clave: "agendaPasosCaidos", id: "agenda-pasos-caidos", titulo: "Pasos de la Agenda con Google que fallaron o no corrieron", href: "/agenda" },
+  { clave: "agendaSaludSinComprobar", id: "agenda-salud-sin-comprobar", titulo: "No se pudo comprobar si la Agenda sigue mirando Google", href: "/agenda" },
 ];
+
+/**
+ * Los avisos cuya `cantidad` es una **bandera** (1 = pasa) y no un conteo. El
+ * resumen los imprime sin número, igual que a los de ritmo: «1 · No se pudo
+ * comprobar…» y «1 más · No se pudo comprobar…» no dicen nada que el título no
+ * diga, y un «1» que parece un total es peor que ningún número. La `cantidad`
+ * existe sólo para que el movimiento y el descarte los traten como a los demás.
+ */
+export const ES_BANDERA: ReadonlySet<string> = new Set(["agenda-salud-sin-comprobar"]);
+
+/**
+ * Los avisos cuyo número **depende de quién mira** y que por lo tanto no caben en
+ * la foto diaria (`avisos_fotos`), que es una sola para todo el sistema.
+ *
+ * El resumen diario compara cada aviso contra esa foto. Un aviso que no está en
+ * la foto «subió desde cero», así que sin esta lista el de la Agenda saldría
+ * todos los días como «3 más · Eventos del calendario…» con el total entero,
+ * rotulado como incremento y repitiéndose hasta que alguien abra la Agenda: la
+ * novedad falsa que el diseño del resumen existe para evitar. `loQueSeMovio` los
+ * saltea, y quedan en la campana y en el resumen de los lunes, que lleva totales.
+ *
+ * **Lo que se pierde con esto**, dicho: la divergencia que se detecta fuera de la
+ * ventana del aviso en el momento (de noche, o la que halla el barrido de las 2 de
+ * la mañana) no la repesca el resumen de las 8:30 salvo los lunes —la campana sí la muestra
+ * enseguida, porque el conteo se calcula en vivo por persona cada vez que alguien
+ * abre el SdG; lo único que se atrasa es el push—. Hacerlo bien
+ * pide una foto por persona en `avisos_fotos` (ids como `agenda-divergencias:<usuario>`)
+ * y enseñarle al cron del resumen a leerla.
+ */
+export const ES_POR_PERSONA: ReadonlySet<string> = new Set(["agenda-divergencias"]);
 
 export function avisosDeConteos(conteos: Partial<ConteosParaAvisos>): Notificacion[] {
   return AVISOS.flatMap(({ clave, id, titulo, href }) => {

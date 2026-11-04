@@ -232,6 +232,45 @@ cliente no traduce nada: lo que conteste Lenox queda anotado tal cual en la
 última sincronización (`Lenox respondió <status>: …`), que es lo primero que hay
 que mirar si el cartel de "actualizado hace…" se queda viejo.
 
+## Agenda (los avisos de Google Calendar)
+
+La Agenda espeja sus eventos en Google Calendar, y para enterarse **al instante**
+de que alguien borró o movió uno desde Google abre un *canal de observación* por
+cada usuario activo. Google avisa por `POST` a una dirección pública del SdG, así
+que **no hay variable nueva: usa `NEXT_PUBLIC_APP_URL`**, la misma de los links de
+los correos, y le pega `/api/agenda/google`.
+
+| Variable | Para qué |
+|---|---|
+| `NEXT_PUBLIC_APP_URL` | **El dominio completo y público, con `https`, sin barra final**: `https://www.polcecalpolysan.app`. La URL que se le registra a Google es `https://www.polcecalpolysan.app/api/agenda/google` |
+
+Tres cosas que no se deducen del código:
+
+**Con otra cosa no hay canal, y el cron lo dice.** Google exige `https` y valida
+que el dominio sea uno **verificado en el proyecto de Google Cloud** antes de abrir
+el canal (por eso no se puede probar desde `localhost`: se verifica recién en
+producción). El SdG **no cae en `VERCEL_URL` ni en el host del pedido**: un host de
+preview se rechazaría con un error de Google que no nombra la variable. Si falta o
+no es una `https` pública, el cron `/api/cron/agenda` lo anota como fallido en
+`sincronizaciones` (módulo `agenda`, recurso `canales`) diciendo qué casillas
+quedaron sin abrir. Si el dominio no está verificado en Google, el mensaje de Google
+queda anotado tal cual, con la casilla.
+
+**El aviso se verifica por un secreto por canal, no por una variable.** Cada canal
+lleva su propio `secreto` en `agenda_canales`, que Google devuelve en el header
+`X-Goog-Channel-Token`; un token que no coincide es `401`. El endpoint tiene que
+estar en la lista de endpoints de máquina de `lib/supabase/middleware.ts`: sin eso
+el login lo intercepta y la Agenda deja de enterarse sin ningún error.
+
+**Un canal muerto se ve igual que un calendario sin movimiento.** El cron corre a
+las 5 UTC, renueva los canales que vencen en menos de 48 horas y registra cada fallo
+con el nombre de la casilla. Si el cartel de la última sincronización de
+`agenda / canales` está en rojo, esa casilla dejó de avisar o está por dejarlo.
+Además, el mismo cron **barre todas las casillas** (`agenda / barrido`): un canal
+recién abierto o vencido no vio lo que pasó mientras no estaba, y sin el barrido
+ese cambio no se detectaría nunca más. El aviso de Google es el movimiento y el
+barrido es la red.
+
 ## Asistente de IA
 
 | Variable | Para qué | De dónde sale |

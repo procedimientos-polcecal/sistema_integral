@@ -144,3 +144,37 @@ describe("avisosDeRitmo", () => {
     expect(avisosDeRitmo(ritmo, ["inventario"])).toEqual([]);
   });
 });
+
+describe("los avisos de la Agenda", () => {
+  it("las divergencias salen con id propio y llevan a la Agenda", () => {
+    expect(avisosDeConteos({ agendaDivergencias: 2 })).toEqual([
+      {
+        id: "agenda-divergencias",
+        titulo: "Eventos del calendario que alguien cambió desde Google",
+        cantidad: 2,
+        href: "/agenda",
+      },
+    ]);
+  });
+
+  it("la salud sale con otro id, aparte: dos conteos distintos no comparten id", () => {
+    const avisos = avisosDeConteos({ agendaDivergencias: 1, agendaPasosCaidos: 1 });
+    expect(avisos.map((a) => a.id)).toEqual(["agenda-divergencias", "agenda-pasos-caidos"]);
+  });
+
+  it("con cero no avisan", () => {
+    expect(avisosDeConteos({ agendaDivergencias: 0, agendaPasosCaidos: 0, agendaSaludSinComprobar: 0 })).toEqual([]);
+  });
+
+  // «No sé» no es «los canales están caídos» ni «están sanos»: otro id, otro texto.
+  it("la comprobación que falló es su propio aviso y dice que falló la comprobación", () => {
+    expect(avisosDeConteos({ agendaSaludSinComprobar: 1 })).toEqual([
+      {
+        id: "agenda-salud-sin-comprobar",
+        titulo: "No se pudo comprobar si la Agenda sigue mirando Google",
+        cantidad: 1,
+        href: "/agenda",
+      },
+    ]);
+  });
+});
