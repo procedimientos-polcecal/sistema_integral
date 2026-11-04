@@ -549,6 +549,7 @@ clase sin capa, y las otras dos muerden igual de callado:
 | `.card` | `border` (el atajo, o sea también el color) | `border-red-300`, `border-amber-300`, `border-l-*` |
 | `.card` | `box-shadow` | `ring-*`, `shadow-*` |
 | `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost` | `color` y `font-size` | `text-red-700`, `text-xs`, `text-sm` |
+| `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost` | `cursor` | `disabled:cursor-not-allowed`, `cursor-*` |
 
 **Los cuatro `.btn-*` están en la lista a propósito, y `.btn-ghost` entró
 último.** Una tabla incompleta es lo que hace que el próximo lector la dé por
@@ -567,6 +568,28 @@ Qué hacer según el caso: un color de estado va por `style` —es lo que ya hac
 los badges de Mantenimiento—; para un botón rojo existe `.btn-danger`; y una
 utilidad que no puede ganar **se saca**, porque una clase que no hace nada y
 promete que sí es peor que no tenerla.
+
+**Hay una variante que la tabla no puede expresar, porque no es una utilidad
+que pierde sino una regla que falta.** Hasta el 04/11/2026 `globals.css`
+declaraba un solo `:disabled`, el de `.btn-primary`, así que un
+`.btn-secondary`, `.btn-danger` o `.btn-ghost` deshabilitado conservaba su
+aspecto entero; y como ninguno de los cuatro `:hover` llevaba guarda
+`:not(:disabled)`, además **cambiaba de fondo al pasarle el mouse por
+encima**: señalaba «funciono» mientras no hacía nada. Medido ese día
+recorriendo las etiquetas JSX de `app` y `components`: **26 botones
+deshabilitados en 14 archivos y 9 módulos**, de los cuales sólo 4 traían un
+`disabled:opacity-50` escrito a mano. Los cuatro `:disabled` y las cuatro
+guardas están ahora en `globals.css`, así que **un botón nuevo lo hereda y no
+hay que acordarse**, y `lib/core/botonesDeshabilitados.test.ts` lo fija leyendo
+el archivo —como `sw.test.ts` lee `public/sw.js`—: saca las clases del propio
+CSS, así que un `.btn-*` nuevo entra solo al control y no hay una lista que se
+quede corta.
+
+Lo que hay que saber si se toca: `opacity` **sí** se puede poner al lado de un
+`.btn-*` —ninguna de las cuatro la declara, y por eso aquellos cuatro parches
+a mano funcionaban—, pero `disabled:cursor-not-allowed` **no**, que es la fila
+nueva de la tabla. Un estado deshabilitado que necesite algo más que opacidad
+va dentro de la regla de `globals.css`, no en una utilidad al lado.
 
 ## Un aviso nuevo sale por dos lados, y hay un tercero que se gana aparte
 
