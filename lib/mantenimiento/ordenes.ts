@@ -23,6 +23,7 @@
 import { texto, fechaDeSheets, codigoDeEquipo } from "@/lib/mantenimiento/planilla";
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 import { textoParaLaCelda } from "@/lib/core/sheets";
+import { indiceDeColumnas } from "@/lib/mantenimiento/formulario";
 
 /**
  * Las especialidades que usa la planilla, verificadas contra ella.
@@ -378,6 +379,42 @@ export function repartirRegistroDeOT(body: Record<string, unknown>): {
   if (body.foto_url !== undefined) registro.foto_url = texto(body.foto_url);
 
   return { update, registro };
+}
+
+/**
+ * En qué columna del master está la FECHA DE FIN. `-1` es que todavía no la trae.
+ *
+ * **Por el nombre del encabezado y no por la letra**, a diferencia del resto de
+ * esta planilla, que se lee por posición. Es una columna nueva (04/11/2026) y
+ * el mismo contenido ya se mudó de `K:O` a `A:E` en un solo día en este módulo:
+ * una letra fija es un `#REF!` esperando. El alias es el mismo que usa el alta
+ * para escribirla en la hoja de respuestas, así que los dos lados no pueden
+ * llamarla distinto.
+ */
+export function columnaDeFechaFin(encabezado: readonly string[]): number {
+  return indiceDeColumnas(encabezado).fechaFin;
+}
+
+/**
+ * La fecha de fin que va a la base para una fila del master.
+ *
+ * **Una celda vacía no pisa lo que el sistema ya sabe.** El alta guarda la
+ * fecha en la base y la manda a la hoja de respuestas, pero el master la recibe
+ * por `IMPORTRANGE` y tarda entre 3 y 53 horas (medido el 21/10/2026): importar
+ * la celda vacía en esa ventana borraría la fecha recién escrita. Es el mismo
+ * principio que `fecha_ejecucion_pendiente`. Lo que se pierde, a propósito: una
+ * fecha que alguien borra del master no se borra del sistema.
+ *
+ * Y vacía, en la base, quiere decir «dura un día», no «falta»: por eso no hace
+ * falta distinguir acá entre una orden vieja y una que se cargó sin fin.
+ */
+export function fechaFinDeLaFila(
+  fila: readonly unknown[],
+  columna: number,
+  delSistema: string | null
+): string | null {
+  if (columna < 0) return delSistema;
+  return fechaDeSheets(fila[columna]) ?? delSistema;
 }
 
 /**

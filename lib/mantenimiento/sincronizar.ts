@@ -35,7 +35,7 @@ import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlace
 import { filaDeAviso } from "@/lib/mantenimiento/avisos";
 import { resolverElArea, repartirPorArea } from "@/lib/mantenimiento/areaDelAviso";
 import {
-  filaDeOrden, paraLaBase, celdasParaRegistrar, COLUMNA_ESTADO, COLUMNA_OT,
+  filaDeOrden, paraLaBase, columnaDeFechaFin, fechaFinDeLaFila, celdasParaRegistrar, COLUMNA_ESTADO, COLUMNA_OT,
   type OrdenLeida,
 } from "@/lib/mantenimiento/ordenes";
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
@@ -671,6 +671,32 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   /** Las que el derrame ya alcanzo: se les limpia la marca al final. */
   const yaDerramaron: number[] = [];
 
+  // ── LA FECHA DE FIN, QUE LLEGA POR EL ENCABEZADO ──────────────────────────
+  //
+  // Se lee lo que el sistema ya sabe porque una celda vacía del master no
+  // puede borrarlo: ver `fechaFinDeLaFila`. La columna se busca por su nombre.
+  //
+  // Si la lectura falla —la migración `ot_fecha_fin` todavía no corrió y la
+  // columna no existe— `finDelSistema` queda en null y **la clave no entra al
+  // upsert**: PostgREST corta el lote entero si le llega una columna que no
+  // conoce, y eso sería dejar sin importar las 2.300 órdenes por un dato
+  // secundario.
+  const columnaDeFin = columnaDeFechaFin(filas[0] ?? []);
+  let finDelSistema: Map<number, string> | null = null;
+  try {
+    const conFin = await traerTodo<{ ot_number: number; fecha_fin: string }>((desde, hasta) =>
+      admin
+        .from("ordenes_trabajo")
+        .select("ot_number, fecha_fin")
+        .not("fecha_fin", "is", null)
+        .order("ot_number")
+        .range(desde, hasta)
+    );
+    finDelSistema = new Map(conFin.map((o) => [o.ot_number, String(o.fecha_fin)]));
+  } catch {
+    finDelSistema = null;
+  }
+
   for (let i = 0; i < filas.length - 1; i++) {
     const orden = filaDeOrden(filas[i + 1], i + 2);
     if (!orden) continue;
@@ -705,6 +731,9 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     // lote entero si le llega uno. Ver el comentario de esa función.
     registros.push({
       ...paraLaBase(orden), fecha_ejecucion, equipment_id, sector_id, proveedor_id, synced_at: cuando,
+      ...(finDelSistema
+        ? { fecha_fin: fechaFinDeLaFila(filas[i + 1], columnaDeFin, finDelSistema.get(orden.ot_number) ?? null) }
+        : {}),
     });
   }
 

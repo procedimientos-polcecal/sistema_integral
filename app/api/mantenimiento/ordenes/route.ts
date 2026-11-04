@@ -486,9 +486,10 @@ export async function POST(request: Request) {
     descripcion: descripcion.trim(),
     repuesto: losRepuestos.texto,
     fecha_ejecucion: fecha_ejecucion || null,
-    // Va a la planilla y **no** al `record` de abajo: `ordenes_trabajo` no
-    // tiene columna para esto, y mandársela a PostgREST corta el insert
-    // entero —es el mismo 400 que dio `estado_raw` el 29/10/2026—.
+    // Va a los dos lados: acá, a la hoja de respuestas, y abajo, al `record`.
+    // Hasta el 04/11/2026 `ordenes_trabajo` no tenía la columna y mandársela a
+    // PostgREST cortaba el insert entero —el mismo 400 que dio `estado_raw` el
+    // 29/10/2026—; desde la migración `ot_fecha_fin` la tiene.
     fecha_fin: fecha_fin || null,
     prioridad: laPrioridad,
   });
@@ -528,6 +529,8 @@ export async function POST(request: Request) {
     descripcion:     descripcion.trim(),
     repuesto:        losRepuestos.texto,
     fecha_ejecucion: fecha_ejecucion || null,
+    // Vacía quiere decir «dura un día»; no es un dato que falte.
+    fecha_fin:       fecha_fin || null,
     fecha_cierre:    fecha_cierre || null,
     // Una orden con fecha de cierre ya se hizo: la fecha manda sobre el estado
     // que haya venido. La regla está acá y no sólo en el formulario porque el
