@@ -1,0 +1,340 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("./escribirEnGoogle", async (original) => ({
+  ...(await original<typeof import("./escribirEnGoogle")>()),
+  escribirEnGoogle: vi.fn(),
+}));
+
+import { escribirEnGoogle } from "./escribirEnGoogle";
+import { barrerLasQueFaltan, juntarLoAnotado, loQueSeAnotaDelBarrido, TOPE_POR_CORRIDA } from "./barridoDeNuevas";
+import { baseEnMemoria, type Fila } from "./baseEnMemoria.testhelper";
+import { CASILLA_DE_MANTENIMIENTO } from "./evento";
+
+/** Las 09:00 de Argentina del 04/11/2026, o sea «hoy» es el 04. */
+const AHORA = new Date("2026-11-04T12:00:00.000Z");
+
+/** La hora de pared de Argentina como el instante que se guarda. */
+const instante = (horaDePared: string) => `${horaDePared}.000Z`;
+const A_LAS_8 = instante("2026-11-06T11:00:00");
+const A_LAS_9_30 = instante("2026-11-06T12:30:00");
+
+/** Un id válido para `ES_UUID` a partir de un número. */
+const idDe = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+
+function orden(n: number, extra: Fila = {}): Fila {
+  return {
+    id: idDe(n),
+    ot_number: 3000 + n,
+    fecha_ejecucion: "2026-11-06",
+    fecha_ejecucion_pendiente: null,
+    fecha_cierre: null,
+    estado: "PENDIENTE",
+    created_by: null,
+    equipo_raw: "Molino de cal",
+    equipo_code: null,
+    sector_raw: "Molienda",
+    especialidad: "MECÁNICO",
+    tipo: "PROGRAMADO",
+    descripcion: "Cambio de correas",
+    ...extra,
+  };
+}
+
+/** El evento que ya tiene una OT, con la especialidad embebida como la trae el `select`. */
+function eventoDe(n: number, extra: Fila = {}): Fila {
+  return {
+    id: `e-${n}`,
+    ot_id: idDe(n),
+    dueno_id: "u-mant",
+    casilla: CASILLA_DE_MANTENIMIENTO,
+    google_event_id: `g-${n}`,
+    divergencia: null,
+    aviso: null,
+    titulo: `OT ${3000 + n}`,
+    descripcion: null,
+    lugar: null,
+    inicio: A_LAS_8,
+    fin: A_LAS_9_30,
+    turno: "8-16",
+    ordenes_trabajo: { especialidad: "MECÁNICO" },
+    ...extra,
+  };
+}
+
+/**
+ * La base como es la de verdad: lo que se inserta queda **visible para la
+ * lectura siguiente**, con su especialidad resuelta. Sin el `alInsertar` el
+ * test de dos órdenes del mismo día pasaría por la razón equivocada.
+ */
+function base(ordenes: Fila[], eventos: Fila[] = []) {
+  return baseEnMemoria(
+    {
+      ordenes_trabajo: ordenes,
+      agenda_eventos: eventos,
+      agenda_invitados: [],
+      usuarios: [{ id: "u-mant", email: "Mantenimiento@Polcecal.com", activo: true }],
+    },
+    {
+      alInsertar: {
+        agenda_eventos: (fila, tablas) => ({
+          ...fila,
+          ordenes_trabajo: {
+            especialidad: tablas.ordenes_trabajo.find((o) => o.id === fila.ot_id)?.especialidad ?? null,
+          },
+        }),
+      },
+    }
+  );
+}
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(escribirEnGoogle).mockResolvedValue({
+    google_event_id: "g1",
+    inicio_escrito: "2026-11-06T08:00:00-03:00",
+    fin_escrito: "2026-11-06T09:30:00-03:00",
+  });
+});
+
+describe("el barrido de las que faltan", () => {
+  it("crea evento para una OT futura sin evento", async () => {
+    const b = base([orden(1)]);
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(r).toEqual({ creados: 1, quedaron: 0, fallos: [] });
+    expect(b.tablas.agenda_eventos).toHaveLength(1);
+    expect(b.tablas.agenda_eventos[0]).toMatchObject({ ot_id: idDe(1), turno: "8-16", inicio: A_LAS_8 });
+    expect(escribirEnGoogle).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * La que se carga con fecha pendiente y la planilla todavía no devolvió: la
+   * fecha que manda es la pendiente, aunque la otra sea pasada o esté vacía.
+   */
+  it("toma la fecha pendiente cuando la hay, aunque la de ejecución esté vacía", async () => {
+    const b = base([orden(1, { fecha_ejecucion: null, fecha_ejecucion_pendiente: "2026-11-06" })]);
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(r.creados).toBe(1);
+    expect(b.tablas.agenda_eventos[0]).toMatchObject({ ot_id: idDe(1), inicio: A_LAS_8 });
+  });
+
+  it("no vuelve a crear uno para una que ya lo tiene", async () => {
+    const b = base([orden(1)], [eventoDe(1)]);
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(r).toEqual({ creados: 0, quedaron: 0, fallos: [] });
+    expect(b.escrituras).toEqual([]);
+    expect(escribirEnGoogle).not.toHaveBeenCalled();
+  });
+
+  it("ignora las pasadas, las cerradas y las que no tienen fecha", async () => {
+    const b = base([
+      orden(1, { fecha_ejecucion: "2026-11-03" }),
+      orden(2, { fecha_cierre: "2026-11-05" }),
+      orden(3, { estado: "REALIZADO" }),
+      orden(4, { fecha_ejecucion: null }),
+      // La pendiente manda: la de ejecución es futura pero la persona la movió a una que ya pasó.
+      orden(5, { fecha_ejecucion: "2026-11-09", fecha_ejecucion_pendiente: "2026-11-02" }),
+    ]);
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(r).toEqual({ creados: 0, quedaron: 0, fallos: [] });
+    expect(b.escrituras).toEqual([]);
+  });
+
+  it("una de hoy entra: el filtro es por día y no por hora", async () => {
+    const b = base([orden(1, { fecha_ejecucion: "2026-11-04" })]);
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(r.creados).toBe(1);
+  });
+
+  /**
+   * Review Focus 4: dos mecánicas del mismo día en la MISMA corrida. Si no se
+   * cuentan entre sí, las dos ven cero ocupados y las dos caen a las 08:00 —
+   * que es exactamente lo que este diseño evita.
+   *
+   * Y la otra cara, que es la que obligó a no pasar `yaTomados`: con una base
+   * que sí muestra lo recién escrito, sumarlo también por ese lado cuenta cada
+   * orden dos veces y deja huecos (08:00 y 11:00, no 09:30).
+   */
+  it("dos de la misma especialidad y día en una corrida no comparten hora", async () => {
+    const b = base([orden(1), orden(2)]);
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(r).toEqual({ creados: 2, quedaron: 0, fallos: [] });
+    const horas = b.tablas.agenda_eventos.map((e) => e.inicio).sort();
+    expect(horas).toEqual([A_LAS_8, A_LAS_9_30]);
+  });
+
+  it("tres seguidas se apilan de a 1:30, sin huecos", async () => {
+    const b = base([orden(1), orden(2), orden(3)]);
+
+    await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(b.tablas.agenda_eventos.map((e) => e.inicio).sort())
+      .toEqual([A_LAS_8, A_LAS_9_30, instante("2026-11-06T14:00:00")]);
+  });
+
+  it("se apila detrás de lo que ya había ese día, y no mezcla especialidades ni días", async () => {
+    const b = base(
+      [
+        orden(1),
+        orden(2, { especialidad: "ELÉCTRICO" }),
+        orden(3, { fecha_ejecucion: "2026-11-07" }),
+        orden(9), // ya tiene evento: la mecánica del 06 que ocupa las 08:00
+      ],
+      [eventoDe(9)]
+    );
+
+    await barrerLasQueFaltan(b.cliente, AHORA);
+
+    const de = (n: number) => b.tablas.agenda_eventos.find((e) => e.ot_id === idDe(n))?.inicio;
+    expect(de(1)).toBe(A_LAS_9_30); // detrás de la que ya estaba
+    expect(de(2)).toBe(A_LAS_8); // otra especialidad: su propio grupo
+    expect(de(3)).toBe(instante("2026-11-07T11:00:00")); // otro día
+  });
+
+  it("respeta el tope y dice cuántas quedaron", async () => {
+    const ordenes = Array.from({ length: 30 }, (_, i) => orden(i + 1, { especialidad: `ESP-${i}` }));
+    const b = base(ordenes);
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(TOPE_POR_CORRIDA).toBe(25);
+    expect(r).toEqual({ creados: 25, quedaron: 5, fallos: [] });
+    expect(b.tablas.agenda_eventos).toHaveLength(25);
+  });
+
+  it("acepta otro tope", async () => {
+    const b = base([orden(1, { especialidad: "A" }), orden(2, { especialidad: "B" }), orden(3, { especialidad: "C" })]);
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA, 2);
+
+    expect(r).toEqual({ creados: 2, quedaron: 1, fallos: [] });
+  });
+
+  /** Las más cercanas primero: si el tope corta, que corte lo lejano. */
+  it("manda primero las de fecha más cercana", async () => {
+    const b = base([
+      orden(1, { fecha_ejecucion: "2026-12-20" }),
+      orden(2, { fecha_ejecucion: "2026-11-05" }),
+      orden(3, { fecha_ejecucion: "2026-11-30" }),
+      // La pendiente es la que cuenta para el orden, no la de ejecución.
+      orden(4, { fecha_ejecucion: "2026-12-30", fecha_ejecucion_pendiente: "2026-11-06" }),
+    ]);
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA, 2);
+
+    expect(r).toEqual({ creados: 2, quedaron: 2, fallos: [] });
+    expect(b.tablas.agenda_eventos.map((e) => e.ot_id).sort()).toEqual([idDe(2), idDe(4)].sort());
+  });
+
+  it("un fallo en una no frena a las demás, y se dice cuál fue", async () => {
+    // Todos los inserts fallan: que salgan los dos fallos prueba que la
+    // segunda se intentó después de que la primera no pudo.
+    const b = baseEnMemoria(
+      {
+        ordenes_trabajo: [orden(1, { especialidad: "A" }), orden(2, { especialidad: "B" })],
+        agenda_eventos: [],
+        agenda_invitados: [],
+        usuarios: [{ id: "u-mant", email: "Mantenimiento@Polcecal.com", activo: true }],
+      },
+      { falla: { agenda_eventos: { insert: "boom" } } }
+    );
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(r.creados).toBe(0);
+    expect(r.quedaron).toBe(0);
+    expect(r.fallos).toHaveLength(2);
+    expect(r.fallos[0]).toContain("3001");
+    expect(r.fallos[0]).toContain("boom");
+    expect(r.fallos[1]).toContain("3002");
+  });
+
+  it("si lo que lanza es una excepción, tampoco frena a las demás ni sale del barrido", async () => {
+    const b = base([orden(1, { especialidad: "A" }), orden(2, { especialidad: "B", fecha_ejecucion: "2026-11-07" })]);
+    vi.mocked(escribirEnGoogle)
+      .mockRejectedValueOnce(new Error("se cayó Google"))
+      .mockResolvedValue({
+        google_event_id: "g1",
+        inicio_escrito: "2026-11-07T08:00:00-03:00",
+        fin_escrito: "2026-11-07T09:30:00-03:00",
+      });
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(r.creados).toBe(1);
+    expect(r.fallos).toHaveLength(1);
+    expect(r.fallos[0]).toContain("3001");
+  });
+
+  it("nunca lanza: si no puede leer la tabla, lo dice y no crea nada", async () => {
+    const b = baseEnMemoria(
+      { ordenes_trabajo: [], agenda_eventos: [] },
+      { falla: { ordenes_trabajo: { select: "no hay conexión" } } }
+    );
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(r.creados).toBe(0);
+    expect(r.fallos).toHaveLength(1);
+    expect(r.fallos[0]).toContain("no hay conexión");
+  });
+
+  it("si no puede leer qué OT ya tienen evento, no crea ninguno: sin eso duplicaría", async () => {
+    const b = baseEnMemoria(
+      { ordenes_trabajo: [orden(1)], agenda_eventos: [] },
+      { falla: { agenda_eventos: { select: "no hay conexión" } } }
+    );
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(r.creados).toBe(0);
+    expect(r.fallos[0]).toContain("no hay conexión");
+    expect(b.escrituras).toEqual([]);
+  });
+
+  it("con el tiempo de Google agotado deja de intentar y cuenta lo que quedó", async () => {
+    const b = base([orden(1, { especialidad: "A" }), orden(2, { especialidad: "B" }), orden(3, { especialidad: "C" })]);
+    let intentos = 0;
+    // Se agota después de la primera: se mira antes de empezar cada orden.
+    const presupuesto = { agotado: () => intentos++ >= 1 };
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA, TOPE_POR_CORRIDA, presupuesto);
+
+    expect(r).toEqual({ creados: 1, quedaron: 2, fallos: [] });
+  });
+});
+
+describe("lo que se anota de un barrido", () => {
+  it("nada que decir cuando entró todo", () => {
+    expect(loQueSeAnotaDelBarrido({ creados: 3, quedaron: 0, fallos: [] })).toBeNull();
+  });
+
+  it("lo que quedó afuera se dice, y no es un fallo", () => {
+    const a = loQueSeAnotaDelBarrido({ creados: 25, quedaron: 5, fallos: [] });
+    expect(a?.ok).toBe(true);
+    expect(a?.error).toContain("5");
+  });
+
+  it("juntar dos anotaciones no pierde ninguna y sale en rojo si alguna lo está", () => {
+    expect(juntarLoAnotado(null, null)).toBeNull();
+    expect(juntarLoAnotado(null, { ok: true, error: "B" })).toEqual({ ok: true, error: "B" });
+    expect(juntarLoAnotado({ ok: true, error: "A" }, { ok: false, error: "B" })).toEqual({ ok: false, error: "A. B" });
+  });
+
+  it("un fallo sale en rojo y lleva el texto de cada uno", () => {
+    const a = loQueSeAnotaDelBarrido({ creados: 1, quedaron: 0, fallos: ["OT 3002: boom"] });
+    expect(a?.ok).toBe(false);
+    expect(a?.error).toContain("OT 3002: boom");
+  });
+});

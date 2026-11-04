@@ -28,6 +28,9 @@ import { borrarLoQueLaPlanillaNoTrajo } from "@/lib/core/borradoDeEspejo";
 import {
   borrarLosEventosDeLasOT, loQueSeAnotaDeLosEventos, presupuestoDeGoogle, seguirALasOT,
 } from "@/lib/agenda/elEventoSigueALaOT";
+import {
+  barrerLasQueFaltan, juntarLoAnotado, loQueSeAnotaDelBarrido, TOPE_POR_CORRIDA, type LoQueBarrio,
+} from "@/lib/agenda/barridoDeNuevas";
 import { leerValores, leerFormulas, listarPestanas, escribirCeldas, leerFormulasDeRango
 } from "@/lib/core/sheets";
 import { linkDeCelda } from "@/lib/core/links";
@@ -826,10 +829,30 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   // con las otras tres sincronizaciones.
   const eventos = await seguirALasOT(admin, { presupuesto: presupuestoDeLaAgenda.mover });
 
+  // ── Y LAS QUE FALTAN, ENTRAN ──────────────────────────────────────────────
+  //
+  // Toda OT con fecha futura, abierta y sin evento. Va **después** de mover: lo
+  // que acaba de crear no tiene nada que reubicar, y mover primero no lo cuenta.
+  // Comparte el tramo `mover` del presupuesto de Google (no tiene uno propio, así
+  // que la Agenda en conjunto no se pasa del límite que ya tenía): si el
+  // movimiento se comió el tiempo, el barrido no empieza y lo dice en `quedaron`.
+  // No lanza —su contrato—, y aun así va atrapado: la sincronización ya está
+  // anotada como buena y un error acá no puede deshacerlo.
+  let barrido: LoQueBarrio;
+  try {
+    barrido = await barrerLasQueFaltan(admin, new Date(), TOPE_POR_CORRIDA, presupuestoDeLaAgenda.mover);
+  } catch (e) {
+    barrido = {
+      creados: 0, quedaron: 0,
+      fallos: [`El barrido de las órdenes sin evento se cortó: ${e instanceof Error ? e.message : String(e)}`],
+    };
+  }
+
   // Si no se pudo mover algún evento, o no se alcanzó, la última anotación pasa a
   // decirlo: las OT sí se guardaron, y el mensaje lo dice para que no se lea
-  // como una corrida perdida. Mismo criterio que las áreas de los avisos.
-  const loAnotado = loQueSeAnotaDeLosEventos(eventos);
+  // como una corrida perdida. Mismo criterio que las áreas de los avisos. El
+  // barrido suma lo suyo al mismo renglón: es una sola anotación por corrida.
+  const loAnotado = juntarLoAnotado(loQueSeAnotaDeLosEventos(eventos), loQueSeAnotaDelBarrido(barrido));
   if (loAnotado) {
     await registrarSincronizacion({ modulo: "mantenimiento", recurso: "ordenes", filas: guardadas, ...loAnotado });
   }
@@ -850,6 +873,9 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     eventos_pendientes_de_google: eventos.pendientes,
     eventos_sin_alcanzar: eventos.sinAlcanzar,
     ...(eventos.fallos.length > 0 ? { eventos_con_fallos: eventos.fallos } : {}),
+    eventos_creados_por_el_barrido: barrido.creados,
+    eventos_sin_crear_todavia: barrido.quedaron,
+    ...(barrido.fallos.length > 0 ? { eventos_que_no_entraron: barrido.fallos } : {}),
     estados_sin_formula: estadosPuestos.escritas,
     ...(estadosPuestos.freno ? { estado_freno: estadosPuestos.freno } : {}),
     ...(estadosPuestos.error ? { estado_error: estadosPuestos.error } : {}),
@@ -1332,6 +1358,9 @@ export const SINCRONIZACIONES = [
         fallaron: r.fallaron,
         cerrados: r.cerrados,
         sin_estado_todavia: r.sinEstadoTodavia,
+        // El evento que no se pudo crear de una periódica no tiene otro
+        // lugar donde decirse: la corrida de estas no tiene pantalla.
+        ...(r.sinCalendario.length > 0 ? { sin_calendario: r.sinCalendario } : {}),
       });
     },
   },

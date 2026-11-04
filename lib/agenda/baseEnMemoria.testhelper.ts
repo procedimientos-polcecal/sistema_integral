@@ -30,6 +30,14 @@ export interface Opciones {
    * todo): simula un filtro que no coincide, como un `.gte` sobre un `timestamptz`.
    */
   selectConFiltrosVacio?: string[];
+  /**
+   * Por tabla: completa la fila **al insertarla** con lo que en la base de
+   * verdad resolvería un embed. Sin esto una fila insertada no trae
+   * `ordenes_trabajo: { especialidad }`, y quien cuenta huecos por especialidad
+   * no la vería: el test diría que dos órdenes no chocan porque la base en
+   * memoria no sabe unir, no porque el código esté bien.
+   */
+  alInsertar?: Record<string, (fila: Fila, tablas: Record<string, Fila[]>) => Fila>;
 }
 
 export interface BaseEnMemoria {
@@ -75,7 +83,8 @@ export function baseEnMemoria(tablas: Record<string, Fila[]>, opciones: Opciones
           return { data: tocadas.map((f) => ({ id: f.id })), error: null };
         }
         if (modo === "insert") {
-          for (const f of nuevas) filas.push({ ...f });
+          const completar = opciones.alInsertar?.[tabla];
+          for (const f of nuevas) filas.push(completar ? completar({ ...f }, tablas) : { ...f });
           escrituras.push({ tabla, operacion: "insert", columnas: nuevas[0] ?? {}, tocadas: nuevas.length });
           return { data: nuevas.map((f) => ({ ...f })), error: null };
         }
