@@ -110,6 +110,16 @@ describe("armar el calendario", () => {
     expect(cal.every((d) => d.ordenes.length === 0)).toBe(true);
   });
 
+  it("una orden de un dia que cayo antes del rango no se cuela en el primer dia", () => {
+    const cal = armarElCalendario(
+      [orden(1, { fecha_ejecucion: "2026-10-20", fecha_fin: null })],
+      "2026-11-01",
+      "2026-11-07",
+      new Map(),
+    );
+    expect(cal.every((d) => d.ordenes.length === 0)).toBe(true);
+  });
+
   it("una fecha de fin anterior al inicio no inventa un rango al reves", () => {
     const cal = armarElCalendario(
       [orden(1, { fecha_ejecucion: "2026-11-06", fecha_fin: "2026-11-01" })],

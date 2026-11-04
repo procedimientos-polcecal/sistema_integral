@@ -94,9 +94,11 @@ export function armarElCalendario(
     // celda mal tipeada no puede costar treinta mil días. El inicio verdadero
     // se conserva aparte para saber qué es arrastre.
     const fin = o.fecha_fin && o.fecha_fin > hasta ? hasta : o.fecha_fin;
-    // Una ventana que terminó antes del rango no toca ningún día de él; sin
-    // este corte, recortar el inicio a `desde` la dejaría pintada ahí.
-    if (inicio < desde && fin && fin < desde) continue;
+    // Una orden que empezó antes del rango y terminó antes de él no toca ningún
+    // día de él; sin este corte, recortar el inicio a `desde` la dejaría pintada
+    // ahí como arrastre. Sin `fecha_fin` dura un día —el inicio—, así que
+    // también terminó antes.
+    if (inicio < desde && (!fin || fin < desde)) continue;
     const primero = inicio < desde ? desde : inicio;
     for (const dia of diasQueOcupa(primero, fin)) {
       dias.get(dia)?.ordenes.push({
