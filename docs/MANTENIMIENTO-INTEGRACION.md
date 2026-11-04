@@ -1810,12 +1810,30 @@ parecen omisiones y no lo son:
   `fecha_descanso`, la semana del 01/09 devuelve **cero** filas.
   **Las dos fotos del dato, porque la primera contaba otra cosa.** El 26/10/2026
   eran **56 de 217**: los *tomados*, no el total. El 04/11/2026 son **259**
-  francos: **58 `TOMADO` sin fecha** (los viejos; antes eran 56), **1 `TOMADO`
-  con su fecha** —el único tomado por el flujo nuevo, y sí guardó el día— y
-  **200 `PENDIENTE`**, que todavía no tienen día y es lo correcto: `estaDeFranco`
-  pide `TOMADO` **y** la fecha exacta. De los 40 creados desde el 26/10 ninguno
-  tiene fecha y todos están pendientes. Lo que subcuenta ausencias son sólo
-  los 58 viejos, y sólo en días que ya pasaron.
+  francos: **59 `TOMADO` y 200 `PENDIENTE`**. Los pendientes no tienen día y es
+  lo correcto: `estaDeFranco` pide `TOMADO` **y** la fecha exacta.
+
+  **Un franco tomado después del 26/10 puede quedar sin día: hallazgo del
+  04/11/2026, sin arreglar.** Medido fila por fila sobre los 59 `TOMADO`:
+  - **Se sabe.** **56** se tomaron antes del 26/10/2026 y no tienen
+    `fecha_descanso`: son los viejos, y el número coincide exacto con el
+    documentado. **1** se tomó el 02/11/2026 **con** su fecha (se había creado el
+    14/10). **2** se tomaron el 02/11/2026 **sin** fecha (se crearon ese mismo
+    02/11). O sea que **el flujo nuevo no siempre guarda el día**: de los tres
+    francos tomados el 02/11, dos quedaron sin fecha. De los 40 creados desde el
+    26/10 ninguno tiene fecha, y 2 de esos 40 son esos tomados; los otros 38
+    siguen pendientes (es la resta, no se miró uno por uno). El que sí guardó el
+    día **no está entre los 40**: se creó antes y se tomó después.
+  - **Conjetura, sin confirmar.** Que lo que distingue al que funcionó de los dos
+    que no sea haberse creado **y** tomado el mismo día. Es lo único visible en
+    los datos, y son dos casos: **no es una causa**. No se leyó el código del flujo de
+    francos para buscarla.
+  - **Qué significa.** Cada franco tomado sin fecha es una ausencia que la cuenta
+    de disponibles no ve, y ni la programación ni la Agenda pueden saber cuándo
+    descansó esa persona. Es un defecto del flujo de francos y no de la
+    programación: **no se arregló desde acá**, y los 56 viejos siguen siendo
+    historia perdida mientras que estos 2 no lo son necesariamente (el día de
+    descanso podría estar adelante).
   Lo que pregunta la programación es `noViene()` de
   `lib/mantenimiento/disponibilidad.ts`, que junta las dos razones —ausencia
   cargada y franco que se descansa— en un solo lugar, para que la grilla y los

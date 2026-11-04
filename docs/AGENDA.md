@@ -755,29 +755,37 @@ un problema de la persona que la cargó. (La otra migración de esta tanda, la d
 producción coincidan.)
 
 **Después de desplegar: la columna de gente disponible no dice nada hasta que se cargue
-el padrón.** No es un bug de código y no se arregla con código:
+el padrón, y además subcuenta ausencias por un defecto del flujo de francos.** Ninguna de
+las dos cosas se arregla con código de la Agenda:
 
 - **`mant_personal_taller` está vacía**: cero personas, cero semanas de referencia, cero
   excepciones. Con el padrón vacío la grilla dice «no sé» y no cero, que es lo honesto,
   pero tampoco da ningún dato. **Es lo único que hay que cargar.**
-- **Los francos sin `fecha_descanso` son 259 menos uno, y casi todos están bien así**
-  (medido el 04/11/2026, desglosado porque un «258 de 259» suelto se lee como que el
-  arreglo del 26/10 no anda, y no es eso):
-  - **200 están `PENDIENTE` y sin fecha, y es correcto**: un franco pendiente todavía no
-    tiene día, y `estaDeFranco` pide `TOMADO` **y** la fecha exacta.
-  - **58 están `TOMADO` y sin fecha**: son los viejos, de antes del 26/10/2026, de
-    cuando la pantalla no pedía el día. No hay cómo saber cuándo descansaron. Son lo
-    único que subcuenta ausencias, y sólo en los días que esos 58 cubren, que **ya
-    pasaron**.
-  - **1 está `TOMADO` con su fecha**, el único que se tomó por el flujo nuevo, y sí
-    guardó el día: el mecanismo anda y lo que falta es historia.
-  - De los 40 creados desde el 26/10, **ninguno tiene fecha**, pero todos están
-    pendientes: es lo esperado, no un fallo.
+- **Los francos sin `fecha_descanso` son 258 de 259, y casi todos están bien así; dos no.**
+  Se desglosa porque un «258 de 259» suelto se lee como que el arreglo del 26/10 no anda, y
+  no es tan simple. Medido el 04/11/2026, fila por fila (el hallazgo con su detalle está en
+  [docs/MANTENIMIENTO-INTEGRACION.md](MANTENIMIENTO-INTEGRACION.md), sección de la
+  programación del taller, el párrafo «Las dos fotos del dato»). **Se sabe:**
+  - **200 `PENDIENTE` sin fecha, y es correcto**: un franco pendiente todavía no tiene día,
+    y `estaDeFranco` pide `TOMADO` **y** la fecha exacta.
+  - **56 `TOMADO` antes del 26/10/2026, sin fecha**: los viejos, de cuando la pantalla no
+    pedía el día. No hay cómo saber cuándo descansaron, y esos días **ya pasaron**.
+  - **1 `TOMADO` el 02/11/2026, con su fecha** (se creó el 14/10, así que **no es uno de los
+    40 creados desde el 26/10**).
+  - **2 `TOMADO` el 02/11/2026, sin fecha** (se crearon ese mismo día). **O sea que el flujo
+    nuevo no siempre guarda el día**, y un franco tomado puede quedar sin día incluso
+    después del 26/10. Los otros 38 de esos 40 siguen pendientes (es una resta).
 
-  Lo que sí va a pasar: **cuando esos 200 se tomen, tienen que quedar con su día**, y
-  de eso depende que el conteo de gente refleje los francos de verdad. Cruzar por
-  `fecha_tomado` en vez de `fecha_descanso` era el bug ya corregido (pintaba 35
-  huecos un lunes cualquiera) y no es la salida.
+  **Conjetura, sin confirmar:** que lo que distingue al que funcionó de los dos que no sea
+  haberse creado **y** tomado el mismo día. Es lo único visible en los datos, con dos casos:
+  **no se afirma como causa.**
+
+  **Lo que significa para la Agenda:** cada franco tomado sin fecha es una ausencia que la
+  cuenta de disponibles **no ve**, y **eso no se arregla desde acá**: es un defecto del flujo
+  de francos y no de este trabajo, y no se tocó. Los 200 pendientes **no son una tarea
+  manual**: la pantalla pide el día al marcar el franco como tomado, y lo que no se sabe es
+  si lo guarda siempre. Cruzar por `fecha_tomado` en vez de `fecha_descanso` era el bug ya
+  corregido (pintaba 35 huecos un lunes cualquiera) y no es la salida.
 
 **Lo que esta tanda deja sin verificar:**
 
