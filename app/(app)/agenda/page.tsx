@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { usuarioActual } from "@/lib/core/sesion";
 import { traerTodo } from "@/lib/core/paginado";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 import { traerEventos } from "@/lib/agenda/listar";
+import { desdeParaLeer, leerDia, leerVista } from "@/lib/agenda/rango";
 import { leerLaSaludDeLaAgenda, lineasDeSalud } from "@/lib/agenda/avisosDeLaAgenda";
 import AgendaClient from "./AgendaClient";
 import SaludDeLaAgenda from "./SaludDeLaAgenda";
@@ -19,7 +21,8 @@ import SaludDeLaAgenda from "./SaludDeLaAgenda";
  * ── LOS EVENTOS SE LEEN ACÁ, Y NO HAY UN GET ────────────────────────────────
  *
  * Con el cliente del usuario y pidiendo lo que importa (ver `traerEventos`):
- * una agenda crece sin techo. `?historial=1` saca la ventana. Las rutas de
+ * una agenda crece sin techo. La ventana la fijan `?vista=` y `?dia=`, y
+ * `?historial=1` la saca. Las rutas de
  * `/api/agenda` son sólo las de las escrituras; el GET de lectura se borró
  * porque nadie lo llamaba.
  *
@@ -41,6 +44,11 @@ export default async function AgendaPage({
 }) {
   const crudos = await searchParams;
   const historial = crudos.historial === "1";
+  // El día que se mira viaja en la URL, y de él depende qué se lee: mirar una
+  // semana vieja tiene que traer esa semana. Lo que no se entiende cae al
+  // default en vez de tumbar la pantalla (ver `lib/agenda/rango.ts`).
+  const vista = leerVista(crudos.vista);
+  const dia = leerDia(crudos.dia, hoyEnArgentina());
 
   const user = await usuarioActual();
   if (!user) redirect("/login");
@@ -77,6 +85,7 @@ export default async function AgendaPage({
   try {
     eventos = await traerEventos(supabase, {
       historial,
+      desde: desdeParaLeer(vista, dia),
       directorio: new Map([...porId].filter(([, n]) => n !== "")),
     });
   } catch (e) {
