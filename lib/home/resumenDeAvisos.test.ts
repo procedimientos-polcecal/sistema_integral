@@ -166,3 +166,26 @@ describe("resumirElMovimiento", () => {
     expect(r!.body).toContain("y 2 más");
   });
 });
+
+describe("un aviso que es una bandera no imprime el número", () => {
+  // `agenda-salud-sin-comprobar` usa `cantidad: 1` como «pasa», no como cuántos.
+  const bandera: Notificacion = {
+    id: "agenda-salud-sin-comprobar",
+    titulo: "No se pudo comprobar si la Agenda sigue mirando Google",
+    cantidad: 1,
+    href: "/agenda",
+  };
+  const otro: Notificacion = { id: "mant-atrasadas", titulo: "Órdenes de trabajo atrasadas", cantidad: 4, href: "/m" };
+
+  it("solo, el cuerpo queda vacío en el total y en el movimiento", () => {
+    expect(resumirParaPush([bandera])).toEqual({ title: bandera.titulo, body: "", url: "/agenda" });
+    expect(resumirElMovimiento([bandera])).toEqual({ title: bandera.titulo, body: "", url: "/agenda" });
+  });
+
+  it("con otros, va sólo el título y los demás conservan su número", () => {
+    expect(resumirParaPush([otro, bandera])?.body).toBe(`4 · ${otro.titulo}
+${bandera.titulo}`);
+    expect(resumirElMovimiento([otro, bandera])?.body).toBe(`4 más · ${otro.titulo}
+${bandera.titulo}`);
+  });
+});

@@ -7,6 +7,7 @@ import type { Modulo, Rol, UsuarioModulo } from "@/lib/core/types";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { filtrarDescartadas, type Notificacion } from "./notificaciones";
 import { avisosDeConteos, avisosDeRitmo, type ConteosParaAvisos } from "./avisos";
+import { contarDivergenciasSinVer, leerLaSaludDeLaAgenda } from "@/lib/agenda/avisosDeLaAgenda";
 import { ritmoPorModulo } from "./ritmo";
 import {
   traerRitmo, sinClasificarDelUltimoDiaHabil, equiposTallerVialSinService,
@@ -37,23 +38,34 @@ export interface QuienMira {
  * `contarSiTiene`, y `avisosDeRitmo` recibe la lista de módulos— y el RLS de
  * este sistema gatea por acceso al módulo, no por fila. Quien tiene
  * Mantenimiento ve todas las órdenes; quien no lo tiene no cuenta ninguna, con
- * sesión o sin ella. Si algún día alguna tabla pasara a filtrar por fila, esto
- * deja de ser cierto y hay que volver acá.
+ * sesión o sin ella.
  *
- * **Y UN CONTEO NO USA ESTE CLIENTE, SINO SIEMPRE EL ADMIN.** Es
- * `consultasDeRepuestosAbiertas`, el de las consultas de repuestos: su aviso es de
- * Compras y las dos tablas que lee son de Mantenimiento, cerradas con
- * `mant_puede_ver()`. Con el cliente de sesión de quien contesta —medido el
- * 31/10/2026: el encargado de compras no tiene Mantenimiento— la lectura vuelve
- * vacía **sin error** y el conteo da 0, así que la campana diría que no hay nada
- * mientras el push del cron dice que hay tres. El porqué entero está en su
- * encabezado; acá importa que es la excepción al párrafo de arriba y que no
- * amplía lo que alguien ve: el conteo sale sólo con el módulo Compras, y el aviso
- * sólo para quien está en `compras_consultados`.
+ * **La Agenda es la excepción y es la primera:** sus eventos sí se ven por fila
+ * (dueño o invitado), así que el cliente admin los vería todos. Por eso su
+ * conteo recibe el `usuarioId` y **filtra explícito** (`divergenciasSinVer`), en
+ * vez de apoyarse en RLS: con sesión y sin ella da lo mismo. Si otra tabla pasara
+ * a filtrar por fila, tiene que hacer lo mismo.
+ *
+ * `opciones.usuarioId` es **de quién se cuenta la Agenda**; sin él la Agenda no
+ * entra (la foto diaria es de todos y no la lleva). `opciones.saludDeLaAgenda`
+ * dice si se calcula el aviso de salud, que es del sistema y sólo le llega a
+ * `admin_sistema`: es para no pagar las dos lecturas por cada persona del cron.
+ *
+ * **Y hay una segunda excepción, por el otro lado: un conteo que no usa este
+ * cliente sino siempre el admin.** Es `consultasDeRepuestosAbiertas`, el de las
+ * consultas de repuestos. La Agenda se cuida del admin porque filtra por fila;
+ * éste lo necesita por lo contrario — su aviso es de Compras y las dos tablas
+ * que lee son de Mantenimiento, cerradas con `mant_puede_ver()`. Con el cliente
+ * de sesión de quien contesta —medido el 31/10/2026: el encargado de compras no
+ * tiene Mantenimiento— la lectura vuelve vacía **sin error** y el conteo da 0,
+ * así que la campana diría que no hay nada mientras el push del cron dice que
+ * hay tres. No amplía lo que alguien ve: el conteo sale sólo con el módulo
+ * Compras, y el aviso sólo para quien está en `compras_consultados`.
  */
 async function avisosDeLosModulos(
   supabase: SupabaseClient,
-  modulos: Modulo[]
+  modulos: Modulo[],
+  opciones: { usuarioId?: string; saludDeLaAgenda?: boolean } = {}
 ): Promise<Notificacion[]> {
   const tiene = (m: Modulo) => modulos.includes(m);
   const hoy = hoyEnArgentina();
@@ -77,6 +89,7 @@ async function avisosDeLosModulos(
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
     tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar, filasRitmo,
+    agendaDivergencias, saludDeLaAgenda,
   ] = await Promise.all([
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
     contarSiTiene("mantenimiento", () => head("ordenes_trabajo").eq("estado", "ATRASADO")),
@@ -144,6 +157,14 @@ async function avisosDeLosModulos(
       head("syh_fotos").is("respaldada_en_drive_el", null).lt("subida_el", corteDeFotosAtascadas(new Date()))
     ),
     traerRitmo(supabase),
+    // **No pasa por `contarSiTiene`**: la Agenda no es un módulo y el número es
+    // de quien mira, no del sistema. Es la primera entrada de la lista así.
+    // Ver `agendaDivergencias` en `avisos.ts`.
+    opciones.usuarioId ? contarDivergenciasSinVer(supabase, opciones.usuarioId) : Promise.resolve(0),
+    // Tampoco por módulo: es de la salud del cron. Ver `agendaPasosCaidos`.
+    opciones.saludDeLaAgenda
+      ? leerLaSaludDeLaAgenda(supabase)
+      : Promise.resolve({ caidos: 0, sinComprobar: false, corridas: [] }),
   ]);
 
   const conteos: Partial<ConteosParaAvisos> = {
@@ -153,6 +174,9 @@ async function avisosDeLosModulos(
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
     tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar,
+    agendaDivergencias,
+    agendaPasosCaidos: saludDeLaAgenda.caidos,
+    agendaSaludSinComprobar: saludDeLaAgenda.sinComprobar ? 1 : 0,
   };
 
   return [...avisosDeConteos(conteos), ...avisosDeRitmo(ritmoPorModulo(filasRitmo), modulos)];
@@ -173,7 +197,10 @@ async function avisosDeLosModulos(
 export async function avisosDeTodoElSistema(
   supabase: SupabaseClient
 ): Promise<Notificacion[]> {
-  return avisosDeLosModulos(supabase, [...MODULOS_ORDEN]);
+  // Sin `usuarioId`: la Agenda de una persona no entra en una foto que es de
+  // todos. Con la salud sí: ésa es del sistema y la foto la recuerda como a
+  // cualquier otra, de modo que el resumen avisa el día que pasa de 0 a algo.
+  return avisosDeLosModulos(supabase, [...MODULOS_ORDEN], { saludDeLaAgenda: true });
 }
 
 /**
@@ -225,6 +252,16 @@ const DE_UNA_LISTA: Record<string, keyof QuePuedeAtender> = {
    * recibiéndolo; lo que se saca es a los demás.
    */
   "syh-fotos-sin-respaldar": "administraElSistema",
+  /*
+   * Lo mismo, y por lo mismo: que un canal de Google no se renueve o que el cron
+   * no corra lo arregla quien toca las credenciales y las variables de Vercel.
+   * Mandado a quien sólo usa la Agenda sería un push sobre algo que no puede
+   * hacer nada. (`agenda-divergencias`, en cambio, no está acá: es de cada uno y
+   * ya llega sólo a quien le toca, por su propio conteo.)
+   */
+  "agenda-pasos-caidos": "administraElSistema",
+  // Que no se pueda ni mirar la salud también es de quien toca la infraestructura.
+  "agenda-salud-sin-comprobar": "administraElSistema",
 };
 
 /**
@@ -269,7 +306,10 @@ export async function avisosDeUsuario(
   quien: QuienMira
 ): Promise<Notificacion[]> {
   const [avisos, descartes, apruebaCompras, contestaConsultas] = await Promise.all([
-    avisosDeLosModulos(supabase, modulosVisibles(quien.rol, quien.grants)),
+    avisosDeLosModulos(supabase, modulosVisibles(quien.rol, quien.grants), {
+      usuarioId: quien.id,
+      saludDeLaAgenda: quien.rol === "admin_sistema",
+    }),
     supabase
       .from("notificaciones_descartes")
       .select("notificacion_id, cantidad_vista")

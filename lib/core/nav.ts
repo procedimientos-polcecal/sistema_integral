@@ -34,14 +34,28 @@ export interface NavItem {
   children?: NavItem[];
 }
 
-// Estructura de navegación del SdG. La visibilidad real se filtra por permisos.
+/*
+ * Estructura de navegación del SdG. La visibilidad real se filtra por permisos.
+ *
+ * **Cada grupo lleva su propia raíz como primer hijo**, y eso no es una
+ * repetición de más: desde el 04/11/2026 el encabezado de un grupo sólo
+ * despliega y no navega, así que ese hijo es el **único** camino a la portada
+ * del módulo desde el menú. Un grupo nuevo sin él deja su página huérfana, y
+ * nada lo avisa — por eso hay un test en `nav.test.ts` que lo exige.
+ */
 export const NAV: NavItem[] = [
   { label: "Inicio", href: "/" },
+  // Sin `modulo`, como Inicio, y es deliberado: la Agenda no es un módulo con
+  // permisos sino una sección que ven los catorce usuarios, y cada uno ve sólo
+  // lo que creó o a lo que lo invitaron (eso lo resuelve RLS, no el menú).
+  // Ponerle un `modulo` la escondería de quien no tiene ninguno de los doce.
+  { label: "Agenda", href: "/agenda" },
   {
     label: "RRHH",
     href: "/rrhh",
     modulo: "rrhh",
     children: [
+      { label: "Tablero", href: "/rrhh", modulo: "rrhh" },
       {
         label: "Administración",
         href: "/rrhh/empleados",
@@ -91,6 +105,7 @@ export const NAV: NavItem[] = [
     href: "/remises",
     modulo: "remises",
     children: [
+      { label: "Tablero", href: "/remises", modulo: "remises" },
       { label: "Hoy", href: "/remises/hoy", modulo: "remises" },
       { label: "Semana", href: "/remises/semana", modulo: "remises" },
       { label: "Empleados", href: "/remises/empleados", modulo: "remises" },
@@ -107,6 +122,7 @@ export const NAV: NavItem[] = [
     // mira una máquina, y de ahí para abajo el trabajo — lo que se avisa, lo
     // que se hace y lo que se planifica.
     children: [
+      { label: "Tablero", href: "/mantenimiento", modulo: "mantenimiento" },
       { label: "Equipos", href: "/mantenimiento/equipos", modulo: "mantenimiento" },
       { label: "MTBF", href: "/mantenimiento/mtbf", modulo: "mantenimiento" },
       { label: "Avisos", href: "/mantenimiento/avisos", modulo: "mantenimiento" },
@@ -152,10 +168,15 @@ export const NAV: NavItem[] = [
     label: "Compras",
     href: "/compras",
     modulo: "compras",
-    // El tablero primero —dice cuánto trabajo hay en cada etapa—, después el
-    // trabajo del día a día. El dashboard de gráficos es la raíz del módulo,
-    // fuera de esta lista, mismo caso que Cantera.
+    // "Gráficos" y no "Tablero" como en los otros trece: esa raíz es el
+    // dashboard de gráficos, y acá "Tablero" ya es otra pantalla —la de las
+    // cinco etapas del circuito con sus montos—. Dos ítems con el mismo
+    // nombre y distinto destino es peor que una etiqueta despareja.
+    //
+    // Después del tablero va el trabajo del día a día, que es el orden del
+    // circuito: se piden, se aprueban, se compran, se reciben.
     children: [
+      { label: "Gráficos", href: "/compras", modulo: "compras" },
       { label: "Tablero", href: "/compras/tablero", modulo: "compras" },
       { label: "Requerimientos", href: "/compras/requerimientos", modulo: "compras" },
       // Después de Requerimientos, que es el orden del circuito: se piden, se
@@ -214,6 +235,7 @@ export const NAV: NavItem[] = [
     // propósito, mismo caso que Cantera: así clickear el nombre del módulo en
     // la barra lateral entra directo, en vez de sólo desplegar.
     children: [
+      { label: "Tablero", href: "/inventario", modulo: "inventario" },
       { label: "Stock", href: "/inventario/stock", modulo: "inventario" },
       // Después del stock y no al final: es la lista corta que sale del stock
       // —los que faltan **y** se usan— y quien entra a mirar si hay algo es el
@@ -240,6 +262,7 @@ export const NAV: NavItem[] = [
     // raíz del módulo es el dashboard, fuera de esta lista — mismo caso que
     // Cantera e Inventario.
     children: [
+      { label: "Tablero", href: "/produccion", modulo: "produccion" },
       { label: "El día", href: "/produccion/dia", modulo: "produccion" },
       { label: "Resúmenes", href: "/produccion/resumenes", modulo: "produccion" },
       // Lo que midió el PC Robot en los molinos: no es el parte de fábrica de las
@@ -270,6 +293,7 @@ export const NAV: NavItem[] = [
     //
     // Ver docs/CALIDAD.md, docs/CALIDAD-ENVASES.md y docs/CALIDAD-ENSAYOS.md.
     children: [
+      { label: "Tablero", href: "/calidad", modulo: "calidad" },
       {
         label: "Carbonilla",
         href: "/calidad/carbonilla",
@@ -337,6 +361,7 @@ export const NAV: NavItem[] = [
     // raíz del módulo es el dashboard, fuera de esta lista — mismo caso que
     // Cantera.
     children: [
+      { label: "Tablero", href: "/despacho", modulo: "despacho" },
       { label: "Movimientos diarios", href: "/despacho/movimientos", modulo: "despacho" },
       { label: "Órdenes de carga", href: "/despacho/ordenes", modulo: "despacho" },
       { label: "Recepción de material", href: "/despacho/recepciones", modulo: "despacho" },
@@ -352,21 +377,17 @@ export const NAV: NavItem[] = [
     // queda por vincular se mira después, no durante. La raíz del módulo es
     // el dashboard, fuera de esta lista — mismo caso que Cantera.
     children: [
+      { label: "Tablero", href: "/facturacion", modulo: "facturacion" },
       { label: "El buzón", href: "/facturacion/buzon", modulo: "facturacion" },
       { label: "Sin vincular", href: "/facturacion/buzon?estado=recibida", modulo: "facturacion" },
     ],
   },
   {
     label: "Cantera",
-    // `href` propio, distinto al de todos los `children`: es justamente esa
-    // diferencia la que en `Sidebar.tsx` decide que el ítem se renderice como
-    // un link que navega (a la página de inicio del módulo) y despliega, en
-    // vez de sólo desplegar como el resto de los módulos — el usuario pidió
-    // las dos cosas juntas: mantener el desplegable y que clickear "Cantera"
-    // entre a una página propia con el adelanto de Registros y del informe.
     href: "/cantera",
     modulo: "cantera",
     children: [
+      { label: "Tablero", href: "/cantera", modulo: "cantera" },
       { label: "Registros", href: "/cantera/registros", modulo: "cantera" },
       { label: "Acarreo", href: "/cantera/acarreo", modulo: "cantera" },
       { label: "Destape", href: "/cantera/destape", modulo: "cantera" },
@@ -383,6 +404,7 @@ export const NAV: NavItem[] = [
     href: "/taller-vial",
     modulo: "taller_vial",
     children: [
+      { label: "Tablero", href: "/taller-vial", modulo: "taller_vial" },
       { label: "Cargas", href: "/taller-vial/cargas", modulo: "taller_vial" },
       { label: "Estados", href: "/taller-vial/estados", modulo: "taller_vial" },
       { label: "Services", href: "/taller-vial/services", modulo: "taller_vial" },
@@ -396,6 +418,7 @@ export const NAV: NavItem[] = [
     href: "/trituracion",
     modulo: "trituracion",
     children: [
+      { label: "Tablero", href: "/trituracion", modulo: "trituracion" },
       { label: "Partes", href: "/trituracion/partes", modulo: "trituracion" },
       { label: "Informe mensual", href: "/trituracion/informes", modulo: "trituracion" },
       { label: "Plantas", href: "/trituracion/plantas", modulo: "trituracion", soloAdmin: true },
@@ -410,6 +433,7 @@ export const NAV: NavItem[] = [
     // Cuando llegue el segundo frente (accidentes, capacitaciones…) se agrega
     // acá junto con su tarjeta, sin mudar el primero.
     children: [
+      { label: "Tablero", href: "/seguridad-higiene", modulo: "seguridad_higiene" },
       { label: "Condiciones inseguras", href: "/seguridad-higiene/condiciones", modulo: "seguridad_higiene" },
     ],
   },
@@ -439,6 +463,7 @@ export const NAV: NavItem[] = [
     href: "/administracion",
     soloAdminGlobal: true,
     children: [
+      { label: "Tablero", href: "/administracion", soloAdminGlobal: true },
       { label: "Usuarios", href: "/administracion/usuarios", soloAdminGlobal: true },
       { label: "Empresas", href: "/administracion/empresas", soloAdminGlobal: true },
     ],

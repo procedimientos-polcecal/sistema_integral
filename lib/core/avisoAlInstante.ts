@@ -51,6 +51,22 @@ import { traerTodo } from "@/lib/core/paginado";
  * **Agregar un aviso a `lib/home/avisos.ts` no lo vuelve instantáneo.** Eso se
  * decide acá, a mano, y pasando las tres condiciones.
  *
+ * ── HAY UNA EXCEPCIÓN, Y NO PASA POR ACÁ ─────────────────────────────────────
+ *
+ * Los emisores instantáneos no son sólo los de este archivo. La Agenda manda un
+ * push cuando Google avisa que alguien movió o borró un evento
+ * (`lib/agenda/avisoDeDivergencia.ts`), y **no pasa por `avisarAQuienDecide`**:
+ * cumple la 1 (hay personas nombradas: el dueño y los invitados) y la 3 (acaba
+ * de pasar), pero **no la 2** —nada se frena hasta que alguien decida—. Se
+ * mandó igual porque se pidió instantáneo, y el porqué completo y lo que cuesta
+ * (un push por webhook, no por corrida) está allá.
+ *
+ * Está nombrada acá para que quien llegue a este portón a decidir el próximo
+ * aviso se entere de que ya hay un precedente **y de que no es permiso**: las
+ * tres condiciones siguen valiendo, y «ya hay uno que cumple sólo dos» no
+ * convierte en válido al siguiente. Si agregás un emisor instantáneo, sea por
+ * acá o por afuera, anotalo en este renglón.
+ *
  * ── UNA POR CORRIDA, NO UNA POR ÍTEM ─────────────────────────────────────────
  *
  * Es la regla que hace que esto no repita el problema que la fase 2 decidió no

@@ -25,6 +25,9 @@ import { traerTodo } from "@/lib/core/paginado";
 import { avisarAQuienDecide, VERBO_DE_APROBACION } from "@/lib/core/avisoAlInstante";
 import { lasOSQueNacenEsperando } from "@/lib/mantenimiento/aprobacion";
 import { borrarLoQueLaPlanillaNoTrajo } from "@/lib/core/borradoDeEspejo";
+import {
+  borrarLosEventosDeLasOT, loQueSeAnotaDeLosEventos, presupuestoDeGoogle, seguirALasOT,
+} from "@/lib/agenda/elEventoSigueALaOT";
 import { leerValores, leerFormulas, listarPestanas, escribirCeldas, leerFormulasDeRango
 } from "@/lib/core/sheets";
 import { linkDeCelda } from "@/lib/core/links";
@@ -764,14 +767,43 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   // resolvió y «vacío» es justo el criterio de esto.
   const estadosPuestos = await ponerLaFormulaDelEstado(planilla, pestana, filas);
 
+  const presupuestoDeLaAgenda = presupuestoDeGoogle();
   const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_OT, {
     clavesLeidas: trajoLaPlanilla,
     cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
+    // El evento de Google de una OT se borra ANTES que la OT, y si no se puede,
+    // esa OT no se borra en esta corrida. Ver `borrarLosEventosDeLasOT`.
+    // Y el tiempo que se le dedica a Google es UNO para borrar y para mover, con
+    // la mitad reservada para mover: ver `LIMITE_DE_GOOGLE_MS`.
+    antesDeBorrar: (ids) => borrarLosEventosDeLasOT(admin, ids, { presupuesto: presupuestoDeLaAgenda.borrar }),
   });
 
+  // La corrida se anota ANTES de tocar la Agenda. Lo que sigue habla con Google,
+  // que puede colgarse, y si la invocación muere por tiempo el registro de que
+  // las órdenes se importaron bien no puede perderse con ella: la pantalla
+  // mostraría la corrida vieja y los avisos de ritmo mentirían sobre un módulo
+  // que sí se actualizó.
   await registrarSincronizacion({
     modulo: "mantenimiento", recurso: "ordenes", ok: true, filas: guardadas,
   });
+
+  // ── EL EVENTO DE LA AGENDA SIGUE A LA OT ──────────────────────────────────
+  //
+  // Va después del borrado: las OT que acaban de irse se llevaron su evento y
+  // no hay nada que mover. Un evento que ya divergió en Google no se pisa y un
+  // fallo de escritura va a la cola (`google_pendiente`); lo que no se pudo ni
+  // guardar sale acá y en el registro, y no en un `console.warn`. Tiene un
+  // límite de tiempo (`LIMITE_DE_GOOGLE_MS`): corre dentro del cron que sigue
+  // con las otras tres sincronizaciones.
+  const eventos = await seguirALasOT(admin, { presupuesto: presupuestoDeLaAgenda.mover });
+
+  // Si no se pudo mover algún evento, o no se alcanzó, la última anotación pasa a
+  // decirlo: las OT sí se guardaron, y el mensaje lo dice para que no se lea
+  // como una corrida perdida. Mismo criterio que las áreas de los avisos.
+  const loAnotado = loQueSeAnotaDeLosEventos(eventos);
+  if (loAnotado) {
+    await registrarSincronizacion({ modulo: "mantenimiento", recurso: "ordenes", filas: guardadas, ...loAnotado });
+  }
   return logra({
     leidas: filas.length - 1,
     guardadas,
@@ -783,6 +815,12 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     // Cuántas dicen distinto los dos lados. Va en el resultado aunque el aviso
     // ya lo cuente: quien corre la sincronización a mano lo ve en el momento.
     fechas_que_derramaron: yaDerramaron.length,
+    eventos_movidos: eventos.movidos,
+    eventos_avisados: eventos.avisados,
+    eventos_divergidos_sin_tocar: eventos.respetados,
+    eventos_pendientes_de_google: eventos.pendientes,
+    eventos_sin_alcanzar: eventos.sinAlcanzar,
+    ...(eventos.fallos.length > 0 ? { eventos_con_fallos: eventos.fallos } : {}),
     estados_sin_formula: estadosPuestos.escritas,
     ...(estadosPuestos.freno ? { estado_freno: estadosPuestos.freno } : {}),
     ...(estadosPuestos.error ? { estado_error: estadosPuestos.error } : {}),

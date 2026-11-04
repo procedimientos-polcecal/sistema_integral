@@ -4,6 +4,10 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/agenda",
+      "schedule": "0 5 * * *"
+    },
+    {
       "path": "/api/cron/remises-notificaciones",
       "schedule": "0 22 * * *"
     },

@@ -130,3 +130,21 @@ describe("queMandarHoy", () => {
     expect(queMandarHoy({ fechaDeLaFoto: "2026-10-14", hoy: "2026-10-20" })).toBe("movimiento");
   });
 });
+
+describe("loQueSeMovio con avisos que son de una persona", () => {
+  /*
+   * La foto diaria es global y el conteo de divergencias de la Agenda es de
+   * quien mira, así que nunca está en ella. Sin esta excepción "subiría desde
+   * cero" todos los días, con el total entero rotulado como incremento, hasta
+   * que la persona abriera la Agenda.
+   */
+  it("no sale aunque la foto no lo tenga", () => {
+    expect(loQueSeMovio([aviso("agenda-divergencias", 3), aviso("mant-atrasadas", 5)], new Map())).toEqual([
+      { id: "mant-atrasadas", titulo: "t-mant-atrasadas", cantidad: 5, href: "/mant-atrasadas" },
+    ]);
+  });
+
+  it("el de salud, que es del sistema, sí sale cuando sube", () => {
+    expect(loQueSeMovio([aviso("agenda-pasos-caidos", 1)], new Map([["agenda-pasos-caidos", 0]]))).toHaveLength(1);
+  });
+});
