@@ -54,8 +54,15 @@ tiene su test asignado a la tarea que es dueña del código.
    de especialidad vacía se agrupan entre sí y se apilan como cualquier otra; no
    revientan ni comparten hueco con las mecánicas. → Tarea 1.
 4. **Dos OT de la misma especialidad y día en la misma corrida del importador.**
-   La segunda tiene que ver a la primera: si las dos leen la base antes de
-   escribir, las dos cuentan cero ocupados y caen a las 08:00. → Tarea 5.
+   La segunda tiene que ver a la primera y arrancar hora y media después. →
+   Tarea 5.
+
+   *(Corregido el 04/11/2026, durante la ejecución.* Esto decía que la segunda
+   no puede ver a la primera y que por eso hacía falta adelantar los huecos con
+   `yaTomados`. **La premisa era falsa**: el bucle no corre dentro de una
+   transacción, así que el insert de la primera está commiteado y la lectura de
+   la segunda lo ve. Pasar `yaTomados` encima la contaba dos veces — medido:
+   08:00 y 11:00 en vez de 08:00 y 09:30. El parámetro se sacó.)*
 5. **Un ítem del plan cuya OT se borró** entre que se abrió la pantalla y se
    apretó el botón. Ese ítem se informa y los demás siguen. → Tarea 6.
 
