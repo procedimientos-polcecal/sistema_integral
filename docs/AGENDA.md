@@ -798,6 +798,23 @@ las dos cosas se arregla con código de la Agenda:
 
 **Lo que esta tanda deja sin verificar:**
 
+- **Desplegar ES el disparador, y es lo único irreversible y con reloj de toda la tanda.**
+  `barrerLasQueFaltan` corre **al final de cada `sincronizarOrdenes`**, y esa
+  sincronización la dispara el reloj sola, cada 3 a 5 horas. `TOPE_POR_CORRIDA` es 25 y la
+  corrida en seco midió **23 candidatas**, así que **la primera sincronización posterior al
+  despliegue las manda a las 23, todas, en una sola pasada** —no «algunas»—: **92
+  invitaciones por correo**, incluidas las **cuatro de 2027** y las **seis de hoy cuya hora
+  ya pasó**. Está dentro de lo diseñado y es lo que se pidió; lo que no se puede es
+  enterarse después. Tres consecuencias prácticas:
+  1. **Sacar del conjunto una orden concreta tiene que pasar antes del despliegue**, no
+     después: una invitación mandada no se retira, y borrar el evento sólo avisa de la
+     cancelación a quienes ya lo recibieron.
+  2. **La corrida en seco del script sólo sirve si alguien la mira antes de la primera
+     sincronización posterior al despliegue.** Corrida después, muestra lo que queda y no
+     lo que se mandó.
+  3. **No hay un interruptor**: ninguna variable de entorno apaga el barrido. Si no se
+     quiere que salgan solas, el cambio no se despliega (o se saca el barrido del código
+     antes), y mergear a `main` despliega.
 - **Ninguna pantalla nueva se abrió en un navegador** —la grilla del mes con la gente del
   taller, el selector de fecha, el envío del plan al calendario—. Se verificaron con
   `tsc`, el build, `revisar-responsive` y las funciones puras. Es lo mismo que el punto 3
@@ -807,5 +824,7 @@ las dos cosas se arregla con código de la Agenda:
   decía el plan. Son **cuatro invitaciones por evento y no cinco**, porque el dueño es una
   de las cinco casillas fijas y no se invita a su propio evento. **Una invitación mandada
   no se deshace**, y de las 23 hay seis que son de hoy (algunas ya pasaron de hora) y
-  cuatro de 2027. Entre la corrida en seco y la de verdad conviene que pase poco tiempo:
-  el barrido de las sincronizaciones puede mandar algunas por su cuenta.
+  cuatro de 2027. Entre la corrida en seco y la de verdad conviene que pase poco tiempo,
+  pero **en la práctica la «de verdad» la hace el primer barrido después del despliegue**
+  (ver el punto de arriba): el script con `--mandar` es para forzarlo antes o para un
+  reintento, no la única puerta.
