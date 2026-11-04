@@ -772,13 +772,14 @@ las dos cosas se arregla con código de la Agenda:
     pedía el día. No hay cómo saber cuándo descansaron, y esos días **ya pasaron**.
   - **1 `TOMADO` el 02/11/2026, con su fecha** (se creó el 14/10, así que **no es uno de los
     40 creados desde el 26/10**).
-  - **2 `TOMADO` el 02/11/2026, sin fecha** (se crearon ese mismo día). **O sea que el flujo
-    nuevo no siempre guarda el día**, y un franco tomado puede quedar sin día incluso
-    después del 26/10.
+  - **2 `TOMADO` el 02/11/2026, sin fecha** (se crearon ese mismo día). **O sea que de los
+    tres francos tomados el 02/11, dos quedaron sin fecha de descanso** (medido el
+    04/11/2026), y un franco tomado puede quedar sin día incluso después del 26/10. **Qué
+    camino de código los escribió no se sabe.**
   - **De dónde sale cada número:** los **40** francos creados desde el 26/10 y los **2**
     `TOMADO` entre ellos son **medidos**; los **38** pendientes salen de **restarlos**.
   - **Una diferencia sin explicar, que no hace falta rehacer:** 259 − 40 = 219 y la foto
-    del 26/10 decía 217. **El conteo de hoy y esa foto difieren en dos francos y la causa no
+    del 26/10 decía 217. **El conteo del 04/11/2026 y esa foto difieren en dos francos y la causa no
     se averiguó**; no hay evidencia de que alguna de las dos esté mal.
 
   **Conjetura, sin confirmar:** que lo que distingue al que funcionó de los dos que no sea
@@ -788,7 +789,7 @@ las dos cosas se arregla con código de la Agenda:
   **Lo que significa para la Agenda:** cada franco tomado sin fecha es una ausencia que la
   cuenta de disponibles **no ve**, y **eso no se arregla desde acá**. Lo observado es que un
   franco tomado quedó sin día; por qué (un defecto del flujo, otra puerta de entrada, un
-  dato viejo) **no se sabe**, porque no se leyó el flujo de francos, y no se tocó. **Esos 2
+  dato viejo, el flujo nuevo) **no se sabe**, porque no se leyó el flujo de francos, y no se tocó. **Esos 2
   no son históricos como los 56**: su día de descanso podría estar adelante, así que sí
   pueden restarle gente a un día que todavía no llegó. Los 200 pendientes **no son una tarea
   manual**: la pantalla pide el día al marcar el franco como tomado, y lo que no se sabe es

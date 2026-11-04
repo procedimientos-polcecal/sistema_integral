@@ -1819,17 +1819,18 @@ parecen omisiones y no lo son:
     `fecha_descanso`: son los viejos, y el número coincide exacto con el
     documentado. **1** se tomó el 02/11/2026 **con** su fecha (se había creado el
     14/10). **2** se tomaron el 02/11/2026 **sin** fecha (se crearon ese mismo
-    02/11). O sea que **el flujo nuevo no siempre guarda el día**: de los tres
-    francos tomados el 02/11, dos quedaron sin fecha. **De dónde sale cada
+    02/11). O sea que **de los tres francos tomados el 02/11, dos quedaron sin
+    fecha de descanso** (medido el 04/11/2026); **qué camino los escribió no se
+    sabe**. **De dónde sale cada
     número:** los **40** francos creados desde el 26/10 (`created_at >=
     2026-10-26`) y los **2** `TOMADO` entre ellos son **medidos**; los **38**
     pendientes salen de **restarlos**, no de mirarlos uno por uno. Ninguno de
     los 40 tiene fecha. El que sí guardó el día **no está entre los 40**: se
     creó antes y se tomó después.
   - **Una diferencia que no se explicó, y no hace falta rehacerla.** 259 − 40 =
-    219, y la foto del 26/10 decía 217: **el conteo de hoy y esa foto difieren en
-    dos francos, y la causa no se averiguó.** Son mediciones de momentos y de
-    sesiones distintas; no hay evidencia de que alguna de las dos esté mal.
+    219, y la foto del 26/10 decía 217: **el conteo del 04/11/2026 y esa foto
+    difieren en dos francos, y la causa no se averiguó.** Son mediciones de
+    momentos distintos; no hay evidencia de que alguna de las dos esté mal.
   - **Conjetura, sin confirmar.** Que lo que distingue al que funcionó de los dos
     que no sea haberse creado **y** tomado el mismo día. Es lo único visible en
     los datos, y son dos casos: **no es una causa**. No se leyó el código del flujo de
@@ -1838,7 +1839,8 @@ parecen omisiones y no lo son:
     de disponibles no ve, y ni la programación ni la Agenda pueden saber cuándo
     descansó esa persona. **Lo observado es que un franco tomado quedó sin
     día.** Por qué —un defecto del flujo, otra puerta de entrada, un dato
-    viejo— no se sabe: no se leyó el flujo, y por eso no se lo llama defecto.
+    viejo, el flujo nuevo— no se sabe: no se leyó el flujo, y por eso no se lo
+    llama defecto.
     **No se arregló desde acá.** Los 56 viejos siguen siendo
     historia perdida mientras que estos 2 no lo son necesariamente (el día de
     descanso podría estar adelante).
