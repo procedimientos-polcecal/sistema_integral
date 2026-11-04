@@ -216,11 +216,31 @@ export async function ordenesQueFaltan(
   return { faltan, fechasIlegibles, error: null };
 }
 
+/**
+ * Qué pasó con una orden apenas se la intentó. Lo recibe `alTerminarUna`, que
+ * existe para el script de una vez (`scripts/mandar-las-ot-futuras.mts`): con
+ * una acción que no se deshace, quien la corre tiene que ver **cuáles salieron
+ * en el momento**, no reconstruirlo después contra la base si la corrida se
+ * corta a la mitad.
+ */
+export interface DeUnaOrden {
+  numero: number | string;
+  ok: boolean;
+  /**
+   * Sólo con `ok`: si el evento llegó a Google. `ok` quiere decir que el evento
+   * quedó guardado en el SdG; con `enGoogle: false` la invitación **todavía no
+   * salió** y queda para el cron de pendientes.
+   */
+  enGoogle?: boolean;
+  error?: string;
+}
+
 export async function barrerLasQueFaltan(
   admin: SupabaseClient,
   ahora: Date,
   tope: number = TOPE_POR_CORRIDA,
-  presupuesto?: PresupuestoDeGoogle
+  presupuesto?: PresupuestoDeGoogle,
+  alTerminarUna?: (d: DeUnaOrden) => void
 ): Promise<LoQueBarrio> {
   const r: LoQueBarrio = { creados: 0, quedaron: 0, fallos: [], fechasIlegibles: [] };
 
@@ -238,14 +258,25 @@ export async function barrerLasQueFaltan(
     if (r.creados >= tope || presupuesto?.agotado()) break;
     intentadas++;
     const numero = orden.ot_number ?? orden.id;
+    // Un aviso que lanza no puede frenar el barrido ni perder el resultado.
+    const avisar = (d: DeUnaOrden) => {
+      try { alTerminarUna?.(d); } catch { /* el aviso es de cortesía */ }
+    };
     try {
       const m = await mandarLaOTAlCalendario(
         admin, orden.id, { turno: null, invitadosExtra: [], pisar: false }, ahora
       );
-      if (m.ok) r.creados++;
-      else r.fallos.push(`OT ${numero}: ${m.error}`);
+      if (m.ok) {
+        r.creados++;
+        avisar({ numero, ok: true, enGoogle: m.enGoogle });
+      } else {
+        r.fallos.push(`OT ${numero}: ${m.error}`);
+        avisar({ numero, ok: false, error: m.error });
+      }
     } catch (e) {
-      r.fallos.push(`OT ${numero}: ${e instanceof Error ? e.message : String(e)}`);
+      const motivo = e instanceof Error ? e.message : String(e);
+      r.fallos.push(`OT ${numero}: ${motivo}`);
+      avisar({ numero, ok: false, error: motivo });
     }
   }
   r.quedaron = faltan.length - intentadas;

@@ -7,7 +7,7 @@ vi.mock("./escribirEnGoogle", async (original) => ({
 
 import { escribirEnGoogle } from "./escribirEnGoogle";
 import {
-  barrerLasQueFaltan, juntarLoAnotado, loQueSeAnotaDelBarrido, ordenesQueFaltan, TOPE_POR_CORRIDA,
+  barrerLasQueFaltan, juntarLoAnotado, loQueSeAnotaDelBarrido, ordenesQueFaltan, TOPE_POR_CORRIDA, type DeUnaOrden,
 } from "./barridoDeNuevas";
 import { baseEnMemoria, type Fila } from "./baseEnMemoria.testhelper";
 import { CASILLA_DE_MANTENIMIENTO } from "./evento";
@@ -330,6 +330,36 @@ describe("el barrido de las que faltan", () => {
     expect(r.fallos).toHaveLength(3);
     expect(r.quedaron).toBe(1);
     expect(b.tablas.agenda_eventos.map((e) => e.ot_id).sort()).toEqual([idDe(4), idDe(5)].sort());
+  });
+
+  it("avisa de cada una apenas la intenta, con su número, para quien necesite saber cuáles salieron", async () => {
+    const b = base([1, 2, 3].map((n) => orden(n, { especialidad: `ESP-${n}`, fecha_ejecucion: `2026-11-${String(n + 4).padStart(2, "0")}` })));
+    const desdeAca = b.cliente.from.bind(b.cliente);
+    const cliente = {
+      from: (tabla: string) => {
+        const q = desdeAca(tabla) as unknown as { insert: (c: Fila) => unknown };
+        if (tabla !== "agenda_eventos") return q;
+        const insertar = q.insert.bind(q);
+        q.insert = (c: Fila) =>
+          c.ot_id === idDe(2)
+            ? { then: (alCumplir: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { message: "boom" } }).then(alCumplir) }
+            : insertar(c);
+        return q;
+      },
+    } as unknown as typeof b.cliente;
+    const avisos: DeUnaOrden[] = [];
+
+    await barrerLasQueFaltan(cliente, AHORA, 25, undefined, (a) => avisos.push(a));
+
+    expect(avisos.map((a) => [a.numero, a.ok])).toEqual([[3001, true], [3002, false], [3003, true]]);
+    expect(avisos[1].error).toMatch(/boom/);
+    expect(avisos[0].enGoogle).toBe(true);
+  });
+
+  it("un aviso que lanza no frena el barrido", async () => {
+    const b = base([orden(1), orden(2, { especialidad: "CIVIL" })]);
+    const r = await barrerLasQueFaltan(b.cliente, AHORA, 25, undefined, () => { throw new Error("pantalla rota"); });
+    expect(r.creados).toBe(2);
   });
 
   it("si lo que lanza es una excepción, tampoco frena a las demás ni sale del barrido", async () => {

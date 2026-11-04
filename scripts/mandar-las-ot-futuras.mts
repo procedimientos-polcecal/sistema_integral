@@ -179,13 +179,53 @@ if (!mandar) {
 // ── DE VERDAD: lo único que escribe ──────────────────────────────────────────
 // Recorre exactamente lo que la corrida en seco mostró, porque es la misma
 // función que el barrido de las sincronizaciones.
-const r = await barrerLasQueFaltan(db, ahora, TOPE_POR_CORRIDA);
+//
+// **Dice qué mandó en el momento y no sólo cuántas**: una invitación no se
+// deshace, y si la corrida se corta a la mitad (el presupuesto de Google, una
+// caída) quien la corre tiene que poder leer en la pantalla cuáles salieron,
+// sin ponerse a consultar la base después. Por eso cada orden se imprime apenas
+// se intenta, y al final se junta todo de nuevo.
+const salieron: (number | string)[] = [];
+const pendientesEnGoogle: (number | string)[] = [];
+const noSalieron: { numero: number | string; error: string }[] = [];
+const numeroDe = (o: { ot_number: number | null; id: string }) => o.ot_number ?? o.id;
+
+const r = await barrerLasQueFaltan(db, ahora, TOPE_POR_CORRIDA, undefined, (d) => {
+  if (d.ok) {
+    salieron.push(d.numero);
+    if (d.enGoogle === false) pendientesEnGoogle.push(d.numero);
+    console.log(`  OT ${d.numero}: creada${d.enGoogle === false ? " en el SdG, pero NO llegó a Google todavía" : ""}`);
+  } else {
+    noSalieron.push({ numero: d.numero, error: d.error ?? "sin motivo" });
+    console.log(`  OT ${d.numero}: FALLÓ: ${d.error}`);
+  }
+});
+
+// Las que no se intentaron: lo que la selección de arriba tenía y el barrido no
+// llegó a tocar (tope o tiempo). Se saca de la lista de antes de empezar y no de
+// una nueva lectura, que ya las vería distinto.
+const intentadas = new Set<number | string>([...salieron, ...noSalieron.map((f) => f.numero)]);
+const sinIntentar = faltan.map((f) => numeroDe(f.orden)).filter((n) => !intentadas.has(n));
+
+console.log("");
 console.log(`Eventos creados: ${r.creados}`);
-if (r.quedaron > 0) {
-  console.log(`Quedaron ${r.quedaron} sin intentar (tope por corrida): volvé a correr el script o esperá a la sincronización.`);
+if (salieron.length > 0) console.log(`  Quedaron creadas: ${salieron.map((n) => `OT ${n}`).join(", ")}`);
+if (pendientesEnGoogle.length > 0) {
+  console.log(`  Creadas en el SdG pero todavía sin llegar a Google (se reintentan solas): ${pendientesEnGoogle.map((n) => `OT ${n}`).join(", ")}`);
 }
-if (r.fallos.length > 0) {
-  console.log("Fallos:");
-  for (const f of r.fallos) console.log(`  ${f}`);
+if (noSalieron.length > 0) {
+  console.log("Fallaron:");
+  for (const f of noSalieron) console.log(`  OT ${f.numero}: ${f.error}`);
+}
+if (r.fallos.length > noSalieron.length) {
+  // Un fallo que no es de una orden en particular (por ejemplo, no poder leer la base).
+  console.log("Otros fallos:");
+  for (const f of r.fallos.filter((x) => !noSalieron.some((n) => x.startsWith(`OT ${n.numero}:`)))) console.log(`  ${f}`);
+}
+if (sinIntentar.length > 0) {
+  console.log(
+    `Sin intentar (${sinIntentar.length}, tope por corrida o tiempo): ${sinIntentar.map((n) => `OT ${n}`).join(", ")}.` +
+      ` Volvé a correr el script o esperá a la sincronización.`
+  );
 }
 process.exit(r.fallos.length > 0 ? 1 : 0);
