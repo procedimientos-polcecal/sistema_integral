@@ -287,12 +287,12 @@ export async function mandarLaOTAlCalendario(
   pedido: PedidoDeMandar,
   ahora?: Date,
 ): Promise<ResultadoDeMandar>;
-
-/** Cuántos eventos de OT de esa especialidad hay ya ese día. */
-export async function huecosOcupados(
-  admin: SupabaseClient, fecha: string, clave: string,
-): Promise<number>;
 ```
+
+Contar cuántos eventos de esa especialidad hay ya ese día es **interno** de
+este módulo: `barrerLasQueFaltan` no cuenta por su cuenta, pasa `yaTomados` y
+deja que `mandarLaOTAlCalendario` haga la cuenta. Un export que nadie consume
+sobra.
 
 - [ ] **Step 1: Escribir los tests que fallan**
 
@@ -806,6 +806,20 @@ export interface DiaDelCalendario {
              equipo_raw: string | null; /** true si ese día es parte de la ventana, no el inicio */
              arrastre: boolean }[];
   gente: GenteDelDia;
+}
+
+/** Una fila de `ordenes_trabajo` como la lee la grilla. */
+export interface OrdenDelCalendario {
+  ot_number: number;
+  fecha_ejecucion: string | null;
+  fecha_ejecucion_pendiente: string | null;
+  fecha_fin: string | null;
+  especialidad: string | null;
+  tipo: string | null;
+  quien: string | null;
+  descripcion: string | null;
+  sector_raw: string | null;
+  equipo_raw: string | null;
 }
 
 /** Una OT ocupa todos los días de su ventana: del inicio a `fecha_fin` inclusive. */
