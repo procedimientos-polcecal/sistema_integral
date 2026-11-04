@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
@@ -9,6 +9,8 @@ import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
 import { celdasParaRegistrar, type RegistroDeOT } from "@/lib/mantenimiento/ordenes";
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
+import { exportarLoPendiente } from "@/lib/mantenimiento/sincronizar";
+import { esperasQueEntran } from "@/lib/mantenimiento/reintentoDePendientes";
 import {
   agruparEnOrdenes, descripcionDeLaOT, inicioDeLaQuincena, finDeLaQuincena,
   type RenglonParaAgrupar, type GrupoDeOT,
@@ -63,6 +65,14 @@ const TIPO_POR_DEFECTO = "PROGRAMADO";
  * de nuevo, y lo ya generado no se repite.
  */
 const TOPE_POR_CORRIDA = 25;
+
+/**
+ * Cuánto puede tardar la función. Estaba implícito y ahora se declara, porque
+ * el drenaje del final reparte **lo que la corrida no gastó creando órdenes**:
+ * el `after()` corre dentro de este mismo techo.
+ */
+export const maxDuration = 300;
+const TECHO_DE_LA_FUNCION_MS = maxDuration * 1000;
 
 interface DatosDelParte {
   numero: number;
@@ -204,6 +214,7 @@ export async function POST(request: Request) {
     });
   }
 
+  const inicio = Date.now();
   const creadas: Resumen[] = [];
   const actualizadas: Resumen[] = [];
   const problemas: string[] = [];
@@ -227,6 +238,36 @@ export async function POST(request: Request) {
 
     if (!resultado.ok) { problemas.push(resultado.error); continue; }
     (grupo.ot_existentes.length === 1 ? actualizadas : creadas).push(resultado.resumen);
+  }
+
+  // ── Y LAS COLUMNAS DEL MASTER, QUE NO SE ESCRIBEN EN EL MOMENTO ───────────
+  //
+  // De la K en adelante son **literales del master** —K FECHA DE CIERRE, M
+  // ESTADO, N CONTRATISTA, O HORAS— y para escribirlas la fila tiene que
+  // existir ahí, cosa que llega por `IMPORTRANGE` y tarda. El intento de
+  // `crearLaOT`, a medio segundo de crear la orden, **no puede salir nunca**:
+  // queda en `sheets_pendiente` y lo termina quien abra Órdenes o la
+  // sincronización —en la práctica, cada 3 a 5 horas—.
+  //
+  // Es el mismo agujero que tenía la generación del cuaderno de PIPARO y se
+  // cierra igual, con la misma función: medido el 03/11/2026, las OT creadas
+  // por `/api/mantenimiento/ordenes` —que sí reintenta— salían **12 de 12 en
+  // el primer intento, a los 21 s**, mientras las del cuaderno quedaban con las
+  // cuatro columnas vacías.
+  //
+  // Una pasada para toda la corrida y no una por orden: el master recibe las 25
+  // juntas. Si no alcanza el tiempo no pasa nada: la cola sigue siendo la red.
+  if (creadas.length + actualizadas.length > 0) {
+    const esperas = esperasQueEntran(TECHO_DE_LA_FUNCION_MS - (Date.now() - inicio));
+    if (esperas.length > 0) {
+      after(async () => {
+        for (const espera of esperas) {
+          await new Promise((r) => setTimeout(r, espera));
+          const siguen = await exportarLoPendiente(admin);
+          if (siguen.size === 0) return;
+        }
+      });
+    }
   }
 
   const quedaron = Math.max(0, grupos.length - TOPE_POR_CORRIDA);
@@ -301,7 +342,7 @@ function conNombres(grupo: GrupoDeOT, nombres: Nombres, contratista: string) {
     horas: grupo.horas,
     fecha_cierre: grupo.fecha_cierre,
     partes: [...new Set(grupo.detalle.map((d) => d.parte_numero))],
-    descripcion: descripcionDeLaOT(grupo, contratista),
+    descripcion: descripcionDeLaOT(grupo),
     /** Si ya existe, se le suman las horas nuevas en vez de crear otra. */
     ya_existe: grupo.ot_existentes.length === 1,
     conflicto: grupo.ot_existentes.length > 1,
@@ -369,7 +410,7 @@ async function actualizarLaOT(
     ? antes.fecha_cierre as string
     : grupo.fecha_cierre;
 
-  const descripcion = descripcionDeLaOT(grupo, contratista);
+  const descripcion = descripcionDeLaOT(grupo);
 
   const { data: actualizada, error } = await admin
     .from("ordenes_trabajo")
@@ -457,7 +498,7 @@ async function crearLaOT(
   const sector = nombres.sectores.get(grupo.sector_id);
   const sectorNombre = sector?.nombre ?? "";
   const equipoRaw = equipoParaLaPlanilla(grupo, nombres);
-  const descripcion = descripcionDeLaOT(grupo, contratista);
+  const descripcion = descripcionDeLaOT(grupo);
   const comoDecirla = `${grupo.actividad} · ${sectorNombre} · quincena del ${grupo.quincena}`;
 
   // Baja a propósito: es trabajo ya hecho. Una prioridad alta en una orden

@@ -522,27 +522,43 @@ export function agruparEnOrdenes(
 }
 
 /**
- * Qué va a decir la OT.
+ * Qué va a decir la OT: **la actividad y nada más**.
  *
- * Lleva **los textos originales de Candia con su número de parte**, que es lo
- * único que permite volver del sistema al papel, y deja dicho **de dónde
- * salen las horas**: las anotó quien cargó el parte, repartiendo el total
- * escrito entre los frentes del día. Eso último no es decoración — en seis
- * meses alguien va a leer "4 h" y va a querer saber quién las contó, y la
- * respuesta no es "las midió un reloj".
+ * ── QUÉ DECÍA ANTES, Y POR QUÉ CAMBIÓ (04/11/2026) ──────────────────────────
+ *
+ *     Limpieza — CANDIA. Quincena del 1/10 al 15/10. 24 h en total. Según los
+ *     partes diarios: Horno N°1 (parte 1301, 1/10, 4 h); Horno 1 (parte 1303,
+ *     5/10, 4 h); … Las horas de cada renglón las anotó quien cargó el parte
+ *     repartiendo el total escrito en la hoja…
+ *
+ * El contratista, las horas, el cierre y el estado **tienen columna propia en
+ * el master** —N, O, K y M—, y desde una celda de prosa no se filtra ni se
+ * suma. Lo que hacía falta no era repetirlos acá sino que esas columnas
+ * llegaran llenas, que es lo que arregla el drenaje de la ruta.
+ *
+ * ── POR QUÉ ALCANZA CON LA ACTIVIDAD ────────────────────────────────────────
+ *
+ * **Es lo que la planilla ya dice.** Las OT de CANDIA cargadas a mano —las que
+ * esto viene a reemplazar— tienen exactamente esta forma, una por sector:
+ * «Limpieza general», «Corte de pasto», «Riego en planta», «Limpieza en
+ * hidratación». No se está inventando un formato: se está dejando de agregar
+ * uno.
+ *
+ * Y no hace falta ningún denominador común como en el cuaderno de PIPARO:
+ * acá el grupo **se arma por la actividad normalizada**, así que todos sus
+ * renglones dicen la misma. Medido sobre las 19 OT generadas: **cero tienen más
+ * de una forma de escribirla**.
+ *
+ * ── LO QUE SE PIERDE, DICHO ─────────────────────────────────────────────────
+ *
+ * Los lugares de Candia con su número de parte —«Horno N°1 (parte 1301…)»—
+ * salen de la planilla, y **10 de las 19 OT tienen más de un lugar**. No se
+ * pierden del sistema: cada renglón vive en `mant_partes_contratista_renglones`
+ * con su `lugar_raw` y su parte, enlazado a esta misma OT. Lo que se pierde es
+ * poder volver al papel **mirando sólo la planilla**, y eso fue a pedido.
  */
-export function descripcionDeLaOT(grupo: GrupoDeOT, contratista: string): string {
-  const dias = grupo.detalle
-    .map((d) => `${d.lugar_raw.trim()} (parte ${d.parte_numero}, ${fechaCorta(d.fecha)}, ${d.horas} h)`)
-    .join("; ");
-
-  return (
-    `${grupo.actividad} — ${contratista}. ` +
-    `Quincena del ${fechaCorta(grupo.quincena)} al ${fechaCorta(finDeLaQuincena(grupo.quincena))}. ` +
-    `${grupo.horas} h en total. Según los partes diarios: ${dias}. ` +
-    `Las horas de cada renglón las anotó quien cargó el parte repartiendo el ` +
-    `total escrito en la hoja, así que no son una medición por frente de trabajo.`
-  );
+export function descripcionDeLaOT(grupo: GrupoDeOT): string {
+  return grupo.actividad.trim();
 }
 
 /** "2026-10-01" → "1/10". El día y el mes, que es como se nombra una fecha acá. */

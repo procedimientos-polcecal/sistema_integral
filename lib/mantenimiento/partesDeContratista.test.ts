@@ -407,7 +407,7 @@ describe("las OT que salen de los partes", () => {
 });
 
 describe("lo que dice la OT", () => {
-  it("lleva los textos de Candia con su numero de parte, para volver al papel", () => {
+  it("dice la actividad y nada más", () => {
     const { grupos } = agruparEnOrdenes([
       {
         id: "a", parte_numero: 1301, fecha: "2026-10-01", actividad: "Limpieza",
@@ -418,24 +418,30 @@ describe("lo que dice la OT", () => {
         lugar_raw: "Bajo cintas", sector_id: "s3", equipo_id: null, horas: 4,
       },
     ]);
-    const texto = descripcionDeLaOT(grupos[0], "CANDIA");
-    expect(texto).toContain("CANDIA");
-    expect(texto).toContain("Planta N°3 zaranda");
-    expect(texto).toContain("parte 1301");
-    expect(texto).toContain("Bajo cintas");
-    expect(texto).toContain("8 h");
+    expect(descripcionDeLaOT(grupos[0])).toBe("Limpieza");
   });
 
   /**
-   * De donde salen las horas, dicho en la propia OT. En seis meses alguien va
-   * a leer "4 h" y va a querer saber quien las conto.
+   * El contratista, las horas, el cierre y el estado tienen columna propia en
+   * el master —N, O, K y M—. Desde una celda de prosa no se filtra ni se suma,
+   * así que repetirlos acá sólo volvía ilegible la columna.
    */
-  it("deja dicho de donde salen las horas", () => {
+  it("no lleva el contratista, ni la quincena, ni las horas, ni los partes", () => {
     const { grupos } = agruparEnOrdenes([{
       id: "a", parte_numero: 1301, fecha: "2026-10-01", actividad: "Limpieza",
       lugar_raw: "Horno N°1", sector_id: "s1", equipo_id: null, horas: 4,
     }]);
-    expect(descripcionDeLaOT(grupos[0], "CANDIA")).toContain("quien cargó el parte");
+    const texto = descripcionDeLaOT(grupos[0]);
+    expect(texto).not.toContain("CANDIA");
+    expect(texto).not.toMatch(/Quincena|parte 1301|4 h|quien cargó el parte/);
+  });
+
+  it("la actividad sale limpia de espacios, porque es toda la descripción", () => {
+    const { grupos } = agruparEnOrdenes([{
+      id: "a", parte_numero: 1301, fecha: "2026-10-01", actividad: "  Corte de pasto  ",
+      lugar_raw: "Rincón", sector_id: "s1", equipo_id: null, horas: 4,
+    }]);
+    expect(descripcionDeLaOT(grupos[0])).toBe("Corte de pasto");
   });
 });
 

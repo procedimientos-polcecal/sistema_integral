@@ -206,26 +206,6 @@ y a que la Agenda tenga cómo destrabarlo.
 - Next.js 16: leer la guía que corresponda en `node_modules/next/dist/docs/` antes
   de escribir código.
 
-## Lo que ya está probado contra Google
-
-Hecho el 02/11/2026, antes de escribir una línea de código, impersonando
-`procedimientos@polcecal.com` sobre su calendario real (un evento sin invitados,
-creado y borrado):
-
-| | |
-|---|---|
-| API de Calendar habilitada en `mantenimientopp` | sí |
-| Delegación de dominio para `https://www.googleapis.com/auth/calendar` | sí, con el client ID `101499089090401417948` |
-| Las catorce direcciones son casillas y no alias | sí — las catorce entregan token impersonando |
-| Crear, leer, mover y borrar un evento | los cuatro, HTTP 200 / 200 / 200 / 204 |
-| **El dueño del evento es la casilla impersonada** | sí: `organizer` y `creator` dieron `procedimientos@polcecal.com` |
-| La hora, con la zona escrita explícita | `2026-11-03T08:00:00-03:00`, correcta |
-
-**Y una cosa que no se deduce y que cambia cómo se detecta el borrado: un evento
-borrado no desaparece.** Google lo sigue devolviendo con HTTP **200** y
-`status: "cancelled"`. Buscar un 404 —que es lo primero que uno escribe— no
-detecta nada. La divergencia por borrado se lee del `status`.
-
 ## Las decisiones que tomó el usuario
 
 1. Se arranca por lo manual, no por el volcado automático.
@@ -262,16 +242,9 @@ Van marcadas como mías para que se puedan discutir leyendo:
   lo mínimo que hace útil una reunión y lo máximo que no estorba.
 - **Quién edita y borra**: sólo quien lo creó. Un invitado lo ve y no lo toca.
 - **Zona horaria**: `America/Argentina/Buenos_Aires`, escrita explícita en cada
-  evento. Esto **no es prolijidad y no se puede sacar.** Medido el 02/11/2026
-  contra los catorce calendarios reales: **nueve están en `UTC`** —`compras@`,
-  `gerencia@`, `laboratorio@`, `maximilianolenzetti@`, `nicolaslenzetti@`,
-  `produccion@`, `soporte.administracion@`, `soporte.cantera@` y
-  `soporte.laboratorio@`—, cuatro en `America/Argentina/Buenos_Aires` y
-  `despacho@` en `America/Argentina/Cordoba`. Un evento mandado sin zona se
-  interpreta con la del calendario, así que a esas nueve personas una OT del
-  turno 4-12 les caería **a la una de la mañana**. El servidor de Vercel también
-  corre en UTC, y el sistema ya tiene `horaEnArgentina()` en
-  `lib/core/fechas.ts`.
+  evento. El servidor de Vercel corre en UTC y el sistema ya tiene
+  `horaEnArgentina()` en `lib/core/fechas.ts`; dejar que la zona se infiera es
+  cómo se pierden tres horas.
 - **Recordatorios**: los que trae Google por defecto. El SdG no los configura.
 - **Fallo de escritura**: la misma regla que las planillas —se guarda **lo que
   dijo Google, sin traducir**, y se le dice a quien hizo la acción. Nunca un
