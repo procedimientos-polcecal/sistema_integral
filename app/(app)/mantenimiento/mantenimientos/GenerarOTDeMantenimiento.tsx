@@ -178,11 +178,14 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
               </label>
             )}
 
-            {/* Va pegada a la de inicio y con su misma condición: son el par
-                de una ventana estimada, y preguntar cuándo termina algo cuyo
-                comienzo no se preguntó es preguntar por la mitad. Como es
-                opcional, nunca entra en `preguntas` por sí sola. */}
-            {preguntas.includes("la fecha de inicio") && (
+            {/* Con su propia condición desde el 04/11/2026, cuando pasó a ser
+                obligatoria. Antes colgaba de la de inicio con el argumento de
+                que eran el par de una ventana y que, siendo opcional, nunca
+                entraba sola en `preguntas`. Eso dejó de ser cierto **y dejaba
+                el formulario sin salida**: el mantenimiento programado sabe su
+                `next_date`, así que la de inicio no se pregunta, y la de fin
+                —ahora exigida— no se habría dibujado nunca. */}
+            {preguntas.includes("la fecha de fin estimada") && (
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-slate-500">
                   Fecha de fin (estimada)
@@ -241,6 +244,7 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
 /** Los que este formulario sabe dibujar, con el nombre que les da la regla. */
 const CAMPOS_QUE_DIBUJA = [
   "la especialidad", "quién lo realiza", "la fecha de inicio",
+  "la fecha de fin estimada",
   // Éstos los nombra la regla pero los contesta el mantenimiento; si faltan, se
   // avisa arriba con `loQueNoSeArreglaAca` en vez de dibujar un campo.
   "el sector", "el equipo", "la descripción", "el tipo de trabajo",

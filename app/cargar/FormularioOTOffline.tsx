@@ -332,8 +332,12 @@ export default function FormularioOTOffline({
             className="input"
           />
         </F>
-        {/* Estimada, y por eso opcional: la real es la de cierre. */}
-        <F label="Fecha de fin (estimada)">
+        {/* Estimada —la real es la de cierre— y obligatoria desde el
+            04/11/2026. Ojo con esta pantalla en particular: una carga encolada
+            ANTES de esa fecha vuelve sin la clave y el servidor la va a
+            rechazar nombrando el campo. Es visible y se arregla completándolo;
+            medido ese día, las 13 cargas de la tabla estaban resueltas. */}
+        <F label="Fecha de fin (estimada)" required>
           <input
             type="date"
             value={form.fecha_fin}

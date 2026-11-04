@@ -30,13 +30,35 @@ export interface DatosDelAltaDeOT extends DatosDelCierre {
    */
   fecha_ejecucion: string | null | undefined;
   /**
-   * Cuándo se estima que **termina**, y es opcional a propósito.
+   * Cuándo se estima que **termina**. Obligatoria desde el 04/11/2026.
    *
    * No es la de cierre: ésa es la real, y ésta la estimación que se carga al
-   * crear la orden. Quien carga una OT no siempre sabe cuándo termina, y un
-   * campo obligatorio que no se sabe se llena con cualquier cosa.
+   * crear la orden. **Nació opcional** con el argumento de que quien carga una
+   * OT no siempre sabe cuándo termina y un campo obligatorio que no se sabe se
+   * llena con cualquier cosa. Se pidió al revés dos días después, y el
+   * argumento viejo queda escrito acá porque es el que hay que contestar si
+   * alguien propone sacarla: lo que se gana es que toda orden cargada a mano
+   * tenga ventana, y lo que se arriesga es una fecha puesta de compromiso.
+   *
+   * **Obligatoria sólo donde completa una persona**, que es lo que la hace
+   * sostenible: los cuatro generadores automáticos —los periódicos, el
+   * cuaderno, los partes de contratista y los grupos del cuaderno— arman el
+   * registro sin pasar por `loQueFaltaParaCrear`, así que ninguno se cayó al
+   * volverla obligatoria. El de los periódicos dice por qué en su propio
+   * comentario: «el periódico sabe cuándo arranca, no cuánto dura».
+   *
+   * **La clave es obligatoria en el tipo aunque el valor pueda faltar**, y eso
+   * no es una sutileza: el día que se volvió obligatoria, la ruta del alta
+   * seguía armando el objeto sin nombrarla, así que la regla la veía
+   * `undefined` y **habría rechazado todas las órdenes del sistema**. Con la
+   * clave opcional, `tsc` no decía nada — es la misma forma del bug del
+   * 19/10/2026, cuando la regla creció y el botón de los avisos se quedó atrás
+   * en silencio. Exigir la clave y permitir el valor vacío deja que el
+   * compilador nombre a quien se olvide, y que la regla nombre a quien la
+   * mande vacía. Una carga sin señal encolada antes de que el campo existiera
+   * vuelve sin ella: llega como `undefined` y recibe un 400 que la nombra.
    */
-  fecha_fin?: string | null | undefined;
+  fecha_fin: string | null | undefined;
 }
 
 /**
@@ -52,6 +74,9 @@ const IMPRESCINDIBLES: readonly [keyof DatosDelAltaDeOT, string][] = [
   ["tipo", "el tipo de trabajo"],
   ["quien", "quién lo realiza"],
   ["fecha_ejecucion", "la fecha de inicio"],
+  // Las dos juntas y en este orden: son el par de una ventana estimada, y en
+  // los cuatro formularios están una al lado de la otra.
+  ["fecha_fin", "la fecha de fin estimada"],
 ];
 
 /**

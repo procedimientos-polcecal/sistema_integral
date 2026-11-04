@@ -382,9 +382,13 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
             <F label="Fecha de inicio" required>
               <input type="date" value={form.fecha_ejecucion} onChange={e => f("fecha_ejecucion", e.target.value)} className="input" />
             </F>
-            {/* Estimada, y por eso opcional: quien carga la orden no siempre
-                sabe cuándo termina. La real es la de cierre. */}
-            <F label="Fecha de fin (estimada)">
+            {/* Estimada —la real es la de cierre— y obligatoria desde el
+                04/11/2026, a pedido. Nació opcional dos días antes con el
+                argumento de que quien carga la orden no siempre sabe cuándo
+                termina; lo que se gana al exigirla es que toda OT cargada a
+                mano tenga ventana. Quién la exige es `loQueFaltaParaCrear`, no
+                este `required`, que sólo pinta el asterisco. */}
+            <F label="Fecha de fin (estimada)" required>
               <input type="date" value={form.fecha_fin} onChange={e => f("fecha_fin", e.target.value)} className="input" />
             </F>
             <F label="Fecha cierre">

@@ -309,6 +309,7 @@ export async function POST(request: Request) {
   // único que puede llamar a esta ruta.
   const falta = loQueFaltaParaCrear({
     sector_id, equipment_id, descripcion, especialidad, tipo, quien, fecha_ejecucion,
+    fecha_fin,
     fecha_cierre, horas, contratista, operario_1, operario_2, operario_3,
   });
   if (falta.length > 0) {
