@@ -133,6 +133,32 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
   async function mandarAlCalendario(itemId?: string) {
     setMandando(itemId ?? "plan");
     setErrorDelEnvio(null);
+    // Lo que había en pantalla es de una corrida anterior: si ésta falla, un
+    // renglón viejo «Mandada · 05/11» seguiría diciendo algo que esta corrida
+    // no produjo. Se limpia el mapa entero, o la entrada de ese ítem.
+    setResultados(prev => {
+      if (!itemId) return {};
+      const { [itemId]: _viejo, ...resto } = prev;
+      return resto;
+    });
+    // Sin una respuesta del servidor no se sabe qué llegó a salir: la ruta sigue
+    // recorriendo las órdenes aunque el cliente se haya desconectado, y «no se
+    // pudo conectar» se lee como «no pasó nada». Es el mismo aviso en las dos
+    // ramas que pueden quedar sin saber.
+    const PUEDE_HABER_SALIDO = itemId
+      ? " Revisá en el calendario antes de volver a mandar: puede que ya haya salido."
+      : " Revisá en el calendario antes de volver a mandar: puede que algunas órdenes ya hayan salido.";
+    const fallo = (motivo: string) => {
+      if (itemId) {
+        setResultados(prev => ({ ...prev, [itemId]: {
+          item_id: itemId, ot_number: null, estado: "fallo", fecha: null,
+          fecha_corrida: false, mensaje: motivo, advertencias: [],
+        } }));
+      } else {
+        // Sin respuesta no se inventan renglones.
+        setErrorDelEnvio(motivo);
+      }
+    };
     try {
       const res = await fetch(`/api/mantenimiento/planificacion/${plan.id}/calendario`, {
         method: "POST",
@@ -143,24 +169,15 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
       const data = await res.json().catch(() => null) as
         { error?: string; resultados?: ResultadoDeItem[] } | null;
       if (!res.ok || !data?.resultados) {
-        const motivo = data?.error ?? `El servidor respondió ${res.status}.`;
-        if (itemId) {
-          setResultados(prev => ({ ...prev, [itemId]: {
-            item_id: itemId, ot_number: null, estado: "fallo", fecha: null,
-            fecha_corrida: false, mensaje: motivo, advertencias: [],
-          } }));
-        } else {
-          // Sin respuesta no se sabe qué ítems llegaron a salir: se dice, y no se inventan renglones.
-          setErrorDelEnvio(
-            `${motivo} Revisá cada orden antes de volver a mandar: puede que algunas ya hayan salido.`
-          );
-        }
+        // Un error con cuerpo es la ruta diciendo qué pasó (403, 404, 400: no
+        // salió nada). Sin cuerpo, no se sabe.
+        fallo(data?.error ?? `El servidor respondió ${res.status}.${PUEDE_HABER_SALIDO}`);
         return;
       }
       const nuevos = Object.fromEntries(data.resultados.map(r => [r.item_id, r]));
       setResultados(prev => itemId ? { ...prev, ...nuevos } : nuevos);
     } catch (e) {
-      setErrorDelEnvio(`No se pudo conectar con el servidor: ${e instanceof Error ? e.message : String(e)}`);
+      fallo(`No se pudo conectar con el servidor: ${e instanceof Error ? e.message : String(e)}.${PUEDE_HABER_SALIDO}`);
     } finally {
       setMandando(null);
     }
@@ -178,7 +195,8 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
         `Se van a mandar hasta ${invitaciones} invitaciones por correo: ` +
         `${items.length} ${items.length === 1 ? "orden" : "órdenes"} × ${invitados} invitados.\n` +
         `Las órdenes cerradas o con fecha pasada se saltean y no invitan a nadie. ` +
-        `Si el plan es para un día posterior a la fecha de una orden, se le corre la fecha.`,
+        `A las órdenes creadas desde el SdG, si el plan es para un día posterior a su fecha, se les corre la fecha; ` +
+        `a las que entraron por el formulario no, y salen en la suya.`,
       confirmText: "Mandar",
     });
     if (ok) await mandarAlCalendario();
