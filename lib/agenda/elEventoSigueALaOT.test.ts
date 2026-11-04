@@ -161,15 +161,20 @@ describe("planDelEvento", () => {
     expect(p).toEqual({ tipo: "nada", mover: null, aviso: null, volverAAlertar: false });
   });
 
-  it("el aviso del tope no es de esta lógica y no se limpia, ni con nada que hacer ni al mover", () => {
+  it("el aviso del tope no es de esta lógica mientras el evento no se mueva", () => {
     // Lo escribe `mandarLaOTAlCalendario` y en el camino automático es el único
     // canal: nadie lee la advertencia que devuelve. Un evento de OT en estado
     // normal —misma fecha, sin divergencia— perdía esa mitad en la primera pasada.
     const quieto = planDelEvento(fila({ aviso: AVISO_DE_TOPE }, { fecha_ejecucion: "2026-11-03" }));
     expect(quieto).toEqual({ tipo: "nada", mover: null, aviso: undefined, volverAAlertar: false });
 
-    // Y moverlo de día tampoco se lo lleva: sigue compartiendo las 20:00.
-    expect(planDelEvento(fila({ aviso: AVISO_DE_TOPE })).aviso).toBeUndefined();
+    // Al mover sí es de esta lógica, porque es ella la que calcula el hueco del
+    // día nuevo: con el día vacío la orden deja de compartir las 20:00 y la
+    // frase deja de ser cierta. (Antes de que el barrido recalculara, acá se
+    // esperaba `undefined`: el hueco no se tocaba y esta lógica no sabía nada.)
+    expect(planDelEvento(fila({ aviso: AVISO_DE_TOPE })).aviso).toBeNull();
+    // Y si en el día nuevo vuelve a topear, se vuelve a escribir.
+    expect(planDelEvento(fila({ aviso: null }), 9).aviso).toBe(AVISO_DE_TOPE);
   });
 });
 
@@ -357,13 +362,22 @@ describe("seguirALasOT", () => {
     expect(viejo.hechos.find((h) => h.op === "update")?.columnas).toMatchObject({ aviso: null });
   });
 
-  it("el aviso del tope sobrevive una pasada: es la única copia que lee quien mira el evento", async () => {
+  it("el aviso del tope sobrevive una pasada que no mueve el evento: es la única copia que lee quien lo mira", async () => {
     vi.mocked(actualizarEvento).mockResolvedValue(ENGOOGLE("2026-11-10T08:00:00-03:00", "2026-11-10T09:30:00-03:00"));
 
-    const delTope = clienteFalso({ eventos: [FILA_DE_EVENTO({ aviso: AVISO_DE_TOPE })] });
+    // La orden sigue en el día del evento: no hay hueco que recalcular, así que
+    // esta lógica no sabe si el aviso sigue siendo cierto y no lo toca. (Cuando
+    // el evento sí se mueve, el hueco lo decide ella y entonces sí lo escribe o
+    // lo saca: «al mover un evento de OT a otra fecha».)
+    const delTope = clienteFalso({
+      eventos: [FILA_DE_EVENTO({
+        aviso: AVISO_DE_TOPE,
+        ordenes_trabajo: { ot_number: 2900, fecha_ejecucion: "2026-11-03", fecha_ejecucion_pendiente: null, fecha_cierre: null },
+      })],
+    });
     await seguirALasOT(delTope.cliente);
 
-    expect(delTope.hechos.find((h) => h.op === "update")?.columnas).not.toHaveProperty("aviso");
+    expect(delTope.hechos.filter((h) => h.op === "update")).toEqual([]);
   });
 
   it("con Google lento corta a los 60 s: lo que falta queda para la próxima corrida", async () => {
@@ -481,6 +495,145 @@ describe("seguirALasOT", () => {
     const { cliente } = clienteFalso({ falla: { leer: "no existe la tabla" } });
     const r = await seguirALasOT(cliente);
     expect(r.fallos[0]).toContain("no existe la tabla");
+  });
+});
+
+// ── El hueco se recalcula en la fecha nueva ─────────────────────────────────
+
+/**
+ * El instante que guarda la base para una hora de pared de Argentina. Se arma
+ * sumando tres horas y sin `Date`: Argentina no tiene horario de verano y
+ * ninguna hora del taller más tres cruza la medianoche.
+ */
+const enArgentina = (dia: string, hora: string) => {
+  const [h, m] = hora.split(":").map(Number);
+  return `${dia}T${String(h + 3).padStart(2, "0")}:${String(m).padStart(2, "0")}:00+00:00`;
+};
+
+/** Un evento de OT que hoy está en `dia` a `hora` y cuya orden pide el día `destino`. */
+const EVENTO_EN = (p: {
+  n: number; dia: string; hora: string; destino: string;
+  turno?: string; especialidad?: string | null; aviso?: string | null;
+}) =>
+  FILA_DE_EVENTO({
+    id: `${String(p.n).padStart(8, "0")}-89ab-cdef-0123-456789abcdef`,
+    inicio: enArgentina(p.dia, p.hora),
+    turno: p.turno ?? "8-16",
+    aviso: p.aviso ?? null,
+    ordenes_trabajo: {
+      ot_number: 2900 + p.n, fecha_ejecucion: p.destino, fecha_ejecucion_pendiente: null,
+      fecha_cierre: null, especialidad: p.especialidad ?? "MECÁNICO",
+    },
+  });
+
+/** El horario con el que quedó la fila del evento `n`, en hora de Argentina. */
+const horarioDe = (hechos: Hecho[], n: number): string | undefined => {
+  const id = `${String(n).padStart(8, "0")}-89ab-cdef-0123-456789abcdef`;
+  const u = hechos.find((h) => h.op === "update" && h.donde === id);
+  return u?.columnas?.inicio as string | undefined;
+};
+
+describe("al mover un evento de OT a otra fecha", () => {
+  beforeEach(() => {
+    vi.mocked(actualizarEvento).mockResolvedValue(
+      ENGOOGLE("2026-11-20T08:00:00-03:00", "2026-11-20T09:30:00-03:00")
+    );
+  });
+
+  /** Lo que faltaba: llegaba con la hora vieja y se encimaba con otra de su especialidad. */
+  it("recalcula el hueco en la fecha nueva y no conserva la hora vieja", async () => {
+    // Era la tercera mecánica del 6 (11:00) y el 20 no tiene ninguna.
+    const { cliente, hechos } = clienteFalso({
+      eventos: [EVENTO_EN({ n: 1, dia: "2026-11-06", hora: "11:00", destino: "2026-11-20" })],
+    });
+    await seguirALasOT(cliente);
+    expect(horarioDe(hechos, 1)).toBe("2026-11-20T11:00:00.000Z"); // 08:00 de Argentina
+  });
+
+  it("si la fecha nueva ya tiene una de su especialidad, cae 1:30 despues", async () => {
+    const { cliente, hechos } = clienteFalso({
+      eventos: [
+        // Ya está en el 20 y su orden también dice el 20: no se mueve, pero ocupa.
+        EVENTO_EN({ n: 1, dia: "2026-11-20", hora: "08:00", destino: "2026-11-20" }),
+        EVENTO_EN({ n: 2, dia: "2026-11-06", hora: "08:00", destino: "2026-11-20" }),
+      ],
+    });
+    await seguirALasOT(cliente);
+    expect(horarioDe(hechos, 1)).toBeUndefined();
+    expect(horarioDe(hechos, 2)).toBe("2026-11-20T12:30:00.000Z"); // 09:30
+  });
+
+  it("una de otra especialidad en la fecha nueva no le corre el hueco", async () => {
+    const { cliente, hechos } = clienteFalso({
+      eventos: [
+        EVENTO_EN({ n: 1, dia: "2026-11-20", hora: "08:00", destino: "2026-11-20", especialidad: "ELÉCTRICO" }),
+        EVENTO_EN({ n: 2, dia: "2026-11-06", hora: "08:00", destino: "2026-11-20" }),
+      ],
+    });
+    await seguirALasOT(cliente);
+    expect(horarioDe(hechos, 2)).toBe("2026-11-20T11:00:00.000Z"); // 08:00
+  });
+
+  /** El turno que eligió una persona no se pierde al moverse de fecha. */
+  it("un evento del turno 4-12 se recalcula desde las 04:00, no desde las 08:00", async () => {
+    const { cliente, hechos } = clienteFalso({
+      eventos: [
+        // Mecánica del 20 pero del turno de 8: está en otro grupo y no lo corre.
+        EVENTO_EN({ n: 1, dia: "2026-11-20", hora: "08:00", destino: "2026-11-20" }),
+        EVENTO_EN({ n: 2, dia: "2026-11-06", hora: "04:00", destino: "2026-11-20", turno: "4-12" }),
+      ],
+    });
+    await seguirALasOT(cliente);
+    expect(horarioDe(hechos, 2)).toBe("2026-11-20T07:00:00.000Z"); // 04:00
+  });
+
+  it("dos que se mudan al mismo dia no caen una encima de la otra", async () => {
+    const { cliente, hechos } = clienteFalso({
+      eventos: [
+        EVENTO_EN({ n: 1, dia: "2026-11-06", hora: "08:00", destino: "2026-11-20" }),
+        EVENTO_EN({ n: 2, dia: "2026-11-06", hora: "09:30", destino: "2026-11-20" }),
+      ],
+    });
+    await seguirALasOT(cliente);
+    expect(horarioDe(hechos, 1)).toBe("2026-11-20T11:00:00.000Z"); // 08:00
+    expect(horarioDe(hechos, 2)).toBe("2026-11-20T12:30:00.000Z"); // 09:30
+  });
+
+  it("el evento no se cuenta a si mismo al recalcular", async () => {
+    // Mover del 6 al 20 con el día 20 vacío tiene que dar el primer hueco.
+    const { cliente, hechos } = clienteFalso({
+      eventos: [EVENTO_EN({ n: 1, dia: "2026-11-06", hora: "08:00", destino: "2026-11-20" })],
+    });
+    await seguirALasOT(cliente);
+    expect(horarioDe(hechos, 1)).toBe("2026-11-20T11:00:00.000Z"); // 08:00, no 09:30
+  });
+
+  it("si en la fecha nueva el hueco topea, el evento queda con AVISO_DE_TOPE", async () => {
+    // Nueve mecánicas del turno de 8 ya puestas en el 20: la décima comparte las 20:00.
+    const ocupantes = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) =>
+      EVENTO_EN({ n, dia: "2026-11-20", hora: "08:00", destino: "2026-11-20" })
+    );
+    const { cliente, hechos } = clienteFalso({
+      eventos: [...ocupantes, EVENTO_EN({ n: 10, dia: "2026-11-06", hora: "08:00", destino: "2026-11-20" })],
+    });
+    await seguirALasOT(cliente);
+    expect(horarioDe(hechos, 10)).toBe("2026-11-20T23:00:00.000Z"); // 20:00
+    const u = hechos.find((h) => h.op === "update" && h.donde?.startsWith("00000010"));
+    expect(u?.columnas).toMatchObject({ aviso: AVISO_DE_TOPE });
+  });
+
+  /**
+   * La otra mitad: ahora que el barrido recalcula, él sabe si la orden sigue
+   * contra el tope. Dejar el aviso sería dejar escrita una frase que dejó de
+   * ser cierta, que es lo que esta lógica limpia.
+   */
+  it("si el hueco nuevo no topea, el aviso del tope que ya no corresponde se limpia", async () => {
+    const { cliente, hechos } = clienteFalso({
+      eventos: [EVENTO_EN({ n: 1, dia: "2026-11-06", hora: "20:00", destino: "2026-11-20", aviso: AVISO_DE_TOPE })],
+    });
+    await seguirALasOT(cliente);
+    const u = hechos.find((h) => h.op === "update");
+    expect(u?.columnas).toMatchObject({ inicio: "2026-11-20T11:00:00.000Z", aviso: null });
   });
 });
 

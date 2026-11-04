@@ -35,6 +35,9 @@ const aMinutos = (hhmm: string): number => {
 const dos = (n: number) => String(n).padStart(2, "0");
 const aHoraDePared = (minutos: number) => `${dos(Math.floor(minutos / 60))}:${dos(minutos % 60)}`;
 
+/** Una hora de pared `hh:mm` que existe en el reloj. */
+const ES_HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 /**
  * El horario de una OT que tiene `ocupados` órdenes de su misma especialidad ya
  * puestas ese día, o `null` si la fecha no es un día válido (`AAAA-MM-DD`).
@@ -48,16 +51,28 @@ const aHoraDePared = (minutos: number) => `${dos(Math.floor(minutos / 60))}:${do
  * `horarioDeLaOT`: el servidor corre en UTC y una `Date` metería su zona en una
  * hora que es de pared de Argentina. El fin más alto es 21:30, así que ningún
  * horario cruza la medianoche. Sale sin zona (`2026-11-06T08:00:00`).
+ *
+ * **`arranque` casi siempre es `HORA_DE_ARRANQUE`**, que es lo que apila una OT
+ * que nace sola. Lo recibe por el barrido (`elEventoSigueALaOT`): cuando una
+ * orden cambia de fecha, su evento se vuelve a ubicar **desde el turno que
+ * tiene guardado**, que puede arrancar a las 04:00 o a las 12:00. El tope de
+ * reloj es el mismo, así que desde las 04:00 entran once y desde las 12:00
+ * seis. Lo que no acompaña es el texto de `AVISO_DE_TOPE`, que dice «nueve»:
+ * es el número del arranque de las 08:00, y se dejó así a propósito —el camino
+ * automático, que es donde ese aviso es el único canal, siempre arranca ahí—.
  */
 export function horarioApilado(
   fecha: string,
-  ocupados: number
+  ocupados: number,
+  arranqueDelDia: string = HORA_DE_ARRANQUE
 ): { inicio: string; fin: string; topeado: boolean } | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || instanteDe(`${fecha}T00:00:00`) === null) return null;
   if (!Number.isInteger(ocupados) || ocupados < 0) return null;
+  // Sin esto, un arranque mal formado daría `NaN:NaN` y el evento quedaría ilegible.
+  if (!ES_HORA.test(arranqueDelDia)) return null;
 
   const tope = aMinutos(TOPE_DE_ARRANQUE);
-  const sinTopear = aMinutos(HORA_DE_ARRANQUE) + ocupados * DURACION_OT_MINUTOS;
+  const sinTopear = aMinutos(arranqueDelDia) + ocupados * DURACION_OT_MINUTOS;
   const topeado = sinTopear > tope;
   const arranque = topeado ? tope : sinTopear;
 

@@ -57,6 +57,37 @@ describe("donde cae una OT en su dia", () => {
   });
 });
 
+describe("el arranque no siempre es las 08:00", () => {
+  /** El barrido reubica desde el turno guardado del evento, no desde las 08:00. */
+  it("desde las 04:00 la primera cae a las 04:00 y la segunda a las 05:30", () => {
+    expect(horarioApilado("2026-11-06", 0, "04:00")).toEqual({
+      inicio: "2026-11-06T04:00:00", fin: "2026-11-06T05:30:00", topeado: false,
+    });
+    expect(horarioApilado("2026-11-06", 1, "04:00")?.inicio).toBe("2026-11-06T05:30:00");
+  });
+
+  it("desde las 12:00 apila igual", () => {
+    expect(horarioApilado("2026-11-06", 2, "12:00")?.inicio).toBe("2026-11-06T15:00:00");
+  });
+
+  /** El tope es de reloj y no de cantidad: desde las 04:00 entran once y no nueve. */
+  it("el tope de las 20:00 es el mismo, arranque donde arranque", () => {
+    const once = horarioApilado("2026-11-06", 10, "04:00");
+    expect(once?.inicio).toBe("2026-11-06T19:00:00");
+    expect(once?.topeado).toBe(false);
+
+    const doce = horarioApilado("2026-11-06", 11, "04:00");
+    expect(doce?.inicio).toBe("2026-11-06T20:00:00");
+    expect(doce?.topeado).toBe(true);
+  });
+
+  it("un arranque que no es una hora de pared no produce horario", () => {
+    for (const a of ["", "8", "08:00:00", "25:00", "ocho"]) {
+      expect(horarioApilado("2026-11-06", 0, a)).toBeNull();
+    }
+  });
+});
+
 describe("como se agrupa el apilado", () => {
   it("la especialidad decide el grupo", () => {
     expect(claveDeApilado("MECÁNICO")).toBe(claveDeApilado("MECÁNICO"));
