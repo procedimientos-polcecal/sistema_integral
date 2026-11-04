@@ -761,7 +761,7 @@ las dos cosas se arregla con código de la Agenda:
 - **`mant_personal_taller` está vacía**: cero personas, cero semanas de referencia, cero
   excepciones. Con el padrón vacío la grilla dice «no sé» y no cero, que es lo honesto,
   pero tampoco da ningún dato. **Es lo único que hay que cargar.**
-- **Los francos sin `fecha_descanso` son 258 de 259, y casi todos están bien así; dos no.**
+- **Los francos sin `fecha_descanso` son 258 de 259: 256 se explican (200 pendientes y 56 viejos) y dos no.**
   Se desglosa porque un «258 de 259» suelto se lee como que el arreglo del 26/10 no anda, y
   no es tan simple. Medido el 04/11/2026, fila por fila (el hallazgo con su detalle está en
   [docs/MANTENIMIENTO-INTEGRACION.md](MANTENIMIENTO-INTEGRACION.md), sección de la
