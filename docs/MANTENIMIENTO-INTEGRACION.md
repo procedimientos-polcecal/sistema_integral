@@ -1808,6 +1808,14 @@ parecen omisiones y no lo son:
   proyecto aplica en las planillas: enlazar al que se le parece es peor que
   dejar en null. Comprobado contra la base el 26/10/2026: filtrando por
   `fecha_descanso`, la semana del 01/09 devuelve **cero** filas.
+  **Las dos fotos del dato, porque la primera contaba otra cosa.** El 26/10/2026
+  eran **56 de 217**: los *tomados*, no el total. El 04/11/2026 son **259**
+  francos: **58 `TOMADO` sin fecha** (los viejos; antes eran 56), **1 `TOMADO`
+  con su fecha** —el único tomado por el flujo nuevo, y sí guardó el día— y
+  **200 `PENDIENTE`**, que todavía no tienen día y es lo correcto: `estaDeFranco`
+  pide `TOMADO` **y** la fecha exacta. De los 40 creados desde el 26/10 ninguno
+  tiene fecha y todos están pendientes. Lo que subcuenta ausencias son sólo
+  los 58 viejos, y sólo en días que ya pasaron.
   Lo que pregunta la programación es `noViene()` de
   `lib/mantenimiento/disponibilidad.ts`, que junta las dos razones —ausencia
   cargada y franco que se descansa— en un solo lugar, para que la grilla y los

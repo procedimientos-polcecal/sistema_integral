@@ -743,7 +743,7 @@ Antes de todo eso, el orden es: **aplicar `20261102102403_agenda_schema.sql`** (
 y 2), hacer las comprobaciones de RLS, correr el cron a mano
 (`/api/cron/agenda` con el `CRON_SECRET`) y leer las tres filas de `sincronizaciones`.
 
-### Lo que dejan sin comprobar las OT automáticas, y las dos cosas que tiene que hacer una persona
+### Lo que dejan sin comprobar las OT automáticas, y lo que tiene que hacer una persona
 
 **Antes de desplegar: `20261104161017_ot_fecha_fin.sql` tiene que estar corrida.** Es una
 columna nullable y se puede correr dos veces. Si el código llega antes, **el alta de una
@@ -754,19 +754,30 @@ un problema de la persona que la cargó. (La otra migración de esta tanda, la d
 `mant_razones_de_postergacion`, ya se aplicó por PostgREST y es sólo para que el repo y
 producción coincidan.)
 
-**Después de desplegar: la columna de gente disponible va a mentir hasta que se carguen
-dos cosas.** No es un bug de código y no se arregla con código:
+**Después de desplegar: la columna de gente disponible no dice nada hasta que se cargue
+el padrón.** No es un bug de código y no se arregla con código:
 
 - **`mant_personal_taller` está vacía**: cero personas, cero semanas de referencia, cero
   excepciones. Con el padrón vacío la grilla dice «no sé» y no cero, que es lo honesto,
-  pero tampoco da ningún dato.
-- **258 de los 259 francos tienen `fecha_descanso` en null** (medido el 04/11/2026; la
-  documentación decía «56 de 217», que contaba los tomados y no los que tienen día). Un
-  franco abre hueco sólo por esa fecha, así que **casi ninguno abre hueco y el conteo
-  va a mostrar un taller donde nadie descansa nunca**. Cruzar por la otra fecha
-  (`fecha_tomado`) era el bug que ya se corrigió: pintaba 35 huecos un lunes cualquiera.
-  Se arregla **cargando el día de descanso al marcar el franco**, que desde el 26/10/2026
-  la pantalla ya pide; los viejos no tienen cómo saberse.
+  pero tampoco da ningún dato. **Es lo único que hay que cargar.**
+- **Los francos sin `fecha_descanso` son 259 menos uno, y casi todos están bien así**
+  (medido el 04/11/2026, desglosado porque un «258 de 259» suelto se lee como que el
+  arreglo del 26/10 no anda, y no es eso):
+  - **200 están `PENDIENTE` y sin fecha, y es correcto**: un franco pendiente todavía no
+    tiene día, y `estaDeFranco` pide `TOMADO` **y** la fecha exacta.
+  - **58 están `TOMADO` y sin fecha**: son los viejos, de antes del 26/10/2026, de
+    cuando la pantalla no pedía el día. No hay cómo saber cuándo descansaron. Son lo
+    único que subcuenta ausencias, y sólo en los días que esos 58 cubren, que **ya
+    pasaron**.
+  - **1 está `TOMADO` con su fecha**, el único que se tomó por el flujo nuevo, y sí
+    guardó el día: el mecanismo anda y lo que falta es historia.
+  - De los 40 creados desde el 26/10, **ninguno tiene fecha**, pero todos están
+    pendientes: es lo esperado, no un fallo.
+
+  Lo que sí va a pasar: **cuando esos 200 se tomen, tienen que quedar con su día**, y
+  de eso depende que el conteo de gente refleje los francos de verdad. Cruzar por
+  `fecha_tomado` en vez de `fecha_descanso` era el bug ya corregido (pintaba 35
+  huecos un lunes cualquiera) y no es la salida.
 
 **Lo que esta tanda deja sin verificar:**
 

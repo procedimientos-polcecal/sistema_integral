@@ -309,9 +309,12 @@ export async function mandarLaOTAlCalendario(
   //
   // Sin tope se limpia **sólo si lo guardado es el aviso del tope**. Limpiar a
   // ciegas pisaría el de un borrado que Google rechazó, que es lo único que dice
-  // que quedó un evento vivo en cinco calendarios. Son los dos únicos escritores
-  // de esta columna en un evento de OT, y cada uno limpia lo suyo (ver
-  // `limpiable` en `elEventoSigueALaOT.ts`, que es la otra mitad de esta regla).
+  // que quedó un evento vivo en cinco calendarios. La columna tiene tres
+  // escritores en un evento de OT —el borrado fallido y el tope, que son los dos
+  // que ésta nombra, y el que escribe la sincronización cuando la fecha de la
+  // orden se vació o el evento divergió (`avisar` y `respetar`)— y cada uno limpia
+  // lo suyo (ver `limpiable` en `elEventoSigueALaOT.ts`, que es la otra mitad de
+  // esta regla).
   //
   // **Y el aviso de un borrado fallido gana también contra el del tope**, que
   // es el caso que faltaba: escribirlo encima lo perdía igual que limpiarlo a
