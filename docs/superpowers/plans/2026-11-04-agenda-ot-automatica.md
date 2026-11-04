@@ -369,6 +369,89 @@ git commit -m "refactor(agenda): mandar una OT al calendario deja de vivir en la
 
 ---
 
+### Task 2B: El barrido recalcula el hueco al mover un evento
+
+Esta tarea no estaba en el plan original. El spec la pide —«cuando el barrido
+nocturno mueve un evento porque cambió la fecha de la OT, **recalcula el hueco
+en la fecha nueva**»— y la autorrevisión no lo detectó. Sin ella, una OT que se
+mueve del 6 al 20 llega con la hora vieja y puede caer encima de otra de su
+especialidad, que es justo lo que este trabajo existe para evitar.
+
+**Files:**
+- Modify: `lib/agenda/elEventoSigueALaOT.ts` (`planDelEvento`, `queHacerConElEvento`, `seguirALasOT`)
+- Modify: `lib/agenda/elEventoSigueALaOT.test.ts`
+- Modify: `lib/agenda/apilado.ts` y `lib/agenda/apilado.test.ts` (el arranque deja de estar fijo en 08:00)
+
+**Interfaces:**
+- Consumes: `horarioApilado`, `claveDeApilado`, `TOPE_DE_ARRANQUE`, `AVISO_DE_TOPE` (Tarea 1); `mandarLaOT.ts` no se toca.
+- Produces: `horarioApilado(fecha: string, ocupados: number, arranque?: string)` — el tercer
+  parámetro es la hora de arranque y por defecto sigue siendo `HORA_DE_ARRANQUE`.
+
+**El criterio, que es la decisión de esta tarea.** El hueco se recalcula **desde
+el turno guardado del evento**, apilando 1:30 por cada evento de la misma
+especialidad que ya haya ese día *en ese turno*, con el mismo tope de las 20:00.
+
+Es lo que resuelve una ambigüedad real: el camino automático guarda
+`turno = "8-16"`, así que la columna **no distingue** un evento automático de uno
+que una persona puso en el turno de 8. Recalcular siempre desde las 08:00
+tiraría a la basura el turno que alguien eligió; agregar una columna para marcar
+«automático» cuesta una migración que corre una persona, para una distinción que
+así no hace falta. Para un evento automático este criterio es exactamente la
+regla del spec, porque su turno arranca a las 08:00.
+
+- [ ] **Step 1: Escribir los tests que fallan**
+
+```ts
+describe("al mover un evento de OT a otra fecha", () => {
+  /** Lo que falta hoy: llega con la hora vieja y se encima. */
+  it("recalcula el hueco en la fecha nueva y no conserva la hora vieja", () => { /* … */ });
+
+  it("si la fecha nueva ya tiene una de su especialidad, cae 1:30 despues", () => { /* … */ });
+
+  it("una de otra especialidad en la fecha nueva no le corre el hueco", () => { /* … */ });
+
+  /** El turno que eligio una persona no se pierde al moverse de fecha. */
+  it("un evento del turno 4-12 se recalcula desde las 04:00, no desde las 08:00", () => { /* … */ });
+
+  it("el evento no se cuenta a si mismo al recalcular", () => {
+    // Mover del 6 al 20 con el dia 20 vacio tiene que dar el primer hueco.
+  });
+
+  it("si en la fecha nueva el hueco topea, el evento queda con AVISO_DE_TOPE", () => { /* … */ });
+});
+```
+
+- [ ] **Step 2: Correr y ver que falla**
+
+Run: `npx vitest run lib/agenda/elEventoSigueALaOT.test.ts`
+
+- [ ] **Step 3: Darle a `horarioApilado` la hora de arranque**
+
+Tercer parámetro opcional, por defecto `HORA_DE_ARRANQUE`. El tope de las 20:00
+y el `topeado` no cambian. Los tests que ya existen de `apilado` tienen que
+seguir pasando sin tocarse: ésa es la prueba de que el valor por defecto
+preserva el comportamiento.
+
+- [ ] **Step 4: Que el barrido resuelva el hueco antes de decidir**
+
+La cuenta es una lectura y `planDelEvento` es pura, así que el hueco se resuelve
+en `seguirALasOT` y entra como argumento. Una lectura por fecha y no una por
+evento: varios eventos del mismo día comparten la cuenta.
+
+- [ ] **Step 5: Correr y ver que pasa**
+
+Run: `npm test && npx tsc --noEmit`
+Los tests que ya existían de `elEventoSigueALaOT` tienen que seguir en verde.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add lib/agenda/elEventoSigueALaOT.ts lib/agenda/elEventoSigueALaOT.test.ts lib/agenda/apilado.ts lib/agenda/apilado.test.ts
+git commit -m "fix(agenda): al mover un evento de OT, el hueco se recalcula en la fecha nueva"
+```
+
+---
+
 ### Task 3: El enganche en las cuatro puertas que insertan una OT de a una
 
 Son cinco las puertas que insertan una OT. **Cuatro insertan de a una y llevan
