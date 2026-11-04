@@ -1,65 +1,62 @@
 import { leerNumeroDelCampo } from "./cuadernoNumero";
-import { resolverFecha, TOPE_DE_HORAS_POR_RENGLON } from "./cuadernoLectura";
+import { resolverFecha } from "./cuadernoLectura";
 import { normalizarLugar } from "./partesDeContratista";
 
 /**
- * El Excel del cuaderno de PIPARO, leído: renglones, grupos y un control.
+ * El Excel del contratista, leído: una fila es una tarea, y una tarea es una OT.
  *
  * Es una **alternativa a las fotos** y no un reemplazo. Todo lo que viene
- * después —enganche a sector y equipo, la pantalla, juntar y separar, el freno
- * de duplicados, la generación— es el mismo; lo único nuevo es leer el archivo.
+ * después —enganche a sector y equipo, la pantalla, juntar y separar a mano, el
+ * freno de duplicados, la generación— es el mismo; lo único nuevo es leer el
+ * archivo.
  *
  * Es puro: recibe las filas **ya leídas** (`FilaDelExcel`) y no abre ningún
  * archivo. Abrirlo es de `cuadernoExcelArchivo.ts`, y esta separación es lo que
  * deja probar todo sin armar un `.xlsx`.
  *
- * LA FORMA DEL ARCHIVO, MEDIDA el 02/11/2026 sobre `Tareas_Octubre_2026.xlsx`
- * (una hoja, 99 filas):
+ * ── LAS CINCO COLUMNAS, Y POR QUÉ SE BUSCAN POR NOMBRE ──
  *
- * - **Izquierda, el detalle**: `A` fecha, `B` tarea, `C` horas, `D` precio.
- *   97 renglones. La última fila es `TOTALES` con `=SUM(C2:C98)`.
- * - **Derecha, el resumen**: `K` tarea, `L` desde, `M` hasta, `N` horas, `O`
- *   precio. 63 grupos. La celda de `N` es una **fórmula** como `=C47+C50+C51`
- *   que dice **qué renglones del detalle van juntos**: eso es exactamente un
- *   grupo, o sea una OT. La última fila del resumen también es `TOTALES`, con
- *   `=SUM(N2:N65)` y ninguna referencia a `C`, y no es un grupo.
+ * `Tarea · Fecha Desde · Fecha Hasta · Hs · Precio ($)`
  *
- * LO QUE NO SE LEE DEL RESUMEN: `O`, el precio. El precio de cada renglón sale
- * del detalle (`D`) y la OT suma el de sus renglones; lo que diga `O` no entra a
- * ninguna cuenta, y leerlo sólo agregaría una segunda fuente para el mismo dato.
+ * **Se buscan por el texto del encabezado y no por la letra de la columna.**
+ * Esto no es comodidad: el 02/11/2026 el mismo contenido vivía en `K` a `O`
+ * —era el resumen de la derecha de una planilla con dos mitades— y el 03/11
+ * pasó a `A` a `E` al quedar la tabla sola. Leer por letra significa que mover
+ * la tabla una columna rompe la carga sin decir por qué, y que quien arma el
+ * archivo tiene que saber en qué columna va cada cosa. Leer por nombre deja que
+ * el encabezado sea el contrato, que es lo que la persona ve.
  *
- * EL CONTROL, que es la defensa contra una fórmula mal escrita
+ * `Tarea` y `Hs` son las únicas obligatorias: sin tarea no hay qué hacer y sin
+ * horas no hay qué cargarle a la OT. `Fecha Desde`, `Fecha Hasta` y
+ * `Precio ($)` entran si están, y si no están se dice.
  *
- * El criterio es de quien pidió esto: **las horas del resumen tienen que dar las
- * del detalle**, sin renglones contados dos veces ni renglones sin cubrir. Si
- * cierra, se arman los grupos. Si no cierra, **el archivo se carga igual** —los
- * renglones entran— pero **no se arman los grupos**, y se dice con el número de
- * fila qué pasó. Nunca se arma un grupo sobre una cuenta que no da: una fórmula
- * que apunta una fila más abajo junta dos tareas que no tienen nada que ver y
- * las horas van a la OT equivocada sin que nadie lo note.
+ * ── LO QUE ANTES ERA UN GRUPO ──
  *
- * Tres decisiones que no se deducen del código:
+ * Hasta el 02/11/2026 el archivo traía el detalle día por día a la izquierda y
+ * un resumen a la derecha cuyas fórmulas (`=C47+C50+C51`) decían qué renglones
+ * iban juntos en una OT. Ese resumen **es ahora la tabla entera**: quien arma el
+ * archivo ya hizo la consolidación, así que **cada fila es una orden** y no hay
+ * nada que agrupar. El rango de días, que antes salía de los renglones que la
+ * fórmula juntaba, ahora lo dicen `Fecha Desde` y `Fecha Hasta`.
  *
- * - **«Sin cubrir» es un renglón con horas que ningún grupo toma.** Uno que
- *   sólo trae precio (un empalme, un parche: se cobran por trabajo y no por
- *   hora) y no está en el resumen **no es un error**: no tiene horas que se
- *   pierdan, y sale como su propia orden. Lo que sí es error es que un renglón
- *   esté en dos grupos.
- * - **Apuntar a una celda de horas en blanco no es apuntar a una celda vacía si
- *   el renglón trae precio.** Una plantilla que escribe `=C7` para el empalme
- *   aunque sus horas estén en blanco no se equivoca: el renglón existe. Vacía es
- *   una fila sin renglón, el encabezado, el total, o un renglón sin horas ni
- *   precio.
- * - **Se compara también lo que dice la celda de `N` contra lo que suman sus
- *   referencias.** Una fórmula con un término de más (`=C4+C6+2`) o un valor
- *   viejo que Excel no recalculó no se ve mirando las referencias. Si la celda no
- *   tiene valor calculado (un archivo que no guardó Excel) no se compara: mandan
- *   las referencias, que son lo que dice qué se junta.
+ * ── EL CONTROL: LA FILA DE TOTALES ──
  *
- * NADA SE TIRA EN SILENCIO. Un renglón que no se entiende entra marcado
- * `dudoso` con su motivo —la fecha ilegible queda en null, no se descarta—, y lo
- * que no puede entrar (una fila con horas y sin tarea) queda dicho en
- * `problemas` con su fila.
+ * Al desaparecer el detalle desaparece la comprobación de «las horas del
+ * resumen dan las del detalle», que era la defensa contra una fórmula mal
+ * escrita. Lo que queda, y por eso se usa, es la **fila de TOTALES**: su número
+ * de horas tiene que dar la suma de las filas. Medido sobre el archivo real,
+ * ese total está **escrito a mano** y no es una fórmula, así que comparar no es
+ * redundante — es exactamente lo que detecta una fila tipeada de más, una de
+ * menos, o un número con un dígito cambiado.
+ *
+ * **Si no cierra, los renglones entran igual.** No hay nada que retener: la
+ * tabla *es* el dato, no hay grupos que armar sobre una cuenta que no da. Lo
+ * que se hace es decirlo fuerte, con los dos números y la diferencia.
+ *
+ * NADA SE TIRA EN SILENCIO. Una fila que no se entiende entra marcada `dudoso`
+ * con su motivo —la fecha ilegible queda en null, no se descarta—, y lo que no
+ * puede entrar (una fila con horas y sin tarea) queda dicho en `problemas` con
+ * su número de fila.
  */
 
 // ─── Lo que entra: filas ya leídas ───────────────────────────────────────────
@@ -81,36 +78,40 @@ export type FilaDelExcel = { fila: number; celdas: Record<string, CeldaDelExcel>
 
 // ─── Lo que sale ─────────────────────────────────────────────────────────────
 
+/** Qué letra de columna resultó ser cada cosa. Null si esa columna no está. */
+export type ColumnasDelExcel = {
+  tarea: string;
+  desde: string | null;
+  hasta: string | null;
+  horas: string;
+  precio: string | null;
+};
+
 export type RenglonDelExcel = {
   /** El número de fila del Excel: va a `linea` y es la única forma de volver a la planilla. */
   fila: number;
-  fecha: string | null;
   tarea: string;
+  /** El primer día. Null si la celda no se pudo leer; entonces el renglón es dudoso. */
+  desde: string | null;
+  /** El último día. Igual a `desde` cuando la tarea fue de un solo día. */
+  hasta: string | null;
   horas: number | null;
   costo: number | null;
   dudoso: boolean;
   motivo_dudoso: string | null;
 };
 
-export type GrupoDelExcel = {
-  /** La fila del resumen. */
-  fila: number;
-  tarea: string;
-  /** Las filas del detalle que su fórmula junta, sin repetir y en orden. */
-  filas: number[];
-};
-
 export type ControlDelExcel = {
-  /** El archivo trae el resumen (K a N) y se pudo leer. */
-  hay_resumen: boolean;
-  /** Las horas del resumen dan las del detalle y no hay nada que frene los grupos. */
+  /** El archivo trae una fila de TOTALES con un número de horas legible. */
+  hay_total: boolean;
+  /** La suma de las filas da el total declarado. Verdadero también si no hay total que comparar. */
   cierra: boolean;
-  horas_detalle: number;
-  horas_resumen: number;
-  /** Resumen menos detalle: negativo si faltan horas en el resumen. */
+  horas_filas: number;
+  /** Lo que dice la fila de TOTALES; null si no hay. */
+  horas_total: number | null;
+  /** Total menos suma: negativo si el total declara de menos. */
   diferencia: number;
-  /** Cuántas filas del resumen eran grupos (los totales no cuentan). */
-  grupos_leidos: number;
+  costo_filas: number;
   /** Cada cosa que no cierra, con su fila. Vacío cuando cierra. */
   problemas: string[];
 };
@@ -118,11 +119,9 @@ export type ControlDelExcel = {
 export type LecturaDelExcel =
   | {
       ok: true;
+      /** Qué columna resultó ser cada cosa: es lo que se le muestra a quien cargó. */
+      columnas: ColumnasDelExcel;
       renglones: RenglonDelExcel[];
-      /** Todo lo que el resumen decía, cierre o no: es lo que se guarda como evidencia. */
-      grupos_leidos: GrupoDelExcel[];
-      /** Los que se arman: lo mismo que `grupos_leidos` si el control cierra, y nada si no. */
-      grupos: GrupoDelExcel[];
       control: ControlDelExcel;
       /** Todo lo que hay que decirle a quien carga, en orden y con sus filas. */
       problemas: string[];
@@ -134,11 +133,23 @@ export type LecturaDelExcel =
 /** Hasta qué fila se busca el encabezado: un título arriba es normal, diez no. */
 const FILAS_PARA_EL_ENCABEZADO = 10;
 
-/** Un rango de fórmula más grande que esto no es un grupo de tareas: es un descuido. */
-const MAXIMO_DE_UN_RANGO = 5000;
-
 /** Menos que esto no es una diferencia de horas: es coma flotante. */
 const TOLERANCIA = 0.005;
+
+/**
+ * Más horas que éstas en una sola fila no es un dato: es un dígito de más.
+ *
+ * Medido el 03/11/2026 sobre el archivo real de octubre: 63 filas, 1074 horas,
+ * y la más grande es **106** —una tarea que duró del 24 al 31—. El error
+ * probable tipeando es el dígito extra (106 → 1060), y 500 lo atrapa dejando
+ * casi cinco veces el máximo visto de margen. **Sólo marca dudoso**: una obra
+ * larga de verdad tiene que poder entrar.
+ *
+ * No es el mismo número que `TOPE_DE_HORAS_POR_RENGLON` de `cuadernoLectura`
+ * (200) y no tiene por qué serlo: allá una fila es **un renglón de un día** del
+ * cuaderno manuscrito, acá es **una tarea entera a lo largo del mes**.
+ */
+export const TOPE_DE_HORAS_POR_FILA = 500;
 
 const redondear = (n: number) => Math.round(n * 100) / 100;
 const verHoras = (n: number) => String(redondear(n)).replace(".", ",");
@@ -176,36 +187,49 @@ function estaVacia(c: CeldaDelExcel): boolean {
 
 const norm = (c: CeldaDelExcel) => normalizarLugar(textoDe(c));
 
-/** «Fecha» en la A y «Tarea» o «Descripción» en la B. */
-function esElEncabezado(f: FilaDelExcel): boolean {
-  return norm(f.celdas.A) === "fecha" && /^(tarea|descripcion)/.test(norm(f.celdas.B));
-}
-
 const ETIQUETA_DE_TOTAL = /^(sub)?total(es)?( general(es)?)?$/;
 
-/** Una fórmula que suma una columna de C: `SUM(C2:C98)`. */
-const SUMA_DE_LA_COLUMNA_C = /\b(?:SUM|SUBTOTAL)\s*\([^)]*\$?C\$?\d+\s*:\s*\$?C\$?\d+/i;
-
-/** Una fila del detalle que es un total y no un renglón. */
-function esTotalDelDetalle(f: FilaDelExcel): boolean {
-  if (ETIQUETA_DE_TOTAL.test(norm(f.celdas.A)) || ETIQUETA_DE_TOTAL.test(norm(f.celdas.B))) return true;
-  const formula = ver(f.celdas.C).formula;
-  return formula !== null && SUMA_DE_LA_COLUMNA_C.test(formula);
-}
-
-const ES_UNA_SUMA = /^\s*=?\s*(?:SUM|SUBTOTAL)\s*\(/i;
-const TIENE_UNA_C = /(?<![A-Za-z0-9_.])\$?C\$?\d+(?![A-Za-z0-9_(])/i;
+// ─── El encabezado: qué columna es cada cosa ─────────────────────────────────
 
 /**
- * Una fila del resumen que es un total y no un grupo: la que dice TOTALES, o una
- * suma sin ninguna referencia a la columna de horas (`=SUM(N2:N65)`).
+ * Qué papel cumple un encabezado. El orden importa: `fecha desde` tiene que
+ * probarse antes que `fecha` a secas, y `tarea / descripción` antes que nada
+ * que empiece con «descripción».
  */
-function esTotalDelResumen(f: FilaDelExcel): { total: boolean; rotulado: boolean } {
-  const rotulado = ETIQUETA_DE_TOTAL.test(norm(f.celdas.K));
-  if (rotulado) return { total: true, rotulado };
-  const formula = ver(f.celdas.N).formula;
-  return { total: formula !== null && ES_UNA_SUMA.test(formula) && !TIENE_UNA_C.test(formula), rotulado };
+const PAPELES: Array<{ papel: keyof ColumnasDelExcel; es: RegExp }> = [
+  { papel: "desde", es: /^(fecha\s*)?desde\b|^fecha\s+de\s+inicio|^inicio$/ },
+  { papel: "hasta", es: /^(fecha\s*)?hasta\b|^fecha\s+de\s+fin|^fin$/ },
+  { papel: "tarea", es: /^(tarea|descripcion|trabajo)\b|^(tarea|descripcion|trabajo)$/ },
+  { papel: "horas", es: /^(hs|hrs|horas)\b|^(hs|hrs|horas)$/ },
+  { papel: "precio", es: /^(precio|importe|costo|monto)\b|^(precio|importe|costo|monto)$/ },
+  // Una sola columna de fecha es el día en que empieza: sin `hasta`, la tarea
+  // fue de un día y el rango se colapsa solo.
+  { papel: "desde", es: /^fecha$/ },
+];
+
+type Mapa = Partial<Record<keyof ColumnasDelExcel, string>>;
+
+/** Qué columna es cada cosa en esta fila, si es que esta fila es el encabezado. */
+function mapearColumnas(f: FilaDelExcel): Mapa {
+  const mapa: Mapa = {};
+  // Por letra de columna y no por el orden en que vinieron las celdas: si el
+  // archivo trae dos columnas que podrían ser lo mismo, gana la de más a la
+  // izquierda, que es la que la persona ve primero.
+  for (const letra of Object.keys(f.celdas).sort()) {
+    const titulo = norm(f.celdas[letra]);
+    if (!titulo) continue;
+    for (const { papel, es } of PAPELES) {
+      if (mapa[papel] === undefined && es.test(titulo)) {
+        mapa[papel] = letra;
+        break;
+      }
+    }
+  }
+  return mapa;
 }
+
+/** Un encabezado sirve si dice dónde está la tarea y dónde las horas. */
+const sirve = (m: Mapa): boolean => m.tarea !== undefined && m.horas !== undefined;
 
 // ─── Una celda a número, a fecha ─────────────────────────────────────────────
 
@@ -263,416 +287,211 @@ function isoDeUTC(d: Date): string {
  * celda como medianoche UTC, y leerla con el huso local la corre un día en
  * cualquier máquina al oeste de Greenwich.
  */
-function leerFecha(c: CeldaDelExcel): Leido<string> {
+function leerFecha(c: CeldaDelExcel, cual: string): Leido<string> {
   const v = ver(c);
-  if (v.error) return { valor: null, motivo: `La celda de fecha tiene un error de Excel (${v.error})` };
+  if (v.error) return { valor: null, motivo: `La celda de ${cual} tiene un error de Excel (${v.error})` };
   if (v.formula !== null && v.valor === null) {
-    return { valor: null, motivo: "La celda de fecha es una fórmula sin valor calculado: guardá el archivo con Excel para que la calcule" };
+    return { valor: null, motivo: `La celda de ${cual} es una fórmula sin valor calculado: guardá el archivo con Excel para que la calcule` };
   }
   const x = v.valor;
-  if (x === null || (typeof x === "string" && x.trim() === "")) return { valor: null, motivo: "No trae fecha" };
+  if (x === null || (typeof x === "string" && x.trim() === "")) return { valor: null, motivo: `No trae ${cual}` };
 
   const razonable = (iso: string, dicho: string): Leido<string> => {
     const anio = Number(iso.slice(0, 4));
     return anio >= ANIO_MINIMO && anio <= ANIO_MAXIMO
       ? { valor: iso, motivo: null }
-      : { valor: null, motivo: `La fecha «${dicho}» no es razonable (año ${anio})` };
+      : { valor: null, motivo: `La ${cual} «${dicho}» no es razonable (año ${anio})` };
   };
 
   if (x instanceof Date) {
-    if (Number.isNaN(x.getTime())) return { valor: null, motivo: "La fecha no es un día real" };
+    if (Number.isNaN(x.getTime())) return { valor: null, motivo: `La ${cual} no es un día real` };
     return razonable(isoDeUTC(x), isoDeUTC(x));
   }
   if (typeof x === "number") {
     if (x >= SERIE_DEL_2000 && x <= SERIE_DEL_2100) {
       return { valor: isoDeUTC(new Date(Math.round((Math.floor(x) - 25569) * 86400000))), motivo: null };
     }
-    return { valor: null, motivo: `El número ${x} no es una fecha` };
+    return { valor: null, motivo: `El número ${x} no es una ${cual}` };
   }
   if (typeof x === "string") {
-    // Un ISO con hora («2026-10-01T00:00:00.000Z») es el día de adelante.
+    // Un ISO con hora («2026-10-06T00:00:00.000Z») es el día de adelante si se
+    // parte por la T mal; se corta antes de resolverlo.
     const t = x.trim().replace(/T.*$/, "");
     const iso = resolverFecha(t, "");
-    return iso ? razonable(iso, t) : { valor: null, motivo: `La fecha «${x.trim()}» no es un día real` };
+    return iso ? razonable(iso, t) : { valor: null, motivo: `La ${cual} «${t}» no es un día real` };
   }
-  return { valor: null, motivo: "La fecha no es un día real" };
-}
-
-// ─── Las fórmulas del resumen ────────────────────────────────────────────────
-
-type Referencias = {
-  /** Las filas de la columna C que nombra, en orden y **con repetidas**: Excel las suma dos veces. */
-  filas: number[];
-  /** Referencias a una columna que no es la de horas. */
-  fueraDeC: string[];
-  /** Apunta a otra hoja: no se puede leer, y no se supone que es de ésta. */
-  otraHoja: boolean;
-  /** Un rango demasiado grande para ser un grupo de tareas. */
-  rangoDescomunal: string | null;
-};
-
-/**
- * Las filas del detalle que una fórmula de horas nombra: `C47+C50`, `SUM(C3:C5)`,
- * `SUM(C3,C5)`, `$C$47`. Un rango se expande a todas sus filas.
- *
- * No evalúa nada: lo que importa es **qué renglones junta**, no cuánto da. La
- * cuenta de cuánto da la hace el control con los renglones de verdad.
- */
-function referenciasDe(formula: string): Referencias {
-  const salida: Referencias = { filas: [], fueraDeC: [], otraHoja: false, rangoDescomunal: null };
-  if (formula.includes("!")) {
-    salida.otraHoja = true;
-    return salida;
-  }
-  // Ni detrás de una letra, un dígito o un punto (`LOG10`, `1.5C3`) ni delante de
-  // un paréntesis: un nombre de función con dígitos no es una celda.
-  const celda = /(?<![A-Za-z0-9_.])\$?([A-Za-z]{1,3})\$?(\d+)(?:\s*:\s*\$?([A-Za-z]{1,3})\$?(\d+))?(?![A-Za-z0-9_(])/g;
-  for (const m of formula.matchAll(celda)) {
-    const col = m[1].toUpperCase();
-    const desde = Number(m[2]);
-    if (m[3] === undefined) {
-      if (col !== "C") salida.fueraDeC.push(`${col}${desde}`);
-      else salida.filas.push(desde);
-      continue;
-    }
-    const colHasta = m[3].toUpperCase();
-    const hasta = Number(m[4]);
-    if (col !== "C" || colHasta !== "C") {
-      salida.fueraDeC.push(`${col}${desde}:${colHasta}${hasta}`);
-      continue;
-    }
-    const [a, b] = desde <= hasta ? [desde, hasta] : [hasta, desde];
-    if (b - a + 1 > MAXIMO_DE_UN_RANGO) {
-      salida.rangoDescomunal = `C${desde}:C${hasta}`;
-      continue;
-    }
-    for (let n = a; n <= b; n++) salida.filas.push(n);
-  }
-  return salida;
+  return { valor: null, motivo: `La ${cual} no es un día real` };
 }
 
 // ─── La lectura ──────────────────────────────────────────────────────────────
 
-const lista = (xs: readonly (string | number)[]): string =>
-  xs.length <= 1 ? String(xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`;
+const soloFecha = (f: string) => f.split("-").reverse().map(Number).join("/");
 
 export function interpretarExcel(filasCrudas: readonly FilaDelExcel[]): LecturaDelExcel {
   const filas = [...filasCrudas].sort((a, b) => a.fila - b.fila);
+  const problemas: string[] = [];
 
   // ── El encabezado ──
-  const encabezado = filas.find((f) => f.fila <= FILAS_PARA_EL_ENCABEZADO && esElEncabezado(f));
+  let encabezado: FilaDelExcel | null = null;
+  let mapa: Mapa = {};
+  for (const f of filas) {
+    if (f.fila > FILAS_PARA_EL_ENCABEZADO) break;
+    const m = mapearColumnas(f);
+    if (sirve(m)) { encabezado = f; mapa = m; break; }
+  }
+
   if (!encabezado) {
-    const primera = filas.find((f) => f.fila <= FILAS_PARA_EL_ENCABEZADO && !Object.values(f.celdas).every(estaVacia));
+    const primera = filas[0];
     const quedice = primera
-      ? `La fila ${primera.fila} dice: A=«${textoDe(primera.celdas.A)}», B=«${textoDe(primera.celdas.B)}».`
-      : "Las primeras filas están vacías.";
+      ? `La primera fila con algo (la ${primera.fila}) dice: ${Object.keys(primera.celdas).sort()
+          .map((l) => `${l}: «${textoDe(primera.celdas[l])}»`).join(", ")}.`
+      : "El archivo no tiene ninguna fila con datos.";
     return {
       ok: false,
       error:
-        `No se reconoce el formato del archivo: busqué en las primeras ${FILAS_PARA_EL_ENCABEZADO} filas un ` +
-        `encabezado con «Fecha» en la columna A y «Tarea» en la B, y no está. ${quedice}`,
+        `No se reconoció la planilla. Tiene que tener una fila de encabezado con una columna «Tarea» y ` +
+        `una columna «Hs», en cualquier orden y en cualquier columna. ${quedice}`,
     };
   }
 
-  const problemas: string[] = [];
-  const datos = filas.filter((f) => f.fila > encabezado.fila);
+  const columnas: ColumnasDelExcel = {
+    tarea: mapa.tarea!,
+    desde: mapa.desde ?? null,
+    hasta: mapa.hasta ?? null,
+    horas: mapa.horas!,
+    precio: mapa.precio ?? null,
+  };
 
-  // ── El resumen: ¿está, y es el que se espera? ──
-  const kTitulo = norm(encabezado.celdas.K);
-  const nTitulo = norm(encabezado.celdas.N);
-  const hayResumen = /^(tarea|descripcion)/.test(kTitulo) && /^(hs|hora)/.test(nTitulo);
-  if (!hayResumen) {
-    const algoEnElResumen = ["K", "L", "M", "N", "O"].some((c) => !estaVacia(encabezado.celdas[c]));
+  if (!columnas.desde && !columnas.hasta) {
     problemas.push(
-      algoEnElResumen
-        ? `No se leyó el resumen: el encabezado de la columna K dice «${textoDe(encabezado.celdas.K)}» y el de la N «${textoDe(encabezado.celdas.N)}», y se esperaba «Tarea» y «Hs». Cada renglón sale como su propia orden.`
-        : "El archivo no trae el resumen (columnas K a O): cada renglón sale como su propia orden hasta que los juntes a mano."
+      "La planilla no trae ninguna columna de fecha («Fecha Desde» / «Fecha Hasta»): los renglones entran " +
+      "sin fecha y no se van a poder generar las órdenes hasta que se las pongas."
     );
   }
+  if (!columnas.precio) {
+    problemas.push("La planilla no trae columna de precio: las órdenes salen sólo con horas.");
+  }
 
-  // ── El detalle ──
+  // ── Las filas ──
   const renglones: RenglonDelExcel[] = [];
-  const porFila = new Map<number, RenglonDelExcel>();
-  /** Filas con datos pero sin tarea: no son renglones, y una fórmula que las nombra lo tiene que decir. */
-  const sinTarea = new Set<number>();
-  const totales = new Map<number, string>();
-  let ultimaConDatos = 0;
+  let horasDelTotal: number | null = null;
+  let filaDelTotal: number | null = null;
 
-  for (const f of datos) {
-    const celdas = f.celdas;
-    if (["A", "B", "C", "D"].every((c) => estaVacia(celdas[c]))) continue;
+  for (const f of filas) {
+    if (f.fila <= encabezado.fila) continue;
 
-    if (esTotalDelDetalle(f)) {
-      totales.set(f.fila, [textoDe(celdas.A), textoDe(celdas.B)].filter(Boolean).join(" · "));
+    const tarea = textoDe(f.celdas[columnas.tarea]).trim();
+
+    // La fila de TOTALES no es una tarea: es el control.
+    if (ETIQUETA_DE_TOTAL.test(normalizarLugar(tarea))) {
+      const { valor, motivo } = leerNumero(f.celdas[columnas.horas], false);
+      filaDelTotal = f.fila;
+      if (valor !== null) horasDelTotal = valor;
+      else if (motivo) problemas.push(`La fila ${f.fila} dice TOTALES pero sus horas no se pudieron leer: ${motivo}.`);
       continue;
     }
-    ultimaConDatos = f.fila;
 
-    const tarea = textoDe(celdas.B);
-    const fecha = leerFecha(celdas.A);
-    const horas = leerNumero(celdas.C, false);
-    const costo = leerNumero(celdas.D, true);
+    const usadas = [columnas.tarea, columnas.desde, columnas.hasta, columnas.horas, columnas.precio]
+      .filter((l): l is string => !!l);
 
     if (!tarea) {
-      sinTarea.add(f.fila);
-      const trae = [
-        fecha.valor,
-        horas.valor !== null ? `${verHoras(horas.valor)} h` : null,
-        costo.valor !== null ? `$${verHoras(costo.valor)}` : null,
-      ].filter((x): x is string => !!x);
-      problemas.push(
-        `La fila ${f.fila} del detalle no trae tarea y no se cargó${trae.length ? ` (trae ${trae.join(", ")})` : ""}.`
-      );
+      // Una fila en blanco se saltea sin decir nada; una con datos y sin tarea
+      // no se puede cargar, y eso sí se dice: son horas que se perderían.
+      if (usadas.some((l) => !estaVacia(f.celdas[l]))) {
+        problemas.push(`La fila ${f.fila} tiene datos pero no dice qué tarea es, así que no se cargó.`);
+      }
       continue;
     }
 
     const motivos: string[] = [];
-    if (fecha.motivo) motivos.push(fecha.motivo);
-    if (horas.motivo) motivos.push(horas.motivo);
-    if (costo.motivo) motivos.push(costo.motivo);
-    if (horas.valor !== null && horas.valor > TOPE_DE_HORAS_POR_RENGLON) {
-      motivos.push(
-        `Las ${verHoras(horas.valor)} horas no parecen horas: son más de ${TOPE_DE_HORAS_POR_RENGLON} en un solo renglón (¿un dígito de más?)`
-      );
-    }
-    // Si ya se dijo por qué un número no entró, «no trae número» sería falso.
-    if (horas.valor === null && costo.valor === null && !horas.motivo && !costo.motivo) {
-      motivos.push("No trae horas ni precio");
+
+    const leerSiHay = (letra: string | null, cual: string): string | null => {
+      if (!letra) return null;
+      const { valor, motivo } = leerFecha(f.celdas[letra], cual);
+      // «No trae fecha» no es un motivo que valga la pena cuando la otra punta
+      // sí está: una tarea de un día suele llevar sólo una de las dos.
+      if (motivo && !/^No trae /.test(motivo)) motivos.push(motivo);
+      return valor;
+    };
+
+    let desde = leerSiHay(columnas.desde, "fecha desde");
+    let hasta = leerSiHay(columnas.hasta, "fecha hasta");
+
+    // Una sola punta alcanza: la tarea fue de un día, o la otra celda está
+    // rota. No se inventa nada — se usa la que hay para las dos.
+    if (desde && !hasta) hasta = desde;
+    else if (hasta && !desde) desde = hasta;
+    else if (desde && hasta && hasta < desde) {
+      motivos.push(`La fecha hasta (${soloFecha(hasta)}) es anterior a la desde (${soloFecha(desde)})`);
     }
 
-    const r: RenglonDelExcel = {
+    if (!desde && !hasta && (columnas.desde || columnas.hasta)) {
+      motivos.push("No trae ninguna fecha");
+    }
+
+    const horas = leerNumero(f.celdas[columnas.horas], false);
+    if (horas.motivo) motivos.push(horas.motivo);
+    if (horas.valor !== null && horas.valor > TOPE_DE_HORAS_POR_FILA) {
+      motivos.push(`${verHoras(horas.valor)} h en una sola tarea es más de lo que suele entrar: revisalo`);
+    }
+
+    const costo = columnas.precio ? leerNumero(f.celdas[columnas.precio], true) : { valor: null, motivo: null };
+    if (costo.motivo) motivos.push(costo.motivo);
+
+    if (horas.valor === null && costo.valor === null) {
+      motivos.push("No trae ni horas ni precio");
+    }
+
+    renglones.push({
       fila: f.fila,
-      fecha: fecha.valor,
       tarea,
+      desde,
+      hasta,
       horas: horas.valor,
       costo: costo.valor,
       dudoso: motivos.length > 0,
-      motivo_dudoso: motivos.length > 0 ? motivos.join("; ") : null,
-    };
-    renglones.push(r);
-    porFila.set(f.fila, r);
-  }
-
-  // Un total en el medio del detalle no se carga y se dice: perder un renglón
-  // porque «parecía» un total es justo lo que no tiene que pasar en silencio.
-  // El de la última fila es el normal y no se menciona.
-  for (const [fila, texto] of totales) {
-    if (fila < ultimaConDatos) {
-      problemas.push(`La fila ${fila} del detalle parece un total y se salteó, no es un renglón (dice «${texto}»).`);
-    }
-  }
-
-  if (!hayResumen) {
-    return {
-      ok: true,
-      renglones,
-      grupos_leidos: [],
-      grupos: [],
-      control: {
-        hay_resumen: false, cierra: false, horas_detalle: redondear(sumaDeHoras(renglones)),
-        horas_resumen: 0, diferencia: 0, grupos_leidos: 0, problemas: [],
-      },
-      problemas,
-    };
-  }
-
-  // ── El resumen ──
-  type FilaDeGrupo = {
-    fila: number;
-    tarea: string;
-    formula: string | null;
-    dicho: Vista;
-    refs: Referencias | null;
-  };
-  const delResumen: FilaDeGrupo[] = [];
-
-  for (const f of datos) {
-    if (["K", "L", "M", "N", "O"].every((c) => estaVacia(f.celdas[c]))) continue;
-    const { total, rotulado } = esTotalDelResumen(f);
-    // Después de la fila que dice TOTALES no hay más grupos: lo que siga son
-    // notas, y leerlas como grupos pararía el control por algo que no es una fórmula.
-    if (rotulado) break;
-    if (total) continue;
-    const dicho = ver(f.celdas.N);
-    delResumen.push({
-      fila: f.fila,
-      tarea: textoDe(f.celdas.K),
-      formula: dicho.formula,
-      dicho,
-      refs: dicho.formula !== null ? referenciasDe(dicho.formula) : null,
+      motivo_dudoso: motivos.length > 0 ? `${motivos.join(". ")}.` : null,
     });
   }
 
-  const control = controlar({ delResumen, renglones, porFila, sinTarea, totales, encabezado: encabezado.fila });
+  // ── El control ──
+  const horas_filas = redondear(renglones.reduce((s, r) => s + (r.horas ?? 0), 0));
+  const costo_filas = redondear(renglones.reduce((s, r) => s + (r.costo ?? 0), 0));
+  const hay_total = horasDelTotal !== null;
+  const diferencia = hay_total ? redondear(horasDelTotal! - horas_filas) : 0;
+  const delControl: string[] = [];
 
-  const grupos_leidos: GrupoDelExcel[] = delResumen.map((g) => ({
-    fila: g.fila,
-    tarea: g.tarea,
-    filas: [...new Set(g.refs?.filas ?? [])].sort((a, b) => a - b),
-  }));
-
-  const grupos = control.cierra ? grupos_leidos : [];
-  if (!control.cierra) {
-    problemas.push(
-      "El resumen no cierra con el detalle, así que no se armaron los grupos: los renglones se cargaron " +
-      "todos y cada uno sale como su propia orden hasta que los juntes a mano. Lo que no cierra:",
-      ...control.problemas
+  if (!hay_total) {
+    delControl.push(
+      "La planilla no trae fila de TOTALES, así que no hay contra qué comparar la suma de las horas. " +
+      `Las ${renglones.length} filas suman ${verHoras(horas_filas)} h.`
+    );
+  } else if (Math.abs(diferencia) > TOLERANCIA) {
+    delControl.push(
+      `Las horas de las filas (${verHoras(horas_filas)}) no dan el total declarado en la fila ` +
+      `${filaDelTotal} (${verHoras(horasDelTotal!)}): ` +
+      (diferencia > 0
+        ? `faltan ${verHoras(diferencia)} h entre las filas.`
+        : `sobran ${verHoras(-diferencia)} h entre las filas.`) +
+      " Los renglones se cargaron igual: revisá cuál fila está de más o de menos."
     );
   }
 
-  return { ok: true, renglones, grupos_leidos, grupos, control, problemas };
-}
-
-const sumaDeHoras = (rs: readonly RenglonDelExcel[]) => rs.reduce((s, r) => s + (r.horas ?? 0), 0);
-
-// ─── El control ──────────────────────────────────────────────────────────────
-
-/**
- * La cuenta: ¿lo que dice el resumen es lo que hay en el detalle? Devuelve todo
- * lo que no cierra, junto y con su fila, y no el primer problema que encuentra.
- */
-function controlar(entrada: {
-  delResumen: ReadonlyArray<{
-    fila: number; tarea: string; formula: string | null; dicho: Vista;
-    refs: Referencias | null;
-  }>;
-  renglones: readonly RenglonDelExcel[];
-  porFila: ReadonlyMap<number, RenglonDelExcel>;
-  sinTarea: ReadonlySet<number>;
-  totales: ReadonlyMap<number, string>;
-  encabezado: number;
-}): ControlDelExcel {
-  const { delResumen, renglones, porFila, sinTarea, totales, encabezado } = entrada;
-  const problemas: string[] = [];
-
-  const nombre = (r: RenglonDelExcel) =>
-    `«${r.tarea}»${r.horas !== null ? `, ${verHoras(r.horas)} h` : ""}`;
-
-  /** Veces que cada renglón aparece, y en qué filas del resumen. */
-  const apariciones = new Map<number, number[]>();
-  let horasDelResumen = 0;
-
-  for (const g of delResumen) {
-    const donde = `N${g.fila}`;
-    const formula = g.formula ?? "";
-
-    // Una fila del resumen que no dice qué junta.
-    if (g.formula === null || g.refs === null) {
-      const v = g.dicho;
-      problemas.push(
-        v.valor === null && !v.error
-          ? `La fila ${g.fila} del resumen («${g.tarea}») no tiene fórmula en N: no se sabe qué renglones junta.`
-          : `La celda ${donde} del resumen no es una fórmula con referencias al detalle (dice «${v.error ?? textoDe(v.valor)}»): no se sabe qué renglones junta.`
-      );
-      continue;
-    }
-
-    const refs = g.refs;
-    let legible = true;
-    if (refs.otraHoja) {
-      problemas.push(`La fórmula de ${donde} (=${formula}) apunta a otra hoja y no se puede leer.`);
-      legible = false;
-    }
-    for (const fuera of refs.fueraDeC) {
-      problemas.push(`La fórmula de ${donde} (=${formula}) apunta a ${fuera}, que no es de la columna de horas (C).`);
-      legible = false;
-    }
-    if (refs.rangoDescomunal) {
-      problemas.push(`La fórmula de ${donde} (=${formula}) tiene un rango de más de ${MAXIMO_DE_UN_RANGO} filas (${refs.rangoDescomunal}): no es un grupo de tareas.`);
-      legible = false;
-    }
-    if (legible && refs.filas.length === 0) {
-      problemas.push(`La fórmula de ${donde} (=${formula}) no nombra ninguna fila de horas del detalle: no se sabe qué renglones junta.`);
-      legible = false;
-    }
-
-    let suma = 0;
-    for (const n of refs.filas) {
-      const r = porFila.get(n);
-      if (r) {
-        suma += r.horas ?? 0;
-        apariciones.set(n, [...(apariciones.get(n) ?? []), g.fila]);
-        // Una referencia a un renglón sin horas ni precio es apuntar a una celda vacía.
-        if (r.horas === null && r.costo === null) {
-          problemas.push(`La fórmula de ${donde} (=${formula}) apunta a C${n}, y esa fila del detalle no trae horas ni precio.`);
-        }
-        continue;
-      }
-      const que = n <= encabezado
-        ? "que es el encabezado"
-        : totales.has(n)
-          ? "que es la fila de totales"
-          : sinTarea.has(n)
-            ? "que es una fila sin tarea"
-            : "que está vacía";
-      problemas.push(`La fórmula de ${donde} (=${formula}) apunta a C${n}, ${que}.`);
-    }
-    horasDelResumen += suma;
-
-    // Lo que dice la celda contra lo que suman sus referencias: sólo si el
-    // archivo la calculó y si se pudieron leer todas las referencias.
-    const calculado = g.dicho.valor;
-    if (legible && typeof calculado === "number" && Math.abs(calculado - suma) >= TOLERANCIA) {
-      problemas.push(`La celda ${donde} dice ${verHoras(calculado)} pero las filas que junta suman ${verHoras(suma)}.`);
-    }
-  }
-
-  // Contado dos veces.
-  for (const [n, enFilas] of apariciones) {
-    if (enFilas.length < 2) continue;
-    const r = porFila.get(n)!;
-    const distintas = [...new Set(enFilas)];
-    if (distintas.length === 1) {
-      const g = delResumen.find((x) => x.fila === distintas[0])!;
-      problemas.push(`La fórmula de N${g.fila} (=${g.formula}) toma dos veces la fila ${n} del detalle (${nombre(r)}).`);
-    } else {
-      const cuantos = distintas.length === 2 ? "dos" : String(distintas.length);
-      problemas.push(
-        `La fila ${n} del detalle (${nombre(r)}) está en ${cuantos} grupos del resumen: las filas ${lista(distintas)} del resumen.`
-      );
-    }
-  }
-
-  // Sin cubrir: horas que ningún grupo toma.
-  for (const r of renglones) {
-    if ((r.horas ?? 0) > 0 && !apariciones.has(r.fila)) {
-      problemas.push(`La fila ${r.fila} del detalle (${nombre(r)}) no está en ningún grupo del resumen.`);
-    }
-  }
-
-  const horas_detalle = redondear(sumaDeHoras(renglones));
-  const horas_resumen = redondear(horasDelResumen);
-  const diferencia = redondear(horas_resumen - horas_detalle);
-  if (Math.abs(diferencia) >= TOLERANCIA) {
-    problemas.push(
-      `Las horas del resumen (${verHoras(horas_resumen)}) no dan las del detalle (${verHoras(horas_detalle)}): ` +
-      (diferencia < 0
-        ? `faltan ${verHoras(-diferencia)} h en el resumen.`
-        : `sobran ${verHoras(diferencia)} h en el resumen.`)
-    );
-  }
+  const cierra = !hay_total || Math.abs(diferencia) <= TOLERANCIA;
 
   return {
-    hay_resumen: true,
-    cierra: problemas.length === 0,
-    horas_detalle,
-    horas_resumen,
-    diferencia,
-    grupos_leidos: delResumen.length,
-    problemas,
+    ok: true,
+    columnas,
+    renglones,
+    control: {
+      hay_total,
+      cierra,
+      horas_filas,
+      horas_total: horasDelTotal,
+      diferencia,
+      costo_filas,
+      problemas: delControl,
+    },
+    problemas: [...delControl, ...problemas],
   };
-}
-
-// ─── Lo que se junta de verdad ───────────────────────────────────────────────
-
-/**
- * De los grupos del resumen, los que **juntan** algo: los de dos renglones o
- * más. Un grupo de un solo renglón es la orden de ese renglón, y escribirle un
- * `grupo_id` sólo lo haría aparecer como «juntado con 0 más» en la pantalla y le
- * sacaría la propuesta de acumular los que se llaman igual.
- *
- * De los 63 grupos del archivo real, 17 juntan dos o más renglones.
- */
-export function gruposAJuntar(grupos: readonly GrupoDelExcel[]): GrupoDelExcel[] {
-  return grupos.filter((g) => g.filas.length >= 2);
 }

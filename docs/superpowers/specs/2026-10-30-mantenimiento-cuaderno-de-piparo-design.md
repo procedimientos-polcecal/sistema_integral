@@ -420,7 +420,7 @@ si la planilla no estaba.
 
 ---
 
-## Agregado el 02/11/2026: el mes también puede entrar por un Excel
+## Agregado el 02/11/2026, rehecho el 03/11: el mes también puede entrar por un Excel
 
 **El problema que apareció al usarlo.** No todos los meses vienen en el
 cuaderno: a veces quien carga arma él mismo la planilla. Fotografiar lo que ya
@@ -434,49 +434,270 @@ lo que viene después —el enganche a sector y equipo, juntar y separar, confir
 el sector, el freno de duplicados, generar— es el mismo código y no se entera
 de por dónde entraron los renglones.
 
+### Lo que cambió el 03/11, y por qué importa contarlo
+
+La primera versión leía un archivo de **dos mitades**: el detalle día por día a
+la izquierda y, a la derecha, un resumen cuyas fórmulas (`=C47+C50+C51`) decían
+qué renglones iban juntos en una OT. Un día después, quien arma el archivo lo
+reemplazó por **una sola tabla**: el resumen, ya consolidado, con el rango de
+días escrito en vez de deducido.
+
+Eso dejó una lección que vale más que el código que se tiró: **la tabla cambió
+de columnas (`K:O` → `A:E`) de un día para el otro.** Un lector que busca por
+letra de columna se rompe con ese movimiento y no puede decir por qué. Por eso
+ahora **las columnas se buscan por el texto del encabezado**, que es el contrato
+que la persona que arma el archivo ve y controla.
+
+### Las cinco columnas
+
+`Tarea · Fecha Desde · Fecha Hasta · Hs · Precio ($)`
+
+`Tarea` y `Hs` son las únicas obligatorias: sin tarea no hay qué hacer y sin
+horas no hay qué cargarle a la OT. Se aceptan los sinónimos razonables
+(`Descripción`, `Desde`, `Hasta`, `Horas`, `Importe`) y una sola columna `Fecha`
+se toma como el día en que empieza. **Una fila es una tarea y una tarea es una
+orden**: no hay nada que agrupar.
+
 ### Las cuatro decisiones
 
-1. **Las fórmulas del resumen son los grupos.** La columna `N` del archivo real
-   trae `=C47+C50+C51`, que es exactamente «estos tres renglones van en una
-   OT». Leer el valor y no la fórmula habría dejado un 46 sin forma de saber de
-   dónde salió. Por eso **los grupos entran armados** y no hay que proponerlos.
-   Un grupo de un solo renglón no se escribe: es la orden de ese renglón, y
-   marcarlo lo sacaría de la propuesta de acumular los que se llaman igual.
-2. **El control es que las horas del resumen den las del detalle.** Es el
-   criterio de quien pidió esto, y la defensa contra una fórmula que apunta una
-   fila más abajo. Si no cierra, **los renglones entran igual** —no se pierde el
-   trabajo de tipear el mes— pero **no se arma ningún grupo**, y se dice con
-   número de fila qué pasó. Nunca se arma un grupo sobre una cuenta que no da.
+1. **El control es la fila de TOTALES.** Al desaparecer el detalle desapareció
+   la comprobación de «las horas del resumen dan las del detalle». Lo que queda
+   es el total declarado contra la suma de las filas, y sirve porque **ese total
+   está escrito a mano y no es una fórmula**: compararlo detecta una fila de
+   más, una de menos o un dígito cambiado. Si no da, **los renglones entran
+   igual** —no hay nada que retener, la tabla es el dato— y se dice con los dos
+   números y la fila del total. Si no hay TOTALES, también se avisa.
+2. **El rango de días se guarda, no se deduce.** 18 de las 63 filas del archivo
+   real abarcan más de un día; una va del 24 al 31. Sin guardarlo, la OT diría
+   «El 24/10». Es una columna nueva, `fecha_hasta`, **nullable para siempre**:
+   null quiere decir que no hay segunda fecha, que es lo que pasa con todos los
+   renglones que entran por foto. Sin check de `fecha_hasta >= fecha`: un rango
+   dado vuelta hay que mostrárselo a quien tipeó, no hacer fallar el insert de
+   las 63 filas por una.
+
+   **Corregido el 03/11, el mismo día**: la primera versión guardaba null cuando
+   «Fecha Hasta» era igual a «Fecha Desde» —«duró un día», más prolijo—. En
+   pantalla eso dejó **45 de 63 campos vacíos**, que es indistinguible de un dato
+   que se perdió, y quien había tipeado las 63 fechas lo notó al primer vistazo.
+   La lección general: **una optimización de almacenamiento que cambia lo que la
+   persona ve no es una optimización.** Lo que está en el archivo se guarda como
+   está.
 3. **La procedencia no lleva columna nueva.** El archivo va al mismo bucket y a
    la misma tabla que las fotos (`mant_cuadernos_fotos`, con `orden: 1`), y lo
-   único que lo distingue es la extensión de la ruta. Eso evitó una migración
-   de columna y dejó intactos el borrado de la carga, el reintento y el vínculo
-   de cada renglón con su origen. La migración que sí hizo falta es la del
-   bucket: `allowed_mime_types` sólo tenía los cinco tipos de imagen.
+   único que lo distingue es la extensión de la ruta. Eso dejó intactos el
+   borrado de la carga, el reintento y el vínculo de cada renglón con su origen.
+   La migración que sí hizo falta es la del bucket: `allowed_mime_types` sólo
+   tenía los cinco tipos de imagen.
 4. **En pantalla no va el panel de la foto.** No hay hoja contra la cual
-   comparar: la transcripción la escribió la misma persona que carga. Va de qué
-   fila salió cada renglón, y lo que queda por hacer es completar los sectores.
-   **El filtro de «dudosos» se dejó** —el plan decía sacarlo—: el Excel también
-   produce dudosos (una fecha que no existe, unas horas que no son un número) y
-   esconderlos sería tapar problemas reales.
+   comparar: la transcripción la escribió la misma persona que carga. Van las
+   cinco columnas que se leyeron, de qué fila salió cada renglón, y dos campos
+   de fecha en vez de uno. **El filtro de «dudosos» se dejó** —el plan decía
+   sacarlo—: el Excel también produce dudosos y esconderlos sería tapar
+   problemas reales.
 
-### Lo que se midió (02/11/2026, `Tareas_Octubre_2026.xlsx`)
+### Lo que se midió (03/11/2026, `Tareas_Octubre_2026 2.xlsx`)
 
-Una hoja, 99 filas. 97 renglones, 1074 horas, 0 precios. 63 filas de resumen, de
-las cuales 18 juntan dos o más renglones. **La cuenta cierra exacta: 1074 =
-1074, 0 renglones contados dos veces, 0 sin cubrir, 0 referencias a celdas
-vacías, 0 dudosos.** Las dos filas de `TOTALES` usan `SUM()` y se saltean.
+Una hoja, 63 tareas, 1074 horas, y la fila de TOTALES dice 1074: **cierra
+exacto**. La tarea más larga son 106 h; 18 de las 63 duran más de un día; 0
+precios. **Un solo dudoso: la fila 24 trae `#REF!` en «Fecha Desde»**, una
+referencia que quedó rota al sacar el detalle — entra igual, marcada, usando su
+«Fecha Hasta». El tope de horas por fila quedó en **500**, no en los 200 de un
+renglón manuscrito: allá una fila es un día, acá es una tarea entera a lo largo
+del mes, y lo que hay que atrapar es el dígito de más (106 → 1060).
 
 ### Los riesgos que quedan asumidos
 
-- **Si la fórmula está mal pero cierra, el grupo sale mal.** Dos referencias
-  cruzadas entre dos grupos suman lo mismo y el control no lo ve. Lo que sí
-  atrapa es lo que cambia el total: una fila contada dos veces, una sin cubrir,
-  una referencia a una celda vacía, y un término de más en la fórmula (se
-  compara lo que dice la celda contra lo que suman sus referencias).
-- **La columna `O` del resumen no se lee.** El precio sale del detalle y la OT
-  suma el de sus renglones. Si alguien escribe un precio sólo en el resumen, no
-  entra — y es a propósito: leerlo sería una segunda fuente para el mismo dato.
-- **Un archivo que Excel no recalculó no se puede comparar.** Si la celda de
-  horas no trae valor calculado, mandan las referencias. Es lo correcto, pero
-  significa que un término de más ahí no se detecta.
+- **El control es más débil que el que reemplazó.** Antes se cruzaban dos
+  representaciones de lo mismo; ahora se compara un total contra la suma de las
+  filas que lo componen, y las dos las tipeó la misma persona en el mismo rato.
+  Un error de concepto —una tarea que se olvidó de anotar— no lo ve nadie.
+- **Si no hay fila de TOTALES no hay control ninguno**, y eso es lo más probable
+  en un archivo armado a las apuradas. Se avisa, pero avisar no es comprobar.
+- **Un rango de días no se puede verificar.** Que una tarea diga del 24 al 31 es
+  palabra de quien la anotó; el sistema sólo puede ver que el orden sea el
+  correcto.
+
+## Generar de a una, y sacar lo que ya está cargado (03/11/2026)
+
+Dos pedidos que llegaron juntos al estrenar el Excel con el mes real, y que
+salen del mismo lugar: **con el Excel casi todo sale solo**, y el módulo estaba
+armado para el cuaderno manuscrito, donde casi nada sale solo.
+
+Medido sobre la carga real de octubre: de los 63 renglones, **46 ya salían como
+su propia OT y ninguno estaba juntado**; los otros 17 esperan el sector.
+
+### «No tengo la opción de generar una OT sin juntar»
+
+El malentendido que revela es el que había que cerrar: **juntar no es el camino
+para generar una sola**. Juntar existe para cuando dos renglones son la misma
+tarea de días distintos; usarlo como el botón de «generá éste» mete horas de
+tareas distintas en una orden, que es lo que el módulo evita. Lo que faltaba no
+era poder juntar de a uno: era poder **generar** de a uno.
+
+El único botón que había genera todo lo que puede salir. Con 46 órdenes listas
+contra un mes que ya tiene 91 OT de PIPARO cargadas a mano, eso no es una
+opción que alguien vaya a apretar.
+
+La ruta acepta `claves` —la `clave` de cada orden: el `grupo_id`, o `solo:<id>`
+si es un renglón suelto— y la barra de la selección tiene su propio botón. Las
+decisiones:
+
+- **El filtro cae sobre los grupos y no sobre los renglones.** `enOrdenes` corre
+  con la carga entera y las claves se eligen después. Elegir un renglón juntado
+  saca su grupo entero: una orden con la mitad de las horas de su grupo sería
+  peor que no tener el botón. Los compañeros que entran sin haber sido elegidos
+  se cuentan en el cartel antes de escribir.
+- **El tope de 25 y el freno de duplicados se cuentan después del filtro.**
+  Generar de a uno pasa por el mismo freno que generar de a 46; lo que cambia es
+  cuántas órdenes mira ese freno.
+- **La comparación pantalla-contra-servidor sigue en pie**, porque las dos
+  puntas filtran con la misma lista de claves. Era la defensa que impedía
+  confirmar un número que ya no es el que se ve, y un filtro aplicado de un solo
+  lado la habría roto sin romper nada visible.
+- **Se dice cuántos de los elegidos no salen todavía.** Un botón que dijera
+  «Generar 3» con 8 elegidos y no explicara los otros 5 es la clase de número
+  que nadie vuelve a creer.
+
+### «Que pueda borrar una línea, porque alguna capaz ya tiene OT creada»
+
+Es el caso real de octubre. Hasta ahora no había qué hacer con esas filas:
+dejarlas sin generar deja la carga eternamente en `EN_CHEQUEO` con renglones que
+nadie sabe por qué no salieron, y el freno de duplicados avisa que el período
+está cargado pero avisar no alcanza.
+
+- **Ruta propia (`cuaderno/renglones/[id]`), no el `DELETE` de `/renglones`**,
+  que saca el `grupo_id` y deja el renglón vivo. Un `DELETE` que según el cuerpo
+  desagrupa o destruye es la clase de ambigüedad que se paga una sola vez y
+  cara.
+- **No se saca el que ya es una orden del sistema**, ni el que está en un grupo
+  que ya generó. Lo segundo lo decide `sePuedeSeparar` —la misma función que usa
+  separar, no una copia—: sacarlo le cambiaría el total a una orden ya escrita
+  en la planilla.
+- **Se audita con `borrar`, y es el primero que escribe una persona.** Hasta acá
+  ese verbo lo escribían sólo las sincronizaciones. El argumento no es «borrar
+  es grave» sino cuál pregunta queda sin respuesta: el archivo de origen sigue
+  en el bucket, así que **qué decía** se contesta sin la tabla; **quién lo sacó
+  y cuándo** no. Y estas filas son con lo que se le paga al contratista: una que
+  desaparece es una hora que no se factura por el criterio de una persona. El
+  registro va **antes** del borrado —si no entra, no se borra—, que es el orden
+  que fijó `borradoDeEspejo.ts`.
+- **El estado de la carga se recalcula al sacar**, no sólo al generar: sacar el
+  último pendiente puede dejarla `GENERADA`. Por eso `actualizarElEstado` se
+  mudó de la ruta de generación a `lib/mantenimiento/cuadernoEstado.ts`.
+
+### Lo que se comprobó
+
+- `enOrdenes` sobre los 63 renglones reales: 46 órdenes, **las 46 sueltas**, 0
+  grupos, 17 pendientes y todos por `sin_sector`. Es lo que hace necesario el
+  botón.
+- El check vivo de `auditoria.accion` incluye `borrar`, y `filaDeAuditoria` acepta
+  el evento tal como lo arma la ruta: no hace falta ninguna migración.
+- `node scripts/que-cuelga-de.mjs mant_cuadernos_renglones` → **nada apunta a esa
+  tabla por clave foránea**, así que borrar una fila no se lleva nada en cascada.
+- El camino entero del borrado, sobre una carga de mentira creada y limpiada para
+  eso: el `delete` con la guarda `orden_trabajo_id is null` borra 1, el estado
+  queda `EN_CHEQUEO` con un pendiente y pasa a `GENERADA` cuando no queda ninguno.
+
+### El error que casi se va, y cómo quedó frenado
+
+`pedirGenerar(simular, confirmarDuplicados, claves)` tenía `claves` con valor
+por defecto en null, y la llamada de la **generación de verdad** se quedó sin
+pasarlas. La vista previa filtraba y la escritura no: el cartel decía
+«Generar 1» y se habrían escrito las 46 órdenes, en la planilla de producción,
+que se borran a mano fila por fila. Es exactamente el fallo contra el que está
+armado todo lo demás de esta ruta, y no lo habría visto ningún test ni el
+compilador.
+
+Lo que lo frena ahora es que **los tres argumentos son obligatorios**: sin valor
+por defecto, una punta que filtre y otra que no, no compila. Un comentario
+pidiendo acordarse no habría servido —era justo lo que falló—.
+
+### El riesgo que queda asumido
+
+**Sacar un renglón es palabra de quien lo saca.** El sistema no puede comprobar
+que la OT cargada a mano cubra de verdad esa tarea: no hay nada que las ate, y
+el cruce por fecha y contratista es justo lo que el freno de duplicados ya hace
+sin poder decidir. Lo que queda es el registro de quién lo decidió.
+
+## Lo que va en el texto y lo que va en su columna (03/11/2026)
+
+Salió de mirar las 48 órdenes de octubre ya escritas. La descripción decía
+
+    Resoldar chapas impacto rompedores p/ TRT Nº2 — PIPARO. El 19/10. 8 h en
+    total. Según el cuaderno: Resoldar chapas impacto rompedores p/ TRT Nº2
+    (19/10, 8 h).
+
+mientras **K FECHA DE CIERRE, M ESTADO, N CONTRATISTA y O HORAS estaban vacías
+en las 48**. El diagnóstico importa porque son dos cosas con un solo síntoma: el
+texto acumulaba lo que no le tocaba, y las columnas que sí lo llevan no se
+estaban llenando. Arreglar sólo el texto habría dejado la orden sin esos datos
+en ningún lado.
+
+### La descripción
+
+Pasa a ser sólo la tarea. El contratista, la fecha de cierre y las horas tienen
+columna propia, y una celda de prosa no se filtra ni se suma — la planilla es de
+donde lee quien no entra al sistema.
+
+**Riesgo asumido**: el detalle renglón por renglón sale de la planilla. Sigue en
+`mant_cuadernos_renglones`, enlazado a esa misma OT y visible en la pantalla del
+cuaderno, pero quien mira sólo la planilla ve el total y no el reparto. Se
+aceptó a pedido: el texto largo hacía ilegible la columna.
+
+### El denominador común, medido
+
+La regla «si todas las tareas del grupo son iguales, usar ésa» no habría servido
+para ninguno: de los **cinco grupos que una persona juntó de verdad, cero tienen
+las tareas idénticas**. Son la misma tarea escrita distinto cada día.
+
+Por eso el denominador son las palabras que están en **todas**, dichas con las
+palabras de la primera. Tres decisiones:
+
+- **El plural cuenta como la misma palabra.** Sin eso «techo» y «techos» no
+  coinciden y «Limpieza techo Hidratación» ×4 se queda en «Limpieza
+  Hidratación». El límite —prefijo exacto, ambas de cuatro letras o más, a lo
+  sumo dos de diferencia— está puesto para que **«Nº1» y «Nº2» no se parezcan
+  nunca**: una OT de la TRT Nº1 cargada en la Nº2 no se nota jamás.
+- **Con menos de dos palabras en común se listan las tareas distintas.** El
+  quinto grupo real sólo comparte «limpieza»; una orden que dijera eso es peor
+  que no simplificar. Simplificar cuando hay a qué, no inventar un resumen.
+- **El texto sale con las palabras de la primera tarea**, con sus acentos y sus
+  mayúsculas: es como lo escribió quien llevó el cuaderno, no una forma
+  normalizada que nadie usó.
+
+### Las columnas: el mecanismo ya existía
+
+De la K en adelante son literales del master y necesitan que la fila exista ahí,
+cosa que llega por `IMPORTRANGE` y tarda. La generación lo intentaba una vez, a
+medio segundo de crear la orden —o sea nunca a tiempo—, anotaba
+`sheets_pendiente` y lo dejaba para quien abriera Órdenes o para el sync, en la
+práctica cada 3 a 5 horas.
+
+Lo que cierra el caso es la comparación del mismo día:
+
+| | |
+|---|---|
+| OT del cuaderno | 48 de 48 con las cuatro columnas vacías, 47 en la cola |
+| OT de `/api/mantenimiento/ordenes`, que reintenta | **12 de 12 salieron, en el primer intento, a los 21 s** |
+
+O sea que no era un problema de IMPORTRANGE ni de permisos: era que esta ruta
+era la única que no usaba el reintento. Ahora drena con `after()`, con dos
+diferencias respecto del alta de una OT suelta:
+
+- **Una pasada para toda la corrida**, no una por orden: el master recibe las 25
+  juntas, y esperar 25 veces 20 segundos no tendría sentido.
+- **Las esperas se recortan a lo que queda de `maxDuration`**
+  (`esperasQueEntran`), porque el `after()` corre dentro del mismo techo que ya
+  gastó creando. Quedarse sin tiempo no rompe nada: la cola sigue siendo la red.
+
+### Lo que no cambió
+
+El costo sigue viajando en `REPUESTO UTILIZADO`, que es donde la práctica ya lo
+escribía a mano en 58 de las 380 OT viejas de PIPARO.
+
+### Lo que queda pendiente de una decisión
+
+Las 48 órdenes de octubre ya escritas conservan el texto largo. Reescribirlo es
+tocar la columna Y de «Altas del sistema» con `corregirLaAlta` —la H del master
+es derrame— y es una escritura en la planilla de producción, así que no se hizo
+sin pedirlo. Sus K/M/N/O, en cambio, se llenan solas al abrir Órdenes.

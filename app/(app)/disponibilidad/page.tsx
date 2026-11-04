@@ -25,10 +25,9 @@ import DisponibilidadClient from "./DisponibilidadClient";
  * `POST /api/rrhh/ausencias`, que exige ese nivel con `puede_editar_check`; si
  * esto se olvidara, la ruta seguiría contestando 403.
  *
- * El padrón se trae sólo para quien puede cargar, porque es lo único que ese
- * formulario necesita y no hay motivo para mandárselo al resto. Sin filtrar por
- * `activo`: una ausencia de alguien dado de baja hace días es justo lo que
- * alguien puede estar viniendo a cargar.
+ * El padrón se lee para todos —de ahí sale la dotación por sector que usa el
+ * resumen— pero la **lista de nombres** del formulario se le manda sólo a quien
+ * puede cargar.
  *
  * Ver docs/superpowers/specs/2026-10-29-disponibilidad-y-ausentismo-design.md,
  * sección «Quién ve qué».
@@ -42,16 +41,52 @@ export default async function DisponibilidadPage() {
   const nivel = await nivelRrhhDe(supabase, user.id);
   const puedeCargar = nivel === "edicion" || nivel === "admin";
 
-  const empleados = puedeCargar
-    ? await traerTodo<{ id: string; nombre: string; apellido: string }>((desde, hasta) =>
-        supabase.from("empleados").select("id, nombre, apellido").order("apellido").range(desde, hasta)
-      )
-    : [];
+  const empleados = await traerTodo<{
+    id: string;
+    nombre: string;
+    apellido: string;
+    activo: boolean;
+    sectores: unknown;
+  }>((desde, hasta) =>
+    supabase
+      .from("empleados")
+      .select("id, nombre, apellido, activo, sectores(nombre)")
+      .order("apellido")
+      .range(desde, hasta)
+  );
+
+  /*
+   * La dotación de cada sector, para que el resumen pueda decir «3 de sus 11».
+   * Va a todo el mundo y no sólo a quien puede cargar, y eso es a propósito:
+   * `empleados` tiene la lectura abierta a cualquier autenticado, así que
+   * cuánta gente tiene un sector ya está al alcance de todos. Lo que la sección
+   * protege es el MOTIVO de una ausencia, no el organigrama — se comprobó antes
+   * de ponerlo, porque la decisión del 02/11 fue justamente cerrar lo que
+   * volvía identificable un agregado.
+   *
+   * Acá sí se cuentan sólo los **activos**: la dotación es con cuánta gente
+   * cuenta hoy el sector. Es la única cuenta de toda la sección que filtra por
+   * `activo`, y por eso está dicho: en los reportes, filtrar vuelve huérfanas
+   * las ausencias de quien se fue (R27), pero un divisor que incluye a quien ya
+   * no está diría que el sector tiene más gente de la que tiene.
+   */
+  const personalPorSector: Record<string, number> = {};
+  for (const e of empleados) {
+    if (!e.activo) continue;
+    const s = Array.isArray(e.sectores) ? e.sectores[0] : e.sectores;
+    const nombre = (s as { nombre?: unknown } | null | undefined)?.nombre;
+    const clave = typeof nombre === "string" ? nombre : "Sin sector";
+    personalPorSector[clave] = (personalPorSector[clave] ?? 0) + 1;
+  }
 
   return (
     <DisponibilidadClient
       puedeCargar={puedeCargar}
-      empleados={empleados.map((e) => ({ id: e.id, nombre: `${e.apellido}, ${e.nombre}` }))}
+      personalPorSector={personalPorSector}
+      // El padrón del formulario va sólo a quien puede cargar, y sin filtrar
+      // por `activo`: una ausencia de alguien dado de baja hace días es justo
+      // lo que alguien puede venir a cargar.
+      empleados={puedeCargar ? empleados.map((e) => ({ id: e.id, nombre: `${e.apellido}, ${e.nombre}` })) : []}
     />
   );
 }

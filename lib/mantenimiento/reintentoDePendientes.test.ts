@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  ESPERAS_DEL_REINTENTO, reintentarHastaQueSalga, cualesReintentar,
+  ESPERAS_DEL_REINTENTO, MARGEN_POR_PASADA_MS, esperasQueEntran,
+  reintentarHastaQueSalga, cualesReintentar,
   hacePocoQueSeDreno, MINIMO_ENTRE_DRENAJES_MS, MINIMO_ENTRE_INTENTOS_MS,
   avisoDelPendiente,
   type PendienteDeOT,
@@ -253,5 +254,36 @@ describe("el freno de la ráfaga", () => {
    */
   it("corta más corto que el freno por orden", () => {
     expect(MINIMO_ENTRE_DRENAJES_MS).toBeLessThan(MINIMO_ENTRE_INTENTOS_MS);
+  });
+});
+
+describe("cuánto drenaje entra en lo que queda de la función", () => {
+  it("ni con los 300 s enteros entran las cuatro, porque cada pasada cuesta", () => {
+    // 20+20, 40+20, 60+20 son 180; la cuarta pediría 140 más y son 320. Que la
+    // última no entre es correcto y es el motivo de que esto exista: el alta de
+    // una OT sola tiene el techo entero, la generación del cuaderno no.
+    expect(esperasQueEntran(300_000)).toEqual([20_000, 40_000, 60_000]);
+    expect(esperasQueEntran(320_000)).toEqual([...ESPERAS_DEL_REINTENTO]);
+  });
+
+  it("reserva tiempo para la pasada además de la espera", () => {
+    // 20 s de espera + 20 s de pasada = 40. Con 39 no entra ninguna.
+    expect(esperasQueEntran(39_000)).toEqual([]);
+    expect(esperasQueEntran(40_000)).toEqual([20_000]);
+  });
+
+  it("corta donde deja de entrar, y no sigue con las más cortas de atrás", () => {
+    // Las esperas crecen, así que cortar es lo correcto: 20+20 y 40+20 son 100.
+    expect(esperasQueEntran(100_000)).toEqual([20_000, 40_000]);
+    expect(esperasQueEntran(99_000)).toEqual([20_000]);
+  });
+
+  it("sin tiempo devuelve vacío en vez de arrancar una espera que no entra", () => {
+    expect(esperasQueEntran(0)).toEqual([]);
+    expect(esperasQueEntran(-5_000)).toEqual([]);
+  });
+
+  it("el margen por pasada es el que se reserva", () => {
+    expect(esperasQueEntran(20_000 + MARGEN_POR_PASADA_MS)).toEqual([20_000]);
   });
 });

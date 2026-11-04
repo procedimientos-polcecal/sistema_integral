@@ -54,7 +54,10 @@ export default async function PartesContratistaPage() {
   const partes = await traerTodo<ParteCargado>((d, h) =>
     supabase
       .from("mant_partes_contratista")
-      .select("id, proveedor_id, numero, fecha, dirigido_a, hora_entrada, hora_salida, horas_declaradas, materiales, mant_partes_contratista_renglones(id, orden, actividad, lugar_raw, sector_id, equipo_id, horas, orden_trabajo_id)")
+      // `horas_50` y `horas_100` entran desde que un parte se puede corregir:
+      // sin ellas, abrir uno para corregirlo las dejaría vacías y el guardado
+      // las borraría sin que nadie lo pidiera.
+      .select("id, proveedor_id, numero, fecha, dirigido_a, hora_entrada, hora_salida, horas_declaradas, horas_50, horas_100, materiales, mant_partes_contratista_renglones(id, orden, actividad, lugar_raw, sector_id, equipo_id, horas, orden_trabajo_id)")
       .order("fecha", { ascending: false })
       .order("numero", { ascending: false })
       .range(d, h)

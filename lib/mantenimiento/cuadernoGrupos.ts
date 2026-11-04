@@ -28,6 +28,12 @@ export type RenglonDelCuaderno = {
   foto_id?: string | null;
   linea?: number | null;
   fecha: string | null;
+  /**
+   * El último día, cuando la tarea duró más de uno. **Null quiere decir que
+   * duró un día**, no que falte: una línea del cuaderno manuscrito es de un día
+   * y nunca lo trae. Lo trae el Excel, donde cada fila ya viene consolidada.
+   */
+  fecha_hasta?: string | null;
   tarea: string;
   /** Lo que escribió PIPARO. Es el papel: nunca se edita, sólo se lee. */
   lugar_raw: string | null;
@@ -293,7 +299,13 @@ export type TotalesDeRenglones = Pick<
  */
 export function totalesDeRenglones(renglones: readonly RenglonDelCuaderno[]): TotalesDeRenglones {
   const miembros = [...renglones].sort(porFechaYLinea);
-  const fechas = miembros.map((m) => m.fecha).filter((f): f is string => !!f).sort();
+  // Las dos puntas de cada renglón, no sólo su primer día: un renglón que duró
+  // del 24 al 31 tiene que empujar el `hasta` del grupo hasta el 31. Para los
+  // que vienen de una foto `fecha_hasta` es null y esto queda igual que antes.
+  const fechas = miembros
+    .flatMap((m) => [m.fecha, m.fecha_hasta ?? null])
+    .filter((f): f is string => !!f)
+    .sort();
   const costos = miembros.filter((m) => numero(m.costo) > 0);
   return {
     tarea: miembros[0]?.tarea.trim() ?? "",

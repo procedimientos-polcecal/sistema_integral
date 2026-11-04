@@ -235,6 +235,10 @@ export default function CuadernoClient({
   const [resultado, setResultado] = useState<ResultadoDeGenerar | null>(null);
 
   const [filtro, setFiltro] = useState<IdDeFiltro>("todos");
+  /** "" todos · "sin" los que no tienen sector · si no, el id del sector. */
+  const [sectorFiltrado, setSectorFiltrado] = useState<string>("");
+  /** Lo mismo con el equipo. Los dos se combinan entre sí y con los chips. */
+  const [equipoFiltrado, setEquipoFiltrado] = useState<string>("");
   const [seleccion, setSeleccion] = useState<ReadonlySet<string>>(new Set());
   const [renglonActivo, setRenglonActivo] = useState<string | null>(null);
   const [fotoElegida, setFotoElegida] = useState<string | null>(null);
@@ -402,7 +406,53 @@ export default function CuadernoClient({
     { id: "juntados", etiqueta: "Ya juntados", pasa: (r) => !!r.grupo_id },
   ];
   const filtroActual = filtros.find((f) => f.id === filtro) ?? filtros[0];
-  const visibles = renglones.filter(filtroActual.pasa);
+  /**
+   * Los sectores que de verdad hay en esta carga, con cuántos renglones cada
+   * uno. Son los de la carga y no los 60 y pico de la planta: filtrar sirve
+   * para juntar lo que está acá, y una lista con 50 opciones vacías es ruido.
+   */
+  const sectoresDeLaCarga = useMemo(() => {
+    const cuenta = new Map<string, number>();
+    for (const r of renglones) if (r.sector_id) cuenta.set(r.sector_id, (cuenta.get(r.sector_id) ?? 0) + 1);
+    return [...cuenta]
+      .map(([id, n]) => ({ id, nombre: nombreDeSector.get(id) ?? "(sector que ya no está)", n }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  }, [renglones, nombreDeSector]);
+
+  const sinSector = renglones.filter((r) => !r.sector_id).length;
+
+  /**
+   * Los equipos que de verdad hay en esta carga, por el mismo motivo que los
+   * sectores: la planta tiene cientos y acá aparecen unos pocos.
+   *
+   * **No es la gemela del de sector, y conviene saberlo**: sin sector un
+   * renglón **no genera**, y sin equipo genera igual —`enOrdenes` no lo pide—.
+   * O sea que «sin equipo» no es una cola de trabajo pendiente sino una
+   * pregunta: esas horas no van a sumar al costo ni al MTBF de ninguna máquina.
+   */
+  const equiposDeLaCarga = useMemo(() => {
+    const cuenta = new Map<string, number>();
+    for (const r of renglones) if (r.equipo_id) cuenta.set(r.equipo_id, (cuenta.get(r.equipo_id) ?? 0) + 1);
+    return [...cuenta]
+      .map(([id, n]) => {
+        const e = equipoPorId.get(id);
+        return { id, nombre: e ? (e.code ? `${e.code} · ${e.name}` : e.name) : "(equipo que ya no está)", n };
+      })
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  }, [renglones, equipoPorId]);
+
+  const sinEquipo = renglones.filter((r) => !r.equipo_id).length;
+
+  const pasaElSector = (r: Renglon) =>
+    sectorFiltrado === "" ? true : sectorFiltrado === "sin" ? !r.sector_id : r.sector_id === sectorFiltrado;
+
+  const pasaElEquipo = (r: Renglon) =>
+    equipoFiltrado === "" ? true : equipoFiltrado === "sin" ? !r.equipo_id : r.equipo_id === equipoFiltrado;
+
+  const visibles = renglones.filter(filtroActual.pasa).filter(pasaElSector).filter(pasaElEquipo);
+
+  /** Los que se ven y todavía se pueden juntar: los que ya son OT no entran. */
+  const elegiblesALaVista = visibles.filter((r) => !r.orden_trabajo_id);
 
   const fotoDe = useMemo(() => new Map(fotos.map((f) => [f.id, f])), [fotos]);
   const renglonesPorFoto = useMemo(() => {
@@ -505,6 +555,73 @@ export default function CuadernoClient({
     () => [...new Set(gruposElegidos.flatMap((g) => sePuedeSeparar(renglones.filter((r) => r.grupo_id === g))))],
     [gruposElegidos, renglones]
   );
+
+  /**
+   * Las órdenes que saldrían de lo elegido. Sale de `enOrdenes` —la misma
+   * cuenta que corre el servidor— y no de la selección: elegir un renglón
+   * juntado pide **su grupo entero**, porque media orden no existe, y un
+   * renglón que todavía no puede generar no aparece acá en vez de prometer
+   * una orden que la ruta va a negar.
+   */
+  const ordenesDeLoElegido = useMemo(
+    () => salida.ordenes.filter((o) => o.renglon_ids.some((id) => seleccion.has(id))),
+    [salida.ordenes, seleccion]
+  );
+
+  /** Los elegidos que no salen todavía: sin sector, sin fecha, o sin horas ni precio. */
+  const elegidosQueNoSalen = useMemo(() => {
+    const cubiertos = new Set(ordenesDeLoElegido.flatMap((o) => o.renglon_ids));
+    return elegidos.filter((r) => !r.orden_trabajo_id && !cubiertos.has(r.id)).length;
+  }, [ordenesDeLoElegido, elegidos]);
+
+  /**
+   * Sacar un renglón de la carga. **Borra la fila**, que no es lo mismo que
+   * separar: existe para la tarea que ya tiene su OT cargada a mano y que no
+   * hay que volver a crear. El porqué completo está en la ruta.
+   */
+  async function sacarRenglon(r: Renglon) {
+    const horas = Number(r.horas) || 0;
+    const ok = await confirm({
+      title: "Sacar el renglón de la carga",
+      message:
+        `Se borra${r.linea ? ` el renglón de la línea ${r.linea}` : " el renglón"}: «${r.tarea.trim()}»` +
+        `${horas > 0 ? `, ${verHoras(horas)} h` : ""}${Number(r.costo) > 0 ? ` y $${costoParaElCampo(r.costo)}` : ""}. ` +
+        `Es para la tarea que ya tiene su orden de trabajo cargada a mano y no hay que volver a crear: ` +
+        `sacarla es decir que esas horas no se facturan desde acá. ` +
+        `No se deshace —queda registrado quién la sacó y qué decía—, y para recuperarla hay que ` +
+        `volver a cargar ${deExcel ? "la planilla" : "la foto"} en otra carga.`,
+      confirmText: "Sacar el renglón", cancelText: "Volver", danger: true,
+    });
+    if (!ok) return;
+
+    setError(""); setAviso(""); setOcupado(true);
+    try {
+      const res = await fetch(`/api/mantenimiento/cuaderno/renglones/${encodeURIComponent(r.id)}`, {
+        method: "DELETE",
+      });
+      const cuerpo = await leerJson<{ ok?: boolean; decia?: string; aviso?: string | null }>(res);
+      if (!res.ok || !cuerpo.ok) {
+        setError(cuerpo.error ?? `No se pudo sacar el renglón (HTTP ${res.status}).`);
+        return;
+      }
+      tocarRenglones((rs) => rs.filter((x) => x.id !== r.id));
+      setSeleccion((sel) => {
+        if (!sel.has(r.id)) return sel;
+        const n = new Set(sel);
+        n.delete(r.id);
+        return n;
+      });
+      setRenglonActivo((a) => (a === r.id ? null : a));
+      setAviso(
+        `Se sacó el renglón: ${cuerpo.decia ?? r.tarea.trim()}.` +
+        (cuerpo.aviso ? ` ${cuerpo.aviso}` : "")
+      );
+    } catch (e) {
+      setError(`No se pudo sacar el renglón: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setOcupado(false);
+    }
+  }
 
   async function juntar(ids: string[]) {
     setError(""); setAviso(""); setOcupado(true);
@@ -833,10 +950,20 @@ export default function CuadernoClient({
 
   // ── Generar las órdenes ───────────────────────────────────
 
-  async function pedirGenerar(simular: boolean, confirmarDuplicados = false) {
+  /**
+   * Los tres argumentos son **obligatorios a propósito**. Con `claves` por
+   * defecto en null, la vista previa filtraba y la generación no: el cartel
+   * decía «Generar 1» y se escribían las 46. No compilar es la única defensa
+   * contra eso que no depende de que alguien se acuerde.
+   */
+  async function pedirGenerar(simular: boolean, confirmarDuplicados: boolean, claves: string[] | null) {
     const res = await fetch("/api/mantenimiento/cuaderno/generar", {
       method: "POST", headers: JSON_HEADERS,
-      body: JSON.stringify({ cuaderno_id: cargaId, simular, confirmar_duplicados: confirmarDuplicados }),
+      body: JSON.stringify({
+        cuaderno_id: cargaId, simular, confirmar_duplicados: confirmarDuplicados,
+        // Sin claves sale todo, que es lo que hace el botón de abajo.
+        ...(claves ? { claves } : {}),
+      }),
     });
     const cuerpo = await leerJson<
       Partial<ResultadoDeGenerar> & { ordenes?: OrdenDelPlan[]; duplicados?: { aviso: string } | null }
@@ -854,19 +981,28 @@ export default function CuadernoClient({
    * Y si lo que calcula el servidor no coincide con lo que esta pantalla
    * muestra, no se genera: alguien más tocó la carga, y confirmar un número
    * que ya no es el que se ve es lo que esta pantalla existe para evitar.
+   *
+   * Con `claves` sale **sólo eso** —es el botón de la selección— y sin ellas
+   * sale todo. Las dos puntas filtran con la misma lista, así que la
+   * comparación de arriba sigue comparando lo mismo contra lo mismo.
    */
-  async function generar() {
+  async function generar(claves: string[] | null = null) {
     if (cargaId === NUEVA) return;
     setError(""); setAviso(""); setResultado(null); setOcupado(true);
     try {
-      const previa = await pedirGenerar(true);
+      const previa = await pedirGenerar(true, false, claves);
       if (previa.error || !previa.ordenes) {
         setError(previa.error ?? "La vista previa no llegó.");
         return;
       }
 
+      const elegidas = claves ? new Set(claves) : null;
       const delServidor = new Set(previa.ordenes.map((o) => `${o.clave}|${o.accion}`));
-      const deLaPantalla = new Set(salida.ordenes.map((o) => `${o.clave}|${o.accion}`));
+      const deLaPantalla = new Set(
+        salida.ordenes
+          .filter((o) => !elegidas || elegidas.has(o.clave))
+          .map((o) => `${o.clave}|${o.accion}`)
+      );
       const coincide =
         delServidor.size === deLaPantalla.size && [...delServidor].every((k) => deLaPantalla.has(k));
       if (!coincide) {
@@ -916,10 +1052,27 @@ export default function CuadernoClient({
       // una decisión que se toma mirando el aviso, en el mismo cartel.
       const duplicados = previa.duplicados?.aviso ?? null;
 
+      // **Lo que entra sin haber sido elegido, dicho antes de escribir.** Un
+      // renglón juntado arrastra a sus compañeros: la orden sale con el total
+      // del grupo, y media orden sería peor que no tener este botón.
+      const deMas = elegidas
+        ? [...new Set(entran.flatMap((o) => salida.ordenes.find((g) => g.clave === o.clave)?.renglon_ids ?? []))]
+            .filter((id) => !seleccion.has(id)).length
+        : 0;
+      const loElegido = elegidas
+        ? `Sale sólo lo que elegíste. ` +
+          (deMas > 0
+            ? `Entran también ${deMas} ${deMas === 1 ? "renglón que no elegíste porque está" : "renglones que no elegíste porque están"} juntados con los que sí. `
+            : "")
+        : "";
+
       const ok = await confirm({
-        title: duplicados ? "Ese período ya tiene órdenes cargadas" : "Generar las órdenes de trabajo",
+        title: duplicados
+          ? "Ese período ya tiene órdenes cargadas"
+          : elegidas ? "Generar las órdenes de lo elegido" : "Generar las órdenes de trabajo",
         message:
           (duplicados ? `${duplicados} ` : "") +
+          loElegido +
           `Se van a escribir en la planilla de producción: ${nuevas} órdenes nuevas` +
           `${sumadas > 0 ? ` y ${sumadas} que suman a una que ya existe` : ""}, con ${verHoras(horas)} h` +
           `${costo > 0 ? ` y $${costoParaElCampo(costo)}` : ""}.` +
@@ -932,7 +1085,7 @@ export default function CuadernoClient({
       });
       if (!ok) return;
 
-      const hecho = await pedirGenerar(false, Boolean(duplicados));
+      const hecho = await pedirGenerar(false, Boolean(duplicados), claves);
       if (hecho.error && !hecho.creadas) {
         setError(hecho.error);
         return;
@@ -995,6 +1148,7 @@ export default function CuadernoClient({
     setRepetidos(null);
     setCola([]);
     setFiltro("todos");
+    setSectorFiltrado("");
     setMesElegido(null);
   }
 
@@ -1143,10 +1297,13 @@ export default function CuadernoClient({
           <p className="mt-3 text-xs text-slate-500">
             {deExcel || elExcelElegido ? (
               <>
-                La planilla se lee entera de una vez y las órdenes salen de las fórmulas de la columna
-                de horas del resumen. El control es que esas horas den las del detalle: si no dan, los
-                renglones entran igual pero no se arma ningún grupo y se te dice en qué filas está el
-                problema. Volver a subirla reemplaza todo lo de esta carga.
+                Se leen cinco columnas, por el nombre del encabezado y no por su letra:{" "}
+                <strong>Tarea</strong>, <strong>Fecha Desde</strong>, <strong>Fecha Hasta</strong>,{" "}
+                <strong>Hs</strong> y <strong>Precio ($)</strong> — «Tarea» y «Hs» son las únicas
+                obligatorias. Cada fila es una orden de trabajo. Si hay una fila de{" "}
+                <strong>TOTALES</strong>, sus horas tienen que dar la suma de las filas: si no dan, los
+                renglones entran igual y se te dice de cuánto es la diferencia. Volver a subirla
+                reemplaza todo lo de esta carga.
               </>
             ) : (
               <>
@@ -1267,25 +1424,104 @@ export default function CuadernoClient({
       {abierta && (
         <>
           {/* ── Filtros ─────────────────────────────────── */}
-          <div className="flex flex-wrap gap-2">
-            {filtros.map((f) => {
-              const n = renglones.filter(f.pasa).length;
-              const marcado = f.id === filtro;
-              return (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {filtros.map((f) => {
+                // La cuenta del chip ya mira el sector y el equipo elegidos: si
+                // no, diría «Sin sector (35)» mientras abajo se ven tres.
+                const n = renglones.filter(f.pasa).filter(pasaElSector).filter(pasaElEquipo).length;
+                const marcado = f.id === filtro;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setFiltro(f.id)}
+                    className={`rounded-full border px-3 py-1 text-sm ${
+                      marcado
+                        ? "border-slate-800 bg-slate-800 text-white"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {f.etiqueta} ({n})
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Filtrar por sector es lo que hace manejable juntar: se ve de a un
+                sector por vez y se eligen todos los que quedan a la vista. El
+                de equipo es para la otra pregunta —cuántas líneas no tienen
+                ninguno— y los dos se combinan entre sí y con los chips. */}
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500">Sector</span>
+                <div className="w-full sm:w-72">
+                  <Select
+                    value={sectorFiltrado}
+                    onChange={(e) => setSectorFiltrado(e.target.value)}
+                    aria-label="Filtrar por sector"
+                    className={CLASE_CAMPO}
+                  >
+                    <option value="">Todos los sectores ({renglones.length})</option>
+                    {sinSector > 0 && <option value="sin">— sin sector — ({sinSector})</option>}
+                    {sectoresDeLaCarga.map((s) => (
+                      <option key={s.id} value={s.id}>{s.nombre} ({s.n})</option>
+                    ))}
+                  </Select>
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500">Equipo</span>
+                <div className="w-full sm:w-72">
+                  <Select
+                    value={equipoFiltrado}
+                    onChange={(e) => setEquipoFiltrado(e.target.value)}
+                    aria-label="Filtrar por equipo"
+                    className={CLASE_CAMPO}
+                  >
+                    <option value="">Todos los equipos ({renglones.length})</option>
+                    {sinEquipo > 0 && <option value="sin">— sin equipo — ({sinEquipo})</option>}
+                    {equiposDeLaCarga.map((e) => (
+                      <option key={e.id} value={e.id}>{e.nombre} ({e.n})</option>
+                    ))}
+                  </Select>
+                </div>
+              </label>
+
+              {puedeEditar && elegiblesALaVista.length > 0 && (
                 <button
-                  key={f.id}
                   type="button"
-                  onClick={() => setFiltro(f.id)}
-                  className={`rounded-full border px-3 py-1 text-sm ${
-                    marcado
-                      ? "border-slate-800 bg-slate-800 text-white"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
+                  onClick={() => setSeleccion(new Set(elegiblesALaVista.map((r) => r.id)))}
+                  className="rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
                 >
-                  {f.etiqueta} ({n})
+                  Elegir {elegiblesALaVista.length === 1 ? "el que se ve" : `los ${elegiblesALaVista.length} que se ven`}
                 </button>
-              );
-            })}
+              )}
+
+              {(sectorFiltrado !== "" || equipoFiltrado !== "") && (
+                <button
+                  type="button"
+                  onClick={() => { setSectorFiltrado(""); setEquipoFiltrado(""); }}
+                  className="px-2 py-2 text-sm text-slate-500 underline"
+                >
+                  {sectorFiltrado !== "" && equipoFiltrado !== ""
+                    ? "Quitar los dos filtros"
+                    : `Quitar el filtro de ${sectorFiltrado !== "" ? "sector" : "equipo"}`}
+                </button>
+              )}
+            </div>
+
+            {/* Sin equipo un renglón genera igual —no es lo mismo que sin
+                sector—, así que se dice qué se pierde en vez de dejar creer que
+                es algo que falta completar antes de generar. */}
+            {equipoFiltrado === "sin" && (
+              <p className="text-xs text-slate-500">
+                Un renglón sin equipo <strong>genera la OT igual</strong>: el equipo no es obligatorio,
+                a diferencia del sector. Lo que se pierde es que esas horas no suman al costo ni al
+                MTBF de ninguna máquina.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
@@ -1301,8 +1537,10 @@ export default function CuadernoClient({
                       Esta carga entró por Excel
                     </p>
                     <p className="mt-2 text-sm text-slate-700">
-                      {renglones.length} {renglones.length === 1 ? "renglón" : "renglones"} ·{" "}
-                      {gruposArmados} {gruposArmados === 1 ? "grupo armado" : "grupos armados"} desde el resumen
+                      {renglones.length} {renglones.length === 1 ? "tarea" : "tareas"}
+                      {gruposArmados > 0 && (
+                        <> · {gruposArmados} {gruposArmados === 1 ? "juntada" : "juntadas"} a mano</>
+                      )}
                     </p>
                     {errorDeFoto && <p className="mt-2 text-xs text-rose-700">{errorDeFoto}</p>}
                     {planilla && urls[planilla.id] && (
@@ -1315,9 +1553,16 @@ export default function CuadernoClient({
                       </a>
                     )}
                     <p className="mt-3 text-xs text-slate-500">
-                      No hay hoja que mirar al lado: la transcripción la escribiste vos. Lo que queda
-                      por hacer es completar los sectores. Los renglones que van en la misma orden ya
-                      vienen juntados desde las fórmulas del resumen.
+                      No hay hoja que mirar al lado: la transcripción la escribiste vos. <strong>Cada
+                      fila de la planilla es una orden de trabajo</strong>, así que lo que queda por
+                      hacer es completar los sectores.
+                    </p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Se leen cinco columnas, buscadas por el nombre del encabezado y no por su letra:
+                      <strong> Tarea</strong>, <strong>Fecha Desde</strong>, <strong>Fecha Hasta</strong>,
+                      <strong> Hs</strong> y <strong>Precio ($)</strong>. «Tarea» y «Hs» son las únicas
+                      obligatorias. La fila de <strong>TOTALES</strong> no es una tarea: sus horas se
+                      usan para comprobar que la suma de las filas dé.
                     </p>
 
                     {/* De qué fila de la planilla salió el renglón en el que estás parado. */}
@@ -1510,6 +1755,7 @@ export default function CuadernoClient({
                       equipoAparte={delSector && equipo && equipo.sector_id !== r.sector_id ? equipo : null}
                       etiquetaDeEquipo={etiquetaDeEquipo}
                       nombreDelSector={r.sector_id ? nombreDeSector.get(r.sector_id) ?? "" : ""}
+                      conRango={deExcel}
                       pagina={r.foto_id ? fotoDe.get(r.foto_id)?.orden ?? null : null}
                       hermanosEnPropuesta={enPropuesta.get(r.id) ?? 0}
                       integrantesDelGrupo={r.grupo_id ? renglones.filter((x) => x.grupo_id === r.grupo_id).length : 0}
@@ -1518,6 +1764,7 @@ export default function CuadernoClient({
                       onGuardar={(c) => guardar(r.id, c)}
                       onCambiarSector={(s) => cambiarSector(r, s)}
                       onConfirmarSector={() => confirmarSector(r)}
+                      onSacar={() => sacarRenglon(r)}
                       onError={setError}
                     />
                   );
@@ -1537,7 +1784,18 @@ export default function CuadernoClient({
                     </p>
                   )}
                   {elegidos.length === 1 && (
-                    <p className="mt-1 text-xs text-slate-500">Elegí al menos dos renglones para juntarlos.</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Elegí al menos dos renglones para juntarlos. Para una sola OT no hace falta juntar:
+                      alcanza con generar.
+                    </p>
+                  )}
+                  {elegidosQueNoSalen > 0 && (
+                    <p className="mt-1 text-xs text-amber-800">
+                      {elegidosQueNoSalen === 1
+                        ? "Uno de los elegidos todavía no sale como OT"
+                        : `${elegidosQueNoSalen} de los elegidos todavía no salen como OT`}
+                      : les falta el sector, la fecha, o las horas y el precio.
+                    </p>
                   )}
                   {problemasDeJuntar.length > 0 && (
                     <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-rose-700">
@@ -1557,6 +1815,22 @@ export default function CuadernoClient({
                       className="rounded bg-slate-800 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
                     >
                       Juntar en una OT
+                    </button>
+                    {/* Generar sin juntar. Juntar es para cuando dos renglones son
+                        la misma tarea; usarlo como el botón de «generá éste» mezclaba
+                        horas de tareas distintas en una sola orden. */}
+                    <button
+                      type="button"
+                      onClick={() => generar(ordenesDeLoElegido.map((o) => o.clave))}
+                      disabled={ocupado || ordenesDeLoElegido.length === 0}
+                      className="rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+                      title="Escribe en la planilla sólo las órdenes de lo elegido"
+                    >
+                      {ocupado
+                        ? "Generando…"
+                        : ordenesDeLoElegido.length === 1
+                          ? "Generar la OT de lo elegido"
+                          : `Generar ${ordenesDeLoElegido.length} OT de lo elegido`}
                     </button>
                     <button
                       type="button"
@@ -1594,7 +1868,7 @@ export default function CuadernoClient({
               <div className="mt-3">
                 <button
                   type="button"
-                  onClick={generar}
+                  onClick={() => generar()}
                   disabled={ocupado || salida.ordenes.every((o) => o.accion === "denunciar")}
                   className="rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
                 >
@@ -1739,6 +2013,8 @@ interface PropsDeFila {
   equipoAparte: EquipoBasico | null;
   etiquetaDeEquipo: (e: EquipoBasico) => string;
   nombreDelSector: string;
+  /** La tarea puede durar varios días y se edita con dos fechas: lo traen las planillas, no las fotos. */
+  conRango: boolean;
   pagina: number | null;
   /** Con cuántos más (contándolo) lo propone juntar el sistema. 0 si no. */
   hermanosEnPropuesta: number;
@@ -1748,15 +2024,17 @@ interface PropsDeFila {
   onGuardar: (cambios: Record<string, unknown>) => Promise<boolean>;
   onCambiarSector: (sectorId: string) => Promise<void>;
   onConfirmarSector: () => Promise<void>;
+  /** Borra el renglón de la carga. Pide confirmación arriba; acá sólo se ofrece. */
+  onSacar: () => Promise<void>;
   onError: (mensaje: string) => void;
 }
 
-type Borrador = { fecha?: string; tarea?: string; horas?: string; costo?: string };
+type Borrador = { fecha?: string; fecha_hasta?: string; tarea?: string; horas?: string; costo?: string };
 
 function FilaDelRenglon({
   r, activo, marcado, puedeEditar, opcionesDeSector, opcionesDeEquipo, equipo, equipoAparte, etiquetaDeEquipo,
-  nombreDelSector, pagina, hermanosEnPropuesta, integrantesDelGrupo,
-  onActivar, onMarcar, onGuardar, onCambiarSector, onConfirmarSector, onError,
+  nombreDelSector, conRango, pagina, hermanosEnPropuesta, integrantesDelGrupo,
+  onActivar, onMarcar, onGuardar, onCambiarSector, onConfirmarSector, onSacar, onError,
 }: PropsDeFila) {
   // Lo que se está tipeando, hasta que se sale del campo. Se muestra el borrador
   // si lo hay y, si no, lo que tiene el renglón: así un guardado que falla vuelve
@@ -1784,6 +2062,10 @@ function FilaDelRenglon({
       if (campo === "fecha") {
         const nueva = escrito || null;
         if (nueva !== r.fecha) await onGuardar({ fecha: nueva });
+      } else if (campo === "fecha_hasta") {
+        // Vaciarlo quiere decir «duró un día», y es una decisión: va como null.
+        const nueva = escrito || null;
+        if (nueva !== (r.fecha_hasta ?? null)) await onGuardar({ fecha_hasta: nueva });
       } else if (campo === "tarea") {
         if (escrito.trim() !== r.tarea.trim()) await onGuardar({ tarea: escrito });
       } else {
@@ -1826,10 +2108,28 @@ function FilaDelRenglon({
             onChange={escribir("fecha")}
             onBlur={() => cerrarCampo("fecha")}
             disabled={bloqueado}
-            aria-label="Fecha"
+            aria-label={conRango ? "Fecha desde" : "Fecha"}
+            title={conRango ? "Fecha desde" : undefined}
             className={CLASE_CAMPO}
           />
         </div>
+        {/* El último día. Vacío quiere decir que la tarea fue de un día: no se
+            muestra con las fotos, donde un renglón es siempre de un día. */}
+        {conRango && (
+          <div className="w-36 shrink-0">
+            <input
+              type="date"
+              value={borrador.fecha_hasta ?? r.fecha_hasta ?? ""}
+              onChange={escribir("fecha_hasta")}
+              onBlur={() => cerrarCampo("fecha_hasta")}
+              disabled={bloqueado}
+              aria-label="Fecha hasta"
+              title="Fecha hasta — vacío quiere decir que duró un día"
+              placeholder="hasta"
+              className={CLASE_CAMPO}
+            />
+          </div>
+        )}
         <div className="min-w-0 flex-1 basis-48">
           <textarea
             rows={2}
@@ -1928,6 +2228,19 @@ function FilaDelRenglon({
           {r.linea ? ` · línea ${r.linea}` : ""}
           {r.lugar_raw ? ` · lugar: «${r.lugar_raw}»` : ""}
         </p>
+        {/* Sacar el renglón de la carga. Está acá abajo y chico a propósito: es
+            lo único irreversible de esta fila, y no se pone al lado de los campos
+            que se tocan todo el tiempo. Un renglón ya convertido no se saca. */}
+        {!bloqueado && (
+          <button
+            type="button"
+            onClick={onSacar}
+            className="shrink-0 self-end text-xs text-rose-700 underline"
+            title="Borra el renglón —para la tarea que ya tiene su OT cargada a mano—"
+          >
+            Sacar
+          </button>
+        )}
       </div>
 
       {/* Etiquetas */}

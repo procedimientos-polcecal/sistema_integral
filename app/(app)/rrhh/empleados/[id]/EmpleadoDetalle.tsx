@@ -391,7 +391,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
       <div className="card p-5">
         {tab === "fichadas" && (
           <div>
-            <div className="flex gap-3 items-end mb-4">
+            <div className="flex flex-wrap gap-3 items-end mb-4">
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Desde</label>
                 <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
@@ -399,6 +399,30 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Hasta</label>
                 <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
+              </div>
+              {/*
+                Los dos bajan exactamente lo que muestra la tabla de abajo,
+                para el mismo rango: el .xlsx y el PDF salen de las mismas
+                funciones que esta pantalla (`lib/rrhh/marcacionesDelMes.ts`).
+                Son <a> y no <button> a propósito — el PDF se abre en otra
+                pestaña y el Excel es una descarga, así que el clic del medio y
+                el "abrir en pestaña nueva" funcionan como cualquiera espera.
+              */}
+              <div className="flex gap-2 ml-auto">
+                <a
+                  href={`/api/rrhh/asistencia/empleado/${empleado.id}/export?desde=${desde}&hasta=${hasta}`}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  Excel
+                </a>
+                <a
+                  href={`/rrhh/empleados/${empleado.id}/imprimir?desde=${desde}&hasta=${hasta}`}
+                  target="_blank"
+                  rel="noopener"
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  PDF
+                </a>
               </div>
             </div>
             {cargandoDias ? (
