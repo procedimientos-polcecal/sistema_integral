@@ -297,9 +297,11 @@ describe("acomodar", () => {
 
   it("no modifica lo que recibe", () => {
     const ps = [pedazo("b", dia, h(9), h(10)), pedazo("a", dia, h(8), h(9))];
-    const copia = ps.map((p) => p.evento.id);
+    // Una copia de cada objeto, no sólo de los ids: escribir `columna` en el
+    // pedazo que recibió también sería mutar lo que es de quien llama.
+    const antes = ps.map((p) => ({ ...p }));
     acomodar(ps);
-    expect(ps.map((p) => p.evento.id)).toEqual(copia);
+    expect(ps).toEqual(antes);
   });
 
   it("conserva todos los datos del pedazo, no sólo la posición", () => {
