@@ -31,7 +31,7 @@ export interface OTCandidata {
 export function esCandidataAlCalendario(
   o: OTCandidata,
   hoy: string
-): { ok: true; fecha: string } | { ok: false; motivo: string } {
+): { ok: true; fecha: string } | { ok: false; motivo: string; fechaIlegible?: true } {
   if (laOTEstaCerrada(o)) {
     return { ok: false, motivo: "La OT ya está cerrada" };
   }
@@ -45,7 +45,14 @@ export function esCandidataAlCalendario(
   }
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || instanteDe(`${fecha}T00:00:00`) === null) {
-    return { ok: false, motivo: `La fecha de ejecución «${fecha}» no es una fecha válida (tiene que ser AAAA-MM-DD)` };
+    // `fechaIlegible` separa este rechazo de los otros: las cerradas, las que no
+    // tienen fecha y las pasadas son lo normal y quien barre las calla; ésta es
+    // un dato roto de la planilla y es la que tiene que nombrarse.
+    return {
+      ok: false,
+      fechaIlegible: true,
+      motivo: `La fecha de ejecución «${fecha}» no es una fecha válida (tiene que ser AAAA-MM-DD)`,
+    };
   }
 
   if (fecha < hoy) {

@@ -843,7 +843,7 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     barrido = await barrerLasQueFaltan(admin, new Date(), TOPE_POR_CORRIDA, presupuestoDeLaAgenda.mover);
   } catch (e) {
     barrido = {
-      creados: 0, quedaron: 0,
+      creados: 0, quedaron: 0, fechasIlegibles: [],
       fallos: [`El barrido de las órdenes sin evento se cortó: ${e instanceof Error ? e.message : String(e)}`],
     };
   }
@@ -876,6 +876,7 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     eventos_creados_por_el_barrido: barrido.creados,
     eventos_sin_crear_todavia: barrido.quedaron,
     ...(barrido.fallos.length > 0 ? { eventos_que_no_entraron: barrido.fallos } : {}),
+    ...(barrido.fechasIlegibles.length > 0 ? { eventos_con_fecha_ilegible: barrido.fechasIlegibles } : {}),
     estados_sin_formula: estadosPuestos.escritas,
     ...(estadosPuestos.freno ? { estado_freno: estadosPuestos.freno } : {}),
     ...(estadosPuestos.error ? { estado_error: estadosPuestos.error } : {}),

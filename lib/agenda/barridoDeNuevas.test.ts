@@ -102,7 +102,7 @@ describe("el barrido de las que faltan", () => {
 
     const r = await barrerLasQueFaltan(b.cliente, AHORA);
 
-    expect(r).toEqual({ creados: 1, quedaron: 0, fallos: [] });
+    expect(r).toEqual({ creados: 1, quedaron: 0, fallos: [], fechasIlegibles: [] });
     expect(b.tablas.agenda_eventos).toHaveLength(1);
     expect(b.tablas.agenda_eventos[0]).toMatchObject({ ot_id: idDe(1), turno: "8-16", inicio: A_LAS_8 });
     expect(escribirEnGoogle).toHaveBeenCalledTimes(1);
@@ -126,7 +126,7 @@ describe("el barrido de las que faltan", () => {
 
     const r = await barrerLasQueFaltan(b.cliente, AHORA);
 
-    expect(r).toEqual({ creados: 0, quedaron: 0, fallos: [] });
+    expect(r).toEqual({ creados: 0, quedaron: 0, fallos: [], fechasIlegibles: [] });
     expect(b.escrituras).toEqual([]);
     expect(escribirEnGoogle).not.toHaveBeenCalled();
   });
@@ -143,8 +143,39 @@ describe("el barrido de las que faltan", () => {
 
     const r = await barrerLasQueFaltan(b.cliente, AHORA);
 
-    expect(r).toEqual({ creados: 0, quedaron: 0, fallos: [] });
+    expect(r).toEqual({ creados: 0, quedaron: 0, fallos: [], fechasIlegibles: [] });
     expect(b.escrituras).toEqual([]);
+  });
+
+  /**
+   * Las fechas sucias vienen de la planilla, y éste es el único camino que las
+   * ve: una orden con la fecha ilegible no puede desaparecer sin una palabra.
+   * Las otras dos que quedan afuera —cerrada sin fecha de cierre y sin fecha—
+   * son lo normal (168 de 986 `REALIZADO`) y se callan: informarlas en cada
+   * corrida es el ruido que hace que nadie mire el informe.
+   */
+  it("una con la fecha mal formada se nombra, y las cerradas o sin fecha no", async () => {
+    // La base en memoria no tipa las columnas, así que cualquier texto entra:
+    // «2026-11-6» pasa el filtro de fechas y no es AAAA-MM-DD.
+    const b = base([
+      orden(1, { fecha_ejecucion: "2026-11-6" }),
+      orden(2, { estado: "REALIZADO" }),
+      orden(3, { fecha_ejecucion: null }),
+      orden(4, { fecha_ejecucion: "2026-11-09", fecha_ejecucion_pendiente: "2026-11-02" }),
+    ]);
+
+    const r = await barrerLasQueFaltan(b.cliente, AHORA);
+
+    expect(r.creados).toBe(0);
+    expect(r.fechasIlegibles).toHaveLength(1);
+    expect(r.fechasIlegibles[0]).toContain("3001");
+    expect(r.fechasIlegibles[0]).toContain("2026-11-6");
+    // Una fecha ilegible no es un fallo del barrido: no pone la corrida en rojo.
+    expect(r.fallos).toEqual([]);
+    const anotado = loQueSeAnotaDelBarrido(r);
+    expect(anotado?.ok).toBe(true);
+    expect(anotado?.error).toContain("3001");
+    expect(anotado?.error).not.toContain("3002");
   });
 
   it("una de hoy entra: el filtro es por día y no por hora", async () => {
@@ -170,7 +201,7 @@ describe("el barrido de las que faltan", () => {
 
     const r = await barrerLasQueFaltan(b.cliente, AHORA);
 
-    expect(r).toEqual({ creados: 2, quedaron: 0, fallos: [] });
+    expect(r).toEqual({ creados: 2, quedaron: 0, fallos: [], fechasIlegibles: [] });
     const horas = b.tablas.agenda_eventos.map((e) => e.inicio).sort();
     expect(horas).toEqual([A_LAS_8, A_LAS_9_30]);
   });
@@ -210,7 +241,7 @@ describe("el barrido de las que faltan", () => {
     const r = await barrerLasQueFaltan(b.cliente, AHORA);
 
     expect(TOPE_POR_CORRIDA).toBe(25);
-    expect(r).toEqual({ creados: 25, quedaron: 5, fallos: [] });
+    expect(r).toEqual({ creados: 25, quedaron: 5, fallos: [], fechasIlegibles: [] });
     expect(b.tablas.agenda_eventos).toHaveLength(25);
   });
 
@@ -219,7 +250,7 @@ describe("el barrido de las que faltan", () => {
 
     const r = await barrerLasQueFaltan(b.cliente, AHORA, 2);
 
-    expect(r).toEqual({ creados: 2, quedaron: 1, fallos: [] });
+    expect(r).toEqual({ creados: 2, quedaron: 1, fallos: [], fechasIlegibles: [] });
   });
 
   /** Las más cercanas primero: si el tope corta, que corte lo lejano. */
@@ -234,7 +265,7 @@ describe("el barrido de las que faltan", () => {
 
     const r = await barrerLasQueFaltan(b.cliente, AHORA, 2);
 
-    expect(r).toEqual({ creados: 2, quedaron: 2, fallos: [] });
+    expect(r).toEqual({ creados: 2, quedaron: 2, fallos: [], fechasIlegibles: [] });
     expect(b.tablas.agenda_eventos.map((e) => e.ot_id).sort()).toEqual([idDe(2), idDe(4)].sort());
   });
 
@@ -349,17 +380,17 @@ describe("el barrido de las que faltan", () => {
 
     const r = await barrerLasQueFaltan(b.cliente, AHORA, TOPE_POR_CORRIDA, presupuesto);
 
-    expect(r).toEqual({ creados: 1, quedaron: 2, fallos: [] });
+    expect(r).toEqual({ creados: 1, quedaron: 2, fallos: [], fechasIlegibles: [] });
   });
 });
 
 describe("lo que se anota de un barrido", () => {
   it("nada que decir cuando entró todo", () => {
-    expect(loQueSeAnotaDelBarrido({ creados: 3, quedaron: 0, fallos: [] })).toBeNull();
+    expect(loQueSeAnotaDelBarrido({ creados: 3, quedaron: 0, fallos: [], fechasIlegibles: [] })).toBeNull();
   });
 
   it("lo que quedó afuera se dice, y no es un fallo", () => {
-    const a = loQueSeAnotaDelBarrido({ creados: 25, quedaron: 5, fallos: [] });
+    const a = loQueSeAnotaDelBarrido({ creados: 25, quedaron: 5, fallos: [], fechasIlegibles: [] });
     expect(a?.ok).toBe(true);
     expect(a?.error).toContain("5");
   });
@@ -370,8 +401,14 @@ describe("lo que se anota de un barrido", () => {
     expect(juntarLoAnotado({ ok: true, error: "A" }, { ok: false, error: "B" })).toEqual({ ok: false, error: "A. B" });
   });
 
+  it("una fecha ilegible se dice pero no pone la corrida en rojo", () => {
+    const a = loQueSeAnotaDelBarrido({ creados: 0, quedaron: 0, fallos: [], fechasIlegibles: ["OT 3001: fecha rara"] });
+    expect(a).toMatchObject({ ok: true });
+    expect(a?.error).toContain("OT 3001: fecha rara");
+  });
+
   it("un fallo sale en rojo y lleva el texto de cada uno", () => {
-    const a = loQueSeAnotaDelBarrido({ creados: 1, quedaron: 0, fallos: ["OT 3002: boom"] });
+    const a = loQueSeAnotaDelBarrido({ creados: 1, quedaron: 0, fallos: ["OT 3002: boom"], fechasIlegibles: [] });
     expect(a?.ok).toBe(false);
     expect(a?.error).toContain("OT 3002: boom");
   });

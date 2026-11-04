@@ -106,6 +106,16 @@ export interface LoQueBarrio {
   /** Candidatas que no se intentaron en esta pasada, por el tope o por el tiempo. */
   quedaron: number;
   fallos: string[];
+  /**
+   * Órdenes sin evento cuya fecha no se pudo leer, con el motivo. **No es un
+   * fallo del barrido** (no pone la corrida en rojo): es un dato roto de la
+   * planilla. Las fechas sucias vienen de ahí, o sea de las que entran por el
+   * formulario, y éste es el único camino que las ve; sin esta lista una orden
+   * así desaparece sin una palabra. Las otras dos que no entran —cerrada sin
+   * fecha de cierre y sin fecha— son lo normal y **no se listan**: en cada
+   * corrida serían el ruido que hace que nadie mire el informe.
+   */
+  fechasIlegibles: string[];
 }
 
 export async function barrerLasQueFaltan(
@@ -114,7 +124,7 @@ export async function barrerLasQueFaltan(
   tope: number = TOPE_POR_CORRIDA,
   presupuesto?: PresupuestoDeGoogle
 ): Promise<LoQueBarrio> {
-  const r: LoQueBarrio = { creados: 0, quedaron: 0, fallos: [] };
+  const r: LoQueBarrio = { creados: 0, quedaron: 0, fallos: [], fechasIlegibles: [] };
   const hoy = hoyEnArgentina(ahora);
 
   // Dos lecturas y no un `or`: la fecha que cuenta es la pendiente cuando la
@@ -168,7 +178,10 @@ export async function barrerLasQueFaltan(
     .filter((o) => !conEvento.has(o.id))
     .flatMap((o) => {
       const c = esCandidataAlCalendario(o, hoy);
-      return c.ok ? [{ orden: o, fecha: c.fecha }] : [];
+      if (c.ok) return [{ orden: o, fecha: c.fecha }];
+      // Sólo la fecha ilegible se nombra; el resto de los rechazos es lo normal.
+      if (c.fechaIlegible) r.fechasIlegibles.push(`OT ${o.ot_number ?? o.id}: ${c.motivo}`);
+      return [];
     })
     .sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.orden.ot_number ?? 0) - (b.orden.ot_number ?? 0));
 
@@ -195,12 +208,16 @@ export async function barrerLasQueFaltan(
 /**
  * Lo que de un barrido hay que dejar en el registro de `sincronizaciones`, o
  * `null` si no hay nada que decir. Misma forma que `loQueSeAnotaDeLosEventos`.
- * **Con `fallos` la corrida sale en rojo; con sólo `quedaron`, no**: lo que se
- * difiere no es un fallo, pero el texto queda escrito.
+ * **Con `fallos` la corrida sale en rojo; con sólo `quedaron` o
+ * `fechasIlegibles`, no**: lo que se difiere o un dato roto de la planilla no
+ * es un fallo del barrido, pero el texto queda escrito.
  */
 export function loQueSeAnotaDelBarrido(b: LoQueBarrio): { ok: boolean; error: string } | null {
   const partes: string[] = [];
   if (b.fallos.length > 0) partes.push(`Órdenes que no entraron al calendario: ${b.fallos.join(" | ")}`);
+  if (b.fechasIlegibles.length > 0) {
+    partes.push(`Órdenes con la fecha ilegible, que no entran al calendario hasta que se corrija en la planilla: ${b.fechasIlegibles.join(" | ")}`);
+  }
   if (b.quedaron > 0) {
     partes.push(`Quedaron ${b.quedaron} órdenes sin entrar al calendario (tope por corrida o tiempo de Google); entran en la próxima`);
   }

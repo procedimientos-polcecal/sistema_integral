@@ -47,5 +47,15 @@ describe("que OT entra sola al calendario", () => {
     const r = esCandidataAlCalendario({ fecha_ejecucion: "06/11/2026", estado: "POR_HACER" }, HOY);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.motivo).toMatch(/fecha/i);
+    // Sólo éste lleva la marca: es el rechazo que quien barre tiene que nombrar.
+    expect(r).toMatchObject({ fechaIlegible: true });
+  });
+
+  it("los demás rechazos no llevan la marca de fecha ilegible", () => {
+    const sinMarca = (o: Parameters<typeof esCandidataAlCalendario>[0]) =>
+      (esCandidataAlCalendario(o, HOY) as { fechaIlegible?: true }).fechaIlegible;
+    expect(sinMarca({ fecha_ejecucion: "2026-11-03", estado: "POR_HACER" })).toBeUndefined();
+    expect(sinMarca({ fecha_ejecucion: null, estado: "POR_HACER" })).toBeUndefined();
+    expect(sinMarca({ fecha_ejecucion: "2026-11-06", estado: "REALIZADO" })).toBeUndefined();
   });
 });
