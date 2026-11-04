@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
 import { traerTodo } from "@/lib/core/paginado";
-import { comoSeLee, esFechaIso } from "@/lib/core/fechas";
+import { comoSeLee, esFechaIso, hoyEnArgentina } from "@/lib/core/fechas";
 import { invitadosExtraDeLaOT } from "@/lib/agenda/evento";
 import { mandarLaOTAlCalendario, TURNO_AUTOMATICO } from "@/lib/agenda/mandarLaOT";
 import { ES_UUID, quienLlama } from "@/lib/agenda/sesion";
@@ -68,13 +68,12 @@ type Item = { id: string; ot_number: number | null; work_order_id: string | null
  * sorpresa: **si la orden ya tenía evento, se conservan su turno y sus
  * invitados extra.** Reenviar reemplaza ambos, y el plan no los conoce.
  *
- * **Y esta ruta no está en el registro de `revisar-exportaciones`, a propósito
- * y sabiendo que escribe en una planilla**: lo hace sólo a través de la ruta de
- * postergar, que sí está declarada (`aborta`: la planilla primero, y si no
- * contesta no se mueve nada), y el script sólo sigue la indirección desde los
- * módulos `delega`. Declararla `delega` daría un «MIRAR: ya no escribe» que no
- * es cierto, y no declararla es lo que es: la obligación de anotar no se mudó
- * acá, se quedó en postergar, que la cumple por su cuenta.
+ * **Esta ruta escribe en una planilla, pero lo hace sólo a través de la ruta de
+ * postergar**, y por eso en el registro de `revisar-exportaciones` está
+ * declarada `aborta` como ella: la obligación de anotar
+ * `fecha_ejecucion_pendiente` se quedó en postergar, que la cumple por su
+ * cuenta. El script la ve porque sigue el import del handler de una ruta
+ * registrada.
  */
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
@@ -203,7 +202,7 @@ async function mandarUnItem(admin: SupabaseClient, item: Item, fechaDelPlan: str
   ).maybeSingle();
   if (errorDeOrden) return fallo(`No se pudo leer la orden: ${errorDeOrden.message}`);
 
-  const decision = queHacerConElItem({ ot_number: item.ot_number ?? orden?.ot_number ?? 0 }, orden, fechaDelPlan);
+  const decision = queHacerConElItem({ ot_number: item.ot_number ?? orden?.ot_number ?? 0 }, orden, fechaDelPlan, hoyEnArgentina());
   if (decision.que === "saltear") return salteada(decision.motivo);
   // `decision` no es `saltear`, así que la orden existe.
   const ordenId = (orden as { id: string }).id;

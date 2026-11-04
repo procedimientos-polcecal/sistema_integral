@@ -24,6 +24,8 @@ import { MAXIMO_DE_DIAS } from "./postergar";
  *
  * Fuera de esos casos —y de una OT cerrada o ya borrada— el plan manda.
  *
+ * **Una fecha que ya pasó no se manda**, en ningún caso (ver `destinoVigente`).
+ *
  * ── LA FECHA DE LA ORDEN ES LA DE LA ORDEN, NO LA COPIA DEL ÍTEM ─────────────
  *
  * El ítem guarda su propia copia editable de `fecha_ejecucion` que **nunca
@@ -44,11 +46,23 @@ export type QueHacerConElItem =
   | { que: "saltear"; motivo: string };
 
 /**
- * La razón con la que el plan posterga. **No es `falta_repuesto` prestada**:
- * esa razón se escribe en la auditoría y en la columna de observación previa de
- * la planilla de producción, y diría un motivo falso. Tiene su fila en
- * `mant_razones_de_postergacion`, inactiva, para que el menú manual no la
- * ofrezca: es de este camino y de ningún otro.
+ * La razón con la que el plan posterga. **Es un código de sistema, no una fila
+ * del catálogo, y no tiene que estarlo.**
+ *
+ * `mant_razones_de_postergacion` es la tabla del **menú manual**: `etiqueta`,
+ * `dias`, `orden` y `activa` son todas preocupaciones de menú, y la ruta de
+ * postergar **nunca valida contra ella** —`razon` es texto libre que va a la nota
+ * y al `contexto` de la auditoría—. Una fila acá no compraría nada y dejaría un
+ * arma cargada: Configuración lista las razones activas **e inactivas** con un
+ * botón «Ofrecerla», y un clic la volvería una opción manual; desde ahí, una
+ * postergación que ningún plan hizo quedaría registrada con este motivo en la
+ * auditoría y en la celda de observación previa de la planilla de producción,
+ * que es exactamente el daño que esta razón dedicada existe para evitar. Se
+ * cargó una fila el 04/11/2026 y se sacó el mismo día (migración
+ * `20261104165733`).
+ *
+ * Tampoco es `falta_repuesto` prestada: diría un motivo falso en los mismos dos
+ * lugares.
  */
 export const RAZON_DEL_PLAN = "planificacion_del_dia";
 
@@ -75,7 +89,9 @@ export function queHacerConElItem(
     estado: string | null;
     app_created: boolean | null;
   } | null,
-  fechaDelPlan: string
+  fechaDelPlan: string,
+  /** Hoy en Argentina, `AAAA-MM-DD`. */
+  hoy: string
 ): QueHacerConElItem {
   const ot = `La OT ${item.ot_number}`;
 
@@ -95,43 +111,73 @@ export function queHacerConElItem(
     };
   }
 
-  if (suFecha === fechaDelPlan) return { que: "mandar", fecha: suFecha };
+  if (suFecha === fechaDelPlan) return destinoVigente({ que: "mandar", fecha: suFecha }, ot, "", hoy);
 
   const delPlan = comoSeLee(fechaDelPlan);
   const deLaOrden = comoSeLee(suFecha);
 
+  // Cada «no se pudo mover» es un motivo y la fecha en la que queda: el aviso
+  // dice que se mandó ahí, y si esa fecha ya pasó, que no.
+  const enSuFecha = (porQue: string) => destinoVigente(
+    { que: "mandar-avisando", fecha: suFecha, aviso: `${porQue} Se mandó el ${deLaOrden}.` },
+    ot,
+    porQue,
+    hoy
+  );
+
   // ISO: el orden alfabético es el cronológico.
   if (fechaDelPlan < suFecha) {
-    return {
-      que: "mandar-avisando",
-      fecha: suFecha,
-      aviso:
-        `El plan es del ${delPlan} pero la orden está para el ${deLaOrden}, y desde acá ` +
-        `una fecha sólo se puede correr hacia adelante. Se mandó el ${deLaOrden}.`,
-    };
+    return enSuFecha(
+      `El plan es del ${delPlan} pero la orden está para el ${deLaOrden}, y desde acá ` +
+        `una fecha sólo se puede correr hacia adelante.`
+    );
   }
 
   if (!orden.app_created) {
-    return {
-      que: "mandar-avisando",
-      fecha: suFecha,
-      aviso:
-        `El plan es del ${delPlan} pero la orden entró por el formulario y su fecha no se ` +
+    return enSuFecha(
+      `El plan es del ${delPlan} pero la orden entró por el formulario y su fecha no se ` +
         `puede mover desde el sistema: vive en la planilla que maneja Google Forms. ` +
-        `Se mandó el ${deLaOrden}; si tiene que ser el ${delPlan}, hay que cambiarla en la planilla.`,
-    };
+        `Si tiene que ser el ${delPlan}, hay que cambiarla en la planilla.`
+    );
   }
 
   const dias = diasEntre(suFecha, fechaDelPlan);
   if (dias > MAXIMO_DE_DIAS) {
-    return {
-      que: "mandar-avisando",
-      fecha: suFecha,
-      aviso:
-        `El plan es del ${delPlan}, ${dias} días después de la fecha de la orden (${deLaOrden}), ` +
-        `y no se corre más de ${MAXIMO_DE_DIAS} de una vez. Se mandó el ${deLaOrden}.`,
-    };
+    return enSuFecha(
+      `El plan es del ${delPlan}, ${dias} días después de la fecha de la orden (${deLaOrden}), ` +
+        `y no se corre más de ${MAXIMO_DE_DIAS} de una vez.`
+    );
   }
 
-  return { que: "correr-y-mandar", dias, fecha: fechaDelPlan };
+  return destinoVigente({ que: "correr-y-mandar", dias, fecha: fechaDelPlan }, ot, "", hoy);
+}
+
+/**
+ * **El pasado se rechaza acá y en ningún otro lugar.** `mandarLaOTAlCalendario`
+ * mira si la fecha pasó sólo con `turno: null`; con un turno elegido a mano no,
+ * porque mandar a mano una orden de ayer es una decisión de una persona. En un
+ * plan no hay nadie decidiendo eso, y sin esta comprobación el resultado
+ * dependía de si la orden tenía turno puesto: unos ítems de la misma corrida
+ * fallaban con «la fecha ya pasó» y otros creaban un evento en el pasado, sin
+ * nada que lo explicara. Y la forma común de las 2.259 órdenes del formulario es
+ * justamente una fecha vieja.
+ *
+ * Se mira **el día en que quedaría el evento**, no el de la orden ni el del
+ * plan: un plan viejo sobre una orden futura se manda bien en la fecha de la
+ * orden. El día de hoy todavía entra: el filtro es por día y no por hora.
+ */
+function destinoVigente(
+  decision: Exclude<QueHacerConElItem, { que: "saltear" }>,
+  quienEs: string,
+  porQue: string,
+  hoy: string
+): QueHacerConElItem {
+  if (decision.fecha >= hoy) return decision;
+  const cuando = comoSeLee(decision.fecha);
+  return {
+    que: "saltear",
+    motivo: porQue
+      ? `${porQue} Y el ${cuando} ya pasó, así que no se mandó.`
+      : `${quienEs} quedaría para el ${cuando}, que ya pasó: no se manda un evento al pasado.`,
+  };
 }
