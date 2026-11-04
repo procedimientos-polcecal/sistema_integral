@@ -6,9 +6,9 @@ vi.mock("./escribirEnGoogle", async (original) => ({
 }));
 
 import { escribirEnGoogle } from "./escribirEnGoogle";
-import { claveDelHueco, mandarLaOTAlCalendario, type PedidoDeMandar } from "./mandarLaOT";
+import { mandarLaOTAlCalendario, type PedidoDeMandar } from "./mandarLaOT";
 import { baseEnMemoria, type Fila } from "./baseEnMemoria.testhelper";
-import { AVISO_DE_TOPE } from "./apilado";
+import { AVISO_DE_TOPE, claveDelHueco } from "./apilado";
 import { AVISO_DE_BORRADO } from "./elEventoSigueALaOT";
 import { CASILLA_DE_MANTENIMIENTO } from "./evento";
 
@@ -42,9 +42,10 @@ function orden(extra: Fila = {}): Fila {
 
 /**
  * El evento de **otra** OT ya puesto ese día. La especialidad va embebida como
- * la trae el `select`: la base en memoria no resuelve embeds.
+ * la trae el `select`: la base en memoria no resuelve embeds. El turno también
+ * cuenta para el grupo (`claveDelHueco`), así que tiene que estar.
  */
-function eventoDeOtraOT(id: string, inicio: string, especialidad: string): Fila {
+function eventoDeOtraOT(id: string, inicio: string, especialidad: string, turno = "8-16"): Fila {
   return {
     id,
     ot_id: `otra-${id}`,
@@ -54,6 +55,7 @@ function eventoDeOtraOT(id: string, inicio: string, especialidad: string): Fila 
     divergencia: null,
     inicio,
     fin: inicio,
+    turno,
     ordenes_trabajo: { especialidad },
   };
 }
@@ -103,8 +105,18 @@ beforeEach(() => {
 
 describe("claveDelHueco", () => {
   it("normaliza la especialidad como el apilado, para que nadie rearme la clave a mano", () => {
-    expect(claveDelHueco("2026-11-06", "  mecánico ")).toBe("2026-11-06|MECÁNICO");
-    expect(claveDelHueco("2026-11-06", null)).toBe("2026-11-06|(sin especialidad)");
+    expect(claveDelHueco("2026-11-06", "  mecánico ", "8-16")).toBe("2026-11-06|MECÁNICO|8-16");
+    expect(claveDelHueco("2026-11-06", null, "8-16")).toBe("2026-11-06|(sin especialidad)|8-16");
+  });
+
+  /**
+   * Vive en `apilado.ts` y no acá justamente para que haya **una sola**: con
+   * una clave por camino, el mismo evento recibía un hueco distinto según cuál
+   * de los dos lo tocó último, y eso deriva solo sin que nada avise.
+   */
+  it("el turno es parte del grupo: dos turnos no se apilan juntos", () => {
+    expect(claveDelHueco("2026-11-06", "MECÁNICO", "4-12"))
+      .not.toBe(claveDelHueco("2026-11-06", "MECÁNICO", "8-16"));
   });
 });
 
@@ -139,6 +151,21 @@ describe("mandar una OT al calendario", () => {
       ordenes_trabajo: [orden({ especialidad: "ELÉCTRICO" })],
       agenda_eventos: [eventoDeOtraOT("e1", A_LAS_8, "MECÁNICO")],
     });
+
+    const r = await mandarLaOTAlCalendario(b.cliente, LA_OT, AUTOMATICO, AHORA);
+
+    expect(r).toMatchObject({ ok: true, inicio: A_LAS_8 });
+  });
+
+  /**
+   * La misma afirmación que «un evento del turno 4-12 se recalcula desde las
+   * 04:00» en `elEventoSigueALaOT.test.ts`, por el otro camino: los dos cuentan
+   * con `claveDelHueco`, así que agrupan igual. Antes el alta contaba por
+   * día+especialidad y el barrido por día+especialidad+turno, y el mismo evento
+   * terminaba en una hora distinta según cuál lo tocó último.
+   */
+  it("una mecánica del turno de 4 no corre el hueco de la automática, que es del de 8", async () => {
+    const b = base({ agenda_eventos: [eventoDeOtraOT("e1", instante("2026-11-06T07:00:00"), "MECÁNICO", "4-12")] });
 
     const r = await mandarLaOTAlCalendario(b.cliente, LA_OT, AUTOMATICO, AHORA);
 
@@ -227,7 +254,7 @@ describe("mandar una OT al calendario", () => {
   /** Review Focus 4, la mitad de una corrida: `yaTomados` adelanta el hueco. */
   it("`yaTomados` corre el hueco aunque la base todavía no lo tenga", async () => {
     const b = base();
-    const yaTomados = new Map([[claveDelHueco("2026-11-06", "MECÁNICO"), 2]]);
+    const yaTomados = new Map([[claveDelHueco("2026-11-06", "MECÁNICO", "8-16"), 2]]);
 
     const r = await mandarLaOTAlCalendario(b.cliente, LA_OT, { ...AUTOMATICO, yaTomados }, AHORA);
 
@@ -236,7 +263,7 @@ describe("mandar una OT al calendario", () => {
 
   it("la décima del día comparte las 20:00 y lo dice en la advertencia y en el aviso", async () => {
     const b = base();
-    const yaTomados = new Map([[claveDelHueco("2026-11-06", "MECÁNICO"), 9]]);
+    const yaTomados = new Map([[claveDelHueco("2026-11-06", "MECÁNICO", "8-16"), 9]]);
 
     const r = await mandarLaOTAlCalendario(b.cliente, LA_OT, { ...AUTOMATICO, yaTomados }, AHORA);
 
@@ -258,5 +285,21 @@ describe("mandar una OT al calendario", () => {
     const conBorrado = base({ agenda_eventos: [eventoDeLaOT({ aviso: deBorrado })] });
     await mandarLaOTAlCalendario(conBorrado.cliente, LA_OT, AUTOMATICO, AHORA);
     expect(conBorrado.tablas.agenda_eventos[0].aviso).toBe(deBorrado);
+  });
+
+  it("y el del tope tampoco se le escribe encima al de un borrado que Google rechazó", async () => {
+    // La otra punta del mismo agujero: no alcanza con no limpiarlo a ciegas, el
+    // tope tampoco lo pisa. El del borrado es el único registro de un evento
+    // vivo en cinco calendarios que ya ninguna fila nombra; el del tope se
+    // vuelve a deducir del horario. La advertencia en pantalla igual lo dice.
+    const deBorrado = `${AVISO_DE_BORRADO}. Google dijo: 503`;
+    const b = base({ agenda_eventos: [eventoDeLaOT({ aviso: deBorrado })] });
+    const yaTomados = new Map([[claveDelHueco("2026-11-06", "MECÁNICO", "8-16"), 9]]);
+
+    const r = await mandarLaOTAlCalendario(b.cliente, LA_OT, { ...AUTOMATICO, yaTomados }, AHORA);
+
+    expect(r).toMatchObject({ ok: true, inicio: instante("2026-11-06T23:00:00") });
+    expect(r.ok && r.advertencias).toContain(AVISO_DE_TOPE);
+    expect(b.tablas.agenda_eventos[0].aviso).toBe(deBorrado);
   });
 });

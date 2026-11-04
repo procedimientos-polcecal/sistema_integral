@@ -5,7 +5,8 @@ import {
   INVITADOS_DE_UNA_OT, advertenciaDeReenviarDivergido, datosDeLaOT, faltaConfirmarElPisado,
   fechaParaElCalendario, horarioDeLaOT, problemasDeMandarLaOT, problemasDelEvento,
 } from "./evento";
-import { AVISO_DE_TOPE, claveDeApilado, horarioApilado } from "./apilado";
+import { AVISO_DE_TOPE, claveDelHueco, horarioApilado } from "./apilado";
+import { AVISO_DE_BORRADO } from "./elEventoSigueALaOT";
 import { esCandidataAlCalendario } from "./candidata";
 import { aHoraDePared, aInstanteISO, eventoParaGoogle, invitadosLimpios } from "./pedido";
 import {
@@ -95,14 +96,9 @@ export interface PedidoDeMandar {
   pisar: boolean;
   /**
    * Huecos ya tomados por esta misma corrida y que todavía no están en la base.
-   * La clave es `claveDelHueco(fecha, especialidad)`.
+   * La clave es `claveDelHueco(fecha, especialidad, turno)`, de `apilado.ts`.
    */
   yaTomados?: ReadonlyMap<string, number>;
-}
-
-/** La clave de `yaTomados`. Exportada para que nadie la rearme a mano. */
-export function claveDelHueco(fecha: string, especialidad: string | null | undefined): string {
-  return `${fecha}|${claveDeApilado(especialidad)}`;
 }
 
 export type ResultadoDeMandar =
@@ -126,9 +122,10 @@ function hoyEnArgentina(ahora: Date): string {
   return aHoraDePared(ahora.toISOString())!.slice(0, 10);
 }
 
-/** Lo que de un evento del día hace falta para saber de qué especialidad es. */
+/** Lo que de un evento del día hace falta para saber en qué grupo cae. */
 interface EventoDelDia {
   ot_id: string | null;
+  turno: string | null;
   ordenes_trabajo:
     | { especialidad: string | null }
     | { especialidad: string | null }[]
@@ -136,23 +133,30 @@ interface EventoDelDia {
 }
 
 /**
- * Cuántos eventos de OT de esa misma especialidad ya hay ese día. **Interno**:
- * quien barre no cuenta por su cuenta, pasa `yaTomados` y deja que esta función
- * haga la cuenta, que es lo que evita dos criterios para lo mismo.
+ * Cuántos eventos de OT del mismo grupo ya hay ese día. **Interno**: quien
+ * barre no cuenta por su cuenta, pasa `yaTomados` y deja que esta función haga
+ * la cuenta, que es lo que evita dos criterios para lo mismo.
+ *
+ * El grupo es el de `claveDelHueco` —día, especialidad **y turno**—, la misma
+ * definición que usa el barrido de `elEventoSigueALaOT`. Con dos claves
+ * distintas, el mismo evento recibía un hueco distinto según cuál de los dos
+ * caminos lo tocó último.
  *
  * El día se recorta del lado del servidor con el instante de su medianoche de
  * Argentina y el de la siguiente —Argentina no tiene horario de verano, así que
  * son 24 horas exactas—, para no traerse la tabla entera cada vez que nace una
- * orden. La especialidad se compara acá porque `claveDeApilado` normaliza, y
- * **el evento de la propia orden no cuenta**: al reenviarla se correría sola.
+ * orden. El grupo se compara acá y armando la clave entera de los dos lados,
+ * porque `claveDelHueco` normaliza la especialidad; y **el evento de la propia
+ * orden no cuenta**: al reenviarla se correría sola.
  */
 async function huecosOcupados(
   admin: SupabaseClient,
   fecha: string,
   especialidad: string | null | undefined,
+  turno: Turno,
   exceptoLaOrden: string
 ): Promise<number> {
-  const clave = claveDeApilado(especialidad);
+  const clave = claveDelHueco(fecha, especialidad, turno);
   const desde = aInstanteISO(`${fecha}T00:00:00`);
   if (!desde) throw new Error(`La fecha «${fecha}» no se pudo convertir a un instante`);
   const hasta = new Date(Date.parse(desde) + 24 * 60 * 60 * 1000).toISOString();
@@ -162,7 +166,7 @@ async function huecosOcupados(
       .from("agenda_eventos")
       // La cadena va literal y en una sola pieza: partida con `+` pierde la
       // inferencia de tipos de Supabase.
-      .select("ot_id, ordenes_trabajo!ot_id(especialidad)")
+      .select("ot_id, turno, ordenes_trabajo!ot_id(especialidad)")
       .not("ot_id", "is", null)
       .gte("inicio", desde)
       .lt("inicio", hasta)
@@ -172,9 +176,9 @@ async function huecosOcupados(
   );
 
   return filas.filter((f) => {
-    if (!f.ot_id || f.ot_id === exceptoLaOrden) return false;
+    if (!f.ot_id || f.ot_id === exceptoLaOrden || !f.turno) return false;
     const orden = Array.isArray(f.ordenes_trabajo) ? f.ordenes_trabajo[0] : f.ordenes_trabajo;
-    return claveDeApilado(orden?.especialidad) === clave;
+    return claveDelHueco(fecha, orden?.especialidad, f.turno) === clave;
   }).length;
 }
 
@@ -267,10 +271,10 @@ export async function mandarLaOTAlCalendario(
   if (pedido.turno !== null) {
     horario = horarioDeLaOT(fechaElegida, pedido.turno);
   } else {
-    const clave = claveDelHueco(fechaElegida, orden.especialidad);
+    const clave = claveDelHueco(fechaElegida, orden.especialidad, turno);
     let ocupados: number;
     try {
-      ocupados = await huecosOcupados(admin, fechaElegida, orden.especialidad, ordenId);
+      ocupados = await huecosOcupados(admin, fechaElegida, orden.especialidad, turno, ordenId);
     } catch (e) {
       return mal(500, `No se pudo contar lo que ya hay en el calendario del ${fechaElegida}: ${(e as Error).message}`);
     }
@@ -310,11 +314,21 @@ export async function mandarLaOTAlCalendario(
   // que quedó un evento vivo en cinco calendarios. Son los dos únicos escritores
   // de esta columna en un evento de OT, y cada uno limpia lo suyo (ver
   // `limpiable` en `elEventoSigueALaOT.ts`, que es la otra mitad de esta regla).
-  const delTope = topeado
-    ? { aviso: AVISO_DE_TOPE }
-    : actual?.aviso === AVISO_DE_TOPE
-      ? { aviso: null }
-      : {};
+  //
+  // **Y el aviso de un borrado fallido gana también contra el del tope**, que
+  // es el caso que faltaba: escribirlo encima lo perdía igual que limpiarlo a
+  // ciegas. No son dos comodidades equivalentes —el del borrado es el único
+  // registro de un evento que quedó vivo en cinco calendarios y que ya ninguna
+  // fila nombra; el del tope es que una orden comparte las 20:00, que se vuelve
+  // a deducir del horario—. Es la misma regla que `avisoDeUnMovimiento`.
+  const deUnBorradoFallido = actual?.aviso?.startsWith(AVISO_DE_BORRADO) ?? false;
+  const delTope = deUnBorradoFallido
+    ? {}
+    : topeado
+      ? { aviso: AVISO_DE_TOPE }
+      : actual?.aviso === AVISO_DE_TOPE
+        ? { aviso: null }
+        : {};
 
   if (actual) {
     // ── Reemplazar: se mueve al turno nuevo, no se duplica ──────────────────

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import { traerTodo } from "@/lib/core/paginado";
 import { fechaParaElCalendario, horarioDeLaOT, instanteDe, laOTEstaCerrada, TURNOS_DEL_TALLER } from "./evento";
-import { AVISO_DE_TOPE, claveDeApilado, horarioApilado } from "./apilado";
+import { AVISO_DE_TOPE, claveDelHueco, horarioApilado } from "./apilado";
 import { leerEvento, type EventoParaGoogle } from "@/lib/core/calendar";
 import { aHoraDePared, aInstanteISO, eventoParaGoogle, idDeGoogleDe, invitadosLimpios } from "./pedido";
 import {
@@ -46,6 +46,17 @@ import { anotarEnLaFila } from "./cargar";
  * 5. **`escrito` guarda lo que Google devolvió, nunca lo que se mandó**
  *    (`columnasDespuesDeEscribir`): es lo único que distingue el eco de una
  *    escritura propia de un cambio hecho por una persona.
+ * 6. **El apilado agrupa por turno, y dos turnos vecinos se pueden solapar en
+ *    el borde. Está dicho y no resuelto, a propósito.** El grupo es
+ *    `claveDelHueco` —día, especialidad **y** turno—, así que las de 4-12 y
+ *    las de 8-16 se apilan por separado: la cuarta del turno de 4 arranca a
+ *    las 08:30 y se pisa con una de 8-16 que vaya de 08:00 a 09:30. Se deja
+ *    así por tres razones: el usuario ya decidió no resolver el borde de
+ *    amontonamiento; el camino automático usa **un solo turno**, así que para
+ *    que pase hacen falta además eventos puestos a mano en otro turno el mismo
+ *    día y de la misma especialidad; y arreglarlo de verdad sería contar los
+ *    tres turnos juntos, o sea abandonar la partición por turno, que es
+ *    justamente lo que protege el turno que una persona eligió.
  */
 
 /**
@@ -279,10 +290,18 @@ function limpiable(aviso: string | null): boolean {
  * calcular el hueco del día nuevo—, así que lo escribe si topea y lo saca si no:
  * dejarlo sería dejar escrita una frase que dejó de ser cierta, que es
  * exactamente lo que esta columna no puede tener. Es la misma forma que el
- * `delTope` de `mandarLaOT.ts`, y la razón de que se limpie **sólo** el texto
- * del tope es la misma: a ciegas pisaría el de un borrado que Google rechazó.
+ * `delTope` de `mandarLaOT.ts`.
+ *
+ * **Pero el aviso de un borrado fallido gana siempre, también contra el del
+ * tope.** Escribirle `AVISO_DE_TOPE` encima lo pierde igual que limpiarlo a
+ * ciegas, y los dos no valen lo mismo: el del borrado es el único registro de
+ * que quedó un evento vivo en cinco calendarios que **ya ninguna fila nombra**
+ * y que no se recupera de ningún lado; el del tope dice que la orden comparte
+ * las 20:00, que se vuelve a deducir mirando el horario. Así que con un
+ * borrado fallido guardado esta función no toca la columna, topee o no.
  */
 function avisoDeUnMovimiento(aviso: string | null, topeado: boolean): string | null | undefined {
+  if (aviso?.startsWith(AVISO_DE_BORRADO)) return undefined;
   if (topeado) return aviso === AVISO_DE_TOPE ? undefined : AVISO_DE_TOPE;
   if (aviso === AVISO_DE_TOPE) return null;
   return limpiable(aviso) ? null : undefined;
@@ -473,19 +492,6 @@ function turnoDelTaller(turno: string | null): Turno | null {
 }
 
 /**
- * El grupo dentro del cual se apila un evento de OT: **día, especialidad y
- * turno**.
- *
- * El turno está en la clave y en `mandarLaOTAlCalendario` no, a propósito: allá
- * el arranque es siempre las 08:00, y acá sale del turno guardado del evento.
- * Apilar un evento de las 04:00 detrás de los del turno de 8 lo correría por
- * órdenes con las que no se superpone.
- */
-function claveDelCupo(fecha: string, especialidad: string | null | undefined, turno: Turno): string {
-  return `${fecha}|${claveDeApilado(especialidad)}|${turno}`;
-}
-
-/**
  * Qué eventos hay en cada grupo, **armado con las filas que la pasada ya leyó**:
  * no cuesta ni una lectura más, y por lo tanto nada del presupuesto que
  * `LIMITE_DE_GOOGLE_MS` reserva. `seguirALasOT` trae todos los eventos con
@@ -507,7 +513,7 @@ function cuposDeLasFilas(filas: FilaLeida[]): Map<string, Set<string>> {
     const fecha = fechaDelEvento(f.inicio);
     const turno = turnoDelTaller(f.turno);
     if (!fecha || !turno) continue;
-    tomarElCupo(cupos, claveDelCupo(fecha, laOrdenDe(f)?.especialidad, turno), f.id);
+    tomarElCupo(cupos, claveDelHueco(fecha, laOrdenDe(f)?.especialidad, turno), f.id);
   }
   return cupos;
 }
@@ -582,7 +588,7 @@ export async function seguirALasOT(
       // El hueco del día al que la orden se mudó. Sin esto el evento llegaría
       // con la hora fija de su turno y caería encima de otro de su especialidad.
       const fechaNueva = fechaParaElCalendario(orden);
-      const destino = fechaNueva && turno ? claveDelCupo(fechaNueva, orden.especialidad, turno) : null;
+      const destino = fechaNueva && turno ? claveDelHueco(fechaNueva, orden.especialidad, turno) : null;
 
       const plan = planDelEvento(
         { inicio: f.inicio, turno, divergencia: f.divergencia, aviso: f.aviso, orden },

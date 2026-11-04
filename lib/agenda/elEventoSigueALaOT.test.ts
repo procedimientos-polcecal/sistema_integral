@@ -627,6 +627,28 @@ describe("al mover un evento de OT a otra fecha", () => {
    * contra el tope. Dejar el aviso sería dejar escrita una frase que dejó de
    * ser cierta, que es lo que esta lógica limpia.
    */
+  it("el aviso de un borrado fallido le gana al del tope: no se lo pisa ni topeando", async () => {
+    // Los dos no valen lo mismo. El del borrado es el único registro de que
+    // quedó un evento vivo en cinco calendarios que ya ninguna fila nombra; el
+    // del tope dice que la orden comparte las 20:00, que se deduce del horario.
+    const deBorrado = `${AVISO_DE_BORRADO}. Google dijo: 503`;
+    const ocupantes = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) =>
+      EVENTO_EN({ n, dia: "2026-11-20", hora: "08:00", destino: "2026-11-20" })
+    );
+    const { cliente, hechos } = clienteFalso({
+      eventos: [
+        ...ocupantes,
+        EVENTO_EN({ n: 10, dia: "2026-11-06", hora: "08:00", destino: "2026-11-20", aviso: deBorrado }),
+      ],
+    });
+    await seguirALasOT(cliente);
+
+    // Se mueve igual, y al hueco topeado: lo que no se toca es la columna.
+    expect(horarioDe(hechos, 10)).toBe("2026-11-20T23:00:00.000Z");
+    const u = hechos.find((h) => h.op === "update" && h.donde?.startsWith("00000010"));
+    expect(u?.columnas).not.toHaveProperty("aviso");
+  });
+
   it("si el hueco nuevo no topea, el aviso del tope que ya no corresponde se limpia", async () => {
     const { cliente, hechos } = clienteFalso({
       eventos: [EVENTO_EN({ n: 1, dia: "2026-11-06", hora: "20:00", destino: "2026-11-20", aviso: AVISO_DE_TOPE })],

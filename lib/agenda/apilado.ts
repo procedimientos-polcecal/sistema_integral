@@ -93,3 +93,27 @@ export function claveDeApilado(especialidad: string | null | undefined): string 
   const limpia = especialidad?.trim().toUpperCase();
   return limpia ? limpia : "(sin especialidad)";
 }
+
+/**
+ * **El grupo completo dentro del cual se cuenta un hueco: día, especialidad y
+ * turno.** Es una sola definición y la usan los dos que cuentan —el alta
+ * automática (`mandarLaOTAlCalendario`) y el barrido que reubica
+ * (`elEventoSigueALaOT`)—, porque con dos claves distintas **el mismo evento
+ * recibía un hueco distinto según cuál de los dos lo tocó último**, y eso
+ * deriva solo sin que nada avise. Si se le agrega una dimensión, se le agrega
+ * acá y a los dos a la vez.
+ *
+ * **El turno está adentro** porque «la misma especialidad es la misma gente»
+ * vale dentro de un turno: los mecánicos de 4-12 y los de 8-16 son equipos
+ * distintos, y apilar un evento de las 04:00 detrás de los del turno de 8 lo
+ * correría por órdenes que nunca lo van a cruzar. Lo que eso deja abierto —que
+ * dos turnos vecinos se solapen en el borde— está dicho en el encabezado de
+ * `elEventoSigueALaOT.ts` y se decidió no resolverlo.
+ */
+export function claveDelHueco(
+  fecha: string,
+  especialidad: string | null | undefined,
+  turno: string
+): string {
+  return `${fecha}|${claveDeApilado(especialidad)}|${turno}`;
+}
