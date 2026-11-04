@@ -755,7 +755,7 @@ un problema de la persona que la cargó. (La otra migración de esta tanda, la d
 producción coincidan.)
 
 **Después de desplegar: la columna de gente disponible no dice nada hasta que se cargue
-el padrón, y además subcuenta ausencias por un defecto del flujo de francos.** Ninguna de
+el padrón, y además subcuenta ausencias porque hay francos tomados sin día.** Ninguna de
 las dos cosas se arregla con código de la Agenda:
 
 - **`mant_personal_taller` está vacía**: cero personas, cero semanas de referencia, cero
@@ -774,15 +774,23 @@ las dos cosas se arregla con código de la Agenda:
     40 creados desde el 26/10**).
   - **2 `TOMADO` el 02/11/2026, sin fecha** (se crearon ese mismo día). **O sea que el flujo
     nuevo no siempre guarda el día**, y un franco tomado puede quedar sin día incluso
-    después del 26/10. Los otros 38 de esos 40 siguen pendientes (es una resta).
+    después del 26/10.
+  - **De dónde sale cada número:** los **40** francos creados desde el 26/10 y los **2**
+    `TOMADO` entre ellos son **medidos**; los **38** pendientes salen de **restarlos**.
+  - **Una diferencia sin explicar, que no hace falta rehacer:** 259 − 40 = 219 y la foto
+    del 26/10 decía 217. **El conteo de hoy y esa foto difieren en dos francos y la causa no
+    se averiguó**; no hay evidencia de que alguna de las dos esté mal.
 
   **Conjetura, sin confirmar:** que lo que distingue al que funcionó de los dos que no sea
   haberse creado **y** tomado el mismo día. Es lo único visible en los datos, con dos casos:
   **no se afirma como causa.**
 
   **Lo que significa para la Agenda:** cada franco tomado sin fecha es una ausencia que la
-  cuenta de disponibles **no ve**, y **eso no se arregla desde acá**: es un defecto del flujo
-  de francos y no de este trabajo, y no se tocó. Los 200 pendientes **no son una tarea
+  cuenta de disponibles **no ve**, y **eso no se arregla desde acá**. Lo observado es que un
+  franco tomado quedó sin día; por qué (un defecto del flujo, otra puerta de entrada, un
+  dato viejo) **no se sabe**, porque no se leyó el flujo de francos, y no se tocó. **Esos 2
+  no son históricos como los 56**: su día de descanso podría estar adelante, así que sí
+  pueden restarle gente a un día que todavía no llegó. Los 200 pendientes **no son una tarea
   manual**: la pantalla pide el día al marcar el franco como tomado, y lo que no se sabe es
   si lo guarda siempre. Cruzar por `fecha_tomado` en vez de `fecha_descanso` era el bug ya
   corregido (pintaba 35 huecos un lunes cualquiera) y no es la salida.
