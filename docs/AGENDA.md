@@ -803,8 +803,8 @@ las dos cosas se arregla con código de la Agenda:
   sincronización la dispara el reloj sola, cada 3 a 5 horas. `TOPE_POR_CORRIDA` es 25 y la
   corrida en seco midió **23 candidatas**, así que **la primera sincronización posterior al
   despliegue las manda a las 23, todas, en una sola pasada** —no «algunas»—: **92
-  invitaciones por correo**, incluidas las **cuatro de 2027** y las **seis de hoy cuya hora
-  ya pasó**. Está dentro de lo diseñado y es lo que se pidió; lo que no se puede es
+  invitaciones por correo**, incluidas las **cuatro de 2027** y las **seis de hoy, de las
+  que algunas ya pasaron de hora**. Está dentro de lo diseñado y es lo que se pidió; lo que no se puede es
   enterarse después. Tres consecuencias prácticas:
   1. **Sacar del conjunto una orden concreta tiene que pasar antes del despliegue**, no
      después: una invitación mandada no se retira, y borrar el evento sólo avisa de la

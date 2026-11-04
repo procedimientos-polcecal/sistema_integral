@@ -29,6 +29,14 @@ export const TOPE_DE_ARRANQUE = "20:00";
  * tope depende de dónde arranca el turno —nueve desde las 08:00, once desde las
  * 04:00, seis desde las 12:00— y el texto se guarda en la columna `aviso`, donde
  * una persona lo lee. Un número fijo era falso en dos de los tres caminos.
+ *
+ * **Este texto se compara por igualdad** (`elEventoSigueALaOT.ts` y
+ * `mandarLaOT.ts` deciden con `=== AVISO_DE_TOPE` si un aviso es suyo y se
+ * puede limpiar). Mientras nada de esta rama estuviera desplegado, ninguna fila
+ * de `agenda_eventos.aviso` lo llevaba y cambiarlo era gratis. **Desde el
+ * despliegue deja de serlo**: una fila con el texto viejo se leería como un
+ * aviso escrito por una persona y su evento quedaría congelado. Reescribir la
+ * frase pasa a ser una migración de datos de esa columna, no una edición.
  */
 export const AVISO_DE_TOPE =
   "Ese día ya tiene órdenes de esa especialidad hasta el tope: ésta comparte las 20:00 con las que no entraron.";
