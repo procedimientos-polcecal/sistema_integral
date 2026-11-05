@@ -686,6 +686,105 @@ sólo para que descartarlo no lo traiga de vuelta mañana. Por eso el resumen lo
 imprime sin número — si no diría «9 · Trituración: hace 36 días que no se
 carga». Está fijado con un test en `lib/home/resumenDeAvisos.test.ts`.
 
+**La salud de las sincronizaciones también sale por estos dos lados**, y se
+declara a mano. Desde el 05/11/2026 `avisosDeSalud` (en `lib/home/avisos.ts`)
+emite **un aviso por recurso caído** de `ultima_sincronizacion`, sólo para
+`admin_sistema`, y lo lleva a `/administracion/salud`: ahí aterriza el push. Lo
+que hay que saber antes de tocarlo, porque nada de esto se deduce del código:
+
+- **La tolerancia de cada recurso se declara en `REGISTRO`**
+  ([lib/core/saludDeLasSincronizaciones.ts](lib/core/saludDeLasSincronizaciones.ts)),
+  con la medición que la justifica al lado, y **no se deriva ni del cron
+  declarado ni de la historia del recurso**: los crons de Actions declaran una
+  frecuencia y corren otra (`mantenimiento/ordenes` declara cada 15 minutos y
+  corre cada ~3,5 h), y una tolerancia sacada de la propia historia
+  normalizaría la escasez. Un recurso que aparece en la vista sin estar
+  declarado **no queda mudo: sale como el aviso `salud-sin-declarar`**
+  (`recursosSinDeclarar`), así que **agregar una sincronización nueva obliga a
+  declararla**. Es la misma defensa que `revisar-exportaciones`: no decide si
+  algo está bien, hace que nadie agregue uno sin haber dicho qué espera de él.
+- **Exceptuar no es no mirar: las tres familias.** Una entrada con
+  `toleranciaHoras: null` tiene que decir en cuál cae y por qué, porque cada
+  una es un caso donde «una corrida vieja o fallida es un problema» da una
+  alarma falsa: `solo-escribe-si-hay-algo` (`agenda/aviso_de_google`: su fila
+  sólo existe cuando hubo algo que decir, así que su edad no mide nada y un
+  fallo quedaría clavado hasta el próximo aviso), `se-ve-en-otro-lado`
+  (`agenda/pendientes`: un fallo ahí ya se ve en el evento) y
+  **`apagado-a-proposito`**, que además **lleva quién lo levanta**
+  (`quienLoLevanta`). Esa última es la que importa: sin ella lo primero que
+  hace el sistema es **reintroducir el rojo permanente** que el comentario de
+  `.github/workflows/calidad-envases-bajada.yml` ya había evitado al apagar su
+  cron —«un fallo esperado que se ve igual que uno real entrena a no mirar
+  ninguno»—, porque `calidad/envases_bajada` no corre por decisión y de
+  otro modo quedaría en rojo para siempre. Volver a encenderlo es descomentar el
+  `schedule:` de ese workflow, y la entrada del registro lo dice.
+- **`agenda-pasos-caidos` y `agenda-salud-sin-comprobar` se retiraron** el
+  05/11/2026: hacían para dos pasos lo que esto hace para todos, y dos avisos
+  de salud con umbrales distintos diciendo cosas parecidas es lo que salir de
+  una sola función evita. Sus ids quedan huérfanos en `notificaciones_descartes`,
+  **lo cual es inofensivo** —nunca más coinciden con nada— y **no se reusan**:
+  hacerlo le entregaría a quien los descartó un aviso ya silenciado que nunca
+  vio. Lo que **no** se retiró es `lineasDeSalud`, que sigue dibujando el
+  detalle de la Agenda en `/agenda`, ni las dos exclusiones razonadas de
+  `PASOS_CON_GOOGLE`.
+- **`cuantoLlevaMal` mide cosas distintas según el estado, y es a propósito.**
+  Es la `cantidad` del aviso y existe para una sola cosa: **crecer mientras el
+  problema siga**, porque `filtrarDescartadas` pide `cantidad > cantidad_vista`.
+  En una `vieja` o una `nunca` son las tolerancias enteras de silencio
+  (`cuantasTolerancias`). En un `fallo` son las **corridas fallidas seguidas**
+  (`rachaDeFallos`, leída de `sincronizaciones`), y **no se puede medir con el
+  tiempo**: un cron que falla pero sigue corriendo reescribe su fila cada vez,
+  el silencio nunca pasa de unas horas y la cuenta quedaría en 1 para siempre.
+  Medido el 05/11/2026, `calidad/carbonilla-odoo` —el único fallo real de ese
+  día— falla todos los días a las 08:00, contra una tolerancia de 36 h. Con 1
+  fijo, **un solo descarte dejaría un recurso roto y mudo para siempre**:
+  campana, push y el recordatorio de los lunes. Por la misma razón el resumen
+  imprime estos avisos sin número.
+- **`ultima_sincronizacion` es una unión, y `compras/planilla` no sale de
+  `sincronizaciones`**: la sintetiza `compras_sincronizaciones` (migración
+  `20261023104622`), donde «anduvo» es `error is null` porque no hay columna
+  `ok`. Buscarla en la tabla común —que tiene 0 filas de ese recurso, medido— no
+  daba error ni daba cero: **daba una racha de 1 para siempre**, por el camino de
+  éxito y sin una línea en el log, indistinguible de un recurso que acaba de
+  fallar. Compras es el espejo de más tráfico del sistema. La excepción está
+  declarada en `DE_OTRA_TABLA`, y «ninguna fila» ahora devuelve `null` y se va
+  por el camino que **sí** loguea, para que la próxima unión que alguien agregue
+  a la vista sin declararla **grite** en vez de pasar por sana. Si agregás una,
+  la entrada va ahí.
+- **`salud-sin-comprobar` no tiene estado del que sacar una racha**, porque lo
+  que falló es la lectura: su `cantidad` es **el día** (días desde la época, en
+  fecha de Argentina), de modo que el descarte dura una jornada. Es el único
+  aviso cuyo número es un reloj, y por eso vive en `CRECE_CON_EL_DIA`
+  ([lib/home/notificaciones.ts](lib/home/notificaciones.ts)), con dos
+  consecuencias que hay que mantener juntas: **queda afuera del movimiento
+  diario** —sin eso se anunciaría todas las mañanas, que es justo lo que dejó a
+  las dos personas que probaron las notificaciones en serio con los 13 avisos
+  descartados— y **cuenta 1 en el total de la campana, ni su número ni 0**
+  (`totalDeLaCampana`): con 0 la campana no dibuja insignia y el aviso de que
+  **el vigilante quedó ciego** sería invisible salvo que alguien abriera el
+  panel. Por eso la lista no vive en `lib/home/avisos.ts`: la necesitan las tres
+  superficies y la campana, que es un componente de cliente, no puede
+  importarlo.
+- **Una trampa documentada y no detectada: RLS.** `sinComprobar` cubre que la
+  lectura falle, **no que una policy la deje vacía**: una policy que tapa la
+  vista no da error, devuelve `data` vacía, y eso entra por el camino bueno como
+  una lista de «nunca corrió» falsos. Hoy no muerde porque
+  `sincronizaciones_select` es `to authenticated using (true)` (migración 037) y
+  la vista es `security_invoker`. **Si alguna vez se angosta esa policy**, la
+  campana y `/administracion/salud` —que leen con la sesión— mienten juntas; el
+  cron del resumen no, porque lee con el cliente admin.
+
+**Todo esto depende de la migración `20261105092248`** (la columna `canonico`,
+ver «Hay un segundo despliegue escribiendo en esta base»). Sin ella, cuando
+las dos corridas dicen `production` la vista desempata por la más reciente, que
+suele ser la del otro despliegue: el aviso suena por un recurso que en producción
+anda bien —o, peor, un fallo real queda tapado porque el otro lo mostró sano—.
+El mismo hueco tiene un costo anotado en `rachaDeFallos`: **no filtra por
+`canonico`**, porque nombrarla antes de que la migración corra rompería la
+consulta, así que su racha cuenta también los fallos del otro despliegue. Hoy
+eso sólo la engorda y el aviso reaparece antes; quedaría corta sólo si el otro
+despliegue anduviera bien en un recurso que el canónico falla.
+
 El diseño y lo que se verificó están en
 [el spec de la app instalable](docs/superpowers/specs/2026-10-16-app-instalable-design.md),
 que lleva las cuatro fases: instalar y verse bien (hecha), avisar (hecha), leer
