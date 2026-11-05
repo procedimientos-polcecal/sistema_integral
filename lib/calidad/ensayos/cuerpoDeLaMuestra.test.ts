@@ -47,6 +47,37 @@ describe("validarMuestra", () => {
     expect(r.muestra.peso_vol_gramos).toBe(299.668);
   });
 
+  /**
+   * La coma es lo que tipea quien carga, y hasta el 05/11/2026 el servidor la
+   * leía como `NaN` mientras el formulario la leía bien. Las dos caras del
+   * mismo error: en un retenido frena la carga nombrando una malla que **sí**
+   * estaba escrita, y en cualquier otro campo **no frena nada** y guarda null.
+   * El segundo es el peor, porque la pantalla ya había mostrado el resultado.
+   */
+  it("lee la coma decimal, que es como se escribe un número acá", () => {
+    const r = ok(validarMuestra({
+      ...BASE,
+      humedad_p_recipiente: "433,25",
+      humedad_p_inicial: "650,88",
+      humedad_p_final: "648,99",
+      retenidos: [{ malla: "100", retenido_g: "1,32" }],
+    }));
+    expect(r.muestra.humedad_p_recipiente).toBe(433.25);
+    expect(r.muestra.humedad_p_inicial).toBe(650.88);
+    expect(r.muestra.humedad_p_final).toBe(648.99);
+    expect(r.retenidos).toEqual([{ malla: 100, retenido_g: 1.32 }]);
+  });
+
+  it("un retenido con coma no se reporta como faltante", () => {
+    expect(validarMuestra({
+      ...BASE,
+      retenidos: [
+        { malla: "50", retenido_g: "0.8" },
+        { malla: "100", retenido_g: "1,32" },
+      ],
+    })).not.toHaveProperty("problema");
+  });
+
   it("una observación en blanco queda en null", () => {
     const r = ok(validarMuestra({ ...BASE, observaciones: "   ", humedad_p_inicial: 500 }));
     expect(r.muestra.observaciones).toBeNull();
