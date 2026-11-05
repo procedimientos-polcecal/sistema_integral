@@ -8,6 +8,7 @@
  * funciones puras: leer `ultima_sincronizacion` es de quien las llama.
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { haceCuanto } from "@/lib/agenda/avisosDeLaAgenda";
 
 /** Lo que `ultima_sincronizacion` dice de la última corrida de un recurso. */
@@ -343,4 +344,58 @@ function detalleDe(estado: EstadoCaido, corrida: CorridaLeida | undefined, ahora
 export function recursosSinDeclarar(corridas: CorridaLeida[]): string[] {
   const declarados = new Set(REGISTRO.flatMap((e) => e.recursos.map((r) => claveDe(e.modulo, r))));
   return corridas.map((c) => claveDe(c.modulo, c.recurso)).filter((clave) => !declarados.has(clave));
+}
+
+/** Lo que se pudo saber de la salud de todas las sincronizaciones. */
+export interface SaludDelSistema {
+  caidas: EntradaCaida[];
+  sinDeclarar: string[];
+  /**
+   * **La comprobación misma falló.** No es «todo bien» ni es «algo cayó»: es que
+   * no se sabe. Es un estado aparte y no un 0.
+   */
+  sinComprobar: boolean;
+  /** Lo leído, para dibujar la pantalla. Vacío si no se pudo leer. */
+  corridas: CorridaLeida[];
+}
+
+/**
+ * La salud de todos los recursos, leída de `ultima_sincronizacion`. Es
+ * `leerLaSaludDeLaAgenda` de `lib/agenda/avisosDeLaAgenda.ts` ensanchada de un
+ * módulo a todos, y su docstring tiene el argumento largo; acá va el resumen.
+ *
+ * **Si la lectura falla NO devuelve 0**: devuelve `sinComprobar`. Es el único
+ * aviso del sistema cuyo trabajo es detectar que algo dejó de funcionar en
+ * silencio, y uno que dice «todo bien» cuando no pudo mirar cierra el fallo un
+ * piso más abajo y lo abre un piso más arriba. Tampoco tira —ni por un error de
+ * PostgREST ni por una excepción de red—: la campana corre en cada página del
+ * sistema y no puede caerse por esto. El fallo va al log.
+ *
+ * Tampoco filtra por módulo, a diferencia de la de la Agenda: se quieren todos.
+ * Y **no pagina con `traerTodo()`** a propósito: la vista trae **una fila por
+ * recurso** (29 hoy), no una por corrida, así que no es una tabla que pueda
+ * crecer hasta el corte de 1000 filas de PostgREST.
+ */
+export async function leerLaSalud(
+  supabase: SupabaseClient,
+  ahora: Date = new Date()
+): Promise<SaludDelSistema> {
+  try {
+    const { data, error } = await supabase
+      .from("ultima_sincronizacion")
+      .select("modulo, recurso, ok, error, created_at")
+      .returns<CorridaLeida[]>();
+    if (error) throw new Error(error.message);
+    // Sin error y sin datos tampoco es una lectura: no se afirma nada con ella.
+    if (!data) throw new Error("la vista no devolvió datos ni error");
+    return {
+      caidas: entradasCaidas(data, ahora),
+      sinDeclarar: recursosSinDeclarar(data),
+      sinComprobar: false,
+      corridas: data,
+    };
+  } catch (e) {
+    console.error("salud: no se pudo comprobar la salud del sistema:", e instanceof Error ? e.message : e);
+    return { caidas: [], sinDeclarar: [], sinComprobar: true, corridas: [] };
+  }
 }
