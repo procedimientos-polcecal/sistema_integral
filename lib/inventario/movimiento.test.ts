@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { loQueFalta, sectorDelMovimiento, stockQueQueda, avisoDeStockNegativo } from "./movimiento";
+import { loQueFalta, cantidadDelMovimiento, sectorDelMovimiento, stockQueQueda, avisoDeStockNegativo } from "./movimiento";
 
 const completo = {
   articuloId: "a-1",
@@ -159,5 +159,46 @@ describe("el aviso de stock negativo", () => {
   /** No recorta a cero: el numero negativo es justo lo que hay que ver. */
   it("el aviso dice el numero de verdad y no un cero disimulado", () => {
     expect(avisoDeStockNegativo(-0.5)).toContain("-0.5");
+  });
+});
+
+/**
+ * El bug de la coma decimal, 05/11/2026. El mismo que frenaba la carga de una
+ * muestra en Calidad/Ensayos nombrando una malla que estaba escrita en la
+ * pantalla: acá decía "Poné la cantidad." sobre un campo lleno.
+ *
+ * El campo declara `inputMode="decimal"`, así que el teclado del teléfono
+ * ofrece la coma; `Number("1,5")` da `NaN` y `Number.isFinite(NaN)` es false,
+ * que es el mismo camino que "no pusiste nada".
+ */
+describe("la cantidad se tipea con coma", () => {
+  it("una cantidad con coma decimal no falta", () => {
+    expect(loQueFalta({ ...completo, cantidad: "1,5" })).toEqual([]);
+    expect(loQueFalta({ ...completo, cantidad: "0,25" })).toEqual([]);
+  });
+
+  it("el punto de miles es de miles: 1.200 tornillos son mil doscientos", () => {
+    expect(cantidadDelMovimiento("1.200")).toBe(1200);
+    expect(cantidadDelMovimiento("1,5")).toBeCloseTo(1.5);
+  });
+
+  /** La ruta y el formulario leen con esta misma función: ése era el bug. */
+  it("lee igual lo que ya viene como número y lo que no es ninguno", () => {
+    expect(cantidadDelMovimiento(3)).toBe(3);
+    expect(cantidadDelMovimiento("")).toBeNull();
+    expect(cantidadDelMovimiento("dos")).toBeNull();
+  });
+
+  it("el stock que queda se calcula con la coma, en vez de desaparecer", () => {
+    expect(stockQueQueda("salida", 10, "1,5")).toBeCloseTo(8.5);
+    expect(stockQueQueda("entrada", 10, "1.200")).toBe(1210);
+    expect(stockQueQueda("ajuste", 10, "2,5")).toBeCloseTo(2.5);
+  });
+
+  it("una cantidad con coma sigue respetando el resto de las reglas", () => {
+    expect(loQueFalta({ ...completo, cantidad: "-1,5" }))
+      .toContain("La cantidad tiene que ser mayor a cero.");
+    expect(loQueFalta({ ...completo, tipo: "ajuste", cantidad: "-0,5", solicitanteId: "", motivo: "conteo" }))
+      .toContain("El ajuste no puede ser negativo.");
   });
 });

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarInventario } from "@/lib/inventario/auth";
 import { espejarMovimiento } from "@/lib/inventario/espejo";
-import { loQueFalta, sectorDelMovimiento, avisoDeStockNegativo, type TipoMovimiento } from "@/lib/inventario/movimiento";
+import { loQueFalta, cantidadDelMovimiento, sectorDelMovimiento, avisoDeStockNegativo, type TipoMovimiento } from "@/lib/inventario/movimiento";
 import { auditar, nombreParaAuditoria } from "@/lib/core/auditoria";
 
 /**
@@ -41,7 +41,9 @@ export async function POST(request: Request) {
   const b = await request.json().catch(() => null);
   const articulo_id = String(b?.articulo_id ?? "").trim();
   const tipo = String(b?.tipo ?? "").trim();
-  const cantidad = Number(b?.cantidad);
+  // La misma lectura que el formulario, que es el punto: hasta el 05/11/2026
+  // acá había un `Number(b?.cantidad)` que daba NaN con "1,5".
+  const leida = cantidadDelMovimiento(b?.cantidad);
 
   if (!["entrada", "salida", "ajuste"].includes(tipo)) {
     return NextResponse.json({ error: "Tipo de movimiento inválido" }, { status: 400 });
@@ -60,6 +62,9 @@ export async function POST(request: Request) {
   if (faltan.length > 0) {
     return NextResponse.json({ error: faltan.join(" ") }, { status: 400 });
   }
+
+  // `loQueFalta` ya se negó si no se pudo leer, así que acá es un número.
+  const cantidad = leida as number;
 
   const texto = (v: unknown) => String(v ?? "").trim() || null;
   const admin = createAdminClient();
