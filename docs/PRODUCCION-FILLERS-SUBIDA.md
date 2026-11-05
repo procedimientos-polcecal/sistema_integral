@@ -5,11 +5,16 @@ cada molino. Es la mitad de afuera del frente de molinos: el diseño de lo que
 el SdG hace con ese archivo está en
 [el spec](superpowers/specs/2026-10-21-produccion-molinos-desde-el-robot-design.md).
 
-**La forma recomendada es un contenedor**, para no instalar nada en el
-servidor. Abajo está también la variante con tarea programada de Windows, por
-si no hay Docker donde corresponde.
+**Lo que está andando hoy es la tarea programada de Windows**, en la notebook
+que ve el servidor, desde el 29/10/2026. La variante con contenedor está
+escrita y probada hasta donde se pudo, pero **quedó bloqueada por la cuenta sin
+contraseña del servidor de archivos** — el detalle, medido, está en su sección.
 
-Probado el 23/10/2026 contra el Drive real, en modo seco.
+Lo que ya se verificó de punta a punta el 29/10/2026 contra Drive real: la
+cuenta `pcrobot-subidor@sistemadegestion-pp` sube los dos zips a la unidad
+compartida `PC Robot`, y la cuenta `sheets-reader@mantenimientopp` —la que
+tiene Vercel— los **lista y los descarga**, con los bytes llegando como un zip
+válido. Las dos mitades del circuito existen.
 
 ## Por qué hace falta una máquina adentro
 
@@ -21,6 +26,71 @@ una máquina propia.**
 
 No tiene que ser la PC del robot, y conviene que no lo sea: a esa no hay que
 tocarla y probablemente no tenga salida a internet.
+
+## Qué se sube, y qué de eso se lee
+
+**No son lo mismo, y confundirlos es la trampa de esta parte.** Desde el
+04/11/2026 la tarea sube **cinco** carpetas de `\\server\EXTERIOR`, y el SdG
+lee **dos**. Las otras tres se suben para dejar de perder el dato, no porque
+haya algo que importar:
+
+| Carpeta del servidor | Sube como | ¿El SdG la lee? | Qué trae |
+|---|---|---|---|
+| `Filler1` | `Filler 1 AAAA-MM-DD.zip` | **sí** | el PC Robot del filler 1 |
+| `Filler2` | `Filler 2 AAAA-MM-DD.zip` | **sí** | el PC Robot del filler 2 |
+| `Planta 02` | `Planta 02 AAAA-MM-DD.zip` | no | un PC Robot, pero su CSV es otra cosa |
+| `Hornos` | `Hornos AAAA-MM-DD.zip` | no | 18 planillas mensuales respaldadas a diario |
+| `Porteria` | `Porteria AAAA-MM-DD.zip` | no | el escritorio completo de esa PC |
+
+Lo que hay que saber de cada una de las tres que no se leen, medido el
+04/11/2026:
+
+- **`Planta 02` sí es un PC Robot**, y es la única de las tres que algún día
+  podría entrar al catálogo. 165 zips, uno por día desde julio, y adentro un
+  solo `DAT001.CSV` que **crece**: 69.016 bytes el 14/07, 101.047 el 12/09,
+  130.391 el 04/11. Es acumulativo igual que los fillers. Lo que lo deja
+  afuera es la forma: una fila **por hora** con un horímetro acumulado y
+  **cero kilos**. El modelo de turnos se apoya en toneladas y minutos de
+  marcha, y de ahí sólo salen horas. Además el contador arranca en **−304** y
+  hoy va en 566, así que en algún momento lo pusieron a cero con un desfasaje
+  —una resta a través de ese salto da horas que no existieron—. Leerlo es un
+  diseño, no un prefijo más en `produccion_molinos`.
+- **`Hornos` no es un robot**: cada zip trae dieciocho `.xlsx` mensuales
+  (`202611-HORNOS NOVIEMBRE 2026.xlsx` y los anteriores). 1,1 MB por copia.
+  Exporta más de una vez por día y con el nombre cambiando —se vio
+  `HORNOS - INICIO …` y `HORNOS - (12hrs) …`—, lo que no molesta porque el
+  subidor elige **por fecha de modificación** y nombra el destino con lo que
+  dice la configuración, nunca con el nombre del origen.
+- **`Porteria` tampoco**, y es la que conviene mirar antes de dejarla corriendo
+  mucho tiempo: es el respaldo del **escritorio, Descargas, Documentos, Música
+  y Videos** de esa PC. Exporta **cada hora**, 10,5 MB cada vez, y lleva 397 MB
+  acumulados del lado del servidor. Adentro viajan dos `OfficeSetup.exe` de 7,4
+  MB y un `OperaGXSetup.exe` de 4,1 MB, o sea 19 MB de instaladores en cada
+  copia. Lo útil son cinco planillas de pesaje (`PLANILLA PESAJES.xlsx` y una
+  por cliente), que son materia de **Cantera** y no de Producción. Como el
+  subidor sube una por día, son ~10,5 MB diarios a la unidad compartida —unos
+  3,8 GB al año—: si eso llega a importar, lo que corresponde es subir esas
+  cinco planillas y no el escritorio.
+
+**Lo que está muerto y por qué no está en la lista.** `Datos Cal viva` tiene
+cuatro zips del 30/07/2026 que pesan **22 bytes cada uno**, que es el tamaño
+exacto de un zip sin un solo archivo adentro: los cuatro son del mismo día
+entre las 11:31 y las 11:55, alguien probó cuatro veces y nunca salió nada.
+`Planta 3 - Molienda` y `Taller Electrico` están creadas y vacías desde marzo
+de 2025. `Taller Vial` tiene cuatro planillas, la más nueva de 2024.
+
+Eso deja **Molienda de cal e Hidratación sin ubicar**: las dos carpetas
+candidatas son las dos muertas, no hay ninguna otra con esos nombres, y el
+contador `HIDRAT` que aparece dentro del horímetro de Filler 2 vale **0 en las
+6.297 filas**, de febrero a hoy. Si esas dos tienen PC Robot, está escribiendo
+en otro lado y hay que preguntarlo en planta.
+
+**Una carpeta que no se ve no frena la instalación.** `instalar.ps1` exige las
+dos de los fillers —sin ellas no hay nada que instalar— y a las otras tres, si
+no las ve, las saca de la configuración y lo dice. El motivo es que al subidor
+le alcanza con que falte una carpeta para terminar con código 1: dejar escrita
+una ruta que no existe pinta de rojo la tarea programada todos los días por
+algo que nadie lee, y un rojo permanente es un rojo que se deja de mirar.
 
 ## Antes de empezar: el destino y la credencial
 
@@ -129,8 +199,9 @@ Ese id va en `carpetaDrive` de la configuración.
 
 #### 7. Comprobar sin escribir nada
 
-Con el JSON y el id ya puestos, correr el script en seco. Tiene que listar un
-archivo por molino. Si algo falta, el error lo dice:
+Con el JSON y el id ya puestos, correr el script en seco. Tiene que listar una
+línea por cada carpeta de la configuración —cinco hoy; ver «Qué se sube, y qué
+de eso se lee»—. Si algo falta, el error lo dice:
 
 | Lo que sale | Qué pasó |
 |---|---|
@@ -144,7 +215,35 @@ respaldo; esto sólo agrega una nueva para este trabajo.
 
 ---
 
-# Con Docker (recomendado)
+# Con Docker — y por qué hoy no se puede
+
+Todo lo de abajo funciona: la imagen se construye, el compose es válido, el
+script corre adentro. **Lo que no funciona es el montaje del recurso
+compartido**, y conviene saber exactamente por qué antes de volver a intentarlo.
+
+**La cuenta con la que esta red entra a `\\server\EXTERIOR` no tiene
+contraseña.** No es la cuenta de Windows de nadie: se llama `exterior` y está
+guardada en el Administrador de credenciales (`cmdkey /list` →
+`Domain:target=server`), que es por lo que la `Z:` funciona sin pedir nada y
+por lo que durante un buen rato buscamos el problema en el usuario equivocado.
+
+Con esa cuenta, el montaje CIFS **alterna entre andar y no andar**. Medido el
+29/10/2026: las mismas opciones exactas dieron `permission denied` seis veces y
+`OK` otras seis, en bloques, con una carpeta y con dos, con `sec=ntlmssp` y sin
+él, con `vers=3.0`, `2.1` y `1.0`. No es configuración: un servidor Windows
+restringe por política el inicio de sesión **por red** de cuentas sin clave, y
+que pase o no depende del mecanismo que se negocie en cada sesión.
+
+Por el camino sin Docker eso no aparece, porque ahí la autenticación la hace
+Windows con la credencial que ya tiene guardada: la clave vacía nunca viaja.
+
+**Para desbloquearlo hace falta una cuenta de sólo lectura sobre `EXTERIOR` con
+contraseña de verdad.** Es lo que corresponde igual en la máquina definitiva:
+hoy el contenedor usaría la misma cuenta con la que entra todo el mundo.
+
+---
+
+# Con Docker, cuando haya una cuenta con contraseña
 
 El contenedor trae Node, así que en el host no se instala nada, y trae el
 planificador adentro (`--diario`), así que tampoco hace falta cron ni una tarea
@@ -178,8 +277,13 @@ cp config/subir-zips.config.ejemplo.json config/subir-zips.config.json
 ```
 
 En el JSON de configuración va el id de la carpeta de Drive. Las rutas de
-origen ya apuntan a `/datos/filler1` y `/datos/filler2`, que es **adentro del
-contenedor**: el `docker-compose.yml` monta ahí los recursos compartidos.
+origen ya apuntan a `/datos/filler1`, `/datos/filler2`, `/datos/planta02`,
+`/datos/hornos` y `/datos/porteria`, que es **adentro del contenedor**: el
+`docker-compose.yml` monta ahí los recursos compartidos. Ojo con `Planta 02`:
+el nombre del recurso del servidor lleva un **espacio**, y es el primer lugar
+donde mirar si ese montaje falla y los otros cuatro andan — estas tres líneas
+nuevas no están comprobadas contra un servidor real, porque esta variante
+quedó bloqueada por la cuenta sin contraseña.
 
 La carpeta `config/` y el `.env` están en el `.gitignore` de
 `scripts/pcrobot/`: llevan secretos y no se commitean.
@@ -190,8 +294,8 @@ La carpeta `config/` y el `.env` están en el `.gitignore` de
 docker compose run --rm subidor node subir-zips.mjs /config/subir-zips.config.json --seco
 ```
 
-Tiene que decir una línea por molino con el archivo que subiría. Si algo está
-mal, el mensaje dice qué: los errores que importan están traducidos al
+Tiene que decir una línea por cada carpeta de la configuración con el archivo
+que subiría. Si algo está mal, el mensaje dice qué: los errores que importan están traducidos al
 castellano, incluido el de la cuota y el 404 de la carpeta que la cuenta no ve.
 
 ### 5. Dejarlo andando
@@ -224,13 +328,45 @@ esa hora. Mirar que los dos archivos aparezcan en la carpeta de Drive.
   del protocolo por ningún lado.
 - **Si el nombre `server` no resuelve desde el host de Docker, va la IP** en
   `SMB_SERVIDOR`. El contenedor no hereda el DNS de Windows.
+- **Cambiar el `.env` no recrea los volúmenes.** Docker los crea la primera vez
+  con las opciones de montaje de ese momento y después los reusa; compose avisa
+  *"Volume exists but doesn't match configuration. Recreate?"* y, sin terminal
+  interactiva, **asume que no**. Es una trampa cara porque el error sigue
+  diciendo exactamente lo mismo: uno cambia la contraseña, vuelve a probar, y
+  parece que la nueva tampoco sirve. Antes de cada prueba:
+  `docker compose down -v`.
+- **`SMB_DOMINIO` no puede quedar vacío.** Un `domain=` sin valor hace fallar
+  el montaje con **`invalid argument`**, que no dice cuál de las ocho opciones
+  es la mala y manda a buscar por el lado equivocado: parece un problema de
+  permisos o de versión de SMB, y no es ninguno de los dos. En una red
+  WORKGROUP va `WORKGROUP`, y el compose lo pone por defecto si está vacía.
+  Medido el 23/10/2026 contra el servidor real: con `domain=` da `invalid
+  argument`; con `domain=WORKGROUP`, el montaje se intenta de verdad.
+- **Una cuenta sin contraseña no sirve**, aunque el mapeo de red de Windows
+  funcione desde la sesión abierta. Son dos caminos de autenticación
+  distintos: Windows pasa las credenciales de la sesión, y el montaje CIFS
+  manda lo que diga `SMB_CLAVE`. Con la clave vacía da **`permission
+  denied`**, y con `guest` también si el recurso no admite anónimos — las dos
+  cosas comprobadas acá. Hay que poner la contraseña real de una cuenta que el
+  servidor acepte.
 
 ---
 
-# Sin Docker: tarea programada de Windows
+# Sin Docker: tarea programada de Windows — lo que está andando
 
-Misma lógica, mismo script, sin contenedor. Sirve si en la máquina que ve el
-servidor no hay Docker.
+Misma lógica, mismo script, sin contenedor. **Es lo que quedó instalado el
+29/10/2026** en la notebook que ve el servidor, y la razón es la de arriba: acá
+la autenticación contra el recurso compartido la hace Windows con la credencial
+que ya tiene guardada, así que la cuenta sin contraseña no es un problema.
+
+Instalado y verificado ese día: la tarea corrió desde el Programador con
+resultado `0` y saltó los dos archivos que ya estaban subidos — la idempotencia
+comprobada en la instalación real y no sólo en el script.
+
+**Esa notebook no es el destino final.** Sirve para que esto empiece a correr
+hoy, pero el trabajo es diario a las 09:30 y una notebook se cierra y se lleva.
+Mudar esto a la máquina definitiva es copiar la carpeta, los tres archivos de
+configuración y el XML.
 
 Necesita **Node 18 o posterior** instalado en esa PC. El script no tiene
 dependencias: es un archivo suelto, no hace falta el repo ni `npm install`.
@@ -255,22 +391,52 @@ dependencias: es un archivo suelto, no hace falta el repo ni `npm install`.
 
 4. Correrlo de verdad una vez, sin `--seco`, y mirar Drive.
 
-5. La tarea, desde una consola como administrador:
+5. La tarea se importa desde
+   [`tarea-programada.xml`](../scripts/pcrobot/tarea-programada.xml), ajustando
+   antes las rutas de adentro:
 
    ```bash
-   schtasks /create /tn "SdG - Subir zips del PC Robot" /tr "\"C:\Program Files\nodejs\node.exe\" \"C:\SdG\pcrobot\subir-zips.mjs\" \"C:\SdG\pcrobot\subir-zips.config.json\"" /sc daily /st 09:30 /ru DOMINIO\usuario /rp * /rl LIMITED /f
+   schtasks /create /tn "SdG - Subir zips del PC Robot" /xml tarea-programada.xml /f
    ```
+
+   **Va por XML y no por `schtasks /create` a secas**, por tres opciones que la
+   línea de comandos no expone y que deciden si esto corre o no:
+
+   - **`DisallowStartIfOnBatteries=false`.** Por defecto el Programador **no
+     ejecuta nada con la máquina a batería**. En una notebook eso significa que
+     no corre la mitad de los días, y no avisa. Es el tipo de falla que se
+     descubre un mes después mirando por qué faltan datos.
+   - **`StartWhenAvailable=true`.** Si la máquina estaba apagada a las 09:30,
+     corre cuando vuelve. Sale gratis porque la subida es idempotente.
+   - **`RestartOnFailure`**, tres reintentos cada 15 minutos, para cuando la red
+     todavía no está lista al arrancar.
+
+   Y dos cosas sobre la cuenta:
 
    - **`/st 09:30`** es hora local, media hora después de que el robot exporta.
      No antes: el archivo todavía no existe.
-   - **`/ru` + `/rp`** hacen que corra sin sesión abierta. **No sirve
-     `SYSTEM`**: no tiene credenciales de red y no puede leer el recurso
-     compartido.
-   - Esa cuenta necesita el derecho *Iniciar sesión como trabajo por lotes*
-     (`secpol.msc` → Directivas locales → Asignación de derechos de usuario).
+   - El XML usa **`LogonType=InteractiveToken`**, o sea que corre **sólo con la
+     sesión iniciada**. Es lo único posible cuando la cuenta de Windows no
+     tiene contraseña: el modo desatendido (`/ru` + `/rp`) exige una, y un
+     inicio de sesión por lotes con clave vacía está bloqueado por política. En
+     la máquina definitiva, con una cuenta con contraseña, conviene pasarlo a
+     `Password` o `S4U` y darle el derecho *Iniciar sesión como trabajo por
+     lotes* (`secpol.msc` → Directivas locales → Asignación de derechos de
+     usuario). **`SYSTEM` no sirve**: no tiene credenciales de red y no puede
+     leer el recurso compartido.
 
    Acá sí conviene poner `"log"` en la configuración: una tarea programada no
    tiene a nadie mirando la consola.
+
+6. **Probar la tarea, no sólo el script:**
+
+   ```bash
+   schtasks /run /tn "SdG - Subir zips del PC Robot"
+   ```
+
+   Y mirar el log y el último resultado, que tiene que ser `0`. Correr el
+   script a mano prueba el script; esto prueba la tarea, que es lo que va a
+   correr todos los días.
 
 ---
 

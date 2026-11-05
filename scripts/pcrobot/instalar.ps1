@@ -79,24 +79,75 @@ try {
 if (-not $cuenta.client_email) { Cortar "Ese JSON no parece una cuenta de servicio: no tiene client_email." }
 Bien $cuenta.client_email
 
-# ── 3. La configuracion ────────────────────────────────────────────────────
-Paso 3 "La configuracion"
-$config = Join-Path $Aca "subir-zips.config.json"
-$log    = Join-Path $Aca "subir-zips.log"
+# ── 3. Las carpetas del servidor ───────────────────────────────────────────
+Paso 3 "Las carpetas del servidor"
 
 # Las rutas de origen van en UNC y NUNCA con letra de unidad. Una letra como
 # Z: es un mapeo por usuario y por sesion, asi que una tarea programada que
 # corre sin la sesion abierta no la ve: a mano anda y de noche falla.
-$origen1 = "\\$Servidor\EXTERIOR\Filler1"
-$origen2 = "\\$Servidor\EXTERIOR\Filler2"
+#
+# Los cinco origenes y el porque de cada uno. El "nombre" es el prefijo que va
+# a llevar el archivo en Drive y NO se cambia a la ligera: el SdG empareja por
+# ese prefijo.
+#
+#   Filler 1, Filler 2   el PC Robot de cada filler. El SdG los LEE, asi que
+#                        sin ellos no hay nada que instalar: son obligatorios.
+#   Planta 02            tambien es un PC Robot, pero su CSV es un horimetro
+#                        por hora y SIN kilos, asi que el SdG todavia no sabe
+#                        leerlo. Se sube igual para no seguir perdiendo el dato.
+#   Hornos               no es un robot: son 18 planillas mensuales que alguien
+#                        respalda todos los dias. Se guarda, no se lee.
+#   Porteria             tampoco: es el respaldo del escritorio completo de esa
+#                        PC. Son ~10 MB por dia y adentro viajan dos
+#                        OfficeSetup.exe. Lo util son las planillas de pesaje.
+#
+# Las tres ultimas se guardan y no se leen: ver la nota del mismo tema en
+# lib/produccion/molinos/drive.ts, que es lo que evita que el diagnostico
+# diario del SdG se llene de avisos por ellas.
+#
+# Y por eso una que falta NO corta la instalacion: se saca de la configuracion
+# y se avisa. Al subidor le alcanza con que falte una carpeta para terminar con
+# codigo 1, asi que dejar escrita una ruta que no existe pinta de rojo la tarea
+# programada todos los dias por algo que nadie lee. Un rojo permanente es un
+# rojo que se deja de mirar, y el dia que falle un Filler no lo va a ver nadie.
+$origenes = @(
+  @{ nombre = "Filler 1";  carpeta = "\\$Servidor\EXTERIOR\Filler1";   obligatorio = $true  },
+  @{ nombre = "Filler 2";  carpeta = "\\$Servidor\EXTERIOR\Filler2";   obligatorio = $true  },
+  @{ nombre = "Planta 02"; carpeta = "\\$Servidor\EXTERIOR\Planta 02"; obligatorio = $false },
+  @{ nombre = "Hornos";    carpeta = "\\$Servidor\EXTERIOR\Hornos";    obligatorio = $false },
+  @{ nombre = "Porteria";  carpeta = "\\$Servidor\EXTERIOR\Porteria";  obligatorio = $false }
+)
+
+$incluidos = @()
+foreach ($o in $origenes) {
+  if (-not (Test-Path -LiteralPath $o.carpeta)) {
+    if (-not $o.obligatorio) {
+      Mal "$($o.carpeta) no se ve: queda afuera de la configuracion."
+      continue
+    }
+    Mal "No se ve $($o.carpeta)"
+    Write-Host ""
+    Write-Host "    Comproba que esta PC llegue al servidor y que la cuenta con" -ForegroundColor Yellow
+    Write-Host "    la que entraste tenga permiso de lectura. Si el servidor se" -ForegroundColor Yellow
+    Write-Host "    llama distinto, corre esto con  -Servidor <nombre>." -ForegroundColor Yellow
+    Cortar "Sin acceso a las carpetas de los fillers no hay nada que subir."
+  }
+  $zips = @(Get-ChildItem -LiteralPath $o.carpeta -Filter *.zip -ErrorAction SilentlyContinue)
+  $ult = $zips | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  $cuando = if ($ult) { $ult.LastWriteTime.ToString("yyyy-MM-dd HH:mm") } else { "sin zips" }
+  Bien ("{0,-10} {1,4} zips, el ultimo {2}" -f $o.nombre, $zips.Count, $cuando)
+  $incluidos += $o
+}
+
+# ── 4. La configuracion ────────────────────────────────────────────────────
+Paso 4 "La configuracion"
+$config = Join-Path $Aca "subir-zips.config.json"
+$log    = Join-Path $Aca "subir-zips.log"
 
 $contenido = [ordered]@{
   credencial   = $credencial
   carpetaDrive = $CARPETA_DRIVE
-  origenes     = @(
-    [ordered]@{ nombre = "Filler 1"; carpeta = $origen1 },
-    [ordered]@{ nombre = "Filler 2"; carpeta = $origen2 }
-  )
+  origenes     = @($incluidos | ForEach-Object { [ordered]@{ nombre = $_.nombre; carpeta = $_.carpeta } })
   log          = $log
 }
 # Se escribe con WriteAllText y un UTF8Encoding($false) y NO con
@@ -106,22 +157,7 @@ $contenido = [ordered]@{
 # mismo instalador, que es para lo que esta.
 $json = $contenido | ConvertTo-Json -Depth 5
 [System.IO.File]::WriteAllText($config, $json, (New-Object System.Text.UTF8Encoding($false)))
-Bien "escrita en $config"
-
-# ── 4. Las carpetas del servidor ───────────────────────────────────────────
-Paso 4 "Las carpetas del servidor"
-foreach ($o in @($origen1, $origen2)) {
-  if (-not (Test-Path -LiteralPath $o)) {
-    Mal "No se ve $o"
-    Write-Host ""
-    Write-Host "    Comproba que esta PC llegue al servidor y que la cuenta con" -ForegroundColor Yellow
-    Write-Host "    la que entraste tenga permiso de lectura. Si el servidor se" -ForegroundColor Yellow
-    Write-Host "    llama distinto, corre esto con  -Servidor <nombre>." -ForegroundColor Yellow
-    Cortar "Sin acceso a las carpetas no hay nada que subir."
-  }
-  $n = @(Get-ChildItem -LiteralPath $o -Filter *.zip -ErrorAction SilentlyContinue).Count
-  Bien "$o  ($n zips)"
-}
+Bien "escrita en $config  ($($incluidos.Count) origenes)"
 
 # ── 5. La prueba en seco ───────────────────────────────────────────────────
 Paso 5 "Prueba en seco (no sube nada)"

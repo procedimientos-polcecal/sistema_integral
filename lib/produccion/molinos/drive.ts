@@ -6,6 +6,11 @@
  * `prefijo_archivo` del catálogo `produccion_molinos`, y la fecha del nombre no
  * se lee: manda `modifiedTime`, que no se puede escribir mal.
  *
+ * **En la carpeta hay más de lo que se lee.** Desde el 04/11/2026 esa misma
+ * tarea sube además `Planta 02`, `Hornos` y `Porteria`, que se guardan y no se
+ * importan — el porqué, y por qué eso no aparece como aviso todos los días,
+ * está en `SE_GUARDAN_SIN_LEER` más abajo.
+ *
  * **Sólo se lee Drive; nunca se escribe.** La cuenta de servicio es Lector de
  * la unidad y alcanza con eso.
  *
@@ -53,9 +58,41 @@ const msDe = (iso: string) => {
 };
 
 /**
+ * Lo que está en la carpeta **a propósito** y el SdG todavía no sabe leer.
+ *
+ * Desde el 04/11/2026 la tarea del PC Robot sube cinco carpetas y no dos. Las
+ * tres nuevas se suben para dejar de perder el dato, no porque haya algo que
+ * importar:
+ *
+ * - `Planta 02` sí es un PC Robot, pero su CSV es un **horímetro por hora y
+ *   sin kilos**: no hay toneladas, así que el modelo de turnos —que se apoya
+ *   en toneladas y minutos de marcha— no tiene con qué alimentarse. Leerlo
+ *   necesita un diseño, no un prefijo más en el catálogo.
+ * - `Hornos` no es un robot: son dieciocho planillas mensuales que alguien
+ *   respalda todos los días.
+ * - `Porteria` tampoco: es el respaldo del escritorio completo de esa PC.
+ *
+ * **Por qué se filtran en vez de dejarlas caer en `sinMolino`.** Ese aviso
+ * existe para que un archivo inesperado lo vea una persona, y termina en el
+ * campo `error` de `sincronizaciones` —con `ok: true`—, que es el único lugar
+ * que alguien mira para saber si esto está al día. Tres líneas fijas repetidas
+ * todos los días ahí dejan de ser un aviso y pasan a ser el fondo de pantalla:
+ * es la misma regla que ya se paga cara en las planillas, que un diagnóstico
+ * que no se distingue de otro no es un diagnóstico. Estos tres ya se vieron y
+ * la decisión está tomada; un cuarto nombre raro tiene que seguir saltando.
+ *
+ * El filtro corre **después** de buscar molino, así que el día que Planta 0-2
+ * entre al catálogo gana el catálogo y esta lista no lo tapa. Cuando eso pase,
+ * sacarlo de acá igual: una lista que miente sobre por qué algo no se lee es
+ * peor que no tenerla.
+ */
+const SE_GUARDAN_SIN_LEER = ["Planta 02", "Hornos", "Porteria"];
+
+/**
  * Asigna cada zip a su molino por el prefijo del nombre, y no adivina: un
  * archivo que no es de ningún molino va a `sinMolino` para que alguien lo vea,
- * en vez de importarse al que más se le parece.
+ * en vez de importarse al que más se le parece. La excepción son los nombres
+ * de `SE_GUARDAN_SIN_LEER`, que están ahí a propósito y ya se miraron.
  *
  * Si hay varios zips del mismo molino se queda con el más nuevo por
  * `modificado`; los viejos se ignoran sin avisar, porque que queden los de
@@ -77,7 +114,7 @@ export function emparejar(
       ? porLargo.find((m) => esDelPrefijo(a.nombre, m.prefijo_archivo))
       : undefined;
     if (!molino) {
-      sinMolino.push(a.nombre);
+      if (!SE_GUARDAN_SIN_LEER.some((p) => esDelPrefijo(a.nombre, p))) sinMolino.push(a.nombre);
       continue;
     }
     const candidato: ArchivoDeMolino = {
