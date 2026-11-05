@@ -6,6 +6,7 @@ import { traerConsumos, traerInsumos, traerVoladura, traerYacimientos } from "@/
 import { esTipoDeConsumoValido } from "@/lib/cantera/vocabulario";
 import { desespejarVoladura, espejarVoladura } from "@/lib/cantera/espejo";
 import type { RenglonPlano } from "@/lib/cantera/planilla";
+import { numeroDeCampo } from "@/lib/cantera/numero";
 
 /**
  * Ver y editar una voladura.
@@ -33,11 +34,11 @@ import type { RenglonPlano } from "@/lib/cantera/planilla";
  * así que el error de Google se devuelve para mostrarlo una vez y ya.
  */
 
-function num(v: unknown): number | null {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  return isFinite(n) ? n : null;
-}
+/**
+ * La misma lectura que usa la pantalla. Hasta el 05/11/2026 acá había un
+ * `Number(v)` propio que daba NaN con "2,5" y guardaba el campo vacío.
+ */
+const num = numeroDeCampo;
 function fecha(v: unknown): string | null {
   return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
 }

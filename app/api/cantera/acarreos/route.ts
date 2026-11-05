@@ -4,6 +4,7 @@ import { cuerpoJson } from "@/lib/core/cuerpo";
 import { puedeEditarCantera, tieneAccesoCantera } from "@/lib/cantera/auth";
 import { traerAcarreos } from "@/lib/cantera/consultas";
 import { esTipoDeAcarreoValido } from "@/lib/cantera/acarreo";
+import { numeroDeCampo } from "@/lib/cantera/numero";
 
 /**
  * El acarreo de un fletero: un renglón por tipo y **día** — el usuario pidió
@@ -54,8 +55,10 @@ export async function PATCH(request: Request) {
   if (typeof b?.fecha !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(b.fecha)) {
     return NextResponse.json({ error: "La fecha va como YYYY-MM-DD" }, { status: 400 });
   }
-  const cantidad = Number(b?.cantidad);
-  if (!isFinite(cantidad) || cantidad < 0) {
+  // Vacío es cero —borrar la carga—, y lo que no se entiende es un 400. La
+  // lectura es la misma que la de la pantalla: `Number("639,56")` daba NaN.
+  const cantidad = String(b?.cantidad ?? "").trim() === "" ? 0 : numeroDeCampo(b?.cantidad);
+  if (cantidad === null || cantidad < 0) {
     return NextResponse.json({ error: "La cantidad tiene que ser un número" }, { status: 400 });
   }
   // `mes` sigue siendo una columna real (la usa tarifaVigente y los filtros
