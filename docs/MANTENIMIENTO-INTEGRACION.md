@@ -2686,6 +2686,26 @@ modal de registrar— es la primera defensa y **no** la regla: deja en gris los
 días anteriores, pero se saltea tipeando y en el teléfono depende del
 navegador. Quien decide es la función, en la pantalla y en el servidor.
 
+**Y la alerta salta en el momento, no al guardar** (05/11/2026, a pedido). Las
+tres pantallas calculan la regla **durante el render** —no en un efecto con
+`setState`, que sería un segundo render para guardar algo que ya se sabe— y
+muestran el cartel rojo **pegado a las fechas**, que es donde está mirando
+quien las acaba de completar: en los dos modales el cartel de error vive abajo
+de todo, al lado de los botones, y en un teléfono eso son dos pantallas.
+
+Tres cosas de esa decisión que no se deducen del código:
+
+- **No grita mientras se completa.** `loQueSeContradice` se calla si falta la
+  fecha de inicio, así que la alerta aparece recién cuando las dos están y no
+  cierran. De eso depende que sea una alerta y no un cartel que está siempre.
+- **El botón de guardar sigue habilitado.** Deshabilitarlo dejaría el porqué
+  arriba y el botón mudo abajo; apretarlo repite la misma frase donde la
+  persona está mirando, y el guardado igual no pasa —lo frena el submit y, si
+  llegara, el servidor—. Los dos textos son el mismo a propósito.
+- **Va debajo de la grilla y no adentro de la celda** en el modal de registrar:
+  esa grilla es de dos columnas y el mensaje, que nombra las dos fechas
+  enteras, entraba partido en pedazos de 150 px.
+
 ## Los datos: qué está y qué no
 
 **Todo lo que viene de las planillas está.** Avisos 138, órdenes de trabajo
