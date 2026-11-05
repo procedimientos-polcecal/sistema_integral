@@ -169,12 +169,13 @@ describe("resumirElMovimiento", () => {
 
 describe("un aviso de salud no imprime el número", () => {
   /*
-   * La cantidad de un aviso de salud **no cuenta cosas**: son las tolerancias
-   * enteras que el recurso lleva en silencio, y existe para que descartarlo no
-   * lo calle para siempre (ver `cuantasTolerancias`). Imprimirla daría
-   * «2 · Agenda: los canales de Google no se renuevan», que no significa nada.
+   * La cantidad de un aviso de salud **no cuenta cosas**: es cuánto hace que
+   * ese recurso viene mal —corridas fallidas seguidas, o tolerancias de
+   * silencio si dejó de correr— y existe para que descartarlo no lo calle para
+   * siempre (ver `cuantoLlevaMal`). Imprimirla daría «2 · Agenda: los canales
+   * de Google no se renuevan», que no significa nada.
    */
-  it("un aviso de salud sale sin número: su cantidad son tolerancias, no cosas", () => {
+  it("un aviso de salud sale sin número: su cantidad no cuenta cosas", () => {
     const push = resumirParaPush([
       { id: "salud-agenda/canales", titulo: "Agenda: los canales de Google no se renuevan", cantidad: 2, href: "/administracion/salud" },
     ]);

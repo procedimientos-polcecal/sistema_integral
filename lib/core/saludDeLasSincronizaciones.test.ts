@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   cuantasTolerancias,
   entradasCaidas,
   estadoDeRecurso,
   haceCuantoCorto,
+  rachaDeFallos,
   recursosSinDeclarar,
   REGISTRO,
   type CorridaLeida,
@@ -143,17 +145,45 @@ describe("el registro y las entradas caídas", () => {
     expect(caidas[0]).toMatchObject({ clave: "respaldo/sheets", estado: "vieja" });
   });
 
-  it("un recurso vigilado que nunca corrió sale 'nunca' con 1 tolerancia", () => {
+  it("un recurso vigilado que nunca corrió sale 'nunca' con 1", () => {
     const caidas = entradasCaidas(vistaSana({ "cantera/acarreo": null }), AHORA);
     expect(caidas).toEqual([
-      { clave: "cantera/acarreo", titulo: "Acarreo de Cantera", estado: "nunca", tolerancias: 1, detalle: "nunca corrió" },
+      { clave: "cantera/acarreo", titulo: "Acarreo de Cantera", estado: "nunca", cuantoLlevaMal: 1, detalle: "nunca corrió" },
     ]);
   });
 
   it("uno vencido dice cuánto hace y cuenta sus tolerancias", () => {
     const caidas = entradasCaidas(vistaSana({ "cantera/acarreo": { created_at: hace(73) } }), AHORA);
     expect(caidas).toHaveLength(1);
-    expect(caidas[0]).toMatchObject({ estado: "vieja", tolerancias: 3, detalle: "hace 3 días" });
+    expect(caidas[0]).toMatchObject({ estado: "vieja", cuantoLlevaMal: 3, detalle: "hace 3 días" });
+  });
+
+  /*
+   * EN `fallo` NO SE CUENTAN TOLERANCIAS, Y ÉSTE ES EL CASO QUE LO OBLIGA.
+   *
+   * `calidad/carbonilla-odoo` falla todos los días a las 08:00. Cada corrida
+   * reescribe su fila con `created_at` fresco, así que el silencio medido es de
+   * horas y `cuantasTolerancias` da 1 para siempre: quien descarte el aviso una
+   * vez deja ese recurso roto y **mudo para siempre**, porque
+   * `filtrarDescartadas` pide `cantidad > cantidad_vista`.
+   *
+   * Acá queda en 1 porque contar la racha necesita leer `sincronizaciones`, que
+   * es de `rachaDeFallos`; `leerLaSalud` la reemplaza por la de verdad.
+   */
+  it("un fallo no cuenta tolerancias: queda en 1 hasta que se lea su racha", () => {
+    const caidas = entradasCaidas(
+      vistaSana({ "cantera/acarreo": { ok: false, error: "x", created_at: hace(400) } }),
+      AHORA
+    );
+    expect(caidas[0]).toMatchObject({ estado: "fallo", cuantoLlevaMal: 1 });
+  });
+
+  it("dice de qué recurso del grupo salió la corrida, que es de la que hay que contar la racha", () => {
+    const caidas = entradasCaidas(
+      vistaSana({ "respaldo/RRHH - Padron": { ok: false, error: "403 de Google" } }),
+      AHORA
+    );
+    expect(caidas[0].recursoQueFallo).toEqual({ modulo: "respaldo", recurso: "RRHH - Padron" });
   });
 
   it("uno que corrió dentro de su tolerancia no sale", () => {
@@ -198,5 +228,116 @@ describe("el registro y las entradas caídas", () => {
     const caidas = entradasCaidas(vistaSana({ "respaldo/Remises - Plan": null }), AHORA);
     expect(caidas).toHaveLength(1);
     expect(caidas[0]).toMatchObject({ clave: "respaldo/sheets", estado: "nunca" });
+  });
+});
+
+/*
+ * ── LA RACHA DE FALLOS ──────────────────────────────────────────────────────
+ *
+ * Lo que cierra el agujero de `fallo`: para un recurso que falla una y otra
+ * vez, la cantidad del aviso tiene que **crecer con cada corrida fallida**, de
+ * modo que un descarte caduque solo en la corrida siguiente.
+ */
+describe("rachaDeFallos", () => {
+  type FilaDeSync = { modulo: string; recurso: string; ok: boolean; created_at: string };
+
+  /**
+   * Un `sincronizaciones` de mentira: aplica los `eq`/`gt` que le encadenen.
+   *
+   * Los filtros se aplican de verdad —no devuelve siempre lo mismo— justo para
+   * que un test pueda comprobar que la racha de un recurso no se come las
+   * corridas de otro, que es lo que haría una consulta mal filtrada.
+   */
+  function clienteCon(filas: FilaDeSync[], rompe = false): SupabaseClient {
+    const armar = () => {
+      const filtros: ((f: FilaDeSync) => boolean)[] = [];
+      const pasa = (f: FilaDeSync) => filtros.every((q) => q(f));
+      const b: Record<string, unknown> = {};
+      b.select = () => b;
+      b.eq = (col: keyof FilaDeSync, val: unknown) => {
+        filtros.push((f) => f[col] === val);
+        return b;
+      };
+      b.gt = (col: keyof FilaDeSync, val: string) => {
+        filtros.push((f) => String(f[col]) > val);
+        return b;
+      };
+      b.order = () => b;
+      b.limit = () => b;
+      b.maybeSingle = async () =>
+        rompe
+          ? { data: null, error: { message: "no existe la tabla" } }
+          : {
+              data:
+                filas.filter(pasa).sort((a, z) => (a.created_at < z.created_at ? 1 : -1))[0] ?? null,
+              error: null,
+            };
+      // El conteo se espera directo sobre el builder: `await supabase.from(…)…`.
+      b.then = (resolver: (r: { count: number | null; error: { message: string } | null }) => void) =>
+        resolver(
+          rompe
+            ? { count: null, error: { message: "no existe la tabla" } }
+            : { count: filas.filter(pasa).length, error: null }
+        );
+      return b;
+    };
+    return { from: () => armar() } as unknown as SupabaseClient;
+  }
+
+  const fila = (p: Partial<FilaDeSync>): FilaDeSync => ({
+    modulo: "calidad",
+    recurso: "carbonilla-odoo",
+    ok: false,
+    created_at: hace(1),
+    ...p,
+  });
+
+  it("cuenta las corridas fallidas desde la última que anduvo", async () => {
+    const c = clienteCon([
+      fila({ ok: true, created_at: hace(10) }),
+      fila({ created_at: hace(8) }),
+      fila({ created_at: hace(4) }),
+      fila({ created_at: hace(1) }),
+    ]);
+    expect(await rachaDeFallos(c, "calidad", "carbonilla-odoo")).toBe(3);
+  });
+
+  it("si nunca anduvo, son todas las fallidas", async () => {
+    const c = clienteCon([fila({ created_at: hace(8) }), fila({ created_at: hace(1) })]);
+    expect(await rachaDeFallos(c, "calidad", "carbonilla-odoo")).toBe(2);
+  });
+
+  // Una corrida más tarde, uno más: es lo único que tiene que pasar para que el
+  // descarte de ayer no silencie el fallo de hoy.
+  it("crece con cada corrida fallida, que es para lo que existe", async () => {
+    const filas = [fila({ ok: true, created_at: hace(10) }), fila({ created_at: hace(9) })];
+    expect(await rachaDeFallos(clienteCon(filas), "calidad", "carbonilla-odoo")).toBe(1);
+    filas.push(fila({ created_at: hace(8) }));
+    expect(await rachaDeFallos(clienteCon(filas), "calidad", "carbonilla-odoo")).toBe(2);
+  });
+
+  it("no se come las corridas de otro recurso ni de otro módulo", async () => {
+    const c = clienteCon([
+      fila({ created_at: hace(5) }),
+      fila({ recurso: "carbonilla-planilla", created_at: hace(4) }),
+      fila({ modulo: "cantera", recurso: "acarreo", created_at: hace(3) }),
+    ]);
+    expect(await rachaDeFallos(c, "calidad", "carbonilla-odoo")).toBe(1);
+  });
+
+  // La vista ya dijo que está caído: un 0 diría lo contrario, y un aviso con
+  // cantidad 0 no existe.
+  it("nunca devuelve 0", async () => {
+    expect(await rachaDeFallos(clienteCon([]), "calidad", "carbonilla-odoo")).toBe(1);
+  });
+
+  /*
+   * Si no se puede contar la racha NO se tumba la salud entera: la vista sí se
+   * leyó y el aviso tiene que salir igual. Se pierde la caducidad del descarte,
+   * que es mucho menos que perder el aviso, y queda dicho en el log.
+   */
+  it("si la lectura falla devuelve 1 y no tira", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await rachaDeFallos(clienteCon([], true), "calidad", "carbonilla-odoo")).toBe(1);
   });
 });

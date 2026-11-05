@@ -121,7 +121,7 @@ describe("los avisos de la Agenda", () => {
  */
 describe("sinLoQueNoPuedeAtender — la salud de las sincronizaciones", () => {
   const deSalud = avisosDeSalud({
-    caidas: [{ clave: "agenda/canales", titulo: "Canales de Google de la Agenda", estado: "fallo", tolerancias: 1, detalle: "403" }],
+    caidas: [{ clave: "agenda/canales", titulo: "Canales de Google de la Agenda", estado: "fallo", cuantoLlevaMal: 1, detalle: "403" }],
     sinDeclarar: ["nuevo/cosa"],
     sinComprobar: true,
     corridas: [],

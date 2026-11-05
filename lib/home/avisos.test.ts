@@ -4,7 +4,7 @@ import { filtrarDescartadas } from "./notificaciones";
 import type { EntradaCaida } from "@/lib/core/saludDeLasSincronizaciones";
 
 const caida = (clave: string): EntradaCaida =>
-  ({ clave, titulo: `Caído: ${clave}`, estado: "fallo", tolerancias: 1, detalle: "x" });
+  ({ clave, titulo: `Caído: ${clave}`, estado: "fallo", cuantoLlevaMal: 1, detalle: "x" });
 
 describe("avisosDeConteos", () => {
   it("los dos avisos de Seguridad e Higiene salen con sus títulos y links", () => {
@@ -189,8 +189,8 @@ describe("avisosDeSalud", () => {
   it("cada recurso caído es su propio aviso, con id estable", () => {
     const avisos = avisosDeSalud({
       caidas: [
-        { clave: "agenda/canales", titulo: "Agenda: los canales de Google", estado: "fallo", tolerancias: 1, detalle: "x" },
-        { clave: "calidad/carbonilla-odoo", titulo: "Calidad: la lectura de Odoo", estado: "fallo", tolerancias: 2, detalle: "y" },
+        { clave: "agenda/canales", titulo: "Agenda: los canales de Google", estado: "fallo", cuantoLlevaMal: 1, detalle: "x" },
+        { clave: "calidad/carbonilla-odoo", titulo: "Calidad: la lectura de Odoo", estado: "fallo", cuantoLlevaMal: 2, detalle: "y" },
       ],
       sinDeclarar: [], sinComprobar: false, corridas: [],
     });
@@ -209,8 +209,8 @@ describe("avisosDeSalud", () => {
     expect(hoy[0].id).not.toBe(ayer[0].id);
   });
 
-  it("la cantidad son las tolerancias, para que el descarte se suelte", () => {
-    const [a] = avisosDeSalud({ caidas: [{ ...caida("agenda/canales"), tolerancias: 3 }], sinDeclarar: [], sinComprobar: false, corridas: [] });
+  it("la cantidad es cuánto lleva mal, para que el descarte se suelte", () => {
+    const [a] = avisosDeSalud({ caidas: [{ ...caida("agenda/canales"), cuantoLlevaMal: 3 }], sinDeclarar: [], sinComprobar: false, corridas: [] });
     expect(a.cantidad).toBe(3);
     expect(filtrarDescartadas([a], [{ notificacion_id: a.id, cantidad_vista: 1 }])).toEqual([a]);
   });
@@ -236,20 +236,49 @@ describe("avisosDeSalud", () => {
    */
   it("el título dice cuál se rompió y qué dijo el sistema, sin traducir", () => {
     const [a] = avisosDeSalud({
-      caidas: [{ clave: "agenda/canales", titulo: "Canales de Google de la Agenda", estado: "fallo", tolerancias: 1, detalle: "403 PERMISSION_DENIED" }],
+      caidas: [{ clave: "agenda/canales", titulo: "Canales de Google de la Agenda", estado: "fallo", cuantoLlevaMal: 1, detalle: "403 PERMISSION_DENIED" }],
       sinDeclarar: [], sinComprobar: false, corridas: [],
     });
     expect(a.titulo).toBe("Canales de Google de la Agenda: falló — 403 PERMISSION_DENIED");
   });
 
+  /*
+   * Con racha, cuántas corridas seguidas lleva fallando es mejor dato que el
+   * error solo: distingue «se cayó recién» de «hace una semana que nadie mira».
+   * Con una sola no se escribe, porque «falló 1 corrida seguida» no dice nada
+   * que «falló» no diga.
+   */
+  it("un fallo que se repite dice cuántas corridas seguidas lleva", () => {
+    const [a] = avisosDeSalud({
+      caidas: [{ clave: "calidad/carbonilla-odoo", titulo: "Carbonilla contra Odoo", estado: "fallo", cuantoLlevaMal: 7, detalle: "No se pudo llegar a Odoo" }],
+      sinDeclarar: [], sinComprobar: false, corridas: [],
+    });
+    expect(a.titulo).toBe("Carbonilla contra Odoo: falló 7 corridas seguidas — No se pudo llegar a Odoo");
+  });
+
+  /*
+   * Lo que hace que el descarte caduque: `filtrarDescartadas` pide
+   * `cantidad > cantidad_vista`, así que la corrida fallida de mañana —una más
+   * en la racha— vuelve a mostrar el aviso que alguien silenció hoy. Es el
+   * caso que tenía a `calidad/carbonilla-odoo` roto y mudo para siempre.
+   */
+  it("un descarte caduca en la corrida fallida siguiente", () => {
+    const deHoy = avisosDeSalud({ caidas: [{ ...caida("calidad/carbonilla-odoo"), cuantoLlevaMal: 1 }], sinDeclarar: [], sinComprobar: false, corridas: [] });
+    const descartes = [{ notificacion_id: deHoy[0].id, cantidad_vista: deHoy[0].cantidad }];
+    expect(filtrarDescartadas(deHoy, descartes)).toEqual([]);
+
+    const deManana = avisosDeSalud({ caidas: [{ ...caida("calidad/carbonilla-odoo"), cuantoLlevaMal: 2 }], sinDeclarar: [], sinComprobar: false, corridas: [] });
+    expect(filtrarDescartadas(deManana, descartes)).toEqual(deManana);
+  });
+
   it("el que no corre dice desde cuándo, y el que nunca corrió lo dice", () => {
     const [viejo, nunca, ilegible] = avisosDeSalud({
       caidas: [
-        { clave: "a/b", titulo: "Equis", estado: "vieja", tolerancias: 2, detalle: "hace 3 días" },
-        { clave: "c/d", titulo: "Zeta", estado: "nunca", tolerancias: 1, detalle: "nunca corrió" },
+        { clave: "a/b", titulo: "Equis", estado: "vieja", cuantoLlevaMal: 2, detalle: "hace 3 días" },
+        { clave: "c/d", titulo: "Zeta", estado: "nunca", cuantoLlevaMal: 1, detalle: "nunca corrió" },
         // `haceCuantoCorto` dice esto de un `created_at` que no se entiende, y
         // con un «desde» adelante saldría en castellano roto.
-        { clave: "e/f", titulo: "Ye", estado: "vieja", tolerancias: 1, detalle: "en una fecha ilegible" },
+        { clave: "e/f", titulo: "Ye", estado: "vieja", cuantoLlevaMal: 1, detalle: "en una fecha ilegible" },
       ],
       sinDeclarar: [], sinComprobar: false, corridas: [],
     });
@@ -265,7 +294,7 @@ describe("avisosDeSalud", () => {
    */
   it("un error largo o de varias líneas entra en una línea y cortado por nosotros", () => {
     const [a] = avisosDeSalud({
-      caidas: [{ clave: "a/b", titulo: "Equis", estado: "fallo", tolerancias: 1, detalle: `Se cayó:\n${"x".repeat(200)}` }],
+      caidas: [{ clave: "a/b", titulo: "Equis", estado: "fallo", cuantoLlevaMal: 1, detalle: `Se cayó:\n${"x".repeat(200)}` }],
       sinDeclarar: [], sinComprobar: false, corridas: [],
     });
     expect(a.titulo).not.toContain("\n");

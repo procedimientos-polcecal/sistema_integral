@@ -86,7 +86,9 @@ export function estadoDeRecurso(
 }
 
 /**
- * La cantidad con la que un recurso caído entra a la campana y al resumen.
+ * La cantidad con la que entra a la campana y al resumen un recurso **que dejó
+ * de correr** — los estados `vieja` y `nunca`. Un `fallo` se cuenta con
+ * `rachaDeFallos` y no con esto: ver `cuantoLlevaMal`.
  *
  * **Su número no cuenta cosas.** No son recursos ni canales ni filas: son las
  * **tolerancias enteras** que lleva sin correr, y existe sólo para que
@@ -97,11 +99,15 @@ export function estadoDeRecurso(
  * uno que crece solo cada noche haría inútil descartarlo. Contar tolerancias da
  * el punto medio: descartarlo a las 25 h (1) lo calla hasta las 48 h (2).
  *
- * Es al menos 1 en cualquier caso caído, porque un aviso con cantidad 0 no
- * existe: cubre el fallo reciente (la corrida es de hace una hora, 0
- * tolerancias de silencio, pero el recurso está caído), el recurso que nunca
- * corrió y la fecha ilegible —en esos dos últimos no hay desde cuándo contar,
- * y quedan en 1 fijo, igual que «nunca se cargó» en `cantidadDelAviso`—.
+ * **Y por qué un `fallo` no se mide así**, que es lo que este archivo aprendió
+ * tarde: un cron que falla pero sigue corriendo **no hace silencio** —reescribe
+ * su fila en cada corrida—, de modo que acá daría 1 para siempre y descartar el
+ * aviso una vez dejaría ese recurso roto y mudo. Esta función mide el tiempo
+ * sin noticias, y eso sólo dice algo cuando no hay noticias.
+ *
+ * Es al menos 1, porque un aviso con cantidad 0 no existe: el recurso que nunca
+ * corrió y la fecha ilegible no tienen desde cuándo contar y quedan en 1 fijo,
+ * igual que «nunca se cargó» en `cantidadDelAviso`.
  */
 export function cuantasTolerancias(
   corrida: CorridaLeida | undefined,
@@ -302,10 +308,37 @@ export interface EntradaCaida {
   clave: string;
   titulo: string;
   estado: "nunca" | "fallo" | "vieja";
-  /** Ver `cuantasTolerancias`: el silencio en tolerancias enteras, al menos 1. */
-  tolerancias: number;
+  /**
+   * **Cuánto hace que este recurso viene mal**, y lo que mide **depende del
+   * estado**. Es lo que termina siendo la `cantidad` del aviso, y existe para
+   * una sola cosa: que **crezca mientras el problema siga**, porque
+   * `filtrarDescartadas` vuelve a mostrar un aviso sólo cuando su cantidad
+   * superó a la que tenía al descartarlo. Nunca cuenta cosas, así que el
+   * resumen lo imprime sin número.
+   *
+   *  - `vieja` y `nunca`: **tolerancias enteras de silencio** (ver
+   *    `cuantasTolerancias`). El recurso no escribe nada, así que el silencio
+   *    crece solo y descartarlo a las 25 h lo calla hasta las 48.
+   *  - `fallo`: **corridas fallidas seguidas** (ver `rachaDeFallos`). Acá
+   *    contar tolerancias da mal, y es el caso más común: un cron que falla
+   *    pero sigue corriendo reescribe su fila cada vez, así que el silencio
+   *    medido es siempre de horas y la cuenta queda clavada en 1 — un descarte
+   *    dejaría ese recurso roto y mudo para siempre. Contar corridas la hace
+   *    crecer con cada fallo.
+   *
+   * **`entradasCaidas` no puede saberlo para un `fallo`**: la racha vive en
+   * `sincronizaciones` y esto es una función pura, así que ahí sale en 1 y
+   * `leerLaSalud` la reemplaza por la de verdad.
+   */
+  cuantoLlevaMal: number;
   /** El texto del error **sin traducir**, o cuánto hace que no corre. */
   detalle: string;
+  /**
+   * De qué recurso salió la corrida que la hizo caer. En una entrada que agrupa
+   * varios —el respaldo son ocho— **no es `clave`**, y es el que hay que mirar
+   * para contarle la racha. Vacío sólo si nunca corrió ninguno.
+   */
+  recursoQueFallo?: { modulo: string; recurso: string };
 }
 
 type EstadoCaido = Exclude<EstadoDeRecurso, "sana">;
@@ -354,8 +387,15 @@ export function entradasCaidas(corridas: CorridaLeida[], ahora: Date = new Date(
       clave: claveDe(entrada.modulo, entrada.recursos[0]),
       titulo: entrada.titulo,
       estado: peor.estado,
-      tolerancias: cuantasTolerancias(peor.corrida, entrada.toleranciaHoras, ahora),
+      // Un `fallo` no cuenta tolerancias —ver `cuantoLlevaMal`—: su racha está
+      // en `sincronizaciones` y la pone `leerLaSalud`. Acá vale 1, que es el
+      // piso de cualquier caída.
+      cuantoLlevaMal:
+        peor.estado === "fallo" ? 1 : cuantasTolerancias(peor.corrida, entrada.toleranciaHoras, ahora),
       detalle: detalleDe(peor.estado, peor.corrida, ahora),
+      ...(peor.corrida && {
+        recursoQueFallo: { modulo: peor.corrida.modulo, recurso: peor.corrida.recurso },
+      }),
     });
   }
   return caidas;
@@ -366,6 +406,93 @@ function detalleDe(estado: EstadoCaido, corrida: CorridaLeida | undefined, ahora
   if (estado === "nunca" || !corrida) return "nunca corrió";
   if (estado === "fallo") return corrida.error ?? "falló sin dejar el motivo";
   return haceCuantoCorto(corrida.created_at, ahora);
+}
+
+/**
+ * **Cuántas corridas seguidas viene fallando un recurso**, contando hacia atrás
+ * desde la última que anduvo. Al menos 1, porque esto se llama sólo para un
+ * recurso que la vista ya dio por caído.
+ *
+ * ── POR QUÉ NO ALCANZABA CON EL TIEMPO ──────────────────────────────────────
+ *
+ * `cuantasTolerancias` mide **silencio**, y un cron que falla pero sigue
+ * corriendo no hace silencio: reescribe su fila cada vez. Medido el 05/11/2026,
+ * `calidad/carbonilla-odoo` falla todos los días a las 08:00, así que el
+ * silencio nunca pasa de unas horas contra una tolerancia de 36 y la cuenta
+ * queda clavada en 1 para siempre. Con eso, un `admin_sistema` que descarta el
+ * aviso una vez deja ese recurso **roto y mudo para siempre** —campana, push y
+ * el recordatorio de los lunes—, porque `filtrarDescartadas` pide
+ * `cantidad > cantidad_vista`. Contando corridas, el número sube con cada
+ * fallo y el descarte caduca solo en la corrida siguiente.
+ *
+ * ── SON DOS CONSULTAS Y NO UNA LECTURA CON TOPE ─────────────────────────────
+ *
+ * Se busca la última corrida buena y se cuentan las fallidas posteriores con
+ * `count`, en vez de traer las últimas N filas y contarlas acá. Las dos usan el
+ * índice `(modulo, recurso, created_at desc)` y no transportan filas, y sobre
+ * todo **la cuenta no tiene techo**: con un tope de N, una racha más larga se
+ * achataría en N y ahí el descarte volvería a ser para siempre, que es
+ * exactamente lo que esto viene a arreglar. Se llama sólo para los recursos que
+ * ya están en `fallo` —el 05/11/2026 eran 4 de 29—, así que son pocas.
+ *
+ * ── LO QUE ESTE NÚMERO NO SEPARA, Y ESTÁ MEDIDO ─────────────────────────────
+ *
+ * `sincronizaciones` es un registro global donde escriben **los dos
+ * despliegues** (ver el CLAUDE.md), y acá no se filtra por `canonico`: esa
+ * columna es de la migración `20261105092248`, que **todavía no está aplicada**,
+ * así que nombrarla rompería la consulta hoy. El desempate lo hace la vista, de
+ * su lado, y es la que decide si el recurso está en `fallo`.
+ *
+ * Qué implica, medido el 05/11/2026 sobre las últimas 50 corridas de cada
+ * recurso: el otro despliegue sólo toca recursos que necesitan Google —no tiene
+ * esas credenciales— y por eso **siempre falla** en ellos; en
+ * `calidad/carbonilla-odoo`, el único fallo real de hoy, no dejó ni una fila y
+ * la racha cruda coincide con la canónica (2 y 2). O sea que el error posible
+ * es **de más y no de menos**: sus fallos pueden engordar la racha y hacer que
+ * el aviso reaparezca antes, nunca que se calle. Quedaría corta sólo si ese
+ * despliegue **anduviera bien** en un recurso que el canónico está fallando, que
+ * es la misma confusión que hoy tiene la pantalla y que cierran esa migración y
+ * apagar ese despliegue.
+ */
+export async function rachaDeFallos(
+  supabase: SupabaseClient,
+  modulo: string,
+  recurso: string
+): Promise<number> {
+  try {
+    const { data: ultimaBuena, error: errorDeLaBuena } = await supabase
+      .from("sincronizaciones")
+      .select("created_at")
+      .eq("modulo", modulo)
+      .eq("recurso", recurso)
+      .eq("ok", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (errorDeLaBuena) throw new Error(errorDeLaBuena.message);
+
+    const fallidas = supabase
+      .from("sincronizaciones")
+      .select("id", { count: "exact", head: true })
+      .eq("modulo", modulo)
+      .eq("recurso", recurso)
+      .eq("ok", false);
+    // Sin ninguna corrida buena, la racha es todo lo que falló: nunca anduvo.
+    const { count, error } = await (ultimaBuena
+      ? fallidas.gt("created_at", ultimaBuena.created_at)
+      : fallidas);
+    if (error) throw new Error(error.message);
+    return Math.max(1, count ?? 1);
+  } catch (e) {
+    // No tumba la salud: la vista sí se leyó y el aviso tiene que salir igual.
+    // Lo que se pierde es que el descarte caduque, que es mucho menos que
+    // perder el aviso.
+    console.error(
+      `salud: no se pudo contar la racha de ${modulo}/${recurso}:`,
+      e instanceof Error ? e.message : e
+    );
+    return 1;
+  }
 }
 
 /**
@@ -389,6 +516,27 @@ export interface SaludDelSistema {
   sinComprobar: boolean;
   /** Lo leído, para dibujar la pantalla. Vacío si no se pudo leer. */
   corridas: CorridaLeida[];
+}
+
+/**
+ * Le pone a cada entrada en `fallo` su racha de verdad, que `entradasCaidas` no
+ * puede saber sin leer `sincronizaciones` — ver `cuantoLlevaMal`.
+ *
+ * **Sólo para las que están en `fallo`**: una `vieja` o una `nunca` ya tienen su
+ * número y no hay racha que contar. Son dos consultas por entrada fallida —el
+ * 05/11/2026, 4 de 29— y van en paralelo: cada una toca su propio recurso.
+ */
+async function conLaRachaDeCadaFallo(
+  supabase: SupabaseClient,
+  caidas: EntradaCaida[]
+): Promise<EntradaCaida[]> {
+  return Promise.all(
+    caidas.map(async (caida) => {
+      if (caida.estado !== "fallo" || !caida.recursoQueFallo) return caida;
+      const { modulo, recurso } = caida.recursoQueFallo;
+      return { ...caida, cuantoLlevaMal: await rachaDeFallos(supabase, modulo, recurso) };
+    })
+  );
 }
 
 /**
@@ -421,7 +569,7 @@ export async function leerLaSalud(
     // Sin error y sin datos tampoco es una lectura: no se afirma nada con ella.
     if (!data) throw new Error("la vista no devolvió datos ni error");
     return {
-      caidas: entradasCaidas(data, ahora),
+      caidas: await conLaRachaDeCadaFallo(supabase, entradasCaidas(data, ahora)),
       sinDeclarar: recursosSinDeclarar(data),
       sinComprobar: false,
       corridas: data,

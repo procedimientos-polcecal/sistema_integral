@@ -255,11 +255,19 @@ function enUnaLinea(detalle: string): string {
  * detalle de un recurso viejo puede ser también «en una fecha ilegible», que es
  * lo que dice `haceCuantoCorto` de un `created_at` que no se entiende. Con
  * «desde» adelante, ese caso sale en un castellano roto.
+ *
+ * **Un fallo con racha dice cuántas corridas seguidas lleva**, que distingue
+ * «se cayó recién» de «hace una semana que nadie lo mira» y es el dato que el
+ * error solo no da. Con una sola no se escribe: «falló 1 corrida seguida» no
+ * dice nada que «falló» no diga. La racha va en el título y **no en el
+ * `detalle`**, que es el texto del otro lado sin traducir y tiene que seguir
+ * siéndolo.
  */
 function tituloDeLaCaida(caida: EntradaCaida): string {
   if (caida.estado === "nunca") return `${caida.titulo}: nunca corrió`;
   if (caida.estado === "vieja") return `${caida.titulo}: no corre — ${enUnaLinea(caida.detalle)}`;
-  return `${caida.titulo}: falló — ${enUnaLinea(caida.detalle)}`;
+  const racha = caida.cuantoLlevaMal > 1 ? ` ${caida.cuantoLlevaMal} corridas seguidas` : "";
+  return `${caida.titulo}: falló${racha} — ${enUnaLinea(caida.detalle)}`;
 }
 
 /**
@@ -288,10 +296,12 @@ function tituloDeLaCaida(caida: EntradaCaida): string {
  *
  * ── LAS TRES COSAS QUE HAY QUE SABER SI SE TOCA ─────────────────────────────
  *
- *  - **La `cantidad` no cuenta cosas.** Son las tolerancias enteras que el
- *    recurso lleva en silencio (`cuantasTolerancias`), y existe para que
- *    descartar el aviso no lo calle mientras siga caído. Por eso el resumen lo
- *    imprime sin número: ver `sinNumero` en `./resumenDeAvisos.ts`.
+ *  - **La `cantidad` no cuenta cosas**, y mide algo distinto según el estado:
+ *    corridas fallidas seguidas en un `fallo`, tolerancias enteras de silencio
+ *    en una `vieja` o una `nunca` (ver `cuantoLlevaMal`). Las dos tienen el
+ *    mismo trabajo: **crecer mientras el problema siga**, para que descartar el
+ *    aviso no lo calle para siempre. Por eso el resumen lo imprime sin número:
+ *    ver `sinNumero` en `./resumenDeAvisos.ts`.
  *  - **Los ids son nuevos y no se reusan.** `agenda-pasos-caidos` y
  *    `agenda-salud-sin-comprobar` quedan huérfanos en `notificaciones_descartes`,
  *    lo cual es inofensivo porque nunca más coinciden con nada; reusar uno le
@@ -307,7 +317,7 @@ export function avisosDeSalud(salud: SaludDelSistema): Notificacion[] {
   const avisos: Notificacion[] = salud.caidas.map((caida) => ({
     id: `salud-${caida.clave}`,
     titulo: tituloDeLaCaida(caida),
-    cantidad: caida.tolerancias,
+    cantidad: caida.cuantoLlevaMal,
     href: HREF_DE_LA_SALUD,
   }));
 

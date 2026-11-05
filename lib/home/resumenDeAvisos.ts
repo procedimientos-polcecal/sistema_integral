@@ -12,11 +12,11 @@ const CUANTOS_SE_NOMBRAN = 3;
  *    módulo sin cargarse —ver `cantidadDelAviso` en `./ritmo.ts`—. Escribirla
  *    daría «9 · Trituración: hace 36 días que no se carga», que no significa
  *    nada.
- *  - **Salud** (`salud-`): su cantidad son las tolerancias de silencio que lleva
- *    el recurso —ver `cuantasTolerancias` en
- *    `@/lib/core/saludDeLasSincronizaciones`—, o un 1 que quiere decir «pasa»
- *    en `salud-sin-comprobar`. Un «1» que parece un total es peor que ningún
- *    número.
+ *  - **Salud** (`salud-`): su cantidad es cuánto hace que ese recurso viene mal
+ *    —corridas fallidas seguidas, o tolerancias de silencio si dejó de correr;
+ *    ver `cuantoLlevaMal` en `@/lib/core/saludDeLasSincronizaciones`—, o un 1
+ *    que quiere decir «pasa» en `salud-sin-comprobar`. Un «1» que parece un
+ *    total es peor que ningún número.
  *
  * En las dos, la cantidad existe sólo para que el movimiento y el descarte las
  * traten como a las demás, y el título ya es la frase completa.
