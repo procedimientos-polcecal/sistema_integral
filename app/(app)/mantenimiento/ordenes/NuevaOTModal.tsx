@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Select from "@/components/Select";
 import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
-import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
+import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
 import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -217,6 +217,15 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
       setError(`Falta cargar ${falta.join(", ")}.`);
       return;
     }
+    // Y después, con otro verbo: acá los datos están y lo que no cierra es lo
+    // que dicen entre ellos —una fecha de fin o de cierre anterior al inicio—.
+    // La misma función que corre la ruta, que hasta hoy era la única que la
+    // corría: el formulario mandaba la orden y se enteraba por un 400.
+    const contradice = loQueSeContradice(form);
+    if (contradice.length > 0) {
+      setError(`No se puede guardar porque ${contradice.join(", ")}.`);
+      return;
+    }
     setSaving(true); setError(""); setResultado(null);
 
     const eq = equipos.find((eq: any) => eq.id === form.equipment_id);
@@ -404,11 +413,18 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
                 termina; lo que se gana al exigirla es que toda OT cargada a
                 mano tenga ventana. Quién la exige es `loQueFaltaParaCrear`, no
                 este `required`, que sólo pinta el asterisco. */}
+            {/* El `min` de las dos es la fecha de inicio: el calendario del
+                navegador deja en gris los días anteriores, así que el dedo que
+                erra por un día no llega ni a elegirlos. Es la primera defensa y
+                no la regla —un `min` se saltea tipeando—: quien decide es
+                `loQueSeContradice`, en el submit y en el servidor. Vacío no
+                limita nada, que es lo que corresponde cuando todavía no se
+                eligió el inicio. */}
             <F label="Fecha de fin (estimada)" required>
-              <input type="date" value={form.fecha_fin} onChange={e => f("fecha_fin", e.target.value)} className="input" />
+              <input type="date" value={form.fecha_fin} min={form.fecha_ejecucion || undefined} onChange={e => f("fecha_fin", e.target.value)} className="input" />
             </F>
             <F label="Fecha cierre">
-              <input type="date" value={form.fecha_cierre} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
+              <input type="date" value={form.fecha_cierre} min={form.fecha_ejecucion || undefined} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
             </F>
           </div>
 

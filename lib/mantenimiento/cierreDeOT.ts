@@ -86,6 +86,53 @@ export function loQueFaltaParaCerrar(datos: DatosDelCierre): string[] {
   return falta;
 }
 
+/**
+ * Qué le impide a una orden darse por cerrada en esa fecha.
+ *
+ * Es **otra clase de problema** que `loQueFaltaParaCerrar`, y por eso va
+ * aparte: aquello dice que falta un dato, y esto que los datos que hay no se
+ * sostienen entre ellos. Un «Falta cargar la fecha de inicio» cuando lo que
+ * pasa es que el cierre quedó antes manda a buscar lo que no es.
+ *
+ * Dos cosas, y las dos son la misma: **un trabajo no se cierra antes de
+ * empezar.**
+ *
+ * 1. **Sin fecha de inicio no se puede cerrar.** No es una formalidad: de esa
+ *    fecha salen el atraso, el MTBF y la ventana del equipo, y una orden que
+ *    dice cuándo terminó pero no cuándo empezó no se puede contar en ninguno
+ *    de los tres. Medido el 05/11/2026 sobre las 2.417 órdenes: **0 de las
+ *    2.143 cerradas están así** y hay una sola orden en todo el sistema sin
+ *    fecha de inicio, abierta. O sea que esto no traba nada de lo que hay —
+ *    cierra el agujero antes de que entre la primera.
+ * 2. **El cierre no puede ser anterior al inicio.** Ésa sí pasa: 63 de las
+ *    2.143 cerradas lo están, y no de a un día —la 2568 arranca el 16/11 y
+ *    cierra el 07/10, la 1671 arranca el 03/05 y cierra el 03/02, que tiene
+ *    toda la cara de un d/m leído al revés—. Nada las detectaba, porque cada
+ *    fecha por separado es perfectamente válida.
+ *
+ * **Las dos fechas en el mensaje**, igual que en `loQueSeContradice`: decir
+ * sólo «el cierre es anterior» obliga a volver al formulario a ver contra
+ * qué, y la que está mal puede ser cualquiera de las dos.
+ *
+ * Sin fecha de cierre devuelve `[]` y no mira nada: no se está cerrando.
+ */
+export function loQueImpideCerrar(
+  fechaInicio: string | null | undefined,
+  fechaCierre: string | null | undefined
+): string[] {
+  const cierre = String(fechaCierre ?? "").trim();
+  if (!cierre) return [];
+
+  const inicio = String(fechaInicio ?? "").trim();
+  if (!inicio) {
+    return ["la orden no dice cuándo empezó, y un trabajo no se cierra antes de empezar"];
+  }
+
+  return cierre < inicio
+    ? [`la fecha de cierre (${cierre}) es anterior a la de inicio (${inicio})`]
+    : [];
+}
+
 /** Lo que una orden recién creada puede tener para la planilla. */
 export interface LoQueLaPlanillaNoSabe {
   estado: string | null | undefined;

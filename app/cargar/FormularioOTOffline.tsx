@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Select from "@/components/Select";
-import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
+import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
 import { borradorDesdeElCuerpo } from "@/lib/mantenimiento/borradorDeCarga";
 import RepuestosDeLaOT from "@/components/RepuestosDeLaOT";
 import FallaDeLaOT, { FALLA_VACIA, type LaFalla } from "@/components/FallaDeLaOT";
@@ -146,6 +146,16 @@ export default function FormularioOTOffline({
     const falta = loQueFaltaParaCrear(form);
     if (falta.length > 0) {
       setError(`Falta cargar ${falta.join(", ")}.`);
+      return;
+    }
+    // Y después, con otro verbo: acá los datos están y lo que no cierra es lo
+    // que dicen entre ellos —una fecha de fin o de cierre anterior al inicio—.
+    // Vale el mismo argumento de arriba y con más fuerza: un 400 por esto es
+    // definitivo para la cola, o sea una carga parada por algo que se podía
+    // decir en el momento, con la pantalla delante.
+    const contradice = loQueSeContradice(form);
+    if (contradice.length > 0) {
+      setError(`No se puede guardar porque ${contradice.join(", ")}.`);
       return;
     }
 
@@ -337,10 +347,18 @@ export default function FormularioOTOffline({
             ANTES de esa fecha vuelve sin la clave y el servidor la va a
             rechazar nombrando el campo. Es visible y se arregla completándolo;
             medido ese día, las 13 cargas de la tabla estaban resueltas. */}
+        {/* El `min` de las dos es la fecha de inicio: el calendario deja en
+            gris los días anteriores, así que el dedo que erra por un día no
+            llega ni a elegirlos. Acá importa más que con señal, por lo mismo
+            que arriba: sin conexión el que contesta es el servidor horas o
+            días después, y lo que contesta es un 400 definitivo para la cola.
+            Igual no es la regla —un `min` se saltea tipeando—: quien decide es
+            `loQueSeContradice`, en el submit y en el servidor. */}
         <F label="Fecha de fin (estimada)" required>
           <input
             type="date"
             value={form.fecha_fin}
+            min={form.fecha_ejecucion || undefined}
             onChange={(e) => f("fecha_fin", e.target.value)}
             disabled={deshabilitado}
             className="input"
@@ -350,6 +368,7 @@ export default function FormularioOTOffline({
           <input
             type="date"
             value={form.fecha_cierre}
+            min={form.fecha_ejecucion || undefined}
             onChange={(e) => f("fecha_cierre", e.target.value)}
             disabled={deshabilitado}
             className="input"

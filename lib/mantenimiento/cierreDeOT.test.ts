@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  estadoSegunElCierre, loQueFaltaParaCerrar, loQueHayQueExportar,
+  estadoSegunElCierre, loQueFaltaParaCerrar, loQueHayQueExportar, loQueImpideCerrar,
 } from "./cierreDeOT";
 
 /**
@@ -200,5 +200,65 @@ describe("que hay que exportarle a la planilla", () => {
     expect(Object.keys(r!).sort()).toEqual(
       ["estado", "fecha_cierre", "horas", "operario_1", "operario_2"]
     );
+  });
+});
+
+/**
+ * Un trabajo no se cierra antes de empezar.
+ *
+ * Es otra clase de problema que `loQueFaltaParaCerrar`: aca los datos estan y
+ * lo que no cierra es lo que dicen entre ellos. Medido el 05/11/2026 sobre las
+ * 2.417 ordenes: 63 de las 2.143 cerradas tienen el cierre antes del inicio, y
+ * 0 estan cerradas sin fecha de inicio.
+ */
+describe("lo que impide cerrar una orden", () => {
+  it("una ventana al derecho no se queja", () => {
+    expect(loQueImpideCerrar("2026-10-20", "2026-10-25")).toEqual([]);
+  });
+
+  /** El caso mas comun de todos: se empieza y se termina el mismo dia. */
+  it("cerrar el mismo dia que empieza esta bien", () => {
+    expect(loQueImpideCerrar("2026-10-20", "2026-10-20")).toEqual([]);
+  });
+
+  /** Las dos fechas en el mensaje: la que esta mal puede ser cualquiera. */
+  it("el cierre anterior al inicio se nombra con las dos fechas", () => {
+    expect(loQueImpideCerrar("2026-10-03", "2026-10-01"))
+      .toEqual(["la fecha de cierre (2026-10-01) es anterior a la de inicio (2026-10-03)"]);
+  });
+
+  /** La OT 2845, que es de donde salio esto. */
+  it("un dia de diferencia tambien se frena", () => {
+    expect(loQueImpideCerrar("2026-11-04", "2026-11-03")).toHaveLength(1);
+  });
+
+  /**
+   * Sin fecha de inicio tampoco se puede cerrar, y el mensaje dice eso y no
+   * "falta cargar la fecha de inicio": quien esta registrando el trabajo no
+   * tiene ese campo delante — lo tiene que ir a buscar a la orden.
+   */
+  it("sin fecha de inicio no se puede cerrar", () => {
+    expect(loQueImpideCerrar(null, "2026-10-20"))
+      .toEqual(["la orden no dice cuándo empezó, y un trabajo no se cierra antes de empezar"]);
+    expect(loQueImpideCerrar("", "2026-10-20")).toHaveLength(1);
+    expect(loQueImpideCerrar("   ", "2026-10-20")).toHaveLength(1);
+  });
+
+  /** Sin cierre no se esta cerrando nada: no mira ni el inicio. */
+  it("sin fecha de cierre no opina", () => {
+    expect(loQueImpideCerrar("2026-10-20", null)).toEqual([]);
+    expect(loQueImpideCerrar("2026-10-20", "")).toEqual([]);
+    expect(loQueImpideCerrar(null, null)).toEqual([]);
+    expect(loQueImpideCerrar(null, "")).toEqual([]);
+  });
+
+  /**
+   * Las fechas ISO se comparan como texto a proposito: "2026-02-03" < "2026-05-03"
+   * sin construir un `Date`, que es lo que mete la zona horaria en el medio.
+   * El cruce de anio es el caso que lo probaria mal si se compararan por dia y mes.
+   */
+  it("compara el anio y no solo el dia", () => {
+    expect(loQueImpideCerrar("2026-01-05", "2025-12-30")).toHaveLength(1);
+    expect(loQueImpideCerrar("2025-12-30", "2026-01-05")).toEqual([]);
   });
 });
