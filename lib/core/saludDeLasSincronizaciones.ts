@@ -6,10 +6,14 @@
  * constante `HORAS_SIN_CORRER`, porque cada recurso corre a su propio ritmo —un
  * cron diario no se mide con la vara de uno que corre cada 15 minutos—. Son
  * funciones puras: leer `ultima_sincronizacion` es de quien las llama.
+ *
+ * **Y la Agenda llama acá**: desde el 05/11/2026 su `estadoDelPaso` es una
+ * envoltura de `estadoDeRecurso` con `HORAS_SIN_CORRER`. No quedan dos copias
+ * de la misma decisión, porque de dos copias la que nadie toca es la que
+ * termina mintiendo.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { haceCuanto } from "@/lib/agenda/avisosDeLaAgenda";
 
 /** Lo que `ultima_sincronizacion` dice de la última corrida de un recurso. */
 export interface CorridaLeida {
@@ -21,8 +25,36 @@ export interface CorridaLeida {
   created_at: string;
 }
 
+/**
+ * Lo único que hace falta para decir cómo está un recurso: si la última corrida
+ * anduvo y cuándo fue.
+ *
+ * Es más angosto que `CorridaLeida` a propósito, para que la Agenda —que lee
+ * las mismas filas con su propio tipo, sin `modulo`— pueda usar
+ * `estadoDeRecurso` en vez de tener su propia copia de la misma decisión.
+ */
+export type CorridaParaElEstado = Pick<CorridaLeida, "ok" | "created_at">;
+
 /** Cómo está un recurso. `sana` es la única que no es un problema. */
 export type EstadoDeRecurso = "nunca" | "fallo" | "vieja" | "sana";
+
+/**
+ * «hace 5 h», «hace 2 días»: lo justo para saber si un recurso está al día.
+ *
+ * **No es `haceCuanto` de `lib/core/haceCuanto.ts`**, y por eso tiene otro
+ * nombre: aquélla dice «hace 5 horas» y «recién», y una fecha ilegible le sale
+ * como «nunca» —que acá sería mentir, porque corrió y lo que no se entiende es
+ * cuándo—. Vivía en `lib/agenda/avisosDeLaAgenda.ts` y se mudó para acá cuando
+ * la Agenda pasó a usar `estadoDeRecurso`: con la función allá, el core
+ * importaba de la Agenda y la Agenda del core.
+ */
+export function haceCuantoCorto(desde: string, ahora: Date): string {
+  const ms = ahora.getTime() - new Date(desde).getTime();
+  if (Number.isNaN(ms)) return "en una fecha ilegible";
+  const horas = Math.max(0, Math.round(ms / 3_600_000));
+  if (horas < 48) return `hace ${horas} h`;
+  return `hace ${Math.floor(horas / 24)} días`;
+}
 
 /**
  * **Tres cosas dejan caído a un recurso**, y la tercera es la que justifica que
@@ -42,7 +74,7 @@ export type EstadoDeRecurso = "nunca" | "fallo" | "vieja" | "sana";
  * lado de «todo bien» es justo lo que esta función existe para no hacer.
  */
 export function estadoDeRecurso(
-  corrida: CorridaLeida | undefined,
+  corrida: CorridaParaElEstado | undefined,
   toleranciaHoras: number,
   ahora: Date
 ): EstadoDeRecurso {
@@ -333,7 +365,7 @@ export function entradasCaidas(corridas: CorridaLeida[], ahora: Date = new Date(
 function detalleDe(estado: EstadoCaido, corrida: CorridaLeida | undefined, ahora: Date): string {
   if (estado === "nunca" || !corrida) return "nunca corrió";
   if (estado === "fallo") return corrida.error ?? "falló sin dejar el motivo";
-  return haceCuanto(corrida.created_at, ahora);
+  return haceCuantoCorto(corrida.created_at, ahora);
 }
 
 /**

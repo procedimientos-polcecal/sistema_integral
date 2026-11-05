@@ -167,19 +167,32 @@ describe("resumirElMovimiento", () => {
   });
 });
 
-describe("un aviso que es una bandera no imprime el número", () => {
-  // `agenda-salud-sin-comprobar` usa `cantidad: 1` como «pasa», no como cuántos.
+describe("un aviso de salud no imprime el número", () => {
+  /*
+   * La cantidad de un aviso de salud **no cuenta cosas**: son las tolerancias
+   * enteras que el recurso lleva en silencio, y existe para que descartarlo no
+   * lo calle para siempre (ver `cuantasTolerancias`). Imprimirla daría
+   * «2 · Agenda: los canales de Google no se renuevan», que no significa nada.
+   */
+  it("un aviso de salud sale sin número: su cantidad son tolerancias, no cosas", () => {
+    const push = resumirParaPush([
+      { id: "salud-agenda/canales", titulo: "Agenda: los canales de Google no se renuevan", cantidad: 2, href: "/administracion/salud" },
+    ]);
+    expect(push?.body ?? "").not.toContain("2");
+  });
+
+  // «No sé» tampoco: su `cantidad: 1` es «pasa», no cuántos.
   const bandera: Notificacion = {
-    id: "agenda-salud-sin-comprobar",
-    titulo: "No se pudo comprobar si la Agenda sigue mirando Google",
+    id: "salud-sin-comprobar",
+    titulo: "No se pudo comprobar la salud de las sincronizaciones",
     cantidad: 1,
-    href: "/agenda",
+    href: "/administracion/salud",
   };
   const otro: Notificacion = { id: "mant-atrasadas", titulo: "Órdenes de trabajo atrasadas", cantidad: 4, href: "/m" };
 
   it("solo, el cuerpo queda vacío en el total y en el movimiento", () => {
-    expect(resumirParaPush([bandera])).toEqual({ title: bandera.titulo, body: "", url: "/agenda" });
-    expect(resumirElMovimiento([bandera])).toEqual({ title: bandera.titulo, body: "", url: "/agenda" });
+    expect(resumirParaPush([bandera])).toEqual({ title: bandera.titulo, body: "", url: bandera.href });
+    expect(resumirElMovimiento([bandera])).toEqual({ title: bandera.titulo, body: "", url: bandera.href });
   });
 
   it("con otros, va sólo el título y los demás conservan su número", () => {

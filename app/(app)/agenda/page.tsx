@@ -97,10 +97,12 @@ export default async function AgendaPage({
     for (const o of data ?? []) numerosDeOT[o.id as string] = o.ot_number as number;
   }
 
-  // La salud de la conexión con Google, **sólo para admin_sistema**: es adonde
-  // llevan los dos avisos de salud de la campana. Se lee con el cliente de la
-  // persona (`ultima_sincronizacion` la leen todos los autenticados) y no tumba
-  // la pantalla: si la lectura falla, `sinComprobar` lo dice en vez de callar.
+  // La salud de la conexión con Google, **sólo para admin_sistema**. Se lee con
+  // el cliente de la persona (`ultima_sincronizacion` la leen todos los
+  // autenticados) y no tumba la pantalla: si la lectura falla, `sinComprobar` lo
+  // dice en vez de callar. El aviso de que `canales` o `barrido` se cayeron sale
+  // ahora de `avisosDeSalud` y lleva a `/administracion/salud`; esto es el
+  // detalle de la Agenda para quien ya está acá.
   const { data: yoMismo } = await supabase.from("usuarios").select("rol").eq("id", user.id).maybeSingle();
   const salud = yoMismo?.rol === "admin_sistema" ? await leerLaSaludDeLaAgenda(supabase) : null;
 

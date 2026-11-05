@@ -1,25 +1,32 @@
 import type { Notificacion } from "./notificaciones";
 import type { Aviso } from "@/lib/core/webpush";
-import { ES_BANDERA } from "./avisos";
 
 /** Cuántos avisos se nombran en el cuerpo antes de resumir el resto. */
 const CUANTOS_SE_NOMBRAN = 3;
 
 /**
- * Un aviso de ritmo no cuenta cosas.
+ * Los avisos cuya `cantidad` **no cuenta cosas**, y que por lo tanto van sin
+ * número. Son dos familias y la regla es la misma:
  *
- * Su `cantidad` es cuántos umbrales enteros lleva el módulo sin cargarse, y
- * existe sólo para que descartarlo no lo traiga de vuelta mañana —ver
- * `cantidadDelAviso` en `./ritmo.ts`—. Escribirla al lado del título daría
- * "9 · Trituración: hace 36 días que no se carga", que no significa nada. El
- * título de esos avisos ya es la frase completa, así que va solo.
+ *  - **Ritmo** (`ritmo-`): su cantidad es cuántos umbrales enteros lleva el
+ *    módulo sin cargarse —ver `cantidadDelAviso` en `./ritmo.ts`—. Escribirla
+ *    daría «9 · Trituración: hace 36 días que no se carga», que no significa
+ *    nada.
+ *  - **Salud** (`salud-`): su cantidad son las tolerancias de silencio que lleva
+ *    el recurso —ver `cuantasTolerancias` en
+ *    `@/lib/core/saludDeLasSincronizaciones`—, o un 1 que quiere decir «pasa»
+ *    en `salud-sin-comprobar`. Un «1» que parece un total es peor que ningún
+ *    número.
  *
- * **Tampoco una bandera** (`ES_BANDERA`): `agenda-salud-sin-comprobar` usa
- * `cantidad: 1` como «pasa», no como cuántos. Sale igual de sin número.
+ * En las dos, la cantidad existe sólo para que el movimiento y el descarte las
+ * traten como a las demás, y el título ya es la frase completa.
+ *
+ * **Va por prefijo y no por una lista de ids** porque los de salud son
+ * dinámicos: hay uno por recurso del registro y la lista crece sola.
  */
-const esDeRitmo = (n: Notificacion) => n.id.startsWith("ritmo-") || ES_BANDERA.has(n.id);
+const sinNumero = (n: Notificacion) => n.id.startsWith("ritmo-") || n.id.startsWith("salud-");
 
-const comoLinea = (n: Notificacion) => (esDeRitmo(n) ? n.titulo : `${n.cantidad} · ${n.titulo}`);
+const comoLinea = (n: Notificacion) => (sinNumero(n) ? n.titulo : `${n.cantidad} · ${n.titulo}`);
 
 /**
  * Convierte los avisos de una persona en **una** notificación.
@@ -44,7 +51,7 @@ export function resumirParaPush(avisos: Notificacion[]): Aviso | null {
     const unico = avisos[0];
     return {
       title: unico.titulo,
-      body: esDeRitmo(unico) ? "" : String(unico.cantidad),
+      body: sinNumero(unico) ? "" : String(unico.cantidad),
       url: unico.href,
     };
   }
@@ -87,13 +94,13 @@ export function resumirElMovimiento(avisos: Notificacion[]): Aviso | null {
     const unico = avisos[0];
     return {
       title: unico.titulo,
-      body: esDeRitmo(unico) ? "" : `${unico.cantidad} más`,
+      body: sinNumero(unico) ? "" : `${unico.cantidad} más`,
       url: unico.href,
     };
   }
 
   const comoLineaDeMovimiento = (n: Notificacion) =>
-    esDeRitmo(n) ? n.titulo : `${n.cantidad} más · ${n.titulo}`;
+    sinNumero(n) ? n.titulo : `${n.cantidad} más · ${n.titulo}`;
 
   const nombrados = avisos.slice(0, CUANTOS_SE_NOMBRAN).map(comoLineaDeMovimiento);
   const restantes = avisos.length - CUANTOS_SE_NOMBRAN;

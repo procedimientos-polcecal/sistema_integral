@@ -1,4 +1,5 @@
 import type { Modulo } from "@/lib/core/types";
+import type { EntradaCaida, SaludDelSistema } from "@/lib/core/saludDeLasSincronizaciones";
 import type { Notificacion } from "./notificaciones";
 import { cantidadDelAviso, type Ritmo } from "./ritmo";
 
@@ -26,8 +27,6 @@ export interface ConteosParaAvisos {
   syhSinCompletar: number;
   syhFotosSinRespaldar: number;
   agendaDivergencias: number;
-  agendaPasosCaidos: number;
-  agendaSaludSinComprobar: number;
 }
 
 /**
@@ -122,7 +121,7 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    */
   { clave: "syhFotosSinRespaldar", id: "syh-fotos-sin-respaldar", titulo: "Fotos de condiciones inseguras sin copia de respaldo en Drive", href: "/seguridad-higiene" },
   /*
-   * LA AGENDA: dos avisos, de dos naturalezas distintas, y los dos con id nuevo.
+   * LA AGENDA.
    *
    * **`agenda-divergencias` es de quien mira.** Un evento que el SdG escribió en
    * Google y alguien movió o borró desde allá: el calendario y la OT dicen cosas
@@ -141,49 +140,16 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * pisan: el push es la interrupción, y esto es el stock que queda en la campana
    * hasta que se da por visto.
    *
-   * **`agenda-pasos-caidos` es del sistema, y es el que hace que la garantía de
-   * la Agenda no sea una frase en un docstring.** Todo el diseño descansa en que
-   * «un canal muerto no se distinga de uno sano», y eso se resolvió escribiendo en
-   * `sincronizaciones` —que ninguna pantalla lee—. Es el patrón que perdió las 52
-   * fotos y por el que existe `syhFotosSinRespaldar`: un fallo que sólo queda en
-   * un log. Este aviso lo lee. Cuenta cuántos de los dos pasos del cron que hablan
-   * con Google (`canales`, `barrido`) fallaron en su última corrida, **o no
-   * corrieron en 50 horas, o nunca corrieron** (`pasosCaidos`): el cron que no
-   * corre no deja ninguna fila de fallo.
-   *
-   * Su `cantidad` **no cuenta cosas**: va de 0 a 2 y es cuántos pasos están
-   * caídos, no cuántas casillas —la fila de `sincronizaciones` trae el error como
-   * texto, no como número—. Sirve para que el resumen avise cuando pasa de 0 a
-   * algo, igual que los avisos de ritmo. Por eso el título habla de «pasos» y no
-   * de canales ni de eventos.
-   *
-   * **Y si no se pudo ni leer la salud, no es un 0**: sale `agenda-salud-sin-comprobar`,
-   * un aviso aparte con su propio id porque es otra cosa —«no sé»—, y su título
-   * dice que falló **la comprobación**, no que los canales estén caídos ni
-   * sanos. `cantidad` es 1 cuando pasa: es una bandera y no un conteo (`ES_BANDERA`), y el
-   * resumen la imprime sin número. Un aviso de salud que calla cuando no
-   * puede mirar es el fallo silencioso que esto viene a cerrar.
-   *
-   * Le llegan sólo a `admin_sistema` (`DE_UNA_LISTA`): lo arregla quien toca las
-   * credenciales de Google y las variables de Vercel, no quien usa la Agenda. El
-   * detalle de qué falló se ve en `/agenda`, que para `admin_sistema` muestra cuándo
-   * corrió por última vez cada paso (`SaludDeLaAgenda`): el aviso lleva a donde se
-   * ve el problema, que es lo que hace `syh-fotos-sin-respaldar` y lo que un push
-   * a una pantalla muda no hace.
+   * **Acá había otros dos, y se retiraron el 05/11/2026**: `agenda-pasos-caidos`
+   * y `agenda-salud-sin-comprobar`, que miraban si el cron de la Agenda seguía
+   * hablando con Google. Lo que hacían para dos pasos lo hace ahora
+   * `avisosDeSalud` para los 29 recursos de `ultima_sincronizacion`, con la
+   * tolerancia declarada de cada uno. Dos avisos de salud con umbrales distintos
+   * diciendo cosas parecidas es exactamente lo que la campana y el push evitan
+   * al salir de una sola función.
    */
   { clave: "agendaDivergencias", id: "agenda-divergencias", titulo: "Eventos del calendario que alguien cambió desde Google", href: "/agenda" },
-  { clave: "agendaPasosCaidos", id: "agenda-pasos-caidos", titulo: "Pasos de la Agenda con Google que fallaron o no corrieron", href: "/agenda" },
-  { clave: "agendaSaludSinComprobar", id: "agenda-salud-sin-comprobar", titulo: "No se pudo comprobar si la Agenda sigue mirando Google", href: "/agenda" },
 ];
-
-/**
- * Los avisos cuya `cantidad` es una **bandera** (1 = pasa) y no un conteo. El
- * resumen los imprime sin número, igual que a los de ritmo: «1 · No se pudo
- * comprobar…» y «1 más · No se pudo comprobar…» no dicen nada que el título no
- * diga, y un «1» que parece un total es peor que ningún número. La `cantidad`
- * existe sólo para que el movimiento y el descarte los traten como a los demás.
- */
-export const ES_BANDERA: ReadonlySet<string> = new Set(["agenda-salud-sin-comprobar"]);
 
 /**
  * Los avisos cuyo número **depende de quién mira** y que por lo tanto no caben en
@@ -252,4 +218,125 @@ export function avisosDeRitmo(
       href: HREF[m],
     }];
   });
+}
+
+// ── La salud de las sincronizaciones ────────────────────────────────────────
+
+/** Donde aterriza todo aviso de salud: la pantalla con el estado de los 29. */
+const HREF_DE_LA_SALUD = "/administracion/salud";
+
+/**
+ * Lo más largo que entra del detalle en el título de un aviso.
+ *
+ * El título es lo único que llega al teléfono, y lo que no entra lo corta el
+ * sistema operativo donde se le ocurre. 90 caracteres deja ver el nombre del
+ * recurso y el principio de lo que dijo el otro lado, que es lo que permite
+ * decidir si hay que levantarse; el texto entero, sin traducir, está en la
+ * pantalla a un toque.
+ */
+const LARGO_DEL_DETALLE = 90;
+
+/**
+ * El detalle, en **una sola línea** y cortado por nosotros.
+ *
+ * Lo de una línea no es cosmético: `resumirParaPush` junta los títulos con
+ * saltos de línea, así que un error de Google de tres renglones —y los hay— le
+ * rompe el formato al resumen entero y descoloca a los demás avisos.
+ */
+function enUnaLinea(detalle: string): string {
+  const plano = detalle.replace(/\s+/g, " ").trim();
+  return plano.length > LARGO_DEL_DETALLE ? `${plano.slice(0, LARGO_DEL_DETALLE - 1)}…` : plano;
+}
+
+/**
+ * Qué dice el título de un recurso caído, según de qué manera lo está.
+ *
+ * Va «no corre — hace 3 días» y no «no corre desde hace 3 días» porque el
+ * detalle de un recurso viejo puede ser también «en una fecha ilegible», que es
+ * lo que dice `haceCuantoCorto` de un `created_at` que no se entiende. Con
+ * «desde» adelante, ese caso sale en un castellano roto.
+ */
+function tituloDeLaCaida(caida: EntradaCaida): string {
+  if (caida.estado === "nunca") return `${caida.titulo}: nunca corrió`;
+  if (caida.estado === "vieja") return `${caida.titulo}: no corre — ${enUnaLinea(caida.detalle)}`;
+  return `${caida.titulo}: falló — ${enUnaLinea(caida.detalle)}`;
+}
+
+/**
+ * Los avisos de la salud de las sincronizaciones: **uno por recurso caído**.
+ *
+ * Tiene la forma de `avisosDeRitmo` —un productor **dinámico**— y no la de
+ * `avisosDeConteos`, que mapea un record fijo: son 29 recursos declarados en el
+ * `REGISTRO` y la lista crece sola cuando alguien declara uno nuevo.
+ *
+ * ── POR QUÉ UNO POR RECURSO Y NO UNO CON EL CONTEO ──────────────────────────
+ *
+ * Un solo aviso que dijera «3 sincronizaciones caídas» es la forma obvia y es la
+ * que rompe el objetivo de todo esto. El mismo día se arregla
+ * `calidad/carbonilla-odoo` y se rompe `agenda/canales`: el conteo queda en 1,
+ * `filtrarDescartadas` compara `cantidad > cantidad_vista` y `loQueSeMovio`
+ * reporta la diferencia, así que **no suena la campana ni sale el push** y el
+ * fallo nuevo es invisible. Con los dos pasos de la Agenda eso era tolerable;
+ * con 29 es el agujero que esto viene a cerrar, reabierto adentro del arreglo.
+ * Por el mismo mecanismo, un fallo crónico descartado con `cantidad = 1`
+ * silenciaba al siguiente.
+ *
+ * Un aviso por recurso le devuelve identidad al descarte —se silencia *ese*
+ * problema y no «la salud»—, hace que un fallo nuevo sea siempre una novedad y
+ * deja que el título diga cuál es. `resumirParaPush` ya sabe juntar varios en un
+ * mensaje, así que el push no se multiplica.
+ *
+ * ── LAS TRES COSAS QUE HAY QUE SABER SI SE TOCA ─────────────────────────────
+ *
+ *  - **La `cantidad` no cuenta cosas.** Son las tolerancias enteras que el
+ *    recurso lleva en silencio (`cuantasTolerancias`), y existe para que
+ *    descartar el aviso no lo calle mientras siga caído. Por eso el resumen lo
+ *    imprime sin número: ver `sinNumero` en `./resumenDeAvisos.ts`.
+ *  - **Los ids son nuevos y no se reusan.** `agenda-pasos-caidos` y
+ *    `agenda-salud-sin-comprobar` quedan huérfanos en `notificaciones_descartes`,
+ *    lo cual es inofensivo porque nunca más coinciden con nada; reusar uno le
+ *    entregaría a quien lo había descartado un aviso ya silenciado que nunca vio.
+ *  - **`sinComprobar` es su propio aviso y no un cero.** «No sé» no es «todo
+ *    bien» ni «algo cayó», y un aviso de salud que calla cuando no pudo mirar es
+ *    el fallo silencioso que esto viene a cerrar.
+ *
+ * Le llegan sólo a `admin_sistema` (ver `sinLoQueNoPuedeAtender`): lo arregla
+ * quien toca las credenciales y las variables de Vercel, no quien usa el módulo.
+ */
+export function avisosDeSalud(salud: SaludDelSistema): Notificacion[] {
+  const avisos: Notificacion[] = salud.caidas.map((caida) => ({
+    id: `salud-${caida.clave}`,
+    titulo: tituloDeLaCaida(caida),
+    cantidad: caida.tolerancias,
+    href: HREF_DE_LA_SALUD,
+  }));
+
+  /*
+   * Los que la vista trae y el registro no nombra van **juntos y nombrados**:
+   * la acción es una sola —declararlos en el `REGISTRO`— y el título los lista
+   * porque su número no se imprime. Mientras no estén declarados nadie sabe qué
+   * esperar de ellos, así que no se puede decir si están caídos: esto es «falta
+   * fichar esto», no «esto se rompió», y por eso va después de las caídas.
+   */
+  if (salud.sinDeclarar.length > 0) {
+    avisos.push({
+      id: "salud-sin-declarar",
+      titulo: `Sincronizaciones sin declarar en el registro: ${enUnaLinea(salud.sinDeclarar.join(", "))}`,
+      cantidad: salud.sinDeclarar.length,
+      href: HREF_DE_LA_SALUD,
+    });
+  }
+
+  // El título dice que falló **la comprobación**, no que algo esté caído ni
+  // sano. `cantidad: 1` es «pasa» y no un conteo.
+  if (salud.sinComprobar) {
+    avisos.push({
+      id: "salud-sin-comprobar",
+      titulo: "No se pudo comprobar la salud de las sincronizaciones",
+      cantidad: 1,
+      href: HREF_DE_LA_SALUD,
+    });
+  }
+
+  return avisos;
 }

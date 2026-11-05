@@ -3,6 +3,7 @@ import {
   cuantasTolerancias,
   entradasCaidas,
   estadoDeRecurso,
+  haceCuantoCorto,
   recursosSinDeclarar,
   REGISTRO,
   type CorridaLeida,
@@ -36,6 +37,22 @@ describe("estadoDeRecurso", () => {
 
   it("un fallo viejo se nombra por el fallo y no por la edad", () =>
     expect(estadoDeRecurso(corrida({ ok: false, created_at: hace(99) }), 24, AHORA)).toBe("fallo"));
+});
+
+/*
+ * Vivía en `lib/agenda/avisosDeLaAgenda.ts` y se mudó acá con la generalización.
+ * No es `haceCuanto` de `lib/core/haceCuanto.ts`: ésta dice «hace 5 h» y no
+ * «hace 5 horas», y una fecha ilegible no le sale como «nunca».
+ */
+describe("haceCuantoCorto", () => {
+  it("dice las horas, y pasa a días cuando son muchas", () => {
+    expect(haceCuantoCorto(hace(5), AHORA)).toBe("hace 5 h");
+    expect(haceCuantoCorto(hace(72), AHORA)).toBe("hace 3 días");
+  });
+
+  it("una fecha ilegible lo dice en vez de inventar un «nunca»", () => {
+    expect(haceCuantoCorto("no es una fecha", AHORA)).toBe("en una fecha ilegible");
+  });
 });
 
 describe("cuantasTolerancias", () => {

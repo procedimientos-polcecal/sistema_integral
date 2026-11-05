@@ -144,7 +144,12 @@ describe("loQueSeMovio con avisos que son de una persona", () => {
     ]);
   });
 
+  /*
+   * El contraste: los de salud son del sistema —no dependen de quién mira— así
+   * que la foto los recuerda y el movimiento los ve. Es el día que ese recurso
+   * cae, que es cuando hay que enterarse.
+   */
   it("el de salud, que es del sistema, sí sale cuando sube", () => {
-    expect(loQueSeMovio([aviso("agenda-pasos-caidos", 1)], new Map([["agenda-pasos-caidos", 0]]))).toHaveLength(1);
+    expect(loQueSeMovio([aviso("salud-agenda/canales", 1)], new Map([["salud-agenda/canales", 0]]))).toHaveLength(1);
   });
 });
