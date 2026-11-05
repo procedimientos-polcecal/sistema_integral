@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   estadoDeTexto, filaDeOrden, paraLaBase, celdasParaRegistrar,
   repartirRegistroDeOT,
+  columnaDeFechaFin, fechaFinDeLaFila, faltaLaColumna,
   esEstadoDeOT,
   ESTADOS_DE_OT,
 } from "./ordenes";
@@ -368,5 +369,58 @@ describe("repartirRegistroDeOT y la falla", () => {
     expect(repartirRegistroDeOT({ horas: 2 }).update).not.toHaveProperty("falla_modo");
     expect(repartirRegistroDeOT({ falla_modo: "" }).update.falla_modo).toBeNull();
     expect(repartirRegistroDeOT({ falla_detalle: "   " }).update.falla_detalle).toBeNull();
+  });
+});
+
+describe("la fecha de fin que trae el master", () => {
+  const encabezado = ["N° OT", "FECHA", "SECTOR", "FECHA DE INICIO", "ESTADO", "FECHA DE FIN"];
+
+  it("busca la columna por el nombre del encabezado y no por la letra", () => {
+    expect(columnaDeFechaFin(encabezado)).toBe(5);
+    // La misma columna, mudada de lugar: sigue encontrándola.
+    expect(columnaDeFechaFin(["FECHA DE FIN", "N° OT"])).toBe(0);
+  });
+
+  it("dice -1 si el master todavía no tiene la columna", () => {
+    expect(columnaDeFechaFin(["N° OT", "FECHA", "ESTADO"])).toBe(-1);
+  });
+
+  it("lee el serial como fecha", () => {
+    // 46328 = 2026-11-02 en el calendario de Sheets.
+    expect(fechaFinDeLaFila([1, 0, 0, 0, 0, 46328], 5, null)).toBe("2026-11-02");
+  });
+
+  it("una celda vacía no borra lo que el sistema ya sabe", () => {
+    // El master recibe la fila por IMPORTRANGE y tarda: importar la celda
+    // vacía borraría la fecha que el alta acaba de guardar.
+    expect(fechaFinDeLaFila([1, 0, 0, 0, 0, ""], 5, "2026-11-05")).toBe("2026-11-05");
+    expect(fechaFinDeLaFila([1], 5, "2026-11-05")).toBe("2026-11-05");
+  });
+
+  it("lo que dice el master gana cuando trae algo", () => {
+    expect(fechaFinDeLaFila([1, 0, 0, 0, 0, 46328], 5, "2026-11-05")).toBe("2026-11-02");
+  });
+
+  it("sin la columna en el master, queda lo que el sistema tenga", () => {
+    expect(fechaFinDeLaFila([1, 0, 0], -1, "2026-11-05")).toBe("2026-11-05");
+    expect(fechaFinDeLaFila([1, 0, 0], -1, null)).toBeNull();
+  });
+});
+
+describe("faltaLaColumna", () => {
+  it("reconoce los dos textos de «la migración no corrió»", () => {
+    expect(faltaLaColumna("column ordenes_trabajo.fecha_fin does not exist", "fecha_fin")).toBe(true);
+    expect(
+      faltaLaColumna("Could not find the 'fecha_fin' column of 'ordenes_trabajo' in the schema cache", "fecha_fin")
+    ).toBe(true);
+  });
+
+  it("un corte o un timeout no es una columna que falta", () => {
+    expect(faltaLaColumna("fetch failed", "fecha_fin")).toBe(false);
+    expect(faltaLaColumna("canceling statement due to statement timeout", "fecha_fin")).toBe(false);
+  });
+
+  it("que falte otra columna tampoco es ésta", () => {
+    expect(faltaLaColumna("column ordenes_trabajo.otra does not exist", "fecha_fin")).toBe(false);
   });
 });

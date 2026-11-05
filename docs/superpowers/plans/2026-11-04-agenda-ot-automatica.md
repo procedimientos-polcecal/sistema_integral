@@ -54,8 +54,15 @@ tiene su test asignado a la tarea que es dueña del código.
    de especialidad vacía se agrupan entre sí y se apilan como cualquier otra; no
    revientan ni comparten hueco con las mecánicas. → Tarea 1.
 4. **Dos OT de la misma especialidad y día en la misma corrida del importador.**
-   La segunda tiene que ver a la primera: si las dos leen la base antes de
-   escribir, las dos cuentan cero ocupados y caen a las 08:00. → Tarea 5.
+   La segunda tiene que ver a la primera y arrancar hora y media después. →
+   Tarea 5.
+
+   *(Corregido el 04/11/2026, durante la ejecución.* Esto decía que la segunda
+   no puede ver a la primera y que por eso hacía falta adelantar los huecos con
+   `yaTomados`. **La premisa era falsa**: el bucle no corre dentro de una
+   transacción, así que el insert de la primera está commiteado y la lectura de
+   la segunda lo ve. Pasar `yaTomados` encima la contaba dos veces — medido:
+   08:00 y 11:00 en vez de 08:00 y 09:30. El parámetro se sacó.)*
 5. **Un ítem del plan cuya OT se borró** entre que se abrió la pantalla y se
    apretó el botón. Ese ítem se informa y los demás siguen. → Tarea 6.
 
@@ -287,12 +294,12 @@ export async function mandarLaOTAlCalendario(
   pedido: PedidoDeMandar,
   ahora?: Date,
 ): Promise<ResultadoDeMandar>;
-
-/** Cuántos eventos de OT de esa especialidad hay ya ese día. */
-export async function huecosOcupados(
-  admin: SupabaseClient, fecha: string, clave: string,
-): Promise<number>;
 ```
+
+Contar cuántos eventos de esa especialidad hay ya ese día es **interno** de
+este módulo: `barrerLasQueFaltan` no cuenta por su cuenta, pasa `yaTomados` y
+deja que `mandarLaOTAlCalendario` haga la cuenta. Un export que nadie consume
+sobra.
 
 - [ ] **Step 1: Escribir los tests que fallan**
 
@@ -365,6 +372,89 @@ Expected: PASS, incluidos los tests que ya existían de la Agenda.
 ```bash
 git add lib/agenda/mandarLaOT.ts lib/agenda/mandarLaOT.test.ts "app/api/mantenimiento/ordenes/[id]/calendario/route.ts"
 git commit -m "refactor(agenda): mandar una OT al calendario deja de vivir en la ruta"
+```
+
+---
+
+### Task 2B: El barrido recalcula el hueco al mover un evento
+
+Esta tarea no estaba en el plan original. El spec la pide —«cuando el barrido
+nocturno mueve un evento porque cambió la fecha de la OT, **recalcula el hueco
+en la fecha nueva**»— y la autorrevisión no lo detectó. Sin ella, una OT que se
+mueve del 6 al 20 llega con la hora vieja y puede caer encima de otra de su
+especialidad, que es justo lo que este trabajo existe para evitar.
+
+**Files:**
+- Modify: `lib/agenda/elEventoSigueALaOT.ts` (`planDelEvento`, `queHacerConElEvento`, `seguirALasOT`)
+- Modify: `lib/agenda/elEventoSigueALaOT.test.ts`
+- Modify: `lib/agenda/apilado.ts` y `lib/agenda/apilado.test.ts` (el arranque deja de estar fijo en 08:00)
+
+**Interfaces:**
+- Consumes: `horarioApilado`, `claveDeApilado`, `TOPE_DE_ARRANQUE`, `AVISO_DE_TOPE` (Tarea 1); `mandarLaOT.ts` no se toca.
+- Produces: `horarioApilado(fecha: string, ocupados: number, arranque?: string)` — el tercer
+  parámetro es la hora de arranque y por defecto sigue siendo `HORA_DE_ARRANQUE`.
+
+**El criterio, que es la decisión de esta tarea.** El hueco se recalcula **desde
+el turno guardado del evento**, apilando 1:30 por cada evento de la misma
+especialidad que ya haya ese día *en ese turno*, con el mismo tope de las 20:00.
+
+Es lo que resuelve una ambigüedad real: el camino automático guarda
+`turno = "8-16"`, así que la columna **no distingue** un evento automático de uno
+que una persona puso en el turno de 8. Recalcular siempre desde las 08:00
+tiraría a la basura el turno que alguien eligió; agregar una columna para marcar
+«automático» cuesta una migración que corre una persona, para una distinción que
+así no hace falta. Para un evento automático este criterio es exactamente la
+regla del spec, porque su turno arranca a las 08:00.
+
+- [ ] **Step 1: Escribir los tests que fallan**
+
+```ts
+describe("al mover un evento de OT a otra fecha", () => {
+  /** Lo que falta hoy: llega con la hora vieja y se encima. */
+  it("recalcula el hueco en la fecha nueva y no conserva la hora vieja", () => { /* … */ });
+
+  it("si la fecha nueva ya tiene una de su especialidad, cae 1:30 despues", () => { /* … */ });
+
+  it("una de otra especialidad en la fecha nueva no le corre el hueco", () => { /* … */ });
+
+  /** El turno que eligio una persona no se pierde al moverse de fecha. */
+  it("un evento del turno 4-12 se recalcula desde las 04:00, no desde las 08:00", () => { /* … */ });
+
+  it("el evento no se cuenta a si mismo al recalcular", () => {
+    // Mover del 6 al 20 con el dia 20 vacio tiene que dar el primer hueco.
+  });
+
+  it("si en la fecha nueva el hueco topea, el evento queda con AVISO_DE_TOPE", () => { /* … */ });
+});
+```
+
+- [ ] **Step 2: Correr y ver que falla**
+
+Run: `npx vitest run lib/agenda/elEventoSigueALaOT.test.ts`
+
+- [ ] **Step 3: Darle a `horarioApilado` la hora de arranque**
+
+Tercer parámetro opcional, por defecto `HORA_DE_ARRANQUE`. El tope de las 20:00
+y el `topeado` no cambian. Los tests que ya existen de `apilado` tienen que
+seguir pasando sin tocarse: ésa es la prueba de que el valor por defecto
+preserva el comportamiento.
+
+- [ ] **Step 4: Que el barrido resuelva el hueco antes de decidir**
+
+La cuenta es una lectura y `planDelEvento` es pura, así que el hueco se resuelve
+en `seguirALasOT` y entra como argumento. Una lectura por fecha y no una por
+evento: varios eventos del mismo día comparten la cuenta.
+
+- [ ] **Step 5: Correr y ver que pasa**
+
+Run: `npm test && npx tsc --noEmit`
+Los tests que ya existían de `elEventoSigueALaOT` tienen que seguir en verde.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add lib/agenda/elEventoSigueALaOT.ts lib/agenda/elEventoSigueALaOT.test.ts lib/agenda/apilado.ts lib/agenda/apilado.test.ts
+git commit -m "fix(agenda): al mover un evento de OT, el hueco se recalcula en la fecha nueva"
 ```
 
 ---
@@ -806,6 +896,20 @@ export interface DiaDelCalendario {
              equipo_raw: string | null; /** true si ese día es parte de la ventana, no el inicio */
              arrastre: boolean }[];
   gente: GenteDelDia;
+}
+
+/** Una fila de `ordenes_trabajo` como la lee la grilla. */
+export interface OrdenDelCalendario {
+  ot_number: number;
+  fecha_ejecucion: string | null;
+  fecha_ejecucion_pendiente: string | null;
+  fecha_fin: string | null;
+  especialidad: string | null;
+  tipo: string | null;
+  quien: string | null;
+  descripcion: string | null;
+  sector_raw: string | null;
+  equipo_raw: string | null;
 }
 
 /** Una OT ocupa todos los días de su ventana: del inicio a `fecha_fin` inclusive. */

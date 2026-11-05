@@ -115,12 +115,13 @@ describe("revisarResponsive", () => {
   });
 
   it("los calendarios de la lista de excepciones no salen", () => {
-    // Las cinco entradas reales: un calendario del mes tiene siete columnas por
+    // Las siete grillas reales (cuatro archivos): un calendario del mes tiene siete columnas por
     // definición, y 49 px por celda es lo que mide un día en cualquier teléfono.
     const rutas = [
       ["app/(app)/remises/semana/SemanaClient.tsx", 1],
       ["app/(app)/cantera/destape/DestapeClient.tsx", 2],
       ["app/(app)/trituracion/partes/PartesClient.tsx", 2],
+      ["app/(app)/mantenimiento/ordenes/CalendarioDeFecha.tsx", 2],
     ];
     let total = 0;
     for (const [ruta, veces] of rutas) {
@@ -128,8 +129,8 @@ describe("revisarResponsive", () => {
       expect(revisar(texto, ruta)).toEqual([]);
       total += veces;
     }
-    expect(total).toBe(5);
-    expect(CALENDARIOS.reduce((suma, c) => suma + c.cantidad, 0)).toBe(5);
+    expect(total).toBe(7);
+    expect(CALENDARIOS.reduce((suma, c) => suma + c.cantidad, 0)).toBe(7);
   });
 
   it("la misma grilla de 7 columnas en cualquier otra pantalla sí sale", () => {
