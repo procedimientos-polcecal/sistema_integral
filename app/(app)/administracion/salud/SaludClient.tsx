@@ -33,7 +33,11 @@ import {
  * **Cuando la comprobación misma falló no se dibuja ninguna fila vigilada.** Con
  * `corridas` vacío, cada recurso saldría «nunca corrió»: 29 mentiras en rojo en
  * vez de un «no se pudo mirar». Los exceptuados sí salen, porque su porqué no
- * depende de la lectura.
+ * depende de la lectura. **Y «sin declarar» sale como «no se sabe»**: la lista
+ * llega vacía porque no se pudo armar, y una sección que desaparece se lee
+ * «no hay ninguno». Ojo: esto sólo cubre una lectura que **falla**; una RLS que
+ * tape la vista devuelve datos vacíos sin error y no se distingue desde acá —ver
+ * `leerLaSalud`—.
  */
 
 const ZONA = "America/Argentina/Buenos_Aires";
@@ -171,10 +175,43 @@ export default function SaludClient({ salud, ahora: ahoraISO }: { salud: SaludDe
       </header>
 
       {salud.sinComprobar ? (
-        <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
-          <strong>No se pudo comprobar.</strong> Falló la lectura de las corridas, y el detalle está en el log del
-          servidor. <strong>No quiere decir que esté todo caído ni que esté todo bien</strong>: no se sabe. Por eso
-          más abajo no se muestra el estado de ningún recurso.
+        /*
+         * **Es el único cartel que reemplaza a 29 filas que no se dibujan**, así
+         * que no puede pesar lo mismo que el de «N de 29 con problemas»: borde
+         * grueso, ícono y letra más grande. Y tiene que decir que **tampoco se
+         * sabe lo que no está declarado**: `leerLaSalud` devuelve `sinDeclarar`
+         * vacío cuando no pudo leer, y una lista que no aparece se lee «no hay
+         * ninguno» cuando la verdad es «no se sabe».
+         */
+        <div
+          className="flex gap-3 rounded-lg border-2 border-red-600 bg-red-50 px-4 py-4 text-red-900"
+          role="alert"
+        >
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="mt-0.5 h-6 w-6 shrink-0 text-red-600"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <div className="min-w-0 space-y-1 text-base">
+            <p className="text-lg font-bold">No se pudo comprobar la salud del sistema</p>
+            <p>
+              Falló la lectura de las corridas, y el detalle está en el log del servidor.{" "}
+              <strong>No quiere decir que esté todo caído ni que esté todo bien: no se sabe.</strong>
+            </p>
+            <p>
+              Por eso más abajo no se muestra el estado de ningún recurso, y <strong>tampoco se sabe si hay
+              recursos sin declarar</strong>: esa lista no está vacía, está sin leer.
+            </p>
+          </div>
         </div>
       ) : (
         <div
@@ -195,6 +232,16 @@ export default function SaludClient({ salud, ahora: ahoraISO }: { salud: SaludDe
             </>
           )}
         </div>
+      )}
+
+      {salud.sinComprobar && (
+        <section className="space-y-2">
+          <h2 className="text-lg font-semibold text-slate-900">Sin declarar</h2>
+          <p className="rounded-lg border border-dashed border-red-300 px-4 py-3 text-sm text-red-900">
+            <strong>No se sabe.</strong> Esta lista dice qué recursos trae la vista sin que nadie los vigile, y sin
+            poder leer la vista no hay manera de armarla. Que acá no aparezca ninguno no quiere decir que no haya.
+          </p>
+        </section>
       )}
 
       {salud.sinDeclarar.length > 0 && (

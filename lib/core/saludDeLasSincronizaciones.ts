@@ -638,6 +638,13 @@ async function conLaRachaDeCadaFallo(
  * PostgREST ni por una excepción de red—: la campana corre en cada página del
  * sistema y no puede caerse por esto. El fallo va al log.
  *
+ * **Lo que `sinComprobar` NO cubre: RLS.** Una policy que tapa la vista no da
+ * error, devuelve `data` vacía, y eso entra por el camino bueno: 29 «nunca
+ * corrió» falsos, sin `sinComprobar`. Hoy no muerde porque
+ * `sincronizaciones_select` es `to authenticated using (true)` (migración 037)
+ * y `ultima_sincronizacion` es `security_invoker`; si alguna vez se angosta esa
+ * policy, la campana y la pantalla de `/administracion/salud` mienten juntas.
+ *
  * Tampoco filtra por módulo, a diferencia de la de la Agenda: se quieren todos.
  * Y **no pagina con `traerTodo()`** a propósito: la vista trae **una fila por
  * recurso** (29 hoy), no una por corrida, así que no es una tabla que pueda
