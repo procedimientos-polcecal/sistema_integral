@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avisosDeConteos, avisosDeRitmo, avisosDeSalud } from "./avisos";
+import { avisosDeConteos, avisosDeRitmo, avisosDeSalud, CRECE_CON_EL_DIA } from "./avisos";
 import { filtrarDescartadas } from "./notificaciones";
 import type { EntradaCaida } from "@/lib/core/saludDeLasSincronizaciones";
 
@@ -223,6 +223,43 @@ describe("avisosDeSalud", () => {
   it("no se pudo comprobar es su propio aviso y no un cero", () => {
     const avisos = avisosDeSalud({ caidas: [], sinDeclarar: [], sinComprobar: true, corridas: [] });
     expect(avisos.map((a) => a.id)).toEqual(["salud-sin-comprobar"]);
+  });
+
+  /*
+   * EL PEOR DE TODOS PARA DEJAR DESCARTABLE PARA SIEMPRE: es el aviso que avisa
+   * que **el vigilante quedó ciego**. Con una cantidad fija, una lectura
+   * fallida, un descarte, y una rotura posterior de `ultima_sincronizacion` no
+   * se anuncia nunca más.
+   *
+   * No hay estado persistido del que sacar una racha —no se sabe cuántas veces
+   * seguidas falló la lectura—, así que el número **es el día**: crece solo, de
+   * a uno, y con eso el descarte dura exactamente una jornada.
+   */
+  it("el de «no se pudo comprobar» crece con el día, así el descarte dura un día", () => {
+    const sinComprobar = { caidas: [], sinDeclarar: [], sinComprobar: true, corridas: [] };
+    const [hoy] = avisosDeSalud(sinComprobar, "2026-11-05");
+    const [manana] = avisosDeSalud(sinComprobar, "2026-11-06");
+    expect(manana.cantidad).toBe(hoy.cantidad + 1);
+
+    const descartado = [{ notificacion_id: hoy.id, cantidad_vista: hoy.cantidad }];
+    expect(filtrarDescartadas([hoy], descartado)).toEqual([]);
+    expect(filtrarDescartadas([manana], descartado)).toEqual([manana]);
+  });
+
+  it("el mismo día es el mismo número: no se multiplica por cada vez que se mira", () => {
+    const sinComprobar = { caidas: [], sinDeclarar: [], sinComprobar: true, corridas: [] };
+    expect(avisosDeSalud(sinComprobar, "2026-11-05")[0].cantidad).toBe(
+      avisosDeSalud(sinComprobar, "2026-11-05")[0].cantidad
+    );
+  });
+
+  /*
+   * Y por eso no puede entrar al resumen de movimiento: un número que sube solo
+   * todos los días saldría como novedad todos los días, que es exactamente lo
+   * que dejó a 2 de 13 personas con los 13 avisos descartados.
+   */
+  it("queda fuera del movimiento diario, que es la otra mitad de que esto se banque", () => {
+    expect(CRECE_CON_EL_DIA.has("salud-sin-comprobar")).toBe(true);
   });
 
   it("con todo sano no avisa nada", () => {

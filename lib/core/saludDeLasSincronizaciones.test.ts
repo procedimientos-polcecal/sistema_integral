@@ -239,27 +239,38 @@ describe("el registro y las entradas caídas", () => {
  * modo que un descarte caduque solo en la corrida siguiente.
  */
 describe("rachaDeFallos", () => {
-  type FilaDeSync = { modulo: string; recurso: string; ok: boolean; created_at: string };
+  type FilaCruda = Record<string, unknown> & { created_at: string };
 
   /**
-   * Un `sincronizaciones` de mentira: aplica los `eq`/`gt` que le encadenen.
+   * Las tablas de mentira: aplican los `eq`/`gt`/`is`/`not` que les encadenen.
    *
    * Los filtros se aplican de verdad —no devuelve siempre lo mismo— justo para
    * que un test pueda comprobar que la racha de un recurso no se come las
-   * corridas de otro, que es lo que haría una consulta mal filtrada.
+   * corridas de otro, que es lo que haría una consulta mal filtrada. Y recibe
+   * **varias tablas** porque `ultima_sincronizacion` es una unión: la racha de
+   * Compras no se cuenta en la misma tabla que la de los demás.
    */
-  function clienteCon(filas: FilaDeSync[], rompe = false): SupabaseClient {
-    const armar = () => {
-      const filtros: ((f: FilaDeSync) => boolean)[] = [];
-      const pasa = (f: FilaDeSync) => filtros.every((q) => q(f));
+  function clienteCon(porTabla: Record<string, FilaCruda[]>, rompe = false): SupabaseClient {
+    const armar = (tabla: string) => {
+      const filas = porTabla[tabla] ?? [];
+      const filtros: ((f: FilaCruda) => boolean)[] = [];
+      const pasa = (f: FilaCruda) => filtros.every((q) => q(f));
       const b: Record<string, unknown> = {};
       b.select = () => b;
-      b.eq = (col: keyof FilaDeSync, val: unknown) => {
+      b.eq = (col: string, val: unknown) => {
         filtros.push((f) => f[col] === val);
         return b;
       };
-      b.gt = (col: keyof FilaDeSync, val: string) => {
+      b.gt = (col: string, val: string) => {
         filtros.push((f) => String(f[col]) > val);
+        return b;
+      };
+      b.is = (col: string, val: unknown) => {
+        filtros.push((f) => (f[col] ?? null) === val);
+        return b;
+      };
+      b.not = (col: string, _op: string, val: unknown) => {
+        filtros.push((f) => (f[col] ?? null) !== val);
         return b;
       };
       b.order = () => b;
@@ -281,29 +292,30 @@ describe("rachaDeFallos", () => {
         );
       return b;
     };
-    return { from: () => armar() } as unknown as SupabaseClient;
+    return { from: (tabla: string) => armar(tabla) } as unknown as SupabaseClient;
   }
 
-  const fila = (p: Partial<FilaDeSync>): FilaDeSync => ({
+  const fila = (p: Partial<FilaCruda>): FilaCruda => ({
     modulo: "calidad",
     recurso: "carbonilla-odoo",
     ok: false,
     created_at: hace(1),
     ...p,
   });
+  const sincronizaciones = (...filas: FilaCruda[]) => clienteCon({ sincronizaciones: filas });
 
   it("cuenta las corridas fallidas desde la última que anduvo", async () => {
-    const c = clienteCon([
+    const c = sincronizaciones(
       fila({ ok: true, created_at: hace(10) }),
       fila({ created_at: hace(8) }),
       fila({ created_at: hace(4) }),
-      fila({ created_at: hace(1) }),
-    ]);
+      fila({ created_at: hace(1) })
+    );
     expect(await rachaDeFallos(c, "calidad", "carbonilla-odoo")).toBe(3);
   });
 
   it("si nunca anduvo, son todas las fallidas", async () => {
-    const c = clienteCon([fila({ created_at: hace(8) }), fila({ created_at: hace(1) })]);
+    const c = sincronizaciones(fila({ created_at: hace(8) }), fila({ created_at: hace(1) }));
     expect(await rachaDeFallos(c, "calidad", "carbonilla-odoo")).toBe(2);
   });
 
@@ -311,24 +323,61 @@ describe("rachaDeFallos", () => {
   // descarte de ayer no silencie el fallo de hoy.
   it("crece con cada corrida fallida, que es para lo que existe", async () => {
     const filas = [fila({ ok: true, created_at: hace(10) }), fila({ created_at: hace(9) })];
-    expect(await rachaDeFallos(clienteCon(filas), "calidad", "carbonilla-odoo")).toBe(1);
+    expect(await rachaDeFallos(clienteCon({ sincronizaciones: filas }), "calidad", "carbonilla-odoo")).toBe(1);
     filas.push(fila({ created_at: hace(8) }));
-    expect(await rachaDeFallos(clienteCon(filas), "calidad", "carbonilla-odoo")).toBe(2);
+    expect(await rachaDeFallos(clienteCon({ sincronizaciones: filas }), "calidad", "carbonilla-odoo")).toBe(2);
   });
 
   it("no se come las corridas de otro recurso ni de otro módulo", async () => {
-    const c = clienteCon([
+    const c = sincronizaciones(
       fila({ created_at: hace(5) }),
       fila({ recurso: "carbonilla-planilla", created_at: hace(4) }),
-      fila({ modulo: "cantera", recurso: "acarreo", created_at: hace(3) }),
-    ]);
+      fila({ modulo: "cantera", recurso: "acarreo", created_at: hace(3) })
+    );
     expect(await rachaDeFallos(c, "calidad", "carbonilla-odoo")).toBe(1);
   });
 
-  // La vista ya dijo que está caído: un 0 diría lo contrario, y un aviso con
-  // cantidad 0 no existe.
-  it("nunca devuelve 0", async () => {
-    expect(await rachaDeFallos(clienteCon([]), "calidad", "carbonilla-odoo")).toBe(1);
+  /*
+   * EL QUE SE ESCAPÓ LA PRIMERA VEZ, Y POR QUÉ NO SE VEÍA.
+   *
+   * `ultima_sincronizacion` es una UNIÓN: `compras/planilla` no sale de
+   * `sincronizaciones` sino de `compras_sincronizaciones`. Contándola en la
+   * tabla equivocada no hay ninguna fila, el conteo da 0, el piso de 1 lo
+   * levanta y el resultado sale por el camino de éxito — **indistinguible de
+   * una racha legítima de 1**, sin una línea en el log. Compras es el espejo de
+   * más tráfico del sistema y ya tuvo un día entero caído.
+   */
+  it("la racha de Compras se cuenta en SU tabla, que es de donde la vista la saca", async () => {
+    const importar = (p: Partial<FilaCruda>): FilaCruda => ({
+      direccion: "importar",
+      error: "se cayó",
+      created_at: hace(1),
+      ...p,
+    });
+    const c = clienteCon({
+      sincronizaciones: [],
+      compras_sincronizaciones: [
+        importar({ error: null, created_at: hace(10) }),
+        importar({ created_at: hace(6) }),
+        importar({ created_at: hace(3) }),
+        // La otra dirección no es la que mira la vista.
+        importar({ direccion: "exportar", created_at: hace(2) }),
+      ],
+    });
+    expect(await rachaDeFallos(c, "compras", "planilla")).toBe(2);
+  });
+
+  /*
+   * La defensa de la familia entera, y no sólo de Compras: si mañana la vista
+   * suma otra unión y nadie declara de dónde sacarle la racha, **no puede pasar
+   * por buena**. Sin ninguna fila no hay racha que contar, y decir «1» ahí es
+   * decir «falló una vez» de algo que no se miró.
+   */
+  it("un recurso sin NINGUNA fila no es una racha de 1: lo dice en el log", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await rachaDeFallos(sincronizaciones(), "nuevo", "cosa")).toBe(1);
+    expect(log).toHaveBeenCalled();
+    expect(String(log.mock.calls[0]?.[0])).toContain("nuevo/cosa");
   });
 
   /*
@@ -337,7 +386,8 @@ describe("rachaDeFallos", () => {
    * que es mucho menos que perder el aviso, y queda dicho en el log.
    */
   it("si la lectura falla devuelve 1 y no tira", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await rachaDeFallos(clienteCon([], true), "calidad", "carbonilla-odoo")).toBe(1);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await rachaDeFallos(clienteCon({ sincronizaciones: [] }, true), "calidad", "carbonilla-odoo")).toBe(1);
+    expect(log).toHaveBeenCalled();
   });
 });

@@ -459,41 +459,128 @@ export async function rachaDeFallos(
   modulo: string,
   recurso: string
 ): Promise<number> {
+  const clave = claveDe(modulo, recurso);
   try {
-    const { data: ultimaBuena, error: errorDeLaBuena } = await supabase
-      .from("sincronizaciones")
-      .select("created_at")
-      .eq("modulo", modulo)
-      .eq("recurso", recurso)
-      .eq("ok", true)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (errorDeLaBuena) throw new Error(errorDeLaBuena.message);
-
-    const fallidas = supabase
-      .from("sincronizaciones")
-      .select("id", { count: "exact", head: true })
-      .eq("modulo", modulo)
-      .eq("recurso", recurso)
-      .eq("ok", false);
-    // Sin ninguna corrida buena, la racha es todo lo que falló: nunca anduvo.
-    const { count, error } = await (ultimaBuena
-      ? fallidas.gt("created_at", ultimaBuena.created_at)
-      : fallidas);
-    if (error) throw new Error(error.message);
-    return Math.max(1, count ?? 1);
+    const contar = DE_OTRA_TABLA[clave] ?? enSincronizaciones;
+    const racha = await contar(supabase, modulo, recurso);
+    /*
+     * **Sin una sola fila no hay racha que contar**, y devolver 1 por el camino
+     * bueno sería decir «falló una vez» de algo que no se miró: indistinguible
+     * de una racha legítima y sin una línea en el log. Es justo lo que pasó con
+     * `compras/planilla` cuando se lo buscaba en la tabla equivocada, así que
+     * esto es la defensa de la familia y no el parche de ese recurso: si mañana
+     * la vista suma otra unión y nadie la declara arriba, se entera alguien.
+     */
+    if (racha === null) throw new Error("no tiene ninguna fila en la tabla donde se la buscó");
+    return Math.max(1, racha);
   } catch (e) {
     // No tumba la salud: la vista sí se leyó y el aviso tiene que salir igual.
     // Lo que se pierde es que el descarte caduque, que es mucho menos que
     // perder el aviso.
     console.error(
-      `salud: no se pudo contar la racha de ${modulo}/${recurso}:`,
+      `salud: no se pudo contar la racha de ${clave}:`,
       e instanceof Error ? e.message : e
     );
     return 1;
   }
 }
+
+/**
+ * Cuenta la racha de un recurso, o **`null` si no encontró ninguna fila suya**
+ * —que no es lo mismo que una racha de 1—.
+ */
+type ContarLaRacha = (
+  supabase: SupabaseClient,
+  modulo: string,
+  recurso: string
+) => Promise<number | null>;
+
+/**
+ * ── LOS RECURSOS QUE NO VIVEN EN `sincronizaciones` ─────────────────────────
+ *
+ * **`ultima_sincronizacion` es una UNIÓN**, y eso es lo único que hay que saber
+ * antes de tocar esto. Casi todas sus filas salen de `sincronizaciones`, pero
+ * `compras/planilla` la **sintetiza** desde `compras_sincronizaciones` —ver la
+ * migración `20261023104622`—, donde además no hay columna `ok`: una corrida
+ * anduvo si no dejó `error`.
+ *
+ * Buscarlo en la tabla equivocada no da error ni da cero: **da una racha de 1
+ * para siempre**, porque no hay ninguna fila y el piso la levanta. Pasaba por el
+ * camino de éxito, sin log, así que era indistinguible de un recurso que acaba
+ * de fallar por primera vez — y Compras es el espejo de más tráfico del
+ * sistema, con un día entero caído el 19/10/2026 en el historial.
+ *
+ * **Si alguien agrega otra unión a la vista, la entrada va acá.** Y si se
+ * olvida, `rachaDeFallos` lo grita en el log en vez de dejarlo pasar por bueno.
+ */
+const DE_OTRA_TABLA: Record<string, ContarLaRacha> = {
+  "compras/planilla": contarEnCompras,
+};
+
+/** El caso normal: las corridas con su `ok` en `sincronizaciones`. */
+const enSincronizaciones: ContarLaRacha = async (supabase, modulo, recurso) => {
+  const { data: ultimaBuena, error: errorDeLaBuena } = await supabase
+    .from("sincronizaciones")
+    .select("created_at")
+    .eq("modulo", modulo)
+    .eq("recurso", recurso)
+    .eq("ok", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (errorDeLaBuena) throw new Error(errorDeLaBuena.message);
+
+  const fallidas = supabase
+    .from("sincronizaciones")
+    .select("id", { count: "exact", head: true })
+    .eq("modulo", modulo)
+    .eq("recurso", recurso)
+    .eq("ok", false);
+  // Sin ninguna corrida buena, la racha es todo lo que falló: nunca anduvo.
+  const { count, error } = await (ultimaBuena
+    ? fallidas.gt("created_at", ultimaBuena.created_at)
+    : fallidas);
+  if (error) throw new Error(error.message);
+  return sinNingunaFila(ultimaBuena, count) ? null : (count ?? 0);
+};
+
+/**
+ * Compras, que es el que obligó a que esto fuera declarado. Dos diferencias con
+ * el caso normal, y las dos vienen de cómo la vista arma esa fila: la tabla es
+ * `compras_sincronizaciones`, y **«anduvo» es `error is null`** porque ahí no
+ * hay columna `ok`. `direccion = 'importar'` es el mismo filtro de la vista:
+ * de esto interesa cuándo se trajo lo de la planilla.
+ */
+async function contarEnCompras(supabase: SupabaseClient): Promise<number | null> {
+  const { data: ultimaBuena, error: errorDeLaBuena } = await supabase
+    .from("compras_sincronizaciones")
+    .select("created_at")
+    .eq("direccion", "importar")
+    .is("error", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (errorDeLaBuena) throw new Error(errorDeLaBuena.message);
+
+  const fallidas = supabase
+    .from("compras_sincronizaciones")
+    .select("id", { count: "exact", head: true })
+    .eq("direccion", "importar")
+    .not("error", "is", null);
+  const { count, error } = await (ultimaBuena
+    ? fallidas.gt("created_at", ultimaBuena.created_at)
+    : fallidas);
+  if (error) throw new Error(error.message);
+  return sinNingunaFila(ultimaBuena, count) ? null : (count ?? 0);
+}
+
+/**
+ * Si no hay **ninguna** corrida de ese recurso: ni una buena ni una fallida.
+ * Toda fila es una de las dos, así que no hace falta una tercera consulta para
+ * saberlo.
+ */
+const sinNingunaFila = (ultimaBuena: unknown, fallidas: number | null) =>
+  ultimaBuena === null && (fallidas ?? 0) === 0;
 
 /**
  * Los recursos que la vista trae y el registro no nombra —**ni vigilados ni

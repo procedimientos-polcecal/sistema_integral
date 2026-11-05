@@ -1,5 +1,6 @@
 import type { Modulo } from "@/lib/core/types";
 import type { EntradaCaida, SaludDelSistema } from "@/lib/core/saludDeLasSincronizaciones";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 import type { Notificacion } from "./notificaciones";
 import { cantidadDelAviso, type Ritmo } from "./ritmo";
 
@@ -226,6 +227,22 @@ export function avisosDeRitmo(
 const HREF_DE_LA_SALUD = "/administracion/salud";
 
 /**
+ * Los avisos cuya `cantidad` **crece sola con el paso del tiempo**, y que por
+ * eso **no pueden entrar al resumen de movimiento**.
+ *
+ * `loQueSeMovio` compara contra la foto de ayer y llama novedad a lo que subió.
+ * Un número que sube todas las noches por sí solo sería una novedad todas las
+ * mañanas, para siempre: el mensaje que se repite, que es lo que dejó a 2 de 13
+ * personas con los 13 avisos descartados. Quedan en la campana —que muestra lo
+ * que hay, en vivo— y en el resumen de los lunes, que lleva totales.
+ *
+ * Es la misma mecánica de `ES_POR_PERSONA` y el motivo es otro, así que son dos
+ * conjuntos: aquél sale del movimiento porque su número es de alguien y la foto
+ * es de todos; éste, porque su número es un reloj y no un stock.
+ */
+export const CRECE_CON_EL_DIA: ReadonlySet<string> = new Set(["salud-sin-comprobar"]);
+
+/**
  * Lo más largo que entra del detalle en el título de un aviso.
  *
  * El título es lo único que llega al teléfono, y lo que no entra lo corta el
@@ -313,7 +330,10 @@ function tituloDeLaCaida(caida: EntradaCaida): string {
  * Le llegan sólo a `admin_sistema` (ver `sinLoQueNoPuedeAtender`): lo arregla
  * quien toca las credenciales y las variables de Vercel, no quien usa el módulo.
  */
-export function avisosDeSalud(salud: SaludDelSistema): Notificacion[] {
+export function avisosDeSalud(
+  salud: SaludDelSistema,
+  hoy: string = hoyEnArgentina()
+): Notificacion[] {
   const avisos: Notificacion[] = salud.caidas.map((caida) => ({
     id: `salud-${caida.clave}`,
     titulo: tituloDeLaCaida(caida),
@@ -338,15 +358,41 @@ export function avisosDeSalud(salud: SaludDelSistema): Notificacion[] {
   }
 
   // El título dice que falló **la comprobación**, no que algo esté caído ni
-  // sano. `cantidad: 1` es «pasa» y no un conteo.
+  // sano. La cantidad es el día: ver `elDiaComoNumero`.
   if (salud.sinComprobar) {
     avisos.push({
       id: "salud-sin-comprobar",
       titulo: "No se pudo comprobar la salud de las sincronizaciones",
-      cantidad: 1,
+      cantidad: elDiaComoNumero(hoy),
       href: HREF_DE_LA_SALUD,
     });
   }
 
   return avisos;
+}
+
+/**
+ * La `cantidad` de `salud-sin-comprobar`: **el día, y no un conteo de nada.**
+ *
+ * Es el aviso que avisa que **el vigilante quedó ciego**, así que es el peor de
+ * todos para dejar descartable para siempre: con un número fijo, una lectura
+ * fallida, un descarte, y una rotura posterior de `ultima_sincronizacion` no se
+ * anuncia nunca más. Y no hay de dónde sacar una racha —no se guarda cuántas
+ * veces seguidas falló la lectura, justamente porque lo que falló es la
+ * lectura—.
+ *
+ * Entonces cuenta días: sube de a uno cada noche, así que **el descarte dura
+ * exactamente una jornada** y dentro del día no se mueve por más veces que se
+ * mire. Es la misma idea de `cantidadDelAviso` en `./ritmo.ts` —un número que
+ * existe sólo para que `filtrarDescartadas` lo suelte y que no significa nada
+ * para quien lo lee—, y por eso no se imprime (`sinNumero`) y queda afuera del
+ * movimiento diario (`CRECE_CON_EL_DIA`).
+ *
+ * Son días desde la época, sobre la fecha de Argentina, que es la misma con la
+ * que el cron decide si hoy ya mandó. Una fecha ilegible cae en 1, que es el
+ * comportamiento viejo: sin saber qué día es, no se puede contar nada.
+ */
+function elDiaComoNumero(hoy: string): number {
+  const ms = Date.parse(`${hoy}T00:00:00Z`);
+  return Number.isNaN(ms) ? 1 : Math.floor(ms / 86_400_000);
 }
