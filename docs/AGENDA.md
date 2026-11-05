@@ -351,6 +351,33 @@ lo cubren **tres cosas** y conviene saber cuáles son:
 El umbral de 50 h está elegido con las horas reales del cron: una corrida salteada
 no suena, la segunda seguida sí (a las 07:00 UTC del segundo día).
 
+**Los dos últimos leen `ultima_sincronizacion`, y esa vista tuvo que aprender a
+distinguir dos despliegues.** Hay un segundo despliegue de este repo escribiendo
+en la base de producción desde el 24/10/2026 —otra cuenta de Vercel, con las
+credenciales de Supabase y sin las de Google: ver la sección «Hay un segundo
+despliegue escribiendo en esta base» del [CLAUDE.md](../CLAUDE.md)—. El 05/11/2026
+corrió el barrido **media hora después** del cron de verdad:
+
+```
+agenda/barrido  05:00:11  OK     producción
+agenda/barrido  05:30:55  FALLO  el otro despliegue   ← es la que mostró /agenda
+```
+
+El desempate que tenía la vista —preferir `entorno = 'production'`— no alcanzaba,
+porque el otro también dice `production`. Lo arregla la migración
+`20261105092248`, que prefiere primero la corrida del despliegue canónico. Dos
+cosas que conviene saber antes de tocar la línea de salud:
+
+- **El aviso no estaba mal calibrado.** Era el dato de abajo el que mentía, así
+  que subir el umbral de 50 h o sacar `barrido` de `PASOS_CON_GOOGLE` habría
+  tapado el síntoma y apagado la única luz que avisa que los canales dejaron de
+  funcionar. Antes de ablandar un aviso de salud, mirar de qué `host` salió la
+  fila que lo disparó.
+- **Una corrida del otro despliegue también puede salir OK.** El 05/11
+  `agenda/canales` y `agenda/pendientes` le dieron ok con 0 filas. O sea que el
+  problema no era sólo un rojo de más: el dato ajeno podía ganar **diciendo que
+  todo andaba**, que es el modo de fallar más caro de los dos.
+
 **Falsa alarma el primer día, y es comportamiento correcto:** «nunca corrió»
 cuenta como caído, así que el día del despliegue le suena a `admin_sistema` hasta
 la primera corrida del cron. Un cron mal configurado que nunca arranca es justo lo
@@ -541,6 +568,108 @@ alertas con datos de producción. Y encontró dos defectos que ni `tsc` ni el bu
 tests podían ver: el título del rango salía **una letra por renglón** a 375 px, y la
 grilla abría a la madrugada por un evento que cruzaba la medianoche.
 
+## Las OT que entran solas al calendario
+
+Desde el 04/11/2026 una OT con fecha de ejecución futura **no espera que alguien
+apriete «Mandar al calendario»**: entra sola, con el dueño y los cinco invitados
+de siempre. El diseño y el plan están en
+[el spec](superpowers/specs/2026-11-04-agenda-ot-automatica-design.md) y
+[el plan](superpowers/plans/2026-11-04-agenda-ot-automatica.md); la grilla del mes
+que se ve al elegir la fecha tiene los suyos
+([spec](superpowers/specs/2026-11-04-agenda-vista-de-calendario-design.md),
+[plan](superpowers/plans/2026-11-04-agenda-vista-de-calendario.md)). Las puertas son
+cuatro enganches que llaman a **una sola función** (`alNacerLaOT`: el alta, los
+periódicos y las dos generaciones desde el cuaderno y los partes de contratista), el
+**barrido de después de cada sincronización** para lo que entra por la planilla y
+no distingue un alta de una actualización (25 por corrida, `TOPE_POR_CORRIDA`), y el
+plan del día. Lo que sigue es lo que **no se deduce de ese código**; cada número se
+midió contra producción el 04/11/2026.
+
+- **El evento nace sólo si la fecha no pasó, y el número es lo que impide sacar el
+  freno.** De las 780 órdenes de los últimos 90 días, **574 (73,6 %) tienen la
+  ejecución anterior al alta**: la OT documenta trabajo ya hecho. De las 151 que se
+  cargaron en el SdG, **121 ya tenían la fecha pasada en el momento de cargarlas**, 17
+  eran de ese mismo día y 13 del futuro. Sin el freno, **nueve de cada diez eventos
+  serían del pasado**, cada uno con una invitación a cinco personas por algo
+  terminado. Y se corrige una creencia: **las 780 tienen fecha de ejecución**; lo
+  raro no es que falte sino que apunte hacia adelante. El filtro es por día y no por
+  hora: una orden cargada a las 15:00 para hoy entra.
+- **El apilado agrupa por especialidad y no por sector.** La misma especialidad es la
+  misma gente, que no puede estar en dos lugares a la vez; especialidades distintas
+  comparten hora porque las hacen personas distintas. Una especialidad vacía es su
+  propio grupo (`claveDeApilado`): hay una OT así en producción y no puede reventar ni
+  caer entre las mecánicas. La clave completa es día, especialidad **y turno**
+  (`claveDelHueco`), definida **una sola vez** porque con dos claves el mismo evento
+  recibía un hueco distinto según cuál de las dos pasadas lo tocó último. **Lo que eso
+  deja abierto** —dos turnos vecinos que se solapan en el borde— **está escrito, con
+  sus tres razones, en el encabezado de `lib/agenda/elEventoSigueALaOT.ts`**
+  (punto 6): no se copia acá para que haya una sola versión.
+- **El arranque se topea a las 20:00.** Sin tope, `08:00 + N × 1:30` llega a las 24:30
+  en la undécima orden de una especialidad, `instanteDe` rechaza ese horario y la orden
+  queda **sin evento y sin que nada lo diga**. Entran nueve sin tocarlo; de la décima
+  en adelante comparten las 20:00 y llevan un `aviso`.
+- **`yaTomados` se sacó y no hay que volver a ponerlo.** El plan creía que la segunda
+  orden de una corrida no podía ver a la primera, porque el bucle estaría dentro de una
+  transacción. **No lo está**: el insert de la primera ya está confirmado y la lectura
+  de la segunda lo ve. Adelantar los huecos encima de eso los contaba dos veces —medido:
+  **08:00 y 11:00 en vez de 08:00 y 09:30**—.
+- **El `aviso` de un evento de OT tiene tres escritores y cada uno limpia sólo lo
+  suyo; el del borrado gana siempre.** Son el aviso de un **borrado que Google
+  rechazó** (`AVISO_DE_BORRADO`, que se reconoce por **prefijo** porque le agrega lo
+  que dijo Google), el del **tope** (`AVISO_DE_TOPE`, por **igualdad**) y los que escribe
+  el barrido de OT cuando la fecha se vació o el evento divergió. El del borrado es el
+  único registro de que **quedó un evento vivo en cinco calendarios que ninguna fila
+  nombra**, y no se recupera de ningún lado: el del tope se deduce de nuevo mirando el
+  horario. Por eso `mandarLaOTAlCalendario` y `avisoDeUnMovimiento` no lo pisan ni lo
+  limpian, topee o no. Dónde está cada mitad de la regla: `limpiable` y
+  `avisoDeUnMovimiento` en `elEventoSigueALaOT.ts`, `delTope` en `mandarLaOT.ts`. **Si
+  agregás un cuarto aviso, definí si es por prefijo o por igualdad y decile a
+  `limpiable` que no es suyo.**
+- **`fecha_fin` vacía quiere decir «duró un día»**, no que el dato falte: es la misma
+  convención que `fecha_hasta` en el cuaderno del contratista. Las órdenes anteriores
+  al 04/11/2026 la tienen vacía **y no hay backfill**, porque hasta entonces el valor
+  vivía sólo en la planilla; leerlas como de un día es lo correcto y no una pérdida.
+  Existe en la base porque la grilla pinta una orden **en cada día de su ventana**: una
+  que va de lunes a miércoles y aparece sólo el lunes hace parecer vacío el martes, que
+  es justo lo que se mira para decidir.
+- **La grilla del mes cuenta órdenes y el apilado cuenta eventos, a propósito.** La
+  grilla muestra el trabajo planificado, esté cerrado o no (para decidir dónde poner la
+  próxima importa todo lo que hay ese día); el apilado sólo mira lo que puede chocar en
+  el calendario. Son dos conjuntos distintos y unirlos sería cómodo y falso.
+- **«Gente disponible» se cuenta por día y no por turno.** Los grupos A y B alternan
+  entre 4–12 y 12–20 y **no pasan nunca por 8–16**: sólo los tres electricistas.
+  Como los eventos caen a las 08:00, contar por turno daría **cero mecánicos para
+  siempre**, y el mecánico es **1.764 de las 2.410 órdenes**. Distingue **cero**
+  («el padrón está cargado y ese día no viene nadie») de **no sé** («el padrón está
+  vacío»), y para CIVIL, INSTRUMENTACIÓN y OTRO dice «no lleva gente del taller» y no un
+  número. Qué falta cargar para que diga algo útil está en la sección de la
+  primera corrida, más abajo.
+- **El guardián de la fecha ilegible no se puede disparar desde la base hoy.**
+  `fecha_ejecucion` y `fecha_ejecucion_pendiente` son columnas `date` **según sus
+  migraciones** (el tipo real de producción no se leyó: punto 9), y Postgres no
+  devuelve un valor mal formado. Está en `esCandidataAlCalendario` porque la función
+  es pura y recibe lo que le den, no por un caso observado. **El riesgo real está
+  aguas arriba**: una celda mal escrita en el master hace fallar el `upsert` de las
+  ~2.300 órdenes de una vez, y eso es ruidoso pero es otro problema.
+- **`RAZON_DEL_PLAN` es un código de sistema y `mant_razones_de_postergacion` es la
+  tabla del menú manual.** Mandar un plan al calendario corre la fecha por la ruta de
+  postergar, que pide una `razon` pero **nunca la valida contra esa tabla** (es texto
+  libre que va a la nota y a la auditoría). Se llegó a cargar una fila
+  `planificacion_del_dia` ahí y se **sacó**: Configuración lista las razones inactivas
+  con un botón «Ofrecerla», y un clic la volvía una opción manual que escribía un
+  motivo falso en la auditoría y en la celda de la planilla de producción. La migración
+  `20261104165733_mant_razones_de_postergacion_sin_planificacion_del_dia.sql` está sólo para que
+  el repo y producción digan lo mismo (ya se aplicó por PostgREST). **No se vuelve a
+  poner la fila.**
+- **`scripts/revisar-exportaciones.mjs` cuenta también como escritor a quien importa y
+  llama al handler de una ruta** (`POST`, `PATCH`, `PUT` o `DELETE`) **de un archivo
+  ya registrado.** La regla existe porque el envío del plan al calendario escribe la
+  planilla **a través del `POST` de postergar**, sin llamar a ninguna primitiva, y el
+  script no lo veía: era exactamente el agujero que vino a buscar. Tiene su entrada
+  (`aborta`) en el registro. La propagación es sólo desde handlers, no desde cualquier
+  módulo registrado, para no volver escritor a quien importa algo de un archivo que
+  casualmente escribe.
+
 ## Lo que se decidió no hacer, y lo que queda abierto
 
 - **No se audita.** `auditoria` está para lo irreversible del negocio (postear un
@@ -586,7 +715,7 @@ grilla abría a la madrugada por un evento que cruzaba la medianoche.
 | Webhook `/api/agenda/google` | público, lo llama Google; registra `aviso_de_google` sólo cuando falla |
 | Sincronización de OT | `sincronizarOrdenes` → `seguirALasOT` y el gancho `antesDeBorrar` |
 | Tablas | `agenda_eventos`, `agenda_invitados`, `agenda_canales` (sin policy: sólo el cliente admin), `agenda_divergencias_vistas` |
-| Migración | `supabase/migrations/20261102102403_agenda_schema.sql` — **la aplica una persona a mano** |
+| Migraciones | `supabase/migrations/20261102102403_agenda_schema.sql` y, para las OT automáticas, `20261104161017_ot_fecha_fin.sql` — **las aplica una persona a mano** |
 
 La migración depende además de la `20261018134754` (el verbo `borrar` de la auditoría):
 **sin ella el borrado de espejo no borra nada y lo dice**, porque el registro de
@@ -745,3 +874,89 @@ Antes de todo eso, el orden era: **aplicar `20261102102403_agenda_schema.sql`** 
 `20261018134754` si faltaba) **en la misma ventana que el despliegue del código** —ya
 hecho, ver arriba—, hacer las comprobaciones de RLS, correr el cron a mano
 (`/api/cron/agenda` con el `CRON_SECRET`) y leer las tres filas de `sincronizaciones`.
+
+### Lo que dejan sin comprobar las OT automáticas, y lo que tiene que hacer una persona
+
+**Antes de desplegar: `20261104161017_ot_fecha_fin.sql` tiene que estar corrida.** Es una
+columna nullable y se puede correr dos veces. Si el código llega antes, **el alta de una
+OT falla en el insert**: PostgREST rechaza una columna que no existe con un 400 —el mismo
+que dio `estado_raw` el 29/10/2026— y falla **después de escribir la planilla**, así que
+la orden queda cargada allá y acá no. Es el peor orden posible porque el error se lee como
+un problema de la persona que la cargó. (La otra migración de esta tanda, la de
+`mant_razones_de_postergacion`, ya se aplicó por PostgREST y es sólo para que el repo y
+producción coincidan.)
+
+**Después de desplegar: la columna de gente disponible no dice nada hasta que se cargue
+el padrón, y además subcuenta ausencias porque hay francos tomados sin día.** Ninguna de
+las dos cosas se arregla con código de la Agenda:
+
+- **`mant_personal_taller` está vacía**: cero personas, cero semanas de referencia, cero
+  excepciones. Con el padrón vacío la grilla dice «no sé» y no cero, que es lo honesto,
+  pero tampoco da ningún dato. **Es lo único que hay que cargar.**
+- **Los francos sin `fecha_descanso` son 258 de 259: 256 se explican (200 pendientes y 56 viejos) y dos no.**
+  Se desglosa porque un «258 de 259» suelto se lee como que el arreglo del 26/10 no anda, y
+  no es tan simple. Medido el 04/11/2026, fila por fila (el hallazgo con su detalle está en
+  [docs/MANTENIMIENTO-INTEGRACION.md](MANTENIMIENTO-INTEGRACION.md), sección de la
+  programación del taller, el párrafo «Las dos fotos del dato»). **Se sabe:**
+  - **200 `PENDIENTE` sin fecha, y es correcto**: un franco pendiente todavía no tiene día,
+    y `estaDeFranco` pide `TOMADO` **y** la fecha exacta.
+  - **56 `TOMADO` antes del 26/10/2026, sin fecha**: los viejos, de cuando la pantalla no
+    pedía el día. No hay cómo saber cuándo descansaron, y esos días **ya pasaron**.
+  - **1 `TOMADO` el 02/11/2026, con su fecha** (se creó el 14/10, así que **no es uno de los
+    40 creados desde el 26/10**).
+  - **2 `TOMADO` el 02/11/2026, sin fecha** (se crearon ese mismo día). **O sea que de los
+    tres francos tomados el 02/11, dos quedaron sin fecha de descanso** (medido el
+    04/11/2026), y un franco tomado puede quedar sin día incluso después del 26/10. **Qué
+    camino de código los escribió no se sabe.**
+  - **De dónde sale cada número:** los **40** francos creados desde el 26/10 y los **2**
+    `TOMADO` entre ellos son **medidos**; los **38** pendientes salen de **restarlos**.
+  - **Una diferencia sin explicar, que no hace falta rehacer:** 259 − 40 = 219 y la foto
+    del 26/10 decía 217. **El conteo del 04/11/2026 y esa foto difieren en dos francos y la causa no
+    se averiguó**; no hay evidencia de que alguna de las dos esté mal.
+
+  **Conjetura, sin confirmar:** que lo que distingue al que funcionó de los dos que no sea
+  haberse creado **y** tomado el mismo día. Es lo único visible en los datos, con dos casos:
+  **no se afirma como causa.**
+
+  **Lo que significa para la Agenda:** cada franco tomado sin fecha es una ausencia que la
+  cuenta de disponibles **no ve**, y **eso no se arregla desde acá**. Lo observado es que un
+  franco tomado quedó sin día; por qué (un defecto del flujo, otra puerta de entrada, un
+  dato viejo, el flujo nuevo) **no se sabe**, porque no se leyó el flujo de francos, y no se tocó. **Esos 2
+  no son históricos como los 56**: su día de descanso podría estar adelante, así que sí
+  pueden restarle gente a un día que todavía no llegó. Los 200 pendientes **no son una tarea
+  manual**: la pantalla pide el día al marcar el franco como tomado, y lo que no se sabe es
+  si lo guarda siempre. Cruzar por `fecha_tomado` en vez de `fecha_descanso` era el bug ya
+  corregido (pintaba 35 huecos un lunes cualquiera) y no es la salida.
+
+**Lo que esta tanda deja sin verificar:**
+
+- **Desplegar ES el disparador, y es lo único irreversible y con reloj de toda la tanda.**
+  `barrerLasQueFaltan` corre **al final de cada `sincronizarOrdenes`**, y esa
+  sincronización la dispara el reloj sola, cada 3 a 5 horas. `TOPE_POR_CORRIDA` es 25 y la
+  corrida en seco midió **23 candidatas**, así que **la primera sincronización posterior al
+  despliegue las manda a las 23, todas, en una sola pasada** —no «algunas»—: **92
+  invitaciones por correo**, incluidas las **cuatro de 2027** y las **seis de hoy, de las
+  que algunas ya pasaron de hora**. Está dentro de lo diseñado y es lo que se pidió; lo que no se puede es
+  enterarse después. Tres consecuencias prácticas:
+  1. **Sacar del conjunto una orden concreta tiene que pasar antes del despliegue**, no
+     después: una invitación mandada no se retira, y borrar el evento sólo avisa de la
+     cancelación a quienes ya lo recibieron.
+  2. **La corrida en seco del script sólo sirve si alguien la mira antes de la primera
+     sincronización posterior al despliegue.** Corrida después, muestra lo que queda y no
+     lo que se mandó.
+  3. **No hay un interruptor**: ninguna variable de entorno apaga el barrido. Si no se
+     quiere que salgan solas, el cambio no se despliega (o se saca el barrido del código
+     antes), y mergear a `main` despliega.
+- **Ninguna pantalla nueva se abrió en un navegador** —la grilla del mes con la gente del
+  taller, el selector de fecha, el envío del plan al calendario—. Se verificaron con
+  `tsc`, el build, `revisar-responsive` y las funciones puras. Es lo mismo que el punto 3
+  de arriba, ahora con más superficie.
+- **`--mandar` de `scripts/mandar-las-ot-futuras.mts` nunca se ejecutó.** Sólo corrió en
+  seco contra producción: **23 órdenes y 92 invitaciones**, y no 21 y unas cien como
+  decía el plan. Son **cuatro invitaciones por evento y no cinco**, porque el dueño es una
+  de las cinco casillas fijas y no se invita a su propio evento. **Una invitación mandada
+  no se deshace**, y de las 23 hay seis que son de hoy (algunas ya pasaron de hora) y
+  cuatro de 2027. Entre la corrida en seco y la de verdad conviene que pase poco tiempo,
+  pero **en la práctica la «de verdad» la hace el primer barrido después del despliegue**
+  (ver el punto de arriba): el script con `--mandar` es para forzarlo antes o para un
+  reintento, no la única puerta.

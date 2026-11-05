@@ -130,7 +130,28 @@ button:focus-visible, a:focus-visible {
 }
 .input::placeholder { color: var(--text-muted); }
 
-/* ─── Buttons ─── */
+/* ─── Buttons ───
+   Dos cosas que valen para los cuatro y que estaban sólo en `.btn-primary`:
+   el `:disabled` y la guarda `:not(:disabled)` del `:hover`.
+
+   Faltaban porque `disabled:opacity-50` al lado de la clase *parece*
+   alcanzar, y de hecho cuatro botones del sistema lo tienen escrito a mano
+   —`rrhh/empleados`, `rrhh/fichadas`, `seguridad-higiene/condiciones` y
+   `BotonNotificaciones`—. Los otros 22 de los 26 botones deshabilitados que
+   usan estas tres clases quedaban con su aspecto entero: medido el
+   04/11/2026 recorriendo las etiquetas JSX de `app` y `components`.
+
+   Lo que lo volvía peor que un detalle visual era el hover sin guarda: un
+   `.btn-secondary` deshabilitado cambiaba de fondo al pasarle el mouse por
+   encima, o sea que señalaba «funciono» mientras no hacía nada. El `:active`
+   no necesita guarda —un control deshabilitado no se activa— pero la lleva
+   igual para que las cuatro reglas se lean iguales.
+
+   Y el `cursor` va acá y no en una utilidad: `disabled:cursor-not-allowed`
+   al lado de un `.btn-*` no hace nada, porque estas clases declaran `cursor`
+   y están fuera de capa. Es la misma trampa que `className="input w-20"`,
+   explicada en CLAUDE.md. `opacity` sí se puede poner al lado, porque
+   ninguna `.btn-*` la declara. */
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -146,8 +167,8 @@ button:focus-visible, a:focus-visible {
   transition: background .15s, transform .1s, box-shadow .15s;
   box-shadow: 0 1px 3px rgba(30,125,52,.3);
 }
-.btn-primary:hover { background: var(--primary-dark); box-shadow: 0 4px 12px rgba(30,125,52,.25); }
-.btn-primary:active { transform: scale(.98); }
+.btn-primary:hover:not(:disabled) { background: var(--primary-dark); box-shadow: 0 4px 12px rgba(30,125,52,.25); }
+.btn-primary:active:not(:disabled) { transform: scale(.98); }
 .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 
 .btn-secondary {
@@ -165,7 +186,8 @@ button:focus-visible, a:focus-visible {
   transition: background .15s, border-color .15s, box-shadow .15s;
   box-shadow: var(--shadow-sm);
 }
-.btn-secondary:hover { background: var(--bg); border-color: var(--border-dark); box-shadow: var(--shadow); }
+.btn-secondary:hover:not(:disabled) { background: var(--bg); border-color: var(--border-dark); box-shadow: var(--shadow); }
+.btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
 
 .btn-ghost {
   display: inline-flex;
@@ -179,7 +201,8 @@ button:focus-visible, a:focus-visible {
   cursor: pointer;
   transition: background .15s, color .15s;
 }
-.btn-ghost:hover { background: var(--bg); color: var(--text-primary); }
+.btn-ghost:hover:not(:disabled) { background: var(--bg); color: var(--text-primary); }
+.btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
 
 .btn-danger {
   display: inline-flex;
@@ -196,7 +219,8 @@ button:focus-visible, a:focus-visible {
   transition: background .15s, border-color .15s, box-shadow .15s;
   box-shadow: var(--shadow-sm);
 }
-.btn-danger:hover { background: #FEF2F2; border-color: #FCA5A5; box-shadow: var(--shadow); }
+.btn-danger:hover:not(:disabled) { background: #FEF2F2; border-color: #FCA5A5; box-shadow: var(--shadow); }
+.btn-danger:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ─── Card ───
    Sombra siempre visible, no sólo al pasar el mouse — el usuario lo pidió

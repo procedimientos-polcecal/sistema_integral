@@ -9,6 +9,8 @@
  * arregle: la lee gente que no entra al sistema.
  */
 
+import { numeroDelFormulario } from "@/lib/core/numeroArgentino";
+
 export type TipoMovimiento = "entrada" | "salida" | "ajuste";
 
 export interface MovimientoEnCurso {
@@ -21,6 +23,27 @@ export interface MovimientoEnCurso {
   solicitanteId: string | null | undefined;
   /** Por qué, obligatorio sólo en un ajuste. Ver `loQueFalta`. */
   motivo?: string | null | undefined;
+}
+
+/**
+ * La cantidad que se tipeó, leída como número. `null` es "no se puede leer",
+ * que incluye el campo vacío.
+ *
+ * **La leen las dos puntas, el formulario y la ruta**, y ésa es toda la
+ * gracia. Hasta el 05/11/2026 eran dos: `loQueFalta` hacía `Number(crudo)` y
+ * la ruta `Number(b?.cantidad)`. Las dos daban `NaN` con "1,5" —la coma es
+ * cómo se escribe un decimal acá, y el campo declara `inputMode="decimal"`, o
+ * sea que el teléfono la ofrece—, y un `NaN` ahí es indistinguible de un campo
+ * vacío: el formulario decía **"Poné la cantidad." sobre un campo lleno**.
+ *
+ * Usa la regla de miles de `numeroArgentino` y no la de Calidad/Ensayos: acá
+ * "1.200" son mil doscientos tornillos. Medido el 05/11/2026 sobre las 4.837
+ * filas de `inventario_movimientos`: **ninguna tiene decimales** y la mayor es
+ * 920, así que hoy ni la coma ni el punto aparecen — lo que se arregla es que
+ * el día que alguien los use, el campo no mienta.
+ */
+export function cantidadDelMovimiento(v: unknown): number | null {
+  return numeroDelFormulario(v);
 }
 
 /**
@@ -39,10 +62,9 @@ export function loQueFalta(m: MovimientoEnCurso): string[] {
 
   if (!String(m.articuloId ?? "").trim()) faltan.push("Elegí el artículo.");
 
-  const crudo = String(m.cantidad ?? "").trim();
-  const n = crudo === "" ? NaN : Number(crudo);
+  const n = cantidadDelMovimiento(m.cantidad);
 
-  if (!Number.isFinite(n)) {
+  if (n === null) {
     faltan.push(m.tipo === "ajuste" ? "Poné cuánto hay en realidad." : "Poné la cantidad.");
   } else if (m.tipo === "ajuste") {
     if (n < 0) faltan.push("El ajuste no puede ser negativo.");
@@ -91,10 +113,10 @@ export function stockQueQueda(
   stockActual: number,
   cantidad: number | string | null | undefined
 ): number | null {
-  const crudo = String(cantidad ?? "").trim();
-  if (crudo === "") return null;
-  const c = Number(crudo);
-  if (!Number.isFinite(c)) return null;
+  // La tercera punta que leía la misma cadena, y la que se veía: con "1,5"
+  // el stock que queda desaparecía de la pantalla sin decir por qué.
+  const c = cantidadDelMovimiento(cantidad);
+  if (c === null) return null;
 
   if (tipo === "entrada") return stockActual + c;
   if (tipo === "salida") return stockActual - c;

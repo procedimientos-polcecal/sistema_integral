@@ -55,6 +55,44 @@ describe("emparejar", () => {
     expect(r.sinMolino).toEqual(["Filler 1 notas.txt"]);
   });
 
+  it("los tres que se suben a propósito y no se leen no ensucian sinMolino", () => {
+    const r = emparejar(
+      [
+        { nombre: "Filler 1 2026-11-04.zip" },
+        { nombre: "Planta 02 2026-11-04.zip" },
+        { nombre: "Hornos 2026-11-04.zip" },
+        { nombre: "Porteria 2026-11-04.zip" },
+      ],
+      molinos,
+    );
+    expect(r.archivos.map((a) => a.molinoClave)).toEqual(["filler_1"]);
+    // Ni se importan ni se avisan: el aviso iría al campo que alguien mira
+    // para saber si esto está al día, y tres líneas fijas por día lo tapan.
+    expect(r.sinMolino).toEqual([]);
+  });
+
+  it("el filtro no es un prefijo suelto: un nombre que apenas se le parece sigue saltando", () => {
+    const r = emparejar(
+      [
+        { nombre: "Porteria2 2026-11-04.zip" },
+        { nombre: "Hornos nuevos 2026-11-04.zip" },
+        { nombre: "Planta 03 2026-11-04.zip" },
+      ],
+      molinos,
+    );
+    // "Hornos nuevos" sí es de Hornos y se calla; los otros dos no, y se dicen.
+    expect(r.sinMolino).toEqual(["Porteria2 2026-11-04.zip", "Planta 03 2026-11-04.zip"]);
+  });
+
+  it("si Planta 02 entra al catálogo, gana el catálogo y no la lista de los que no se leen", () => {
+    const r = emparejar(
+      [{ nombre: "Planta 02 2026-11-04.zip", id: "p02" }],
+      [...molinos, { clave: "planta_02", prefijo_archivo: "Planta 02" }],
+    );
+    expect(r.archivos.map((a) => [a.molinoClave, a.id])).toEqual([["planta_02", "p02"]]);
+    expect(r.sinMolino).toEqual([]);
+  });
+
   it("si dos prefijos compiten, gana el más largo", () => {
     const r = emparejar(
       [{ nombre: "Filler 1 Calera 2026-10-29.zip" }],

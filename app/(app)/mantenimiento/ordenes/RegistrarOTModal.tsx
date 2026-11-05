@@ -6,6 +6,8 @@ import Select from "@/components/Select";
 import { instanteDeArgentina } from "@/lib/core/fechas";
 import FallaDeLaOT, { type LaFalla } from "@/components/FallaDeLaOT";
 import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
+import { loQueImpideCerrar } from "@/lib/mantenimiento/cierreDeOT";
+import { comoSeLee } from "@/lib/core/fechas";
 
 /**
  * Registrar el trabajo de una orden.
@@ -58,6 +60,16 @@ export default function RegistrarOTModal({
     falla_modo: string | null;
     falla_causa: string | null;
     falla_detalle: string | null;
+    /**
+     * Cuándo empezó. No se edita acá: es el piso contra el que se compara la
+     * fecha de cierre, porque un trabajo no se cierra antes de empezar.
+     *
+     * Obligatoria y no opcional por lo mismo que las tres de arriba: si el
+     * listado dejara de traerla, el control de abajo no se caería — leería
+     * `undefined` y diría «la orden no dice cuándo empezó» sobre órdenes que sí
+     * lo dicen, trabando el registro del trabajo sin un solo error.
+     */
+    fecha_ejecucion: string | null;
   };
   onCerrar: () => void;
   onRegistrada: () => void;
@@ -127,11 +139,42 @@ export default function RegistrarOTModal({
     if (body.aviso) setAviso(body.aviso);
   }
 
+  /**
+   * Lo que impide cerrar, **calculado en cada render**.
+   *
+   * Se pidió que la alerta salte apenas estén las dos fechas y no recién al
+   * guardar, y por eso vive acá y no adentro de `guardar()`. Es una función
+   * pura de lo que la pantalla ya tiene —la fecha de inicio de la orden y la
+   * que se está eligiendo—, así que no necesita estado propio ni un efecto:
+   * un `useEffect` con `setState` sería un segundo render para guardar algo
+   * que ya se sabe, que es lo que marca `react-hooks/set-state-in-effect`.
+   *
+   * La fecha de inicio no se edita acá, así que de las dos sólo se mueve una:
+   * la alerta aparece y desaparece al cambiar el día, sin apretar nada.
+   */
+  const impideCerrar = loQueImpideCerrar(orden.fecha_ejecucion, cuando);
+
   async function guardar() {
     if (!observaciones.trim() && resultado !== "completado") {
       setError("Contá qué pasó: un trabajo parcial o cancelado sin explicación no sirve después.");
       return;
     }
+
+    // ── ANTES DE LA EJECUCIÓN, Y POR ESO ESTÁ ACÁ Y NO ABAJO ─────────────────
+    //
+    // La misma función que corre el servidor, para que lo que se ve en
+    // pantalla sea lo mismo que va a contestar la ruta. Pero acá no es sólo
+    // comodidad: **esta pantalla hace dos escrituras y la primera no se
+    // deshace.** La ejecución se guarda primero —es el registro de lo que se
+    // hizo y no depende de la planilla— y recién después se cierra la OT. Si
+    // el 400 del cierre llegara después, el trabajo quedaría registrado con
+    // una fecha imposible y la orden abierta, que es exactamente el estado del
+    // que esta pantalla ya avisa («El trabajo quedó registrado, pero...»).
+    if (impideCerrar.length > 0) {
+      setError(`No se puede guardar porque ${impideCerrar.join(", ")}.`);
+      return;
+    }
+
     setGuardando(true);
     setError("");
 
@@ -237,12 +280,32 @@ export default function RegistrarOTModal({
           </Campo>
 
           <Campo etiqueta="Cuándo">
+            {/*
+              `min` es la fecha de inicio de la OT: el calendario del navegador
+              deja los días anteriores en gris, así que el caso más común —el
+              dedo que erra por un día— no llega ni a elegirse. Es sólo la
+              primera defensa y no la regla: un `min` se saltea tipeando, y en
+              el teléfono depende del navegador. Quien decide es
+              `loQueImpideCerrar`, acá arriba y en el servidor.
+            */}
             <input
               type="date"
               value={cuando}
+              min={orden.fecha_ejecucion ?? undefined}
               onChange={(e) => setCuando(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
+            {/*
+              Y dicho con todas las letras, porque el gris del calendario no se
+              explica solo: quien registra el trabajo no tiene la fecha de
+              inicio delante —está en la ficha de la OT— y sin esto el piso
+              parece arbitrario.
+            */}
+            {orden.fecha_ejecucion && (
+              <p className="mt-1 text-xs text-slate-400">
+                Empezó el {comoSeLee(orden.fecha_ejecucion)}
+              </p>
+            )}
           </Campo>
 
           <Campo etiqueta="Horas">
@@ -273,6 +336,23 @@ export default function RegistrarOTModal({
             </Select>
           </Campo>
         </div>
+
+        {/* ── LA ALERTA, EN EL MOMENTO Y NO AL GUARDAR ─────────────────────
+            Se pidió que salte apenas estén las dos fechas. Va **debajo de la
+            grilla y no adentro de la celda**: la grilla es de dos columnas, y
+            ahí el mensaje —que nombra las dos fechas enteras— entra partido en
+            pedazos de 150 px.
+
+            El botón de guardar sigue habilitado a propósito. Deshabilitarlo
+            dejaría el porqué acá arriba y el botón mudo abajo, que en un
+            teléfono es media pantalla de distancia; apretarlo repite el mismo
+            texto donde la persona está mirando, y el guardado igual no pasa:
+            lo frena `guardar()` y, si llegara, el servidor. */}
+        {impideCerrar.length > 0 && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+            No se puede guardar porque {impideCerrar.join(", ")}.
+          </div>
+        )}
 
         <Campo etiqueta="Quiénes lo hicieron">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Select from "@/components/Select";
-import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
+import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
 import { borradorDesdeElCuerpo } from "@/lib/mantenimiento/borradorDeCarga";
 import RepuestosDeLaOT from "@/components/RepuestosDeLaOT";
 import FallaDeLaOT, { FALLA_VACIA, type LaFalla } from "@/components/FallaDeLaOT";
@@ -132,6 +132,22 @@ export default function FormularioOTOffline({
     estadoSegunElCierre(form.fecha_cierre, form.estado) === "REALIZADO" &&
     Boolean(form.fecha_cierre.trim());
 
+  /**
+   * Lo que el formulario dice y se contradice, **calculado en cada render**.
+   *
+   * Se pidió que la alerta salte apenas estén las dos fechas y no recién al
+   * mandar. Acá importa más que con señal, por lo mismo que el resto de los
+   * controles de esta pantalla: sin conexión el que contesta es el servidor
+   * horas o días después, y lo que contesta es un 400 definitivo para la cola.
+   * Decirlo mientras la persona tiene el formulario delante es la diferencia
+   * entre corregir un día y descubrirlo la semana que viene.
+   *
+   * Es una función pura de `form`, así que no necesita estado ni efecto, y
+   * `loQueSeContradice` se calla mientras falte la fecha de inicio: no grita
+   * mientras se completa.
+   */
+  const contradicciones = loQueSeContradice(form);
+
   const equiposDelSector = form.sector_id
     ? equipos.filter((e) => e.sector_id === form.sector_id)
     : equipos;
@@ -146,6 +162,15 @@ export default function FormularioOTOffline({
     const falta = loQueFaltaParaCrear(form);
     if (falta.length > 0) {
       setError(`Falta cargar ${falta.join(", ")}.`);
+      return;
+    }
+    // Y después, con otro verbo: acá los datos están y lo que no cierra es lo
+    // que dicen entre ellos —una fecha de fin o de cierre anterior al inicio—.
+    // Vale el mismo argumento de arriba y con más fuerza: un 400 por esto es
+    // definitivo para la cola, o sea una carga parada por algo que se podía
+    // decir en el momento, con la pantalla delante.
+    if (contradicciones.length > 0) {
+      setError(`No se puede guardar porque ${contradicciones.join(", ")}.`);
       return;
     }
 
@@ -337,10 +362,18 @@ export default function FormularioOTOffline({
             ANTES de esa fecha vuelve sin la clave y el servidor la va a
             rechazar nombrando el campo. Es visible y se arregla completándolo;
             medido ese día, las 13 cargas de la tabla estaban resueltas. */}
+        {/* El `min` de las dos es la fecha de inicio: el calendario deja en
+            gris los días anteriores, así que el dedo que erra por un día no
+            llega ni a elegirlos. Acá importa más que con señal, por lo mismo
+            que arriba: sin conexión el que contesta es el servidor horas o
+            días después, y lo que contesta es un 400 definitivo para la cola.
+            Igual no es la regla —un `min` se saltea tipeando—: quien decide es
+            `loQueSeContradice`, en el submit y en el servidor. */}
         <F label="Fecha de fin (estimada)" required>
           <input
             type="date"
             value={form.fecha_fin}
+            min={form.fecha_ejecucion || undefined}
             onChange={(e) => f("fecha_fin", e.target.value)}
             disabled={deshabilitado}
             className="input"
@@ -350,12 +383,24 @@ export default function FormularioOTOffline({
           <input
             type="date"
             value={form.fecha_cierre}
+            min={form.fecha_ejecucion || undefined}
             onChange={(e) => f("fecha_cierre", e.target.value)}
             disabled={deshabilitado}
             className="input"
           />
         </F>
       </div>
+
+      {/* ── LA ALERTA, EN EL MOMENTO Y NO AL MANDAR ─────────────────────────
+          Pegada a las fechas, que es donde está mirando quien las acaba de
+          completar, y no abajo de todo con el resto de los errores. Dice la
+          misma frase que el cartel de abajo a propósito: éste cuando pasa,
+          aquél si alguien aprieta igual. */}
+      {contradicciones.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          No se puede guardar porque {contradicciones.join(", ")}.
+        </div>
+      )}
 
       {/* Debajo de la fecha de cierre y no arriba: es ella la que lo hace
           aparecer, y en un teléfono una sección que se abre más arriba empuja

@@ -14,7 +14,9 @@ import {
   reservarClave, anotarLaClave, respuestaDeLaReserva,
 } from "@/lib/mantenimiento/claveDeCarga";
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
-import { estadoSegunElCierre, loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
+import {
+  estadoSegunElCierre, loQueHayQueExportar, loQueImpideCerrar,
+} from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
 import { elPendienteDelIntento } from "@/lib/mantenimiento/pendienteDeLaOT";
 import {
@@ -31,6 +33,7 @@ import { hoyEnArgentina } from "@/lib/core/fechas";
 import { esquemaGut } from "@/lib/mantenimiento/gut";
 import { esquemaFalla } from "@/lib/mantenimiento/fallas";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
+import { alNacerLaOT } from "@/lib/agenda/alNacerLaOT";
 
 /**
  * Cinco minutos, que es lo que necesita el reintento del alta.
@@ -485,9 +488,10 @@ export async function POST(request: Request) {
     descripcion: descripcion.trim(),
     repuesto: losRepuestos.texto,
     fecha_ejecucion: fecha_ejecucion || null,
-    // Va a la planilla y **no** al `record` de abajo: `ordenes_trabajo` no
-    // tiene columna para esto, y mandársela a PostgREST corta el insert
-    // entero —es el mismo 400 que dio `estado_raw` el 29/10/2026—.
+    // Va a los dos lados: acá, a la hoja de respuestas, y abajo, al `record`.
+    // Hasta el 04/11/2026 `ordenes_trabajo` no tenía la columna y mandársela a
+    // PostgREST cortaba el insert entero —el mismo 400 que dio `estado_raw` el
+    // 29/10/2026—; desde la migración `ot_fecha_fin` la tiene.
     fecha_fin: fecha_fin || null,
     prioridad: laPrioridad,
   });
@@ -527,6 +531,8 @@ export async function POST(request: Request) {
     descripcion:     descripcion.trim(),
     repuesto:        losRepuestos.texto,
     fecha_ejecucion: fecha_ejecucion || null,
+    // Vacía quiere decir «dura un día»; no es un dato que falte.
+    fecha_fin:       fecha_fin || null,
     fecha_cierre:    fecha_cierre || null,
     // Una orden con fecha de cierre ya se hizo: la fecha manda sobre el estado
     // que haya venido. La regla está acá y no sólo en el formulario porque el
@@ -680,9 +686,20 @@ export async function POST(request: Request) {
     aviso_error = marca.error ?? marca.planillaError;
   }
 
+  // ── El calendario, lo último y sin poder fallar la orden ───────────────
+  //
+  // Va **después** de todo lo que guarda y fuera de cualquier transacción: la
+  // OT ya existe en la planilla y en la base, y el evento es su espejo. Un
+  // fallo de Google no puede convertirse en un error sobre una orden que sí se
+  // creó, así que `alNacerLaOT` no lanza: devuelve una frase, o null cuando no
+  // hay nada que decir —lo normal, porque sólo entra una orden abierta con
+  // fecha de hoy en adelante—. La frase viaja en la respuesta, como el resto
+  // de lo que salió a medias.
+  const calendario_aviso = await alNacerLaOT(admin, inserted.id);
+
   return NextResponse.json({
     data: inserted, ot_number, aviso_error, planilla_error, planilla_reintentando,
-    clave_error, repuestos_error,
+    clave_error, repuestos_error, calendario_aviso,
   });
 }
 
@@ -742,6 +759,47 @@ export async function PATCH(request: Request) {
   }
 
   const admin = createAdminClient();
+
+  // ── UN TRABAJO NO SE CIERRA ANTES DE EMPEZAR ───────────────────────────────
+  //
+  // La misma regla que el alta, por la misma función (`loQueImpideCerrar`),
+  // porque es el mismo hecho: una orden que nace cerrada y una que se cierra
+  // dos meses después no pueden contestar distinto. Dos copias de una regla es
+  // como el botón de los avisos se quedó dos días atrás en silencio.
+  //
+  // **La fecha de inicio sale de la base y no del cuerpo**, y eso no es una
+  // comodidad: `repartirRegistroDeOT` es lista blanca y `fecha_ejecucion` no
+  // está en ninguna de sus dos listas, así que este PATCH no la puede cambiar.
+  // El inicio contra el que se compara es el que tiene la orden, siempre.
+  //
+  // Se lee **sólo cuando hay cierre**: un PATCH que cambia el estado o las
+  // observaciones no paga esta consulta.
+  //
+  // Medido el 05/11/2026 sobre las 2.417 órdenes, que es lo que dice si esto
+  // sirve: 63 de las 2.143 cerradas tienen el cierre antes del inicio. No son
+  // todas por un día —la 2568 arranca el 16/11 y cierra el 07/10— y nada las
+  // detectaba, porque cada fecha por separado es válida. Esas 63 **quedan como
+  // están**: son dato de la planilla, que es la que manda en este módulo, y
+  // corregirlas de este lado las pisa en la próxima sincronización.
+  if (update.fecha_cierre) {
+    const { data: laOrden, error: noSePudoLeer } = await admin
+      .from("ordenes_trabajo").select("fecha_ejecucion").eq("id", id).maybeSingle();
+
+    if (noSePudoLeer) {
+      return NextResponse.json({ error: noSePudoLeer.message }, { status: 500 });
+    }
+    if (!laOrden) {
+      return NextResponse.json({ error: "No se encontró la orden" }, { status: 404 });
+    }
+
+    const impide = loQueImpideCerrar(laOrden.fecha_ejecucion, update.fecha_cierre as string);
+    if (impide.length > 0) {
+      return NextResponse.json(
+        { error: `No se puede guardar porque ${impide.join(", ")}.` },
+        { status: 400 }
+      );
+    }
+  }
 
   const { data: updated, error } = await admin
     .from("ordenes_trabajo").update(update).eq("id", id).select().single();

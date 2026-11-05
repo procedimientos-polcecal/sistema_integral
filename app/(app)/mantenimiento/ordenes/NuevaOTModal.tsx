@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Select from "@/components/Select";
 import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
-import { loQueFaltaParaCrear } from "@/lib/mantenimiento/altaDeOT";
+import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
 import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -17,6 +17,7 @@ import FallaDeLaOT, { FALLA_VACIA, type LaFalla } from "@/components/FallaDeLaOT
 import type { LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { CartelDelResultado } from "@/app/cargar/envio";
 import { mandarOEncolar, type Resultado } from "@/lib/core/mandarOEncolar";
+import CalendarioDeFecha from "./CalendarioDeFecha";
 
 /**
  * Los cuatro vocabularios, de `lib/`, no una copia.
@@ -156,6 +157,9 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
    */
   const [repuestos, setRepuestos] = useState<LineaDeRepuesto[]>([{ cantidad: "", nombre: "" }]);
 
+  /** El calendario que se abre desde la fecha de inicio para ver qué tiene cada día. */
+  const [verCalendario, setVerCalendario] = useState(false);
+
   const [form, setForm] = useState({
     equipment_id:   "",
     sector_id:      "",
@@ -198,6 +202,22 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
   const cierraAlCrearse = estadoSegunElCierre(form.fecha_cierre, form.estado) === "REALIZADO"
     && Boolean(form.fecha_cierre.trim());
 
+  /**
+   * Lo que el formulario dice y se contradice, **calculado en cada render**.
+   *
+   * Se pidió que la alerta salte apenas estén las dos fechas y no recién al
+   * guardar, y por eso vive acá y no adentro de `submit`. Es una función pura
+   * de `form`, así que no necesita estado propio ni un efecto: un `useEffect`
+   * con `setState` sería un segundo render para guardar algo que ya se sabe,
+   * que es lo que marca `react-hooks/set-state-in-effect`.
+   *
+   * `loQueSeContradice` **se calla mientras falte la fecha de inicio**, así
+   * que esto no grita mientras se completa el formulario: aparece recién
+   * cuando las dos están y no cierran. De eso depende que la alerta sea una
+   * alerta y no un cartel que está siempre.
+   */
+  const contradicciones = loQueSeContradice(form);
+
   const filteredEquip = form.sector_id
     ? equipos.filter((e: any) => e.sector_id === form.sector_id)
     : equipos;
@@ -211,6 +231,14 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     const falta = loQueFaltaParaCrear(form);
     if (falta.length > 0) {
       setError(`Falta cargar ${falta.join(", ")}.`);
+      return;
+    }
+    // Y después, con otro verbo: acá los datos están y lo que no cierra es lo
+    // que dicen entre ellos —una fecha de fin o de cierre anterior al inicio—.
+    // La misma función que corre la ruta, que hasta hoy era la única que la
+    // corría: el formulario mandaba la orden y se enteraba por un 400.
+    if (contradicciones.length > 0) {
+      setError(`No se puede guardar porque ${contradicciones.join(", ")}.`);
       return;
     }
     setSaving(true); setError(""); setResultado(null);
@@ -380,7 +408,19 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               <input type="date" value={form.fecha} onChange={e => f("fecha", e.target.value)} className="input" />
             </F>
             <F label="Fecha de inicio" required>
-              <input type="date" value={form.fecha_ejecucion} onChange={e => f("fecha_ejecucion", e.target.value)} className="input" />
+              {/* El campo sigue siendo escribible: el calendario es para
+                  decidir viendo qué hay cada día, no para reemplazarlo. */}
+              <div className="flex gap-2">
+                <input type="date" value={form.fecha_ejecucion} onChange={e => f("fecha_ejecucion", e.target.value)} className="input flex-1 min-w-0" />
+                <button
+                  type="button"
+                  onClick={() => setVerCalendario(true)}
+                  className="btn-secondary shrink-0"
+                  title="Ver qué órdenes tiene cada día antes de elegir"
+                >
+                  Ver el mes
+                </button>
+              </div>
             </F>
             {/* Estimada —la real es la de cierre— y obligatoria desde el
                 04/11/2026, a pedido. Nació opcional dos días antes con el
@@ -388,13 +428,32 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
                 termina; lo que se gana al exigirla es que toda OT cargada a
                 mano tenga ventana. Quién la exige es `loQueFaltaParaCrear`, no
                 este `required`, que sólo pinta el asterisco. */}
+            {/* El `min` de las dos es la fecha de inicio: el calendario del
+                navegador deja en gris los días anteriores, así que el dedo que
+                erra por un día no llega ni a elegirlos. Es la primera defensa y
+                no la regla —un `min` se saltea tipeando—: quien decide es
+                `loQueSeContradice`, en el submit y en el servidor. Vacío no
+                limita nada, que es lo que corresponde cuando todavía no se
+                eligió el inicio. */}
             <F label="Fecha de fin (estimada)" required>
-              <input type="date" value={form.fecha_fin} onChange={e => f("fecha_fin", e.target.value)} className="input" />
+              <input type="date" value={form.fecha_fin} min={form.fecha_ejecucion || undefined} onChange={e => f("fecha_fin", e.target.value)} className="input" />
             </F>
             <F label="Fecha cierre">
-              <input type="date" value={form.fecha_cierre} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
+              <input type="date" value={form.fecha_cierre} min={form.fecha_ejecucion || undefined} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
             </F>
           </div>
+
+          {/* ── LA ALERTA, EN EL MOMENTO Y NO AL GUARDAR ───────────────────
+              Pegada a las fechas, que es donde está mirando quien las acaba de
+              completar: el cartel de error de este modal vive abajo de todo,
+              al lado de los botones, y en un teléfono eso son dos pantallas.
+              Los dos dicen la misma frase a propósito — éste cuando pasa, y
+              aquél si alguien aprieta guardar igual. */}
+          {contradicciones.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+              No se puede guardar porque {contradicciones.join(", ")}.
+            </div>
+          )}
 
           {/* Debajo de la fecha de cierre y no arriba: es ella la que lo hace
               aparecer, y en un teléfono una sección que se abre más arriba
@@ -532,6 +591,14 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           </div>
         </form>
       </div>
+
+      {verCalendario && (
+        <CalendarioDeFecha
+          valor={form.fecha_ejecucion}
+          onElegir={(dia) => { f("fecha_ejecucion", dia); setVerCalendario(false); }}
+          onCerrar={() => setVerCalendario(false)}
+        />
+      )}
     </div>
   );
 }

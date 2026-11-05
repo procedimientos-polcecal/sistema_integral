@@ -4,6 +4,11 @@ import { usuarioActual } from "@/lib/core/sesion";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { esAdminCalidad } from "@/lib/calidad/auth";
 import type { Determinacion } from "@/lib/calidad/ensayos/types";
+// La misma lectura que la carga de muestras, y por la misma razón: acá un
+// "0,5" tipeado se leía `NaN` y quedaba en null, o sea «este límite no tiene
+// mínimo». Con un máximo cargado al lado eso ni siquiera daba error: guardaba
+// el límite a medias y los valores por debajo dejaban de salir en rojo.
+import { numeroTipeado } from "@/lib/calidad/ensayos/cuerpoDeLaMuestra";
 
 /**
  * Los límites por producto y determinación.
@@ -34,12 +39,6 @@ interface CuerpoDelLimite {
   maximo?: number | null;
 }
 
-function numeroONulo(v: unknown): number | null {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
 export async function POST(request: Request) {
   const supabase = await createClient();
   const user = await usuarioActual();
@@ -58,7 +57,7 @@ export async function POST(request: Request) {
   }
 
   const llevaMalla = CON_MALLA.includes(cuerpo.determinacion);
-  const malla = numeroONulo(cuerpo.malla);
+  const malla = numeroTipeado(cuerpo.malla);
 
   if (llevaMalla && (malla === null || !Number.isInteger(malla) || malla <= 0)) {
     return NextResponse.json(
@@ -73,8 +72,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const minimo = numeroONulo(cuerpo.minimo);
-  const maximo = numeroONulo(cuerpo.maximo);
+  const minimo = numeroTipeado(cuerpo.minimo);
+  const maximo = numeroTipeado(cuerpo.maximo);
 
   if (minimo === null && maximo === null) {
     return NextResponse.json(

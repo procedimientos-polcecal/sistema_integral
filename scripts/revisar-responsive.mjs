@@ -85,6 +85,11 @@ export const CALENDARIOS = [
   { ruta: "app/(app)/remises/semana/SemanaClient.tsx", cantidad: 1 },
   { ruta: "app/(app)/cantera/destape/DestapeClient.tsx", cantidad: 2 },
   { ruta: "app/(app)/trituracion/partes/PartesClient.tsx", cantidad: 2 },
+  // El calendario de la fecha de ejecución de una OT. Mide ~47 px por día en un
+  // teléfono (375 menos los márgenes del modal), y por eso cada día muestra a lo
+  // sumo tres fichas y el resto va en «+N más»: con más, la grilla se desarma.
+  // `cantidad: 2` son la de los nombres de los días y la de las celdas.
+  { ruta: "app/(app)/mantenimiento/ordenes/CalendarioDeFecha.tsx", cantidad: 2 },
   // La semana de la Agenda: no es un calendario del mes sino la cuadrícula de
   // siete días con sus horas, y el motivo es el mismo —la semana tiene siete
   // días y con menos columnas deja de ser la semana—. En un teléfono esta

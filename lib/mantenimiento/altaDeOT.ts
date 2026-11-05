@@ -11,7 +11,9 @@
  * importadas, 368 no tienen equipo enlazado.
  */
 
-import { loQueFaltaParaCerrar, type DatosDelCierre } from "@/lib/mantenimiento/cierreDeOT";
+import {
+  loQueFaltaParaCerrar, loQueImpideCerrar, type DatosDelCierre,
+} from "@/lib/mantenimiento/cierreDeOT";
 
 export interface DatosDelAltaDeOT extends DatosDelCierre {
   sector_id: string | null | undefined;
@@ -111,16 +113,30 @@ export function loQueFaltaParaCrear(datos: DatosDelAltaDeOT): string[] {
  * volver al formulario a ver contra qué, y la que está mal puede ser
  * cualquiera de las dos.
  *
- * No mira la de cierre, que es la fecha real: esto compara la ventana
- * estimada contra sí misma. Y si falta la de inicio se calla, porque de eso ya
- * habla `loQueFaltaParaCrear` y dos mensajes por un solo hueco es ruido.
+ * Mira **dos pares distintos contra la misma fecha de inicio**: la de fin, que
+ * es la estimación, y la de cierre, que es la real. Son dos preguntas —cuándo
+ * se calcula que termina y cuándo terminó— y las dos tienen la misma respuesta
+ * imposible: antes de empezar. La segunda la contesta `loQueImpideCerrar`, que
+ * es **la misma función que corre el PATCH** al registrar el trabajo: una orden
+ * que nace cerrada y una que se cierra después tienen que recibir el mismo
+ * mensaje, y dos copias de la regla es como el botón de los avisos se quedó
+ * atrás dos días en silencio el 19/10/2026.
+ *
+ * Y si falta la de inicio se calla —el `if (inicio)`—, porque de eso ya habla
+ * `loQueFaltaParaCrear`, que la exige, y dos mensajes por un solo hueco es
+ * ruido. Allá esa rama sí habla, y tiene que hacerlo: el que registra trabajo
+ * sobre una OT vieja no tiene el campo de inicio delante para completarlo.
  */
 export function loQueSeContradice(datos: DatosDelAltaDeOT): string[] {
   const inicio = String(datos.fecha_ejecucion ?? "").trim();
   const fin = String(datos.fecha_fin ?? "").trim();
-  if (!inicio || !fin) return [];
+  if (!inicio) return [];
 
-  return fin < inicio
-    ? [`la fecha de fin (${fin}) es anterior a la de inicio (${inicio})`]
-    : [];
+  const problemas: string[] = [];
+  if (fin && fin < inicio) {
+    problemas.push(`la fecha de fin (${fin}) es anterior a la de inicio (${inicio})`);
+  }
+  problemas.push(...loQueImpideCerrar(inicio, datos.fecha_cierre));
+
+  return problemas;
 }

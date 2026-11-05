@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { FilaCierreCubicacion, LecturaDeCubicacion } from "@/lib/cantera/cubicacion";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import { numeroDeCampo } from "@/lib/cantera/numero";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -83,14 +84,17 @@ export default function CubicacionClient({
 
   async function guardar(yacimientoCodigo: string) {
     const yacimientoId = idPorCodigo.get(yacimientoCodigo);
-    const n = Number(valor.replace(",", "."));
-    if (!yacimientoId || !isFinite(n) || n < 0) {
+    // Tenía su propio `replace(",", ".")`: entendía la coma y **no** el punto de
+    // miles, así que "2.240" entraba como 2,24. Medido el 05/11/2026: 3 de las
+    // 16 cubicaciones cargadas pasan las mil toneladas y la mayor es 2240.
+    const n = numeroDeCampo(valor);
+    if (!yacimientoId || n === null || n < 0) {
       setError("La existencia final del yacimiento tiene que ser un número");
       return;
     }
     // Vacío es "sin medir", no un cero.
-    const acopio = valorAcopio.trim() === "" ? null : Number(valorAcopio.replace(",", "."));
-    if (acopio !== null && (!isFinite(acopio) || acopio < 0)) {
+    const acopio = valorAcopio.trim() === "" ? null : numeroDeCampo(valorAcopio);
+    if (acopio === null ? valorAcopio.trim() !== "" : acopio < 0) {
       setError("La existencia del acopio por triturar tiene que ser un número");
       return;
     }

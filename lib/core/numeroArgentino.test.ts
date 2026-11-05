@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { numeroArgentino } from "./numeroArgentino";
+import { numeroArgentino, numeroDelFormulario } from "./numeroArgentino";
 
 /**
  * La regla del separador decimal, que Compras y RRHH resolvían por su cuenta y
@@ -56,5 +56,38 @@ describe("numeroArgentino", () => {
     expect(numeroArgentino("-")).toBeNull();
     expect(numeroArgentino(".")).toBeNull();
     expect(numeroArgentino("1-3")).toBeNull();
+  });
+});
+
+describe("numeroDelFormulario", () => {
+  /**
+   * El bug del 05/11/2026, el mismo que en Calidad: la pantalla manda lo que
+   * tipeó la persona y el servidor lo leía con `Number()`.
+   */
+  it("la coma decimal entra, que es como se tipea acá", () => {
+    expect(numeroDelFormulario("1,32")).toBeCloseTo(1.32);
+    expect(numeroDelFormulario("2,5")).toBeCloseTo(2.5);
+    expect(numeroDelFormulario("0,8")).toBeCloseTo(0.8);
+  });
+
+  it("el punto de miles también, que es lo que distingue a ésta de la de Calidad", () => {
+    expect(numeroDelFormulario("1.440")).toBe(1440);
+    expect(numeroDelFormulario("1.234,5")).toBeCloseTo(1234.5);
+  });
+
+  it("un número ya interpretado pasa derecho", () => {
+    expect(numeroDelFormulario(1.32)).toBeCloseTo(1.32);
+    expect(numeroDelFormulario(0)).toBe(0);
+    expect(numeroDelFormulario(NaN)).toBeNull();
+  });
+
+  /** Vacío es "no se cargó", y nunca un cero: eso es lo que decide la ruta. */
+  it("lo que no es un número da null, y no NaN ni cero", () => {
+    expect(numeroDelFormulario("")).toBeNull();
+    expect(numeroDelFormulario("   ")).toBeNull();
+    expect(numeroDelFormulario(null)).toBeNull();
+    expect(numeroDelFormulario(undefined)).toBeNull();
+    expect(numeroDelFormulario("dos")).toBeNull();
+    expect(numeroDelFormulario({})).toBeNull();
   });
 });
