@@ -7,9 +7,10 @@
  * se lee: manda `modifiedTime`, que no se puede escribir mal.
  *
  * **En la carpeta hay más de lo que se lee.** Desde el 04/11/2026 esa misma
- * tarea sube además `Planta 02`, `Hornos` y `Porteria`, que se guardan y no se
- * importan — el porqué, y por qué eso no aparece como aviso todos los días,
- * está en `SE_GUARDAN_SIN_LEER` más abajo.
+ * tarea sube además `Planta 02`, `Hornos` y `Porteria`, y desde el 05/11/2026
+ * los doce CSV de `Pesadas Balanza`, que se guardan y no se importan — el
+ * porqué, y por qué eso no aparece como aviso todos los días, está en
+ * `SE_GUARDAN_SIN_LEER` más abajo.
  *
  * **Sólo se lee Drive; nunca se escribe.** La cuenta de servicio es Lector de
  * la unidad y alcanza con eso.
@@ -71,22 +72,32 @@ const msDe = (iso: string) => {
  * - `Hornos` no es un robot: son dieciocho planillas mensuales que alguien
  *   respalda todos los días.
  * - `Porteria` tampoco: es el respaldo del escritorio completo de esa PC.
+ * - `Pesadas Balanza` (05/11/2026) es **doce archivos y no uno**: un
+ *   `Pesadas Balanza DAT000000NN.CSV` por camión, y cada uno acumula desde
+ *   agosto. Es lo único de la carpeta que no son zips, y es también lo único
+ *   cuyo dato el SdG ya tiene por otro lado: las pesadas entran a
+ *   `cantera_pesadas` desde la pestaña «Datos» de la planilla de balanza
+ *   (`app/api/cantera/acarreo/sync`). Esto es el export crudo del equipo, que
+ *   se guarda por si esa planilla se rompe, y no una segunda fuente a leer.
  *
  * **Por qué se filtran en vez de dejarlas caer en `sinMolino`.** Ese aviso
  * existe para que un archivo inesperado lo vea una persona, y termina en el
  * campo `error` de `sincronizaciones` —con `ok: true`—, que es el único lugar
- * que alguien mira para saber si esto está al día. Tres líneas fijas repetidas
+ * que alguien mira para saber si esto está al día. Líneas fijas repetidas
  * todos los días ahí dejan de ser un aviso y pasan a ser el fondo de pantalla:
  * es la misma regla que ya se paga cara en las planillas, que un diagnóstico
- * que no se distingue de otro no es un diagnóstico. Estos tres ya se vieron y
- * la decisión está tomada; un cuarto nombre raro tiene que seguir saltando.
+ * que no se distingue de otro no es un diagnóstico. Y acá la cuenta ya no es
+ * chica: sin este filtro serían **quince** avisos diarios, doce de la balanza,
+ * y en un renglón solo separado por puntos. Estos cuatro ya se vieron y la
+ * decisión está tomada; un nombre raro que no esté acá tiene que seguir
+ * saltando.
  *
  * El filtro corre **después** de buscar molino, así que el día que Planta 0-2
  * entre al catálogo gana el catálogo y esta lista no lo tapa. Cuando eso pase,
  * sacarlo de acá igual: una lista que miente sobre por qué algo no se lee es
  * peor que no tenerla.
  */
-const SE_GUARDAN_SIN_LEER = ["Planta 02", "Hornos", "Porteria"];
+const SE_GUARDAN_SIN_LEER = ["Planta 02", "Hornos", "Porteria", "Pesadas Balanza"];
 
 /**
  * Asigna cada zip a su molino por el prefijo del nombre, y no adivina: un

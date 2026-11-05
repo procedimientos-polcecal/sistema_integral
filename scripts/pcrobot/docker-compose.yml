@@ -27,6 +27,7 @@ services:
       - planta02:/datos/planta02:ro
       - hornos:/datos/hornos:ro
       - porteria:/datos/porteria:ro
+      - balanza:/datos/balanza:ro
       # La configuración y la credencial, también de sólo lectura.
       - ./config:/config:ro
     logging:
@@ -96,3 +97,11 @@ volumes:
       type: cifs
       o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO:-WORKGROUP},vers=3.0,ro,uid=1000,gid=1000"
       device: "//${SMB_SERVIDOR}/EXTERIOR/Porteria"
+  # El único que no son zips: doce CSV, uno por camión. Lleva espacio en el
+  # nombre del recurso, igual que `Planta 02`.
+  balanza:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=${SMB_USUARIO},password=${SMB_CLAVE},domain=${SMB_DOMINIO:-WORKGROUP},vers=3.0,ro,uid=1000,gid=1000"
+      device: "//${SMB_SERVIDOR}/EXTERIOR/Pesadas Balanza"

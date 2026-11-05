@@ -55,7 +55,7 @@ describe("emparejar", () => {
     expect(r.sinMolino).toEqual(["Filler 1 notas.txt"]);
   });
 
-  it("los tres que se suben a propósito y no se leen no ensucian sinMolino", () => {
+  it("los que se suben a propósito y no se leen no ensucian sinMolino", () => {
     const r = emparejar(
       [
         { nombre: "Filler 1 2026-11-04.zip" },
@@ -67,7 +67,20 @@ describe("emparejar", () => {
     );
     expect(r.archivos.map((a) => a.molinoClave)).toEqual(["filler_1"]);
     // Ni se importan ni se avisan: el aviso iría al campo que alguien mira
-    // para saber si esto está al día, y tres líneas fijas por día lo tapan.
+    // para saber si esto está al día, y unas líneas fijas por día lo tapan.
+    expect(r.sinMolino).toEqual([]);
+  });
+
+  it("la balanza son doce archivos .CSV y ninguno avisa: el filtro no mira la extensión", () => {
+    // Es el único origen que no son zips, así que cae por la otra rama de
+    // `emparejar` —la que descarta lo que no termina en .zip— y aun así tiene
+    // que callarse. Sin esto serían doce avisos por día, no uno.
+    const nombres = Array.from(
+      { length: 12 },
+      (_, i) => `Pesadas Balanza DAT${String(i + 2).padStart(8, "0")}.CSV`,
+    );
+    const r = emparejar([{ nombre: "Filler 1 2026-11-05.zip" }, ...nombres.map((nombre) => ({ nombre }))], molinos);
+    expect(r.archivos.map((a) => a.molinoClave)).toEqual(["filler_1"]);
     expect(r.sinMolino).toEqual([]);
   });
 
