@@ -14,7 +14,8 @@
     "migracion": "node scripts/nueva-migracion.mjs",
     "planillas": "npx tsx scripts/revisar-planillas.mts",
     "contrastar-ot": "npx tsx scripts/contrastar-ot.mts",
-    "catalogo": "npx tsx scripts/generar-catalogo-asistente.mts"
+    "catalogo": "npx tsx scripts/generar-catalogo-asistente.mts",
+    "mapa-de-apis": "npx tsx scripts/mapa-de-apis.mts"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.105",
