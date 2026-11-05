@@ -1,5 +1,178 @@
 {
   "tablas": {
+    "agenda_canales": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "casilla",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "canal_id",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "recurso_id",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "secreto",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "vence",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "agenda_divergencias_vistas": [
+      {
+        "columna": "evento_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "divergencia_el",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "agenda_eventos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "titulo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "descripcion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "lugar",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "inicio",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "fin",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "dueno_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "casilla",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "google_event_id",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "inicio_escrito",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "fin_escrito",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "divergencia",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "divergencia_el",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "google_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "google_pendiente_el",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "aviso",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "ot_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "turno",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "agenda_invitados": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "evento_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "email",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": true
+      }
+    ],
     "asientos": [
       {
         "columna": "id",
@@ -322,6 +495,21 @@
       {
         "columna": "ot_enlazada_por",
         "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente_campos",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_intentado_en",
+        "tipo": "timestamptz",
         "nuleable": true
       }
     ],
@@ -2262,6 +2450,18 @@
       {
         "columna": "activo",
         "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "compras_consultados": [
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
         "nuleable": false
       },
       {
@@ -4414,6 +4614,11 @@
         "columna": "created_at",
         "tipo": "timestamptz",
         "nuleable": false
+      },
+      {
+        "columna": "fecha_descanso",
+        "tipo": "date",
+        "nuleable": true
       }
     ],
     "hojas_ruta": [
@@ -4954,6 +5159,167 @@
         "nuleable": false
       }
     ],
+    "mant_cuadernos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "proveedor_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "estado",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "mant_cuadernos_fotos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "cuaderno_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "orden",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "ruta",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "respuesta_cruda",
+        "tipo": "jsonb",
+        "nuleable": true
+      },
+      {
+        "columna": "fallo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "mant_cuadernos_renglones": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "cuaderno_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "foto_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "linea",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "tarea",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "lugar_raw",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sector_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "sector_propuesto",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "equipo_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "horas",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "costo",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "dudoso",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "motivo_dudoso",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "heredado",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "grupo_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "orden_trabajo_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha_hasta",
+        "tipo": "date",
+        "nuleable": true
+      }
+    ],
     "mant_partes_contratista": [
       {
         "columna": "id",
@@ -5179,6 +5545,60 @@
         "nuleable": false
       }
     ],
+    "mant_razones_de_postergacion": [
+      {
+        "columna": "codigo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "etiqueta",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "dias",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "activa",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "orden",
+        "tipo": "int4",
+        "nuleable": false
+      }
+    ],
+    "mantenimiento_divergencias": [
+      {
+        "columna": "ot_number",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "campo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "en_el_sistema",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "en_la_planilla",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "visto_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
     "mantenimiento_tarifas_hora": [
       {
         "columna": "id",
@@ -5377,6 +5797,11 @@
       {
         "columna": "reference_photos",
         "tipo": "jsonb",
+        "nuleable": true
+      },
+      {
+        "columna": "especialidad",
+        "tipo": "text",
         "nuleable": true
       }
     ],
@@ -5583,6 +6008,16 @@
       {
         "columna": "motivo_rechazo",
         "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sheets_intentado_en",
+        "tipo": "timestamptz",
         "nuleable": true
       }
     ],
@@ -5806,6 +6241,21 @@
         "columna": "falla_detalle",
         "tipo": "text",
         "nuleable": true
+      },
+      {
+        "columna": "fecha_ejecucion_pendiente",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "costo",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_fin",
+        "tipo": "date",
+        "nuleable": true
       }
     ],
     "ordenes_trabajo_notas": [
@@ -5833,6 +6283,21 @@
         "columna": "creado_en",
         "tipo": "timestamptz",
         "nuleable": false
+      },
+      {
+        "columna": "tipo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "repuesto_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "responde_a",
+        "tipo": "uuid",
+        "nuleable": true
       }
     ],
     "ordenes_trabajo_repuestos": [
@@ -6194,6 +6659,137 @@
         "nuleable": false
       }
     ],
+    "produccion_molino_paradas": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "molino_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "turno",
+        "tipo": "produccion_molino_turno",
+        "nuleable": true
+      },
+      {
+        "columna": "motivo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "orden_trabajo_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "produccion_molino_turnos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "molino_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "turno",
+        "tipo": "produccion_molino_turno",
+        "nuleable": false
+      },
+      {
+        "columna": "kg",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "minutos_marcha",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "minutos_teoricos",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "estado",
+        "tipo": "produccion_molino_estado",
+        "nuleable": false
+      },
+      {
+        "columna": "por_material",
+        "tipo": "jsonb",
+        "nuleable": false
+      }
+    ],
+    "produccion_molinos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "clave",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "formato",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "prefijo_archivo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "umbral_minutos",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "desde",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      }
+    ],
     "produccion_partes": [
       {
         "columna": "id",
@@ -6534,6 +7130,11 @@
         "columna": "comentario",
         "tipo": "text",
         "nuleable": true
+      },
+      {
+        "columna": "modo_de_carga",
+        "tipo": "text",
+        "nuleable": false
       }
     ],
     "proveedores_odoo": [
@@ -6853,6 +7454,38 @@
         "nuleable": false
       }
     ],
+    "rrhh_horas_a_realizar": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "sector_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "horas_por_empleado",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "desde",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "hasta",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
     "rrhh_import_batches": [
       {
         "columna": "id",
@@ -7056,6 +7689,197 @@
         "columna": "host",
         "tipo": "text",
         "nuleable": true
+      },
+      {
+        "columna": "canonico",
+        "tipo": "bool",
+        "nuleable": true
+      }
+    ],
+    "syh_condiciones": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "numero",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "clave",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sector_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "equipo_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "detectada_el",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "detectada_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "descripcion",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "peligro_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "accion_propuesta",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "prioridad",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "responsable_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_maxima",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_ejecucion",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "requiere_inversion",
+        "tipo": "bool",
+        "nuleable": true
+      },
+      {
+        "columna": "observaciones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "frecuencia",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "antecedentes",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "controles",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "magnitud_dano",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "legislacion",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "probabilidad",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "gravedad",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "nivel_riesgo",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "creada_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizada_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "syh_fotos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "condicion_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "ruta",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "subida_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "subida_el",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "respaldada_en_drive_el",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "syh_peligros": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "descripcion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
       }
     ],
     "taller_vial_cargas": [
@@ -7827,7 +8651,8 @@
       "cantera",
       "calidad",
       "taller_vial",
-      "trituracion"
+      "trituracion",
+      "seguridad_higiene"
     ],
     "nivel_acceso": [
       "lectura",
@@ -7852,6 +8677,18 @@
       "0_2",
       "cal",
       "otros"
+    ],
+    "produccion_molino_estado": [
+      "normal",
+      "acumulado",
+      "inconsistente",
+      "huerfano"
+    ],
+    "produccion_molino_turno": [
+      "20_00",
+      "00_04",
+      "04_12",
+      "12_20"
     ],
     "produccion_turno": [
       "4_12",
