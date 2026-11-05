@@ -29,9 +29,25 @@ import {
  *
  * `bajo_minimo` sí entra: alcanza para este trabajo pero hay que reponer, y el
  * momento de darse cuenta es este.
+ *
+ * Y `no_alcanza` entra desde el 04/11/2026, que es el caso que más se parece a
+ * no tener: hay stock, pero menos del que esta orden pide, así que el día del
+ * trabajo falta igual. Hasta entonces la pantalla decía «Hay» en verde con 61
+ * tuercas para una OT que pedía 80.
+ *
+ * **La cantidad sugerida no cambia por esto, y se decidió así:** sale la que
+ * pide la orden —las 80— y no la diferencia. Pedir sólo lo que falta deja el
+ * pañol en cero apenas se hace el trabajo, y el formulario es editable, así
+ * que quien pide ajusta. Además `deDondeSale` escribe cuántos quedaban, con lo
+ * que quien aprueba ve las dos cifras.
  */
 export function convienePedir(estado: EstadoDeStock): boolean {
-  return estado === "no_hay" || estado === "no_esta" || estado === "bajo_minimo";
+  return (
+    estado === "no_hay" ||
+    estado === "no_esta" ||
+    estado === "bajo_minimo" ||
+    estado === "no_alcanza"
+  );
 }
 
 /** Lo que hace falta saber de la orden para armar el pedido. */

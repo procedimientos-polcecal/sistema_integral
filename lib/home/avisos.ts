@@ -11,6 +11,7 @@ export interface ConteosParaAvisos {
   mantenimientoAtrasadas: number;
   mantenimientoDivergencias: number;
   comprasEsperandoAprobacion: number;
+  comprasConsultasAbiertas: number;
   inventarioSinPlanilla: number;
   produccionSinPlanilla: number;
   despachoAbiertas: number;
@@ -46,6 +47,24 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
   // divergencia de hoy y no un acumulado: lo que se arregla desaparece solo.
   { clave: "mantenimientoDivergencias", id: "mant-divergencias", titulo: "Órdenes que dicen distinto en el sistema y en la planilla", href: "/mantenimiento/ordenes" },
   { clave: "comprasEsperandoAprobacion", id: "compras-por-aprobar", titulo: "Requerimientos esperando aprobación", href: "/compras/aprobaciones" },
+  /*
+   * Una pregunta de Mantenimiento por un repuesto que nadie contestó. Es el
+   * estado que el diseño del 26/10/2026 existe para hacer visible, y el push del
+   * momento no alcanza para sostenerlo: fuera de la ventana de 7:00 a 21:00 no
+   * se manda y **no se reintenta nunca**, así que una pregunta de las 22:00 no
+   * interrumpió a nadie. Esto es la red que la recoge a la mañana siguiente.
+   *
+   * No lleva umbral de días, aunque el spec lo dejaba a elección del
+   * constructor: una pregunta contestada el mismo día no llega a aparecer acá
+   * —el conteo son las que siguen esperando—, y esperar N días para nombrarla es
+   * justo el silencio que este aviso viene a tapar. Si en la práctica hiciera
+   * ruido, el umbral se agrega donde se cuenta y **con un id nuevo**.
+   *
+   * Va a `compras_consultados` y no a todo el que vea Compras: lo reparte
+   * `DE_UNA_LISTA` en `avisosDeUsuario.ts`, por lo mismo que
+   * `compras-por-aprobar` va a los aprobadores.
+   */
+  { clave: "comprasConsultasAbiertas", id: "compras-consultas-repuestos", titulo: "Consultas de repuestos sin responder", href: "/compras/consultas" },
   { clave: "inventarioSinPlanilla", id: "inv-sin-planilla", titulo: "Movimientos que no llegaron a la planilla", href: "/inventario/movimientos" },
   { clave: "produccionSinPlanilla", id: "produccion-sin-planilla", titulo: "Partes de producción que no llegaron a la planilla", href: "/produccion" },
   /*

@@ -21,7 +21,7 @@ interface Importacion {
 }
 
 export default function ConfiguracionClient({
-  sincronizaciones, aprobadores, aprobadoresOS, usuarios, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total, cuentaDeServicio, esAdmin, umbralMontoAlto, puedeEditarUmbral
+  sincronizaciones, aprobadores, aprobadoresOS, consultados, usuarios, pendientes, nuevosApp, nuevosPlanilla, abiertos, abiertosGestionados, gestionados, total, cuentaDeServicio, esAdmin, umbralMontoAlto, puedeEditarUmbral
 }: {
   /** Admin de Compras: es quien puede mandar la cola entera a Odoo. */
   esAdmin: boolean;
@@ -35,6 +35,12 @@ export default function ConfiguracionClient({
   aprobadores: { id: string; nombre: string; apellido: string; email: string; alias: string | null }[];
   /** Quiénes deciden sobre las órdenes de servicio. Sin alias: esa planilla no firma. */
   aprobadoresOS: { id: string; nombre: string; apellido: string; email: string }[];
+  /**
+   * A quiénes se les avisa cuando Mantenimiento pregunta por un repuesto. No
+   * deciden nada: ver la sección, que es donde está explicado por qué ésta se
+   * puede dejar vacía y las dos de arriba no.
+   */
+  consultados: { id: string; nombre: string; apellido: string; email: string }[];
   usuarios: { id: string; nombre: string; apellido: string; email: string }[];
   /** Requerimientos cuyo cambio no se pudo escribir en la planilla. */
   pendientes: {
@@ -284,6 +290,58 @@ export default function ConfiguracionClient({
           <strong>Ojo:</strong> estar en esta lista no alcanza para llegar a la pantalla.
           Aprobaciones vive dentro de Compras, así que quien no tenga acceso al módulo no
           va a poder entrar aunque figure acá.
+        </p>
+      </section>
+
+      {/*
+        La tercera lista, y la única de las tres que no es un permiso. Va acá al
+        lado por lo mismo que la de OS: para que se vea que son tres y no una.
+      */}
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          A quién se le avisa de las consultas de repuestos
+        </h2>
+        <p className="mb-3 text-sm text-slate-600">
+          Cuando Mantenimiento pregunta por un repuesto desde una orden de
+          trabajo, a quien esté acá le llega la notificación en el momento, y las
+          que quedan sin responder le aparecen en el resumen diario. La pregunta
+          y la respuesta viven en el historial de esa orden; esta lista sólo
+          decide a quién se le avisa.
+        </p>
+
+        {consultados.length === 0 ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            No hay nadie en la lista. Las preguntas se siguen guardando en la
+            orden y se pueden contestar igual, pero <strong>nadie recibe el
+            aviso</strong> en el momento: hay que acordarse de mirar las
+            consultas. A quien pregunte se le avisa de esto en pantalla.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {consultados.map((c) => (
+              <FilaConsultado key={c.id} consultado={c} />
+            ))}
+          </ul>
+        )}
+
+        <SumarConsultado
+          usuarios={usuarios.filter((u) => !consultados.some((c) => c.id === u.id))}
+        />
+
+        <p className="mt-3 text-xs text-slate-500">
+          <strong>Estar en esta lista no es un permiso, es un destinatario.</strong>{" "}
+          Contestar lo habilita el acceso a Compras —con cualquier nivel, mientras
+          la pregunta siga abierta—, así que quien cubra a alguien de licencia
+          contesta sin que nadie edite esto. Por el mismo motivo la lista{" "}
+          <strong>se puede dejar vacía</strong>, a diferencia de las dos de
+          arriba: vaciarla no traba nada, sólo apaga el aviso.
+        </p>
+
+        <p className="mt-2 text-xs text-slate-500">
+          Es una lista aparte de la de aprobadores y no la misma: ahí hay cuatro
+          personas y la consulta por un repuesto la contesta una. Mandarla a toda
+          esa lista interrumpiría a tres que no la van a contestar, que es lo que
+          enseña a ignorar las notificaciones.
         </p>
       </section>
 
@@ -984,6 +1042,120 @@ function FilaAprobadorOS({
         onClick={quitar}
         disabled={quitando || soloQueda}
         title={soloQueda ? "Es el último: sin nadie en la lista ninguna OS pasa a comparativa" : undefined}
+        className="ml-auto text-xs text-red-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-300 disabled:no-underline"
+      >
+        {quitando ? "Quitando…" : "Quitar"}
+      </button>
+      {error && <p className="w-full text-xs text-red-600">{error}</p>}
+    </li>
+  );
+}
+
+/**
+ * Sumar a alguien a la lista de a quiénes se les avisa de las consultas.
+ *
+ * Tercera copia de lo mismo, por la razón que dejó escrita la segunda: lo único
+ * que compartirían es el desplegable, y el parecido sería justamente lo que
+ * después haga que alguien cambie una lista creyendo que toca la otra. Lo que hay
+ * que mirar al editar esto es que el `fetch` apunte a `consultados`: los tres
+ * endpoints se llaman parecido y ni `tsc` ni el build distinguen uno de otro.
+ */
+function SumarConsultado({
+  usuarios,
+}: {
+  usuarios: { id: string; nombre: string; apellido: string; email: string }[];
+}) {
+  const router = useRouter();
+  const [elegido, setElegido] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+
+  async function sumar() {
+    setGuardando(true);
+    setError("");
+    const res = await fetch("/api/compras/consultados", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usuario_id: elegido }),
+    });
+    setGuardando(false);
+    if (!res.ok) {
+      setError((await res.json().catch(() => ({}))).error ?? "No se pudo sumar.");
+      return;
+    }
+    setElegido("");
+    router.refresh();
+  }
+
+  if (usuarios.length === 0) return null;
+
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={elegido}
+          onChange={(e) => setElegido(e.target.value)}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        >
+          <option value="">Sumar a alguien…</option>
+          {usuarios.map((u) => (
+            <option key={u.id} value={u.id}>{u.nombre} {u.apellido}</option>
+          ))}
+        </Select>
+        <button
+          onClick={sumar}
+          disabled={!elegido || guardando}
+          className="rounded-lg bg-[var(--primary)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
+        >
+          {guardando ? "Sumando…" : "Sumar a la lista"}
+        </button>
+      </div>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * Una persona a la que se le avisa de las consultas de repuestos.
+ *
+ * **Sin `soloQueda`, y es la única diferencia con las dos filas de arriba.** Allá
+ * el botón se apaga cuando queda uno porque vaciar la lista traba el circuito: sin
+ * nadie que apruebe, ningún requerimiento avanza. Acá vaciarla no traba nada —las
+ * preguntas abiertas se siguen contestando y una nueva se guarda igual, sólo que
+ * sin avisar—, así que apagar el botón sería inventar un permiso que esta lista no
+ * es. La ruta tampoco se niega, y tiene un test que lo fija.
+ */
+function FilaConsultado({
+  consultado,
+}: {
+  consultado: { id: string; nombre: string; apellido: string; email: string };
+}) {
+  const router = useRouter();
+  const [quitando, setQuitando] = useState(false);
+  const [error, setError] = useState("");
+
+  async function quitar() {
+    if (!confirm(`¿Sacar a ${consultado.nombre} de la lista? Deja de recibir el aviso de las consultas de repuestos.`)) return;
+    setQuitando(true);
+    setError("");
+    const res = await fetch(`/api/compras/consultados?usuario_id=${consultado.id}`, {
+      method: "DELETE",
+    });
+    setQuitando(false);
+    if (!res.ok) {
+      setError((await res.json().catch(() => ({}))).error ?? "No se pudo quitar.");
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 card px-3 py-2 text-sm">
+      <span className="text-slate-900">{consultado.nombre} {consultado.apellido}</span>
+      <span className="font-mono text-xs text-slate-500">{consultado.email}</span>
+      <button
+        onClick={quitar}
+        disabled={quitando}
         className="ml-auto text-xs text-red-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-300 disabled:no-underline"
       >
         {quitando ? "Quitando…" : "Quitar"}

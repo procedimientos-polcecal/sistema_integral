@@ -22,7 +22,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
 import { traerTodo } from "@/lib/core/paginado";
-import { avisarAQuienDecide } from "@/lib/core/avisoAlInstante";
+import { avisarAQuienDecide, VERBO_DE_APROBACION } from "@/lib/core/avisoAlInstante";
 import { lasOSQueNacenEsperando } from "@/lib/mantenimiento/aprobacion";
 import { borrarLoQueLaPlanillaNoTrajo } from "@/lib/core/borradoDeEspejo";
 import {
@@ -1051,7 +1051,11 @@ export async function sincronizarOrdenesDeServicio(opciones: OpcionesDeCorrida =
       registros as unknown as Parameters<typeof lasOSQueNacenEsperando>[0],
       yaEstaban
     ),
-    nombre: { singular: "Una orden de servicio", plural: "órdenes de servicio" },
+    nombre: {
+      singular: "Una orden de servicio",
+      plural: "órdenes de servicio",
+      verbo: VERBO_DE_APROBACION,
+    },
     url: "/compras/aprobaciones",
   });
 
