@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { leerCantidadesDelParte } from "@/lib/trituracion/cantidades";
 import { despejarParte } from "@/lib/trituracion/horas";
 import { ESTADOS_PARTE, ETIQUETA_ESTADO, MATERIALES, ORIGENES_SIN_YACIMIENTO } from "@/lib/trituracion/vocabulario";
 import type { EmpleadoLiviano, ParteDB, PlantaDB } from "@/lib/trituracion/consultas";
@@ -250,22 +251,44 @@ export default function PartesClient({
     }
   }
 
+  /**
+   * Lo que se tipeó, leído con la MISMA función que la ruta. Ésa es toda la
+   * gracia: hasta el 05/11/2026 la pantalla hacía `Number(x) || 0` y la ruta
+   * también, así que "1,5" se mostraba y se guardaba como cero.
+   */
+  const cantidades = useMemo(
+    () =>
+      leerCantidadesDelParte({
+        horas_mantenimiento: form.horasMantenimiento,
+        horas_falta_piedra: form.horasFaltaPiedra,
+        horas_produccion: form.horasProduccion,
+        horas_otro: form.horasOtro,
+        camiones_llegados: form.camionesLlegados,
+        toneladas_procesadas: form.toneladasProcesadas,
+      }),
+    [form]
+  );
+
   const previewDespeje = useMemo(
     () =>
       despejarParte({
         horaInicio: form.horaInicio || null,
         horaFin: form.horaFin || null,
-        horasMantenimiento: Number(form.horasMantenimiento) || 0,
-        horasFaltaPiedra: Number(form.horasFaltaPiedra) || 0,
-        horasProduccion: Number(form.horasProduccion) || 0,
-        horasOtro: Number(form.horasOtro) || 0,
-        toneladasProcesadas: form.toneladasProcesadas === "" ? null : Number(form.toneladasProcesadas),
-        camionesLlegados: form.camionesLlegados === "" ? null : Number(form.camionesLlegados),
+        // Con un número que no se entiende la vista previa muestra el despeje
+        // sin esa parada, y el cartel de abajo dice cuál es: mostrarlo como un
+        // cero mudo es lo que se está sacando.
+        horasMantenimiento: cantidades.ok ? cantidades.valor.horas_mantenimiento : 0,
+        horasFaltaPiedra: cantidades.ok ? cantidades.valor.horas_falta_piedra : 0,
+        horasProduccion: cantidades.ok ? cantidades.valor.horas_produccion : 0,
+        horasOtro: cantidades.ok ? cantidades.valor.horas_otro : 0,
+        toneladasProcesadas: cantidades.ok ? cantidades.valor.toneladas_procesadas : null,
+        camionesLlegados: cantidades.ok ? cantidades.valor.camiones_llegados : null,
       }),
-    [form]
+    [form.horaInicio, form.horaFin, cantidades]
   );
 
   async function guardar() {
+    if (!cantidades.ok) { setError(cantidades.errores.join(" ")); return; }
     setGuardando(true);
     setError(null);
     setAviso(null);
@@ -287,13 +310,16 @@ export default function PartesClient({
           operario_raw: empleados.find((e) => e.id === form.operarioId)
             ? `${empleados.find((e) => e.id === form.operarioId)!.apellido}, ${empleados.find((e) => e.id === form.operarioId)!.nombre}`
             : null,
-          horas_mantenimiento: form.horasMantenimiento === "" ? 0 : Number(form.horasMantenimiento),
-          horas_falta_piedra: form.horasFaltaPiedra === "" ? 0 : Number(form.horasFaltaPiedra),
-          horas_produccion: form.horasProduccion === "" ? 0 : Number(form.horasProduccion),
-          horas_otro: form.horasOtro === "" ? 0 : Number(form.horasOtro),
+          // Va el texto tal cual se tipeó: lo interpreta la ruta, con la
+          // misma función de arriba. `Number("1,5")` daba NaN y
+          // `JSON.stringify(NaN)` es null, así que el campo llegaba vacío.
+          horas_mantenimiento: form.horasMantenimiento,
+          horas_falta_piedra: form.horasFaltaPiedra,
+          horas_produccion: form.horasProduccion,
+          horas_otro: form.horasOtro,
           motivo_otro: form.motivoOtro || null,
-          camiones_llegados: form.camionesLlegados === "" ? null : Number(form.camionesLlegados),
-          toneladas_procesadas: form.toneladasProcesadas === "" ? null : Number(form.toneladasProcesadas),
+          camiones_llegados: form.camionesLlegados,
+          toneladas_procesadas: form.toneladasProcesadas,
           observaciones: form.observaciones || null,
         }),
       });
@@ -596,6 +622,12 @@ export default function PartesClient({
               </div>
             </div>
             {aviso && <p className="mt-2 text-sm text-amber-700">{aviso}</p>}
+            {/* Un número que no se entiende se dice mientras se tipea, antes de
+                apretar Guardar: el despeje de arriba lo está dejando afuera, y
+                mostrarlo como un cero mudo era el bug del 05/11/2026. */}
+            {!cantidades.ok && (
+              <p className="mt-2 text-sm text-amber-700">{cantidades.errores.join(" ")}</p>
+            )}
             {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
             </div>
           </section>
