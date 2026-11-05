@@ -59,6 +59,7 @@ código.
 | Odoo | [docs/ODOO-INTEGRACION.md](docs/ODOO-INTEGRACION.md) |
 | Login y correos | [docs/AUTENTICACION.md](docs/AUTENTICACION.md) |
 | Respaldo | [docs/RESPALDO.md](docs/RESPALDO.md) |
+| Las APIs | [docs/API.md](docs/API.md) — qué función cumple cada una, cómo está conectada y cómo funciona. El inventario de las 282 rutas lo genera `npm run mapa-de-apis` en [docs/API-MAPA.generado.md](docs/API-MAPA.generado.md) y **no se edita a mano**. Tres cosas de ahí que no se deducen leyendo una ruta: **56 rutas no validan nada en su archivo y no hace falta**, porque las protege el proxy —saberlo pide cruzar su url con la lista de exentos de `lib/supabase/middleware.ts`, y el generador la lee de ahí en vez de copiarla—; **hay dos relojes para los crons** (de 18, siete los programa Vercel, cinco GitHub Actions y **seis los dos a la vez**, así que `vercel.json` solo da una respuesta incompleta); y **105 de 282 usan el cliente admin**, o sea que RLS no corre y el permiso lo pone la ruta, que cambia dónde hay que mirar |
 | Variables de entorno | [docs/VARIABLES-VERCEL.md](docs/VARIABLES-VERCEL.md) |
 | Migraciones | [supabase/migrations/README.md](supabase/migrations/README.md) |
 
