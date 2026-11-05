@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { avisosDeConteos, avisosDeRitmo, avisosDeSalud, CRECE_CON_EL_DIA } from "./avisos";
-import { filtrarDescartadas } from "./notificaciones";
+import { avisosDeConteos, avisosDeRitmo, avisosDeSalud } from "./avisos";
+import { CRECE_CON_EL_DIA, filtrarDescartadas } from "./notificaciones";
 import type { EntradaCaida } from "@/lib/core/saludDeLasSincronizaciones";
 
 const caida = (clave: string): EntradaCaida =>

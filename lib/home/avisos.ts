@@ -226,21 +226,12 @@ export function avisosDeRitmo(
 /** Donde aterriza todo aviso de salud: la pantalla con el estado de los 29. */
 const HREF_DE_LA_SALUD = "/administracion/salud";
 
-/**
- * Los avisos cuya `cantidad` **crece sola con el paso del tiempo**, y que por
- * eso **no pueden entrar al resumen de movimiento**.
- *
- * `loQueSeMovio` compara contra la foto de ayer y llama novedad a lo que subió.
- * Un número que sube todas las noches por sí solo sería una novedad todas las
- * mañanas, para siempre: el mensaje que se repite, que es lo que dejó a 2 de 13
- * personas con los 13 avisos descartados. Quedan en la campana —que muestra lo
- * que hay, en vivo— y en el resumen de los lunes, que lleva totales.
- *
- * Es la misma mecánica de `ES_POR_PERSONA` y el motivo es otro, así que son dos
- * conjuntos: aquél sale del movimiento porque su número es de alguien y la foto
- * es de todos; éste, porque su número es un reloj y no un stock.
+/*
+ * `CRECE_CON_EL_DIA` —los avisos cuyo número es un reloj— vive en
+ * `./notificaciones.ts` y no acá, porque lo necesitan **las tres** superficies:
+ * el movimiento del push, el resumen y la campana, que es un componente de
+ * cliente y no puede importar este archivo.
  */
-export const CRECE_CON_EL_DIA: ReadonlySet<string> = new Set(["salud-sin-comprobar"]);
 
 /**
  * Lo más largo que entra del detalle en el título de un aviso.

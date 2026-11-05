@@ -1,6 +1,7 @@
 import { diaDeLaSemana } from "@/lib/core/fechas";
 import type { Notificacion } from "./notificaciones";
-import { CRECE_CON_EL_DIA, ES_POR_PERSONA } from "./avisos";
+import { ES_POR_PERSONA } from "./avisos";
+import { CRECE_CON_EL_DIA } from "./notificaciones";
 
 /**
  * Lo que se movió desde el resumen anterior.

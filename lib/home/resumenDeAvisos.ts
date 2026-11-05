@@ -1,4 +1,4 @@
-import type { Notificacion } from "./notificaciones";
+import { suNumeroSeMuestra, type Notificacion } from "./notificaciones";
 import type { Aviso } from "@/lib/core/webpush";
 
 /** Cuántos avisos se nombran en el cuerpo antes de resumir el resto. */
@@ -23,8 +23,16 @@ const CUANTOS_SE_NOMBRAN = 3;
  *
  * **Va por prefijo y no por una lista de ids** porque los de salud son
  * dinámicos: hay uno por recurso del registro y la lista crece sola.
+ *
+ * **La primera condición es la que también aplica la campana**
+ * (`suNumeroSeMuestra`, en `./notificaciones.ts`): un número que es un reloj no
+ * se muestra en ninguna superficie, y ese criterio se escribe una sola vez. Los
+ * dos prefijos son el escalón extra que hoy da sólo el push — la campana sigue
+ * mostrando las insignias de ritmo y de salud, y equipararlas es otra decisión,
+ * que se toma acá cambiando esta línea.
  */
-const sinNumero = (n: Notificacion) => n.id.startsWith("ritmo-") || n.id.startsWith("salud-");
+const sinNumero = (n: Notificacion) =>
+  !suNumeroSeMuestra(n) || n.id.startsWith("ritmo-") || n.id.startsWith("salud-");
 
 const comoLinea = (n: Notificacion) => (sinNumero(n) ? n.titulo : `${n.cantidad} · ${n.titulo}`);
 
