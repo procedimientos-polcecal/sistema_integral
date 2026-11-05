@@ -53,6 +53,22 @@ export const NOTAS: Record<string, string> = {
     "tiene acá sus proveedores y allá uno solo. `monto` en null es 'no se " +
     "sabe cuánto le tocó a éste', y va a estar null la mayoría de las veces.",
 
+  sincronizaciones:
+    "Cuándo corrió cada sincronización con su planilla, **también cuando falló**. " +
+    "Es un registro GLOBAL y le escribe más de un despliegue: desde el " +
+    "24/10/2026 hay un SEGUNDO despliegue de este repo en otra cuenta de Vercel " +
+    "que tiene las credenciales de Supabase y no las de Google, y deja fallos " +
+    "que no son de producción (53 corridas y 51 fallidas al 05/11/2026). Así " +
+    "que **contar fallos sin filtrar da mal**: para lo que de verdad pasó en " +
+    "producción, filtrá `canonico = true`, o `host like '%sistemapolcecalpolysan%'` " +
+    "para las filas viejas. `canonico` en NULL no quiere decir 'no es el " +
+    "canónico': quiere decir que la escribió un despliegue anterior a esa " +
+    "columna, y hoy son casi todas. Si te preguntan cuántas vinieron del " +
+    "despliegue bueno, `canonico = true` va a dar 0 hasta que el código esté " +
+    "desplegado — decilo, no contestes que no hubo ninguna. Para 'la última vez " +
+    "que se actualizó X' usá la vista `ultima_sincronizacion`, que ya resuelve " +
+    "todo esto y se queda con una fila por recurso.",
+
   ordenes_trabajo_notas:
     "**Por qué una OT todavía no se hizo**, con quién lo escribió y cuándo. Es un " +
     "historial: no se edita y puede tener varias por orden, así que la última " +
