@@ -1494,11 +1494,17 @@ anotar qué hace falta no depende de saber si lo hay. Para conectarlo:
 Había que acordarse de apretar el botón en cada pantalla, y lo que se veía en el
 sistema era tan viejo como la última vez que alguien lo hizo.
 
-Ahora lo llaman dos relojes, igual que Compras: **GitHub Actions cada quince
-minutos**, que es la frecuencia real, y un **cron diario de Vercel** como red por
-si Actions falla. El cron vive en Actions y no en `vercel.json` porque el plan
-Hobby sólo admite crons diarios: poner una frecuencia mayor no degrada el cron,
-hace fallar el deploy entero.
+Ahora lo llama **un solo reloj: `vercel.json`, cada 10 minutos**. Hasta el
+05/11/2026 eran dos —Actions «cada quince minutos» y un cron diario de Vercel
+como red— y el motivo escrito era que el plan Hobby sólo admite crons diarios.
+**Las dos mitades de eso resultaron falsas**: el plan es Pro, y los quince
+minutos de Actions eran en los hechos **cada 4 a 8 horas**. El workflow
+`mantenimiento-sync.yml` conserva su disparo a mano y perdió el `schedule`.
+
+Para Mantenimiento esto importa más que para los otros, porque de esta
+sincronización cuelga el barrido que **mete las OT nuevas al calendario**: lo
+que antes tardaba hasta ocho horas en aparecerle a la gente, ahora tarda diez
+minutos.
 
 De paso se arregló un cron muerto: `vercel.json` llamaba todos los días a las 6
 a `/api/cron/sync`, una ruta que nunca existió en este repo —quedó copiada de la

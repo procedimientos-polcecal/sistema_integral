@@ -141,10 +141,15 @@ limita por planilla, no por pestaña.
 
 ### Por qué el cron está en GitHub Actions
 
-Por lo mismo que los otros seis: el plan Hobby de Vercel limita cuántos crons se
-pueden declarar, y pasarse no degrada el cron, **hace fallar el deploy entero**.
-`vercel.json` ya tiene diez. Además, en Actions corre aunque el deploy de Vercel
-esté roto.
+**El motivo que decía acá era falso y se corrigió el 05/11/2026**: no es que el
+plan Hobby limite cuántos crons se declaran —el plan es Pro, que admite
+cuarenta—, y ese día los ocho workflows de sincronización devolvieron su cron a
+`vercel.json`.
+
+Éste se queda en Actions, y por la única razón que sí vale para un respaldo:
+**corre aunque el deploy de Vercel esté roto**. Un respaldo que depende de que
+la aplicación despliegue bien deja de existir justo el día que hace falta. Lo
+mismo vale para `backup.yml`, y son los dos únicos que quedaron ahí.
 
 Hoy es diario, a las 00:00 de Argentina (`0 3 * * *` en UTC, que es como se
 escriben todos los crons del repo). **Para pasarlo a semanal** alcanza con

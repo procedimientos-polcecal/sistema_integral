@@ -59,7 +59,7 @@ código.
 | Odoo | [docs/ODOO-INTEGRACION.md](docs/ODOO-INTEGRACION.md) |
 | Login y correos | [docs/AUTENTICACION.md](docs/AUTENTICACION.md) |
 | Respaldo | [docs/RESPALDO.md](docs/RESPALDO.md) |
-| Las APIs | [docs/API.md](docs/API.md) — qué función cumple cada una, cómo está conectada y cómo funciona. El inventario de las 282 rutas lo genera `npm run mapa-de-apis` en [docs/API-MAPA.generado.md](docs/API-MAPA.generado.md) y **no se edita a mano**. Tres cosas de ahí que no se deducen leyendo una ruta: **56 rutas no validan nada en su archivo y no hace falta**, porque las protege el proxy —saberlo pide cruzar su url con la lista de exentos de `lib/supabase/middleware.ts`, y el generador la lee de ahí en vez de copiarla—; **hay dos relojes para los crons** (de 18, siete los programa Vercel, cinco GitHub Actions y **seis los dos a la vez**, así que `vercel.json` solo da una respuesta incompleta); y **105 de 282 usan el cliente admin**, o sea que RLS no corre y el permiso lo pone la ruta, que cambia dónde hay que mirar |
+| Las APIs | [docs/API.md](docs/API.md) — qué función cumple cada una, cómo está conectada y cómo funciona. El inventario de las 282 rutas lo genera `npm run mapa-de-apis` en [docs/API-MAPA.generado.md](docs/API-MAPA.generado.md) y **no se edita a mano**. Tres cosas de ahí que no se deducen leyendo una ruta: **56 rutas no validan nada en su archivo y no hace falta**, porque las protege el proxy —saberlo pide cruzar su url con la lista de exentos de `lib/supabase/middleware.ts`, y el generador la lee de ahí en vez de copiarla—; **hay un solo reloj para los crons desde el 05/11/2026** (`vercel.json`): antes eran dos y **seis endpoints los disparaban los dos a la vez**, así que `vercel.json` daba una respuesta incompleta. En Actions quedan sólo los dos respaldos, a propósito — ver `## Los crons corren desde Vercel` más abajo; y **105 de 282 usan el cliente admin**, o sea que RLS no corre y el permiso lo pone la ruta, que cambia dónde hay que mirar |
 | Variables de entorno | [docs/VARIABLES-VERCEL.md](docs/VARIABLES-VERCEL.md) |
 | Migraciones | [supabase/migrations/README.md](supabase/migrations/README.md) |
 
@@ -245,6 +245,55 @@ encima:
   estaba recalculando— multiplicado por dos escritores que no se ven. La
   migración arregla **la pantalla, no la concurrencia**: la defensa de verdad es
   apagar ese despliegue, y eso se hace desde esa cuenta de Vercel.
+
+## Los crons corren desde Vercel
+
+**Un solo reloj, y es `vercel.json`.** Hasta el 05/11/2026 eran dos —Vercel y
+GitHub Actions— y seis endpoints los disparaban los dos a la vez.
+
+**El motivo que justificaba esa arquitectura era falso, y estaba escrito en
+siete archivos:** que el plan Hobby de Vercel sólo admite crons diarios y que
+pasarse no degrada el cron sino que **hace fallar el deploy entero**. Las dos
+mitades de esa frase son ciertas de Hobby; lo que dejó de ser cierto es el
+plan. Se descubrió midiendo, y la medición es la que conviene repetir si
+alguien vuelve a dudar: `vercel.json` tenía trece crons y cinco de ellos
+disparaban **todos los días a la hora exacta** durante una semana. Hobby admite
+dos. No podía ser Hobby.
+
+**Y la vuelta no era cosmética: un cron de GitHub Actions no cumple lo que
+declara.** Los de este repo decían cada 15 o 20 minutos y corrían **cada 4 a 8
+horas** — medido el 05/11/2026 sobre `gh run list`. Mientras el motivo escrito
+fue el plan, nadie miró el reloj.
+
+Hoy, en `vercel.json`:
+
+- **Once sincronizaciones cada 10 minutos**, escalonadas un minuto cada una
+  (agenda en el 0, mantenimiento en el 1, y así). **El escalonado no es
+  prolijidad**: las once usan la misma cuenta de servicio de Google y el límite
+  de lectura de Sheets es de **60 pedidos por minuto y por usuario**, así que
+  dispararlas en el mismo minuto las hace chocar entre ellas. Son once en diez
+  minutos, así que dos comparten el minuto 9: `taller-vial-partes` y
+  `produccion-molinos`, las dos más livianas y las dos con la fuente que menos
+  cambia.
+- **Cuatro siguen siendo diarias, y no se aceleran nunca.** `avisos-diarios` y
+  `remises-notificaciones` **mandan un push por persona**: cada 10 minutos
+  serían 144 notificaciones diarias a cada uno, que es lo contrario de lo que
+  un resumen diario existe para hacer. `rrhh-lenox-sync` trae las marcaciones
+  una vez por día y Lenox tiene un límite de llamadas **que ante un 429 no se
+  reintenta**. `syh-respaldo-de-fotos` es un respaldo de 40 fotos con tres
+  viajes cada una.
+- `rrhh-recalculo` cada 6 horas, la cadencia que ya declaraba en Actions —pero
+  acá se cumple—.
+
+**En Actions quedan sólo los dos respaldos** (`backup.yml` y
+`respaldo-sheets.yml`), por la única razón que sí vale para un respaldo:
+**corren aunque el deploy de Vercel esté roto**. Un respaldo que depende de que
+la aplicación despliegue bien deja de existir justo el día que hace falta.
+
+Los otros workflows **conservan su `workflow_dispatch`** y perdieron sólo el
+`schedule`: siguen sirviendo para disparar una sincronización a mano desde la
+pestaña Actions. Si alguno recupera un `schedule`, ese endpoint vuelve a tener
+dos relojes y nada lo avisa.
 
 ## Las planillas de Google
 
@@ -729,8 +778,22 @@ termine en que alguien apague las notificaciones:
   planilla.
 - **Ventana 7:00–21:00 de Argentina, y fuera de ella no se encola nada.** El
   resumen de las 8:30 ya cuenta los `PENDIENTE` sin mirar cuándo entraron, así
-  que el repesque existe sin código. Ojo: el cron de Compras corre 09:00 UTC,
-  que son las 6 de la mañana de acá, y queda afuera a propósito.
+  que el repesque existe sin código. Hasta el 05/11/2026 decía acá que el cron
+  de Compras corre 09:00 UTC —las 6 de la mañana— y queda afuera a propósito:
+  **eso dejó de ser cierto**, porque ahora corre cada 10 minutos y pasa por
+  toda la ventana.
+- **Y de ahí sale la trampa que ese cambio dejó armada, que hay que mirar.**
+  «Una notificación por corrida» es un tope que **vale lo que valga la
+  separación entre corridas**. Con el cron diario y los de Actions —que
+  declaraban 15 minutos y corrían cada 4 a 8 horas— eran una o dos
+  notificaciones por día pasara lo que pasara. Con corridas cada 10 minutos el
+  tope casi no topea: dieciséis requerimientos que entran a lo largo de la
+  mañana ya no son un push, son hasta dieciséis. Es exactamente el pico que el
+  resumen diario existe para evitar, por la puerta de al lado. **No está
+  medido todavía** —se decidió el 05/11/2026 a pedido, acelerando todos los
+  módulos, y lo que hay que vigilar es si a los aprobadores de Compras les
+  empieza a sonar el teléfono—. Si molesta, lo que se baja es la frecuencia de
+  `compras-sync` en `vercel.json`, no el tope.
 - **El enganche va en la sincronización y no en la ruta de alta.** De los
   últimos 400 requerimientos, 397 entraron por la planilla y 3 por la app: el
   momento en que el SdG se entera de un pedido es el momento en que
