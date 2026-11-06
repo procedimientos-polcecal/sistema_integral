@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { revisarElSecreto } from "@/lib/core/cron";
 import { importarDesdeSheets, reintentarPendientes } from "@/lib/compras/sheets";
+import { avisarDeLosPedidosQueEsperan } from "@/lib/compras/avisoDeAprobacion";
 import { reintentarSeguimiento } from "@/lib/compras/seguimientoSheets";
 
 export const maxDuration = 300;
@@ -32,7 +33,19 @@ export async function GET(request: Request) {
     const reintento = await reintentarPendientes();
     // El libro de seguimiento tiene su propia cola: `seguimiento_pendiente`.
     const seguimiento = await reintentarSeguimiento();
-    return NextResponse.json({ ...importado, reintento, seguimiento });
+    // El aviso al instante a quien aprueba. Va despues de todo lo demas y no
+    // puede fallar la corrida: `avisarDeLosPedidosQueEsperan` no tira.
+    //
+    // Este cron corre 09:00 UTC, o sea las 6 de la manana de aca, que esta
+    // fuera de la ventana 7:00-21:00 a proposito: lo que traiga a esa hora lo
+    // levanta el resumen de las 8:30. Se llama igual porque el cron puede
+    // correrse y porque la decision de la hora vive en un solo lugar.
+    const aviso = await avisarDeLosPedidosQueEsperan(importado.nacen_esperando);
+    return NextResponse.json({
+      ...importado, reintento, seguimiento,
+      avisos_al_instante: aviso.enviadas,
+      ...(aviso.motivo ? { avisos_al_instante_motivo: aviso.motivo } : {}),
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },

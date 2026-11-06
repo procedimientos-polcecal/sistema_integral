@@ -141,3 +141,33 @@ describe("filaBochon", () => {
     expect(fila[7]).toBe("197"); // "Perforaciones" = cantidad
   });
 });
+
+/*
+ * Cantera escribe con `USER_ENTERED` y las observaciones son el unico campo
+ * de texto libre de las tres pestanas. El precedente es del 19/10/2026: un
+ * lazo de IMPORTRANGE dejo las once pestanas de Compras en blanco un dia.
+ */
+describe("las observaciones no entran como formula", () => {
+  const yac = null;
+
+  it("se escapan en las tres filas", () => {
+    const v = voladura({ observaciones: "=IMPORTRANGE(\"https://x\";\"A1\")" });
+    const b = bochon({ observaciones: "-se corto la mecha" });
+
+    expect(filaPerforacion(v, yac)[12]).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+    expect(filaVoladura(v, yac, [])[12]).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+    expect(filaBochon(b, yac)[12]).toBe("'-se corto la mecha");
+  });
+
+  it("un texto normal no cambia", () => {
+    const v = voladura({ observaciones: "malla 3x3 - salio bien" });
+    expect(filaPerforacion(v, yac)[12]).toBe("malla 3x3 - salio bien");
+  });
+
+  /* Lo contrario tambien importa: el codigo ordena y los montos se suman. */
+  it("el codigo y los numeros no se tocan", () => {
+    const v = voladura({ codigo: "V01D625", vol_tc_usd: 1350 });
+    expect(filaVoladura(v, yac, [])[0]).toBe("V01D625");
+    expect(filaVoladura(v, yac, [])[8]).not.toMatch(/^'/);
+  });
+});

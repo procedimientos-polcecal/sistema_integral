@@ -329,9 +329,16 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
                       )}
                       {item.type === "number" && (
                         <div className="flex items-center gap-2">
-                          <input type="number" value={checklistResponses[item.id] ?? ""}
-                            onChange={(e) => setChecklistResponses((r) => ({ ...r, [item.id]: e.target.value }))}
-                            className="input w-32" placeholder="0" />
+                          {/* El ancho va en el envoltorio y no en el `input`:
+                              `.input` declara `width: 100%` sin capa y le gana
+                              a `w-32`, que vive en `@layer utilities` (la regla
+                              está en CLAUDE.md). Suelto, un campo para escribir
+                              "40" ocupaba el renglón entero. */}
+                          <div className="w-32">
+                            <input type="number" value={checklistResponses[item.id] ?? ""}
+                              onChange={(e) => setChecklistResponses((r) => ({ ...r, [item.id]: e.target.value }))}
+                              className="input" placeholder="0" />
+                          </div>
                           {item.unit && <span className="text-xs text-slate-500">{item.unit}</span>}
                         </div>
                       )}

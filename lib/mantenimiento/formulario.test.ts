@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   indiceDeColumnas, laSerieEstaCongelada, maximoDeLaSerie, celdasDelAlta,
+  loQueSigueEnLaSerie, laFilaEstaLibre, celdaDeLaFechaComprometida,
+  celdasParaCorregirLaAlta,
 } from "./formulario";
+import { serialDelDia } from "@/lib/core/fechaDeSheets";
 
 /**
  * El encabezado real de «Respuestas de formulario», leido con la cuenta de
@@ -19,11 +22,14 @@ const ENCABEZADO = [
   "EQUIPO QUE SOLICITA", "EQUIPO QUE SOLICITA",
   "ESPECIALIDAD", "TIPO DE TRABAJO", "QUIÉN LO REALIZA",
   "DESCRIPCIÓN DEL TRABAJO", "REPUESTO UTILIZADO", "FECHA COMPROMETIDA",
-  "Puntuación", "PRIORIDAD",
+  "Puntuación", "PRIORIDAD", "Frecuencia", "Próxima fecha", "FECHA DE FIN",
 ];
 
 const datos = {
   ot_number: 2786,
+  email: "rocco@polcecal.com",
+  nombre: "Rocco",
+  apellido: "Gimenez",
   creado: new Date("2026-10-14T12:30:00Z"),
   sector: "Planta filler 1",
   equipo: "PY-A1-05 – Rompedora a martillos",
@@ -33,6 +39,7 @@ const datos = {
   descripcion: "Reemplazo de grillas",
   repuesto: null,
   fecha_ejecucion: "2026-10-20",
+  fecha_fin: "2026-10-25",
   prioridad: "🟠 Alta",
 };
 
@@ -49,6 +56,7 @@ describe("en que columna esta cada cosa", () => {
     expect(i.descripcion).toBe(24);  // Y
     expect(i.fecha).toBe(26);        // AA
     expect(i.prioridad).toBe(28);    // AC
+    expect(i.fechaFin).toBe(31);     // AF
   });
 
   /** Catorce columnas iguales; al master llegan aplanadas, asi que da igual. */
@@ -126,15 +134,69 @@ describe("las celdas del alta", () => {
   });
 
   /**
-   * Las columnas que no son nuestras quedan vacias: poner algo en el mail o el
-   * nombre seria decir que alguien contesto el formulario.
+   * La fecha de fin, desde el 02/11/2026. Es una estimacion -cuando se calcula
+   * que termina- y por eso no es la de cierre, que es la real.
    */
-  it("no toca las columnas del formulario que no le corresponden", () => {
+  it("la fecha de fin va como serial en su columna", () => {
+    const r = celdasDelAlta(ENCABEZADO, datos);
+    if (!r.ok) throw new Error(r.motivos.join(" · "));
+    expect(valorDe(r.celdas, 31)).toBe(serialDelDia("2026-10-25"));
+  });
+
+  it("sin fecha de fin esa celda no se escribe", () => {
+    const r = celdasDelAlta(ENCABEZADO, { ...datos, fecha_fin: null });
+    if (!r.ok) throw new Error(r.motivos.join(" · "));
+    expect(valorDe(r.celdas, 31)).toBeUndefined();
+  });
+
+  /**
+   * Hasta que el encabezado no tenga la columna, el dato no se escribe y el
+   * alta no se cae: es la misma regla que ya vale para toda columna que el
+   * formulario puede no tener.
+   */
+  it("sin la columna en el encabezado la OT se crea igual", () => {
+    const sinLaColumna = ENCABEZADO.filter((h) => h !== "FECHA DE FIN");
+    const r = celdasDelAlta(sinLaColumna, datos);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.celdas.some((c) => c.valor === serialDelDia("2026-10-25"))).toBe(false);
+  });
+
+  /**
+   * QUIEN LA PIDIO, desde el 18/10/2026.
+   *
+   * Estas tres columnas quedaban vacias a proposito, con esta razon escrita:
+   * "poner algo en el mail o el nombre seria decir que alguien contesto el
+   * formulario". Esa razon se murio cuando el alta se mudo a su propia
+   * pestana: una fila en «Altas del sistema» no dice que nadie contesto nada,
+   * dice que el sistema la creo, y ahi saber quien fue es informacion.
+   */
+  it("escribe quien la pidio en el correo, el nombre y el apellido", () => {
+    const r = celdasDelAlta(ENCABEZADO, datos);
+    if (!r.ok) throw new Error(r.motivos.join(" · "));
+    expect(valorDe(r.celdas, 2)).toBe("rocco@polcecal.com");
+    expect(valorDe(r.celdas, 3)).toBe("Rocco");
+    expect(valorDe(r.celdas, 4)).toBe("Gimenez");
+  });
+
+  /** La puntuacion sigue siendo del formulario: esa no se toca. */
+  it("no toca la puntuacion, que no es nuestra", () => {
     const r = celdasDelAlta(ENCABEZADO, datos);
     if (!r.ok) throw new Error("no armó");
-    for (const ajena of [2, 3, 4, 27]) {
-      expect(r.celdas.some((c) => c.columna === ajena)).toBe(false);
-    }
+    expect(r.celdas.some((c) => c.columna === 27)).toBe(false);
+  });
+
+  /**
+   * Un usuario sin apellido cargado existe. No se escribe nada en esa celda,
+   * que es la misma convencion que el repuesto y la fecha: en una fila nueva
+   * no escribir y escribir "" son lo mismo, y lo que importa es que no entre
+   * un "undefined" en una planilla que mira gente.
+   */
+  it("lo que el usuario no tenga cargado no se escribe", () => {
+    const r = celdasDelAlta(ENCABEZADO, { ...datos, apellido: null, nombre: null });
+    if (!r.ok) throw new Error("no armó");
+    expect(r.celdas.some((c) => c.columna === 3)).toBe(false);
+    expect(r.celdas.some((c) => c.columna === 4)).toBe(false);
   });
 
   it("un campo vacio no se escribe", () => {
@@ -156,5 +218,252 @@ describe("las celdas del alta", () => {
   it("una fecha de creacion invalida se niega en vez de escribir NaN", () => {
     const r = celdasDelAlta(ENCABEZADO, { ...datos, creado: new Date("no es una fecha") });
     expect(r.ok).toBe(false);
+  });
+});
+
+/**
+ * EL INCIDENTE DEL 16/10/2026, y por qué esta funcion existe.
+ *
+ * La OT 2796 se creo desde el sistema y no llego a la planilla. La serie
+ * seguia sin congelar, asi que la guarda se nego a escribir —bien— pero el
+ * numero ya se habia tomado: la OT quedo en la base con el 2796 y la hoja de
+ * respuestas segui­a con 2795 arriba de todo. La siguiente respuesta del
+ * formulario iba a numerarse 2796 tambien (el Apps Script cuenta max(A)+1), y
+ * el upsert por `ot_number` de la sincronizacion habria pisado la de la app
+ * con la del formulario, sin avisar.
+ *
+ * La raiz no era la guarda: era que el numero salia de una lectura y la fila
+ * de otra, con una escritura en el medio que podia no pasar. Acá salen las
+ * dos de la misma, y si no se puede escribir no se consume nada.
+ */
+describe("lo que sigue en la serie", () => {
+  const form = [["N° OT"], ["622"], ["2794"], ["2795"]];
+  const sinAltas = [["N° OT"]];
+
+  it("el numero y la fila salen de la misma lectura", () => {
+    const r = loQueSigueEnLaSerie(form, sinAltas);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.ot_number).toBe(2796);
+    expect(r.fila).toBe(2);
+  });
+
+  /**
+   * La serie quedo repartida entre dos hojas el 16/10/2026, asi que contar una
+   * sola es repartir un numero que la otra ya uso.
+   */
+  it("el maximo sale de las dos pestanas, no de una", () => {
+    const r = loQueSigueEnLaSerie([["N° OT"], ["2795"]], [["N° OT"], ["2796"], ["2797"]]);
+    expect(r.ok && r.ot_number).toBe(2798);
+  });
+
+  it("si el maximo esta en el formulario, tambien", () => {
+    const r = loQueSigueEnLaSerie([["N° OT"], ["2799"]], [["N° OT"], ["2796"]]);
+    expect(r.ok && r.ot_number).toBe(2800);
+  });
+
+  /** Se escribe en las altas, asi que la fila es de esa hoja y no del formulario. */
+  it("la fila es la de las altas, no la del formulario", () => {
+    const largo = Array.from({ length: 2175 }, (_, i) => [String(600 + i)]);
+    const r = loQueSigueEnLaSerie(largo, [["N° OT"], ["2796"], ["2797"]]);
+    expect(r.ok && r.fila).toBe(4);
+  });
+
+  it("con las altas vacias se empieza en la fila 2", () => {
+    const r = loQueSigueEnLaSerie([["N° OT"], ["2795"]], sinAltas);
+    expect(r.ok && r.fila).toBe(2);
+    expect(r.ok && r.ot_number).toBe(2796);
+  });
+
+  /**
+   * La cadena de formulas vive en el formulario; la hoja de altas la escribe el
+   * sistema con literales. El mensaje tiene que mandar a la que hay que tocar.
+   */
+  it("una formula viva en el formulario frena, y nombra esa pestana", () => {
+    const r = loQueSigueEnLaSerie([["N° OT"], ["622"], ['=A2+1']], sinAltas);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain("Respuestas de formulario");
+    expect(r.error).not.toContain("Altas del sistema");
+  });
+
+  it("una hoja recien hecha empieza en 1", () => {
+    const r = loQueSigueEnLaSerie([["N° OT"]], sinAltas);
+    expect(r.ok && r.ot_number).toBe(1);
+    expect(r.ok && r.fila).toBe(2);
+  });
+
+  /** Un hueco no corre la fila ni saltea el numero. */
+  it("un hueco en el medio no desacomoda ninguna de las dos", () => {
+    const r = loQueSigueEnLaSerie(form, [["N° OT"], ["2796"], [], ["2797"]]);
+    expect(r.ok && r.ot_number).toBe(2798);
+    expect(r.ok && r.fila).toBe(5);
+  });
+});
+
+/**
+ * La guarda de concurrencia. Dos altas al mismo tiempo leen la misma columna y
+ * calculan la misma fila libre; sin esto, la segunda pisa a la primera y la OT
+ * que se perdio no deja rastro en ningun lado.
+ */
+describe("la fila donde va el alta tiene que estar libre", () => {
+  it("una fila con algo no esta libre", () => {
+    expect(laFilaEstaLibre([["2798"]])).toBe(false);
+  });
+
+  it("vacia, sin celdas o con espacios, si", () => {
+    expect(laFilaEstaLibre([[""]])).toBe(true);
+    expect(laFilaEstaLibre([])).toBe(true);
+    expect(laFilaEstaLibre([["   "]])).toBe(true);
+    expect(laFilaEstaLibre([[]])).toBe(true);
+  });
+});
+
+/**
+ * Sin encabezado no se escribe. La pestana "Altas del sistema" la crea una
+ * persona a mano, asi que existir sin encabezado es un estado real y no una
+ * hipotesis: escribir ahi dejaria una fila con los datos en cualquier columna.
+ */
+describe("si la pestana de altas esta sin encabezado", () => {
+  it("se niega y dice que columnas faltan", () => {
+    const r = celdasDelAlta([], datos);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.motivos.join(" ")).toContain("descripcion");
+  });
+});
+
+/*
+ * El alta escribe con `USER_ENTERED` en la planilla de produccion, asi que lo
+ * que arranca con `=`, `+`, `-` o `@` entra como formula. El precedente es
+ * del 19/10/2026: un lazo de IMPORTRANGE dejo las once pestanas de Compras
+ * en blanco todo el dia, y nadie habia escrito una formula mala a mano.
+ */
+describe("el alta de una OT no deja entrar una formula", () => {
+  it("escapa lo que tipea quien pide", () => {
+    const r = celdasDelAlta(ENCABEZADO, {
+      ...datos,
+      quien: "-INTERNO",
+      descripcion: "=IMPORTRANGE(\"https://x\";\"A1\")",
+      repuesto: "+2 rodamientos",
+    });
+    if (!r.ok) throw new Error(r.motivos.join(" · "));
+
+    expect(valorDe(r.celdas, 23)).toBe("'-INTERNO");
+    expect(valorDe(r.celdas, 24)).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+    expect(valorDe(r.celdas, 25)).toBe("'+2 rodamientos");
+  });
+
+  it("un texto normal no cambia", () => {
+    const r = celdasDelAlta(ENCABEZADO, datos);
+    if (!r.ok) throw new Error("no armó");
+    expect(valorDe(r.celdas, 24)).toBe("Reemplazo de grillas");
+  });
+
+  /*
+   * La otra mitad de la regla: el N° y las dos fechas son numero. Escribirlos
+   * como texto es lo mismo que escribir la fecha en d/m, que es la trampa que
+   * dio vuelta 885 fechas en Compras.
+   */
+  it("el N de OT y las fechas siguen siendo numero", () => {
+    const r = celdasDelAlta(ENCABEZADO, datos);
+    if (!r.ok) throw new Error("no armó");
+    expect(valorDe(r.celdas, 0)).toBe(2786);
+    expect(typeof valorDe(r.celdas, 1)).toBe("number");
+    expect(typeof valorDe(r.celdas, 26)).toBe("number");
+  });
+});
+
+/**
+ * Postergar una orden es reescribir SU celda de «Altas del sistema», porque la
+ * columna J del master es derrame y escribir ahí no queda.
+ */
+describe("la celda de la fecha comprometida", () => {
+  const ENC = ["N° OT", "Marca temporal", "DESCRIPCIÓN", "FECHA COMPROMETIDA"];
+  const FILAS = [ENC, [2896, 46320, "Sacamuestra", 46328], [2897, 46320, "Otra", 46328]];
+
+  it("encuentra la fila por el número de OT, no por la posición", () => {
+    const r = celdaDeLaFechaComprometida(FILAS, 2897, "2026-11-05");
+    expect(r).toEqual({ ok: true, fila: 3, columna: 3, valor: serialDelDia("2026-11-05") });
+  });
+
+  it("el valor va como serial y no como texto", () => {
+    const r = celdaDeLaFechaComprometida(FILAS, 2896, "2026-11-05");
+    expect(r.ok && typeof r.valor).toBe("number");
+  });
+
+  /**
+   * El caso que define el alcance: una OT del formulario no está en esta
+   * pestaña, y el mensaje tiene que decir por qué en vez de "no encontrada".
+   */
+  it("una OT que no creó el sistema no está, y lo explica", () => {
+    const r = celdaDeLaFechaComprometida(FILAS, 1234, "2026-11-05");
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("creó el sistema");
+  });
+
+  it("sin la columna en el encabezado no se escribe nada", () => {
+    const r = celdaDeLaFechaComprometida([["N° OT", "DESCRIPCIÓN"], [2896, "x"]], 2896, "2026-11-05");
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("FECHA COMPROMETIDA");
+  });
+
+  it("una fecha que no existe no se escribe", () => {
+    expect(celdaDeLaFechaComprometida(FILAS, 2896, "2026-02-30").ok).toBe(false);
+  });
+});
+
+/**
+ * Corregir lo que el alta escribió: la descripción, el repuesto y la fecha de
+ * una orden que ya está en «Altas del sistema». Existe porque el master las
+ * recibe por derrame y escribirlas ahí no queda.
+ */
+describe("celdasParaCorregirLaAlta", () => {
+  const ENC = ["N° OT", "Marca temporal", "DESCRIPCIÓN DEL TRABAJO", "REPUESTO UTILIZADO", "FECHA COMPROMETIDA"];
+  const FILAS = [ENC, [2896, 46320, "x", "", 46328], [2897, 46320, "y", "", 46328]];
+
+  it("encuentra la fila por el número de OT y escribe cada cosa en su columna", () => {
+    const r = celdasParaCorregirLaAlta(FILAS, 2897, {
+      descripcion: "Nueva", repuesto: "$920.000", fecha_ejecucion: "2026-11-05",
+    });
+    expect(r).toEqual({
+      ok: true,
+      celdas: [
+        { fila: 3, columna: 2, valor: "Nueva" },
+        { fila: 3, columna: 3, valor: "$920.000" },
+        { fila: 3, columna: 4, valor: serialDelDia("2026-11-05") },
+      ],
+    });
+  });
+
+  it("sólo escribe lo que se pidió", () => {
+    const r = celdasParaCorregirLaAlta(FILAS, 2896, { repuesto: "$1.000" });
+    expect(r).toEqual({ ok: true, celdas: [{ fila: 2, columna: 3, valor: "$1.000" }] });
+  });
+
+  it("la prosa pasa por el escape y la fecha va como serial", () => {
+    const r = celdasParaCorregirLaAlta(FILAS, 2896, {
+      descripcion: "=IMPORTRANGE(1)", fecha_ejecucion: "2026-11-05",
+    });
+    expect(r.ok && r.celdas[0].valor).toBe("'=IMPORTRANGE(1)");
+    expect(r.ok && typeof r.celdas[1].valor).toBe("number");
+  });
+
+  it("una OT que no creó el sistema no está, y lo explica", () => {
+    const r = celdasParaCorregirLaAlta(FILAS, 1234, { repuesto: "$1" });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("creó el sistema");
+  });
+
+  it("si falta una columna, no escribe nada y dice cuál", () => {
+    const r = celdasParaCorregirLaAlta([["N° OT", "DESCRIPCIÓN DEL TRABAJO"], [2896, "x"]], 2896, {
+      descripcion: "a", repuesto: "$1",
+    });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toContain("REPUESTO UTILIZADO");
+  });
+
+  it("una fecha que no existe no se escribe", () => {
+    expect(celdasParaCorregirLaAlta(FILAS, 2896, { fecha_ejecucion: "2026-02-30" }).ok).toBe(false);
   });
 });

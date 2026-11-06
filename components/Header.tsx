@@ -22,14 +22,14 @@ export function Header({
 
   return (
     <header
-      className="flex h-14 shrink-0 items-center gap-2 px-3 md:gap-4 md:px-4"
+      className="no-print flex h-14 shrink-0 items-center gap-2 px-3 md:gap-4 md:px-4"
       style={{ background: "linear-gradient(165deg, var(--sidebar-bg) 0%, var(--sidebar-bg-dark) 100%)", borderBottom: "1px solid var(--sidebar-border)" }}
     >
       <BotonMenu />
 
       <Link href="/" title="Inicio" className="flex shrink-0 items-center">
         <img
-          src="/logo.png"
+          src="/logo-320.png"
           alt="Polcecal / Polysan"
           style={{ height: 32, width: "auto", objectFit: "contain", filter: "brightness(0) invert(1)" }}
         />

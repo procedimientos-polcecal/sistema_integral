@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useCargar } from "@/lib/core/useCargar";
+import { areaPorDefecto } from "@/lib/compras/areaDelUsuario";
+import {
+  AMBAS, empresaSugerida, equiposDelSector, elEquipoSigueValiendo, loQueDiceLaUbicacion,
+  type SectorDePlanta,
+} from "@/lib/compras/sectorDelPedido";
 import { PRIORIDADES, PRIORIDAD_LABELS } from "@/lib/compras/constants";
 import { recortarParaPantalla } from "@/lib/compras/texto";
 import Select from "@/components/Select";
@@ -14,9 +20,15 @@ type Opcion = { id: string; nombre: string };
  * el código y la cantidad ya están del otro lado, y volver a escribirlos es
  * donde el código se pierde y el RI termina diciendo "rodamiento" a secas.
  *
- * **El área y quién paga no se pueden precargar y es a propósito.** Son
- * decisiones de quien pide, y elegirlas por él es cómo un pedido de
- * Mantenimiento entra como si fuera de Producción.
+ * **Quién paga no se precarga nunca**, y el área **sólo cuando no se la está
+ * adivinando**. Son decisiones de quien pide, y elegirlas por él es cómo un
+ * pedido de Mantenimiento entra como si fuera de Producción.
+ *
+ * Esa razón es contra adivinar, no contra saber. Desde el 18/10/2026 la orden
+ * de trabajo manda `areaId`: un repuesto que falta para una OT **es** un pedido
+ * de Mantenimiento por construcción, lo pida quien lo pida. Quién paga sigue
+ * sin precargarse desde afuera — se deduce acá, de la ubicación, y se puede
+ * cambiar.
  */
 export interface ValoresIniciales {
   descripcion?: string;
@@ -25,6 +37,8 @@ export interface ValoresIniciales {
   detalle?: string;
   ubicacionId?: string;
   equipoId?: string;
+  /** Sólo cuando quien precarga lo sabe de verdad. Ver arriba. */
+  areaId?: string;
 }
 
 /**
@@ -32,18 +46,62 @@ export interface ValoresIniciales {
  * que se mantiene igual de corto: sólo descripción y área son obligatorias.
  */
 export default function NuevoRequerimientoModal({
-  areas, empresas, ubicaciones, inicial, onClose, onSaved,
+  areas, empresas, ubicaciones, inicial, advertencia, onClose, onSaved,
 }: {
   areas: Opcion[];
   empresas: Opcion[];
   ubicaciones: Opcion[];
   /** Precargado desde otra pantalla. Se puede editar todo antes de enviar. */
   inicial?: ValoresIniciales;
+  /**
+   * Algo que quien monta el modal quiere decir antes de que se confirme.
+   *
+   * Hoy lo usa la orden de trabajo para avisar que ese repuesto **ya tiene un
+   * requerimiento en curso**, y por eso es un nodo y no un texto: ahí van
+   * números de RI con su enlace y su estado. No bloquea nada — el formulario se
+   * envía igual, porque un falso "ya está pedido" que impida pedir es peor que
+   * pedir dos veces.
+   */
+  advertencia?: ReactNode;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [descripcion, setDescripcion] = useState(inicial?.descripcion ?? "");
-  const [areaId, setAreaId] = useState("");
+
+  /**
+   * El área viene con la de quien pide, y **se puede cambiar**.
+   *
+   * No se bloquea ni se avisa si la cambia: alguien de Mantenimiento pidiendo
+   * algo para Producción es un caso legítimo, y lo que decide quién lo ve en
+   * «Mis pedidos» es el área que quede, no la de quien escribe.
+   *
+   * Lo pide el modal y no las seis pantallas que lo montan — Compras, los tres
+   * listados de Inventario, los repuestos de una OT y Mis pedidos—: pasárselo a
+   * las seis es seis lugares donde olvidarse de uno.
+   *
+   * Si falla, se queda vacío y se elige a mano, como hasta ahora. Que no se
+   * sepa de qué área es alguien no puede impedirle pedir un material.
+   *
+   * Y si quien abre el formulario ya sabe el área —la orden de trabajo manda
+   * Mantenimiento—, ésa gana: es más específica que la del perfil, y el pedido
+   * es de la orden y no de quien la mira.
+   */
+  const [areaId, setAreaId] = useState(inicial?.areaId ?? "");
+
+  useCargar(async (vigente) => {
+    try {
+      const res = await fetch("/api/compras/mi-area");
+      const body = await res.json().catch(() => ({}));
+      if (!vigente() || !res.ok) return;
+      const suya = areaPorDefecto(body.data ?? []);
+      // Sólo si todavía no eligió: la respuesta puede llegar después de que
+      // alguien ya tocó el desplegable, y pisarle la elección sería peor que
+      // no completar nada.
+      if (suya) setAreaId((actual) => actual || suya);
+    } catch {
+      // Se queda vacío a propósito.
+    }
+  }, []);
   const [cantidad, setCantidad] = useState(inicial?.cantidad ?? "");
   const [codigo, setCodigo] = useState(inicial?.codigo ?? "");
   const [fechaNecesidad, setFechaNecesidad] = useState("");
@@ -70,9 +128,34 @@ export default function NuevoRequerimientoModal({
    * pedidos que no son de ninguna máquina— y no llegar a elegirlo no puede
    * impedir cargar lo que alguien necesita.
    */
-  const [equipos, setEquipos] = useState<{ id: string; etiqueta: string }[]>([]);
+  const [equipos, setEquipos] = useState<
+    { id: string; etiqueta: string; sector_id: string | null }[]
+  >([]);
   const [equipoId, setEquipoId] = useState(inicial?.equipoId ?? "");
   const [equiposError, setEquiposError] = useState("");
+
+  /**
+   * El sector **no es un campo**: sale de "dónde se necesita".
+   *
+   * Es lo mismo que pregunta el formulario de Google, que tampoco pide el
+   * sector aparte: ramifica por el lugar y en cada rama ofrece los equipos de
+   * ese lugar —son las 16 columnas "EQUIPO QUE SOLICITA" de la hoja de
+   * respuestas—. Preguntarlo dos veces acá sería pedirle a la gente que
+   * conteste dos veces lo mismo y abrir la puerta a que se contradigan.
+   *
+   * El enlace ya existe: `compras_ubicaciones` dice a qué sector o a qué
+   * equipo corresponde cada lugar. Medido el 16/10/2026 sobre las 44
+   * ubicaciones: 13 dan un sector —de ahí salen la empresa y el filtro—, 15
+   * dan un equipo puntual —y ahí se puede elegir el equipo solo— y 16 no dan
+   * nada, entre ellas las más usadas (Taller Eléctrico, OTRA, Oficinas). Para
+   * ésas no se sugiere nada y el formulario queda como estaba, que es lo
+   * correcto: lo que no se sabe no se inventa.
+   */
+  const [sectores, setSectores] = useState<SectorDePlanta[]>([]);
+  const [sectorId, setSectorId] = useState("");
+  const [enlaceDeUbicacion, setEnlaceDeUbicacion] = useState<
+    Record<string, { sector_id: string | null; equipo_id: string | null }>
+  >({});
 
   useEffect(() => {
     let vigente = true;
@@ -89,18 +172,109 @@ export default function NuevoRequerimientoModal({
         // cargado acá igual que la de uno que entró por el formulario.
         setEquipos(
           (body.equipos ?? [])
-            .map((e2: { id: string; code: string | null; name: string | null }) => ({
+            .map((e2: { id: string; code: string | null; name: string | null; sector_id: string | null }) => ({
               id: e2.id,
               etiqueta: [e2.code, e2.name].filter(Boolean).join(" - "),
+              sector_id: e2.sector_id ?? null,
             }))
             .filter((e2: { etiqueta: string }) => e2.etiqueta)
         );
+        // Van todos los sectores: acá no se eligen, se usan para nombrar el
+        // que salió de la ubicación y para leerle la empresa.
+        setSectores((body.sectores ?? []) as SectorDePlanta[]);
+
+        // A qué sector o equipo apunta cada ubicación. Va en su propia llamada
+        // porque es de Compras y la de arriba es de Mantenimiento; si falla,
+        // el formulario sigue andando sin la sugerencia.
+        try {
+          const res2 = await fetch("/api/compras/ubicaciones");
+          if (res2.ok) {
+            const cuerpo2 = await res2.json();
+            if (!vigente) return;
+            setEnlaceDeUbicacion(
+              Object.fromEntries(
+                (cuerpo2.ubicaciones ?? []).map(
+                  (u: { id: string; sector_id: string | null; equipo_id: string | null }) =>
+                    [u.id, { sector_id: u.sector_id, equipo_id: u.equipo_id }]
+                )
+              )
+            );
+          }
+        } catch { /* la sugerencia es de más; el pedido se carga igual */ }
       } catch (e2) {
         if (vigente) setEquiposError(e2 instanceof Error ? e2.message : String(e2));
       }
     })();
     return () => { vigente = false; };
   }, []);
+
+  /**
+   * Al elegir dónde se necesita: deducir el sector, sugerir quién paga y
+   * recortar los equipos.
+   *
+   * Las dos decisiones delicadas están acá y son la misma: **no pisar lo que
+   * una persona ya eligió.**
+   *
+   *   * quién paga se completa **sólo si está vacío**. El formulario dice, con
+   *     razón, que el área y quién paga no se precargan desde otra pantalla,
+   *     porque elegir por alguien es cómo un pedido de Mantenimiento entra
+   *     como si fuera de Producción. Esto es distinto —sale de algo que la
+   *     misma persona acaba de elegir acá, se ve en un campo que dice
+   *     "sugerido" y se puede cambiar—, pero la diferencia se sostiene sólo
+   *     mientras no reemplace una decisión ya tomada;
+   *   * el equipo se limpia **sólo si deja de estar en la lista**. Dejarlo
+   *     sería mandar el pedido con un equipo que no figura en el desplegable
+   *     que se ve: nadie lo puede revisar antes de enviarlo, y después aparece
+   *     en la ficha contradiciendo al sector.
+   */
+  function elegirUbicacion(nuevaUbicacionId: string) {
+    setUbicacionId(nuevaUbicacionId);
+
+    const { sectorId: nuevoSectorId, equipoId: equipoDelLugar } = loQueDiceLaUbicacion(
+      enlaceDeUbicacion[nuevaUbicacionId],
+      equipos
+    );
+
+    setSectorId(nuevoSectorId);
+    if (equipoDelLugar) setEquipoId(equipoDelLugar);
+    else if (!elEquipoSigueValiendo(equipos, equipoId, nuevoSectorId)) setEquipoId("");
+
+    const sugerida = empresaSugerida(sectores.find((s2) => s2.id === nuevoSectorId));
+    if (sugerida && !paga) setPaga(sugerida);
+  }
+
+  /**
+   * Lo que vino precargado pasa por **la misma deducción** que elegirlo a mano.
+   *
+   * Precargar `ubicacionId` guardaba el valor y nada más: el sector no se
+   * deducía y quién paga quedaba vacío, aunque la ubicación dijera de qué
+   * sector es. Correr `elegirUbicacion` en vez de repetir sus cuentas acá es a
+   * propósito — dos caminos que tienen que dar lo mismo tarde o temprano no lo
+   * dan, y el que se usa menos es el que se queda viejo.
+   *
+   * Espera a que estén los catálogos porque sin ellos no hay nada que deducir,
+   * y corre **una sola vez**: después de eso lo que haya en pantalla es de
+   * quien lo está completando.
+   *
+   * Va **durante el render y no en un efecto**, que es como esta casa ajusta
+   * un estado derivado —igual que el salto a la última página del listado de
+   * órdenes—. Y el testigo es estado y no un `ref`: un `ref` leído en el
+   * render es lo que `react-hooks/refs` marca, con razón, porque no dispara el
+   * re-render que esto necesita.
+   *
+   * Si alguien eligió la ubicación a mano antes de que llegaran los catálogos,
+   * esto corre igual y completa lo que en ese momento no se pudo deducir.
+   */
+  const [dedujoLaInicial, setDedujoLaInicial] = useState(false);
+  if (!dedujoLaInicial && ubicacionId && sectores.length > 0 && enlaceDeUbicacion[ubicacionId]) {
+    setDedujoLaInicial(true);
+    elegirUbicacion(ubicacionId);
+  }
+
+  /** El sector deducido, para poder nombrarlo en pantalla. */
+  const sectorDeducido = sectores.find((s2) => s2.id === sectorId);
+
+  const equiposOfrecidos = equiposDelSector(equipos, sectorId);
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -168,8 +342,8 @@ export default function NuevoRequerimientoModal({
           codigo: codigo.trim() || null,
           fecha_necesidad: fechaNecesidad || null,
           prioridad: prioridad || null,
-          empresa_id: paga === "AMBAS" ? null : paga || null,
-          paga_ambas: paga === "AMBAS",
+          empresa_id: paga === AMBAS ? null : paga || null,
+          paga_ambas: paga === AMBAS,
           detalle_extra: detalle.trim() || null,
           imagen_url: imagenUrl.trim() || null,
           ubicacion_id: ubicacionId || null,
@@ -220,6 +394,10 @@ export default function NuevoRequerimientoModal({
         </div>
 
         <form onSubmit={enviar} className="space-y-4 px-6 py-5">
+          {/* Arriba de todo: es lo último que se puede mirar antes de que el
+              pedido exista. */}
+          {advertencia}
+
           <Campo label="Qué se necesita" requerido>
             <input
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -292,7 +470,7 @@ export default function NuevoRequerimientoModal({
               >
                 <option value="">Sin definir</option>
                 {empresas.map((e2) => <option key={e2.id} value={e2.id}>{e2.nombre}</option>)}
-                <option value="AMBAS">Ambas</option>
+                <option value={AMBAS}>Ambas</option>
               </Select>
             </Campo>
           </div>
@@ -302,7 +480,7 @@ export default function NuevoRequerimientoModal({
             <Select
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={ubicacionId}
-              onChange={(e) => setUbicacionId(e.target.value)}
+              onChange={(e) => elegirUbicacion(e.target.value)}
             >
               <option value="">Sin especificar</option>
               {ubicaciones.map((u) => (
@@ -310,8 +488,11 @@ export default function NuevoRequerimientoModal({
               ))}
             </Select>
             <p className="mt-1 text-xs text-slate-500">
-              ¿Falta un lugar en la lista? Pedile a Compras que lo agregue, así todos
-              lo escriben igual y se puede filtrar por ubicación.
+              {sectorDeducido
+                ? `Sector ${sectorDeducido.nombre}: abajo quedan sus equipos, y quién paga ` +
+                  "viene sugerido de ahí."
+                : "¿Falta un lugar en la lista? Pedile a Compras que lo agregue, así todos " +
+                  "lo escriben igual y se puede filtrar por ubicación."}
             </p>
           </Campo>
 
@@ -324,7 +505,7 @@ export default function NuevoRequerimientoModal({
               onChange={(e2) => setEquipoId(e2.target.value)}
             >
               <option value="">Sin especificar</option>
-              {equipos.map((e2) => (
+              {equiposOfrecidos.map((e2) => (
                 <option key={e2.id} value={e2.id}>{e2.etiqueta}</option>
               ))}
             </Select>
@@ -332,8 +513,11 @@ export default function NuevoRequerimientoModal({
               {equiposError
                 ? `No se pudo traer la lista de equipos (${equiposError}). El pedido se ` +
                   "puede cargar igual; el equipo se le agrega después."
-                : "Opcional. Es lo que después deja ver cuánto se gastó en cada máquina, " +
-                  "y de dónde sale la imputación contable."}
+                : sectorId && equiposOfrecidos.length === 0
+                  ? "Ese lugar no tiene equipos cargados. Elegí otro, o dejalo sin especificar " +
+                    "para ver la lista completa."
+                  : "Opcional. Es lo que después deja ver cuánto se gastó en cada máquina, " +
+                    "y de dónde sale la imputación contable."}
             </p>
           </Campo>
 

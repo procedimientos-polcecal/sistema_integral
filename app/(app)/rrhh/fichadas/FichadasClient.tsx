@@ -10,6 +10,7 @@ import { haceCuanto } from "@/lib/core/haceCuanto";
 import { fechaHora } from "@/lib/compras/constants";
 import { AVISO_DIA_SIN_PROTEGER, traeDiaSinProteger } from "@/lib/rrhh/fichadas/diaSinProteger";
 import { rangoQueIncluye } from "@/lib/rrhh/fichadas/rangoDeLista";
+import { diaDeLaSalida } from "@/lib/rrhh/fichadas/turnoDeNoche";
 import { DIAS_MAX_RANGO } from "@/lib/rrhh/lenox/rango";
 import { bloqueoPorUltimaSync, rangoPorDefecto, segundosDeEspera, textoDeEspera } from "@/lib/rrhh/lenox/pantalla";
 import AcreditadoDeFichada from "@/components/rrhh/AcreditadoDeFichada";
@@ -279,7 +280,13 @@ export default function FichadasClient({ empleados, fichadasIniciales, fallaLaLi
         employeeId: form.employeeId,
         fecha: form.fecha,
         horaEntrada: `${form.fecha}T${form.horaEntrada}:00`,
-        horaSalida: form.horaSalida ? `${form.fecha}T${form.horaSalida}:00` : null,
+        // El día de la salida NO es siempre el de la entrada: en un turno de
+        // 20 a 4 es el siguiente. Este formulario tiene una sola fecha, así
+        // que lo decide `diaDeLaSalida` — un turno no termina antes de
+        // empezar. Es el mismo arreglo que el del modal de corrección.
+        horaSalida: form.horaSalida
+          ? `${diaDeLaSalida(form.fecha, form.horaEntrada, form.horaSalida)}T${form.horaSalida}:00`
+          : null,
       }),
     });
     setGuardandoManual(false);
@@ -385,7 +392,12 @@ export default function FichadasClient({ empleados, fichadasIniciales, fallaLaLi
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-6 mb-6 items-start">
+      {/* Apiladas abajo de `sm`: en 375 px, dos columnas dejan 159 px cada una y
+          40 se los come el padding de la tarjeta, así que quedan 119 px de
+          contenido. Adentro va el formulario de importar el Excel del reloj
+          —botón de archivo, selectores de columna—, que ahí no entra. El script
+          de responsive no lo ve porque corta en tres columnas. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6 items-start">
         <details className="card p-5">
           <summary className="font-medium text-slate-700 cursor-pointer flex items-center gap-1.5">
             Importar archivo del reloj (respaldo)
@@ -531,7 +543,7 @@ export default function FichadasClient({ empleados, fichadasIniciales, fallaLaLi
                 {empleados.map((e) => <option key={e.id} value={e.id}>{e.legajo} - {e.apellido}, {e.nombre}</option>)}
               </Select>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Fecha</label>
                 <input type="date" required value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} className="input" />

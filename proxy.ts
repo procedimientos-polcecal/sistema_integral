@@ -31,8 +31,40 @@ export const config = {
    * y —si por cualquier motivo la cookie no viajara en el pedido del Worker— un
    * 307 al login que del lado del navegador aparece como un error opaco, justo
    * en medio de la carga de una factura.
+   *
+   * `manifest.webmanifest` y `sw.js` quedan afuera por el mismo motivo, y acá
+   * el 307 no es un detalle: el manifest lo lee el navegador antes de que haya
+   * sesión (es lo que ofrece «Agregar a inicio» desde la pantalla de login), y
+   * `sw.js` tiene que registrarse para todo el origen. Con el redirect, el
+   * manifest llega como HTML donde se esperaba JSON y el service worker no se
+   * registra. Los dos son públicos por definición y no hay nada que proteger.
+   *
+   * `cola` queda afuera por el mismo motivo que `sw.js`, y esto **está
+   * medido**: el 19/10/2026, contra producción, pedir `/cola/cualquier-cosa.js`
+   * desde el registro de un service worker devolvía *«The script resource is
+   * behind a redirect, which is disallowed»* —el 307 al login de acá abajo—.
+   * `public/sw.js` importa de `/cola/colaOffline.js` y `/cola/idb.js` las
+   * reglas de la cola de cargas sin señal, para que sean las mismas que corre
+   * la pantalla; el navegador baja esos dos archivos cuando registra o
+   * actualiza el worker, y si no cargan **el service worker entero no se
+   * registra**: se van con él el push y la oferta de instalar. No es una
+   * precaución. Son funciones de decisión: no leen la base, no tienen datos ni
+   * secretos adentro.
+   *
+   * `/cargar` —la pantalla que se dibuja entera en el navegador para poder
+   * cargar un aviso o una OT sin señal— **NO queda afuera, y eso es a
+   * propósito**: con señal tiene que pedir sesión como cualquier otra pantalla.
+   * No la necesita para dibujarse, pero sí para que lo que se cargue ahí llegue
+   * a algún lado, y excluirla sólo lograría que alguien sin sesión la abriera,
+   * cargara, y se quedara con la carga adentro del teléfono. Sin señal este
+   * código no corre —no hay servidor— y la va a servir el service worker desde
+   * el caché, que es la tarea 7 del plan.
+   *
+   * Cuidado con el regex: las alternativas van separadas por `|` y el punto
+   * de los nombres con extensión se escapa con doble barra, porque esto es un
+   * string JS y un `\.` a secas se evalúa como `.` y no escapa nada.
    */
   matcher: [
-    "/((?!_next/static|_next/image|pdfjs|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|pdfjs|cola/|favicon.ico|manifest\\.webmanifest|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

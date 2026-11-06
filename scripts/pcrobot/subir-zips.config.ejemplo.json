@@ -1,0 +1,23 @@
+{
+  "_comentario": "Copiar como subir-zips.config.json al lado del script, en la PC que vaya a subir. NO se commitea: lleva rutas de esa máquina y la ubicación de la credencial. Lo normal es no escribirlo a mano: lo genera instalar.ps1 con las rutas de esa máquina.",
+
+  "credencial": "C:\\SdG\\pcrobot\\cuenta-de-servicio.json",
+
+  "_carpetaDrive": "Id de la carpeta de destino. TIENE que estar dentro de una unidad compartida, no en 'Mi unidad' de nadie. Se saca de la URL: drive.google.com/drive/folders/<ESTO>",
+  "carpetaDrive": "PONER_EL_ID_DE_LA_CARPETA",
+
+  "_origenes": "Una entrada por carpeta del servidor. 'nombre' es el prefijo que va a llevar el archivo en Drive y lo que el SdG usa para saber de qué molino es, así que no se cambia a la ligera. 'carpeta' es donde el PCRobot deja los zips.",
+  "_origenes_cuales": "Los dos fillers son los que el SdG LEE. Los otros cuatro se suben para no perder el dato y todavía no se leen: Planta 02 es un PC Robot pero su CSV es un horímetro por hora y sin kilos; Hornos son planillas mensuales respaldadas a diario; Portería es el respaldo del escritorio de esa PC, ~10 MB por día; y Pesadas Balanza son los CSV crudos de la balanza, cuyo dato el SdG ya tiene por la planilla de Cantera. El porqué de que eso no ensucie el diagnóstico diario está en lib/produccion/molinos/drive.ts.",
+  "_carpetaEntera": "Sin esto se sube UN archivo: el .zip más nuevo, porque el zip del robot es acumulativo y los de días anteriores sobran. Con esto se suben TODOS los archivos de la carpeta, con su propio nombre y sin fecha. Va sólo donde el dato son varios archivos y cada uno acumula lo suyo — hoy la balanza, que tiene un CSV por camión. NO sirve para una carpeta donde cada archivo sea el de un día y no se reescriba: ahí un día perdido se pierde, y este script no tiene cola.",
+  "origenes": [
+    { "nombre": "Filler 1", "carpeta": "\\\\server\\EXTERIOR\\Filler1" },
+    { "nombre": "Filler 2", "carpeta": "\\\\server\\EXTERIOR\\Filler2" },
+    { "nombre": "Planta 02", "carpeta": "\\\\server\\EXTERIOR\\Planta 02" },
+    { "nombre": "Hornos", "carpeta": "\\\\server\\EXTERIOR\\Hornos" },
+    { "nombre": "Porteria", "carpeta": "\\\\server\\EXTERIOR\\Porteria" },
+    { "nombre": "Pesadas Balanza", "carpeta": "\\\\server\\EXTERIOR\\Pesadas Balanza", "carpetaEntera": true }
+  ],
+
+  "_log": "Opcional pero muy recomendado: una tarea programada no tiene a nadie mirando la consola.",
+  "log": "C:\\SdG\\pcrobot\\subir-zips.log"
+}

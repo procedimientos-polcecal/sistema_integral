@@ -3,7 +3,8 @@ import { monto, porcentaje, siNo } from "./planilla";
 import {
   COMPARATIVA_PESTANAS, pestanaDeSector, filaDeComparativa,
   filaParaComparativa, coincideLaFila, porOrdenDeServicio, resumenDeCotizaciones,
-  pareceCotizacion,
+  pareceCotizacion, pestanasQueFaltan, elTotalLoCalculaLaPlanilla,
+  COLUMNA_PRECIO_TOTAL,
 } from "./comparativas";
 
 describe("pestanaDeSector", () => {
@@ -21,9 +22,38 @@ describe("pestanaDeSector", () => {
     expect(pestanaDeSector(null)).toBe("Otros");
   });
 
-  it("tiene las doce pestañas de la planilla", () => {
-    expect(COMPARATIVA_PESTANAS).toHaveLength(12);
+  it("tiene las catorce pestañas de la planilla", () => {
+    expect(COMPARATIVA_PESTANAS).toHaveLength(14);
     expect(COMPARATIVA_PESTANAS).toContain("Otros");
+  });
+
+  /*
+   * Cantera y Despacho se agregaron a la planilla después de escribir el
+   * módulo, y nada avisó: sus cotizaciones iban a parar a "Otros" mientras la
+   * sincronización ni siquiera leía esas dos pestañas. Medido el 16/10/2026
+   * contra la planilla: cuatro cotizaciones —las tres de la OS 240 en Cantera
+   * y la de la OS 250 en Despacho— no existían en el espejo.
+   */
+  it("conoce las pestañas que la planilla sumó después", () => {
+    expect(pestanaDeSector("Cantera")).toBe("Cantera");
+    expect(pestanaDeSector("Despacho")).toBe("Despacho");
+  });
+});
+
+describe("pestanasQueFaltan", () => {
+  it("no dice nada cuando la planilla es la que el sistema conoce", () => {
+    expect(pestanasQueFaltan([...COMPARATIVA_PESTANAS])).toEqual([]);
+  });
+
+  it("nombra la pestaña nueva, que es la que nadie iba a notar", () => {
+    expect(pestanasQueFaltan([...COMPARATIVA_PESTANAS, "Laboratorio"]))
+      .toEqual(["Laboratorio"]);
+  });
+
+  it("el acento no hace nueva a una pestaña que ya está", () => {
+    // La planilla escribe "Calcinación" y la lista también, pero "Hidratacion"
+    // va sin acento: que el aviso dependa de eso lo volvería ruido.
+    expect(pestanasQueFaltan(["Calcinacion", "Hidratación", "  OTROS "])).toEqual([]);
   });
 });
 
@@ -218,6 +248,113 @@ describe("filaParaComparativa", () => {
     expect(filaParaComparativa(cot)[10]).toBe("");
     expect(filaParaComparativa(cot)[13]).toBe("");
   });
+
+  /*
+   * La J es una fórmula de la planilla y escribirla la mata.
+   *
+   * Medido el 16/10/2026 contra la planilla: las filas cargadas a mano tienen
+   * `=H6+(H6*I6)` y la única que había escrito el SdG —la cotización de la OS
+   * 250— tenía el número 2395800 pelado. Se veía a simple vista porque al
+   * perder la fórmula perdió también el formato de moneda: las demás decían
+   * " $2.395.800,00" y ésa, "2395800".
+   *
+   * Importa porque acá manda la planilla: si después alguien corrige el precio
+   * unitario, todas las filas recalculan su total menos la que cargó el
+   * sistema, y nada avisa.
+   */
+  it("no pisa la fórmula del total cuando el total es el que ella calcularía", () => {
+    // 1.972.500 + 21% = 2.386.725, que es justo lo que trae la cotización.
+    expect(filaParaComparativa(cot)[COLUMNA_PRECIO_TOTAL]).toBeNull();
+  });
+
+  it("escribe el total cuando no sale de esa cuenta", () => {
+    // El formulario deja pisar el total a propósito: a veces el proveedor
+    // cotiza uno que no es unitario + IVA.
+    const pisado = { ...cot, precio_total: "2300000" };
+    expect(filaParaComparativa(pisado)[COLUMNA_PRECIO_TOTAL]).toBe("2300000");
+  });
+
+  it("tolera los centavos del redondeo del formulario", () => {
+    // El formulario hace Math.round(u * (1 + iva) * 100) / 100, así que el
+    // total que manda puede diferir del de la planilla en menos de un centavo.
+    // 308.487 + 21% = 373.269,27 exacto, pero el caso que importa es el que
+    // redondea: 1.234.567,89 + 21% = 1.493.827,1469.
+    const redondeado = {
+      ...cot, precio_unitario: "1234567.89", precio_total: "1493827.15",
+    };
+    expect(filaParaComparativa(redondeado)[COLUMNA_PRECIO_TOTAL]).toBeNull();
+  });
+
+  it("sin total deja que lo calcule la planilla", () => {
+    const sinTotal = { ...cot, precio_total: null };
+    expect(filaParaComparativa(sinTotal)[COLUMNA_PRECIO_TOTAL]).toBeNull();
+  });
+
+  it("sigue teniendo quince celdas aunque alguna no se toque", () => {
+    expect(filaParaComparativa(cot)).toHaveLength(15);
+  });
+});
+
+describe("elTotalLoCalculaLaPlanilla", () => {
+  it("reconoce la cuenta de la planilla, H + H*I", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "1980000", iva: 0.21, precio_total: "2395800",
+    })).toBe(true);
+  });
+
+  it("acepta el IVA en cero, que es como está la mitad de las filas", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "18000000", iva: 0, precio_total: "18000000",
+    })).toBe(true);
+  });
+
+  it("toma el IVA que falta como cero", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "1000", iva: null, precio_total: "1000",
+    })).toBe(true);
+  });
+
+  it("dice que no cuando el total está pisado a mano", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "1980000", iva: 0.21, precio_total: "2000000",
+    })).toBe(false);
+  });
+
+  /*
+   * Sin precio unitario la fórmula daría cero, así que el total cotizado es lo
+   * único que hay: va escrito aunque pise la fórmula.
+   */
+  it("dice que no cuando hay total pero no hay unitario", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: null, iva: 0.21, precio_total: "2000000",
+    })).toBe(false);
+  });
+
+  it("dice que sí cuando no hay total que escribir", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "1980000", iva: 0.21, precio_total: null,
+    })).toBe(true);
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: null, iva: null, precio_total: null,
+    })).toBe(true);
+  });
+
+  /*
+   * El IVA viaja como fracción —0,21 y no 21—, que es como lo guarda la
+   * planilla y como lo manda el formulario. Tomarlo como porcentaje daría
+   * veintiún veces el precio y ninguna cotización coincidiría nunca.
+   */
+  it("el IVA es la fracción, no el porcentaje", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "1000", iva: 21, precio_total: "1210",
+    })).toBe(false);
+  });
+
+  it("lee el total escrito a la argentina", () => {
+    expect(elTotalLoCalculaLaPlanilla({
+      precio_unitario: "1.980.000", iva: 0.21, precio_total: "2.395.800,00",
+    })).toBe(true);
+  });
 });
 
 describe("coincideLaFila", () => {
@@ -289,5 +426,55 @@ describe("que fila de la planilla es una cotizacion a medias", () => {
 
   it("el guion suelto es como se escribe 'aca no va nada'", () => {
     expect(pareceCotizacion(fila("-", "-"))).toBe(false);
+  });
+});
+
+/*
+ * `USER_ENTERED` interpreta lo que arranca con `=`, `+`, `-` o `@`. El
+ * precedente es del 19/10/2026: un lazo de IMPORTRANGE dejo las once pestanas
+ * de Compras en blanco todo el dia, sin que nadie escribiera una formula.
+ */
+describe("la comparativa de una OS no deja entrar una formula", () => {
+  const cot = {
+    os_number: 16, fecha: "2025-12-03", area: "Mantenimiento",
+    sector: "Planta filler 2", equipo_raw: "PY-B1-09 – Molino vertical",
+    descripcion: "Eje", proveedor: "Met. Don Alfredo",
+    precio_unitario: "1972500", iva: 0.21, precio_total: "2386725",
+    vigencia_hasta: null, plazos: "15", condiciones_pago: "20 días F.F",
+    otras_especificaciones: null, eleccion: true,
+  };
+
+  it("escapa lo que tipea quien carga la cotizacion", () => {
+    const fila = filaParaComparativa({
+      ...cot,
+      descripcion: "=IMPORTRANGE(\"https://x\";\"A1\")",
+      proveedor: "-Met. Don Alfredo",
+      condiciones_pago: "@contado",
+      otras_especificaciones: "+IVA",
+    });
+
+    expect(fila[5]).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+    expect(fila[6]).toBe("'-Met. Don Alfredo");
+    expect(fila[12]).toBe("'@contado");
+    expect(fila[13]).toBe("'+IVA");
+  });
+
+  it("un texto normal no cambia", () => {
+    const fila = filaParaComparativa(cot);
+    expect(fila[5]).toBe("Eje");
+    expect(fila[6]).toBe("Met. Don Alfredo");
+    expect(fila[12]).toBe("20 días F.F");
+  });
+
+  /*
+   * Los PLAZOS quedan afuera a proposito: son dias —"15", "30, 60"— y la
+   * columna tiene validacion de lista, asi que escribir "15" como texto
+   * cambiaria lo que la planilla compara. El N de OS y el IVA, igual.
+   */
+  it("los plazos, el N de OS y el IVA siguen sin escapar", () => {
+    const fila = filaParaComparativa(cot);
+    expect(fila[11]).toBe("15");
+    expect(fila[0]).toBe(16);
+    expect(fila[8]).toBe(0.21);
   });
 });

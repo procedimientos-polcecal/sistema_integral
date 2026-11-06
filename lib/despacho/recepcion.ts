@@ -1,4 +1,5 @@
 import type { Recepcion } from "./types";
+import { textoParaLaCelda } from "@/lib/core/sheets";
 
 /**
  * La recepción de un camión de material: el pesaje, el estado y la planilla.
@@ -216,6 +217,11 @@ export interface FilaDeRecepcion {
  *
  * Se devuelven con el número de columna —y no como un arreglo de siete— para que
  * saltear la `E` sea estructural y no un `""` puesto en el lugar justo.
+ *
+ * Las notas y el lugar de descarga los tipea quien carga la recepción, así que
+ * van por `textoParaLaCelda`: la escritura es `USER_ENTERED` y lo que arranca
+ * con `=`, `+`, `-` o `@` entraría como fórmula. Las toneladas y la fecha no,
+ * que es de lo que vive la fórmula de la `E`.
  */
 export function celdasDeLaRecepcion(datos: {
   fecha: string;
@@ -229,9 +235,9 @@ export function celdasDeLaRecepcion(datos: {
     { columna: 0, valor: fechaComoSeEscribe(datos.fecha) },
     { columna: 1, valor: datos.proveedor },
     { columna: 2, valor: datos.toneladas === null ? "" : cantidadComoSeEscribe(datos.toneladas) },
-    { columna: 3, valor: datos.notas ?? "" },
+    { columna: 3, valor: textoParaLaCelda(datos.notas) },
     { columna: 5, valor: ordenComoSeEscribe(datos.odooNombre) },
-    { columna: 6, valor: datos.lugarDescarga ?? "" },
+    { columna: 6, valor: textoParaLaCelda(datos.lugarDescarga) },
   ];
 }
 

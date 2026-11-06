@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarCompras } from "@/lib/compras/auth";
+import { filtroDeMontoAlto } from "@/lib/compras/montoAlto";
+import { umbralDeMontoAlto } from "@/lib/compras/ajustes";
 import { PRIORIDADES } from "@/lib/compras/constants";
 import { paginaPedida } from "@/lib/core/paginado";
 import {
   ALTA_SIN_ESCRIBIR, exportarAltaAlFormulario, maximoDeLaSerieEnLaPlanilla,
 } from "@/lib/compras/formulario";
 import { proximoNroRi } from "@/lib/compras/serieDeRi";
+import { avisarDeLosPedidosQueEsperan } from "@/lib/compras/avisoDeAprobacion";
 
 /**
  * Cuánto puede tardar el POST antes de que la plataforma lo mate.
@@ -256,6 +259,26 @@ export async function POST(request: Request) {
         console.error(`RI ${data.nro_ri}: no se pudo escribir en la planilla: ${avisoSheets}`);
       }
 
+      // ── El aviso al instante a quien tiene que aprobarlo ──
+      //
+      // Va último, después de la planilla: el pedido ya está guardado y ya está
+      // encolado, así que esto no puede voltear nada. `avisarAQuienDecide` no
+      // tira —si el push service está caído la compra igual quedó pedida—, y
+      // por eso no necesita su propio `try`.
+      //
+      // `excepto: user.id` porque quien carga un pedido suele ser de los que
+      // aprueban: de los cuatro de `compras_aprobadores`, varios también piden.
+      // Avisarle a alguien de algo que acaba de hacer él es la clase de
+      // notificación que enseña a ignorarlas.
+      //
+      // Nada de lo que devuelve entra en la respuesta: quien cargó el pedido no
+      // tiene nada que hacer con que a otro le haya llegado o no un push, y un
+      // cartel sobre eso sería ruido en la pantalla de quien pide.
+      await avisarDeLosPedidosQueEsperan(
+        [{ etiqueta: `RI ${data.nro_ri}`, descripcion }],
+        user.id
+      );
+
       return NextResponse.json(
         { ...data, ...(avisoSheets ? { aviso_sheets: avisoSheets } : {}) },
         { status: 201 }
@@ -294,10 +317,22 @@ export async function GET(request: Request) {
   const aprobacion = searchParams.get("estado_aprobacion");
   const compra = searchParams.get("estado_compra");
   const mios = searchParams.get("mios");
+  const montoAlto = searchParams.get("monto_alto");
 
   if (aprobacion) query = query.eq("estado_aprobacion", aprobacion);
   if (compra) query = query.eq("estado_compra", compra);
   if (mios === "1") query = query.eq("solicitante_id", user.id);
+
+  // El monto alto se filtra ACÁ y no en la pantalla porque este listado pagina
+  // de a 50 en el servidor: filtrar después de traer la página daría páginas
+  // incompletas —y una lista corta se lee como "no hay más", no como "faltan"—.
+  //
+  // La regla está escrita dos veces, en `lib/compras/montoAlto.ts`: una para la
+  // pantalla y otra para PostgREST. Viven pegadas y hay un test que fija las
+  // dos, porque separarlas es la forma de que se contradigan sin que nada avise.
+  if (montoAlto === "1" || montoAlto === "0") {
+    query = query.or(filtroDeMontoAlto(montoAlto === "1", await umbralDeMontoAlto(supabase)));
+  }
 
   const { data, count, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

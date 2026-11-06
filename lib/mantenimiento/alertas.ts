@@ -1,4 +1,5 @@
 import { fechaEnArgentina } from "@/lib/core/fechas";
+import { esGutAlto, type NotasGut } from "./gut";
 
 /**
  * Qué órdenes de trabajo están atrasadas.
@@ -18,7 +19,14 @@ export interface Atrasable {
   proxima_fecha?: string | null;
 }
 
-/** Estados en los que la orden ya no espera nada de nadie. */
+/**
+ * Estados en los que la orden ya no espera nada de nadie.
+ *
+ * Tiene una gemela, `CERRADAS_GUT` en `gut.ts`, con los mismos dos valores y
+ * **otro dueño**: aquella espeja la migración de `gut_orden` y ésta no espeja
+ * nada, sólo decide qué cuenta como atrasada. No se unifican a propósito. Si un
+ * día aparece un estado nuevo, hay que mirar las dos y decidir en cada una.
+ */
 const CERRADAS = ["REALIZADO", "SUSPENDIDA"];
 
 /**
@@ -87,9 +95,8 @@ export function ordenarPorAtraso<T extends Atrasable>(ordenes: T[], hoy: string)
   });
 }
 
-interface ParaResumir extends Atrasable {
+interface ParaResumir extends Atrasable, NotasGut {
   ot_number?: number | null;
-  prioridad?: string | null;
   sector_raw?: string | null;
 }
 
@@ -99,6 +106,12 @@ interface ParaResumir extends Atrasable {
  * Se agrupa por sector porque es como se decide a quién mandar: las cuatro
  * atrasadas de Calcinación son un problema de Calcinación, no cuatro problemas
  * sueltos.
+ *
+ * `urgentes` son las atrasadas de **puntaje GUT alto** (65 o más), y no las de
+ * `prioridad` "alta". Esa comparación —`prioridad.toUpperCase() === "ALTA"`—
+ * **nunca coincidió**: la planilla guarda "🟠 Alta", con el emoji y el espacio,
+ * así que el tablero decía "0 de prioridad alta" desde el primer día. No se
+ * restaura: la prioridad de la planilla ya no decide nada, sólo se muestra.
  */
 export function resumirAtrasadas<T extends ParaResumir>(ordenes: T[], hoy: string) {
   const atrasadas = ordenarPorAtraso(ordenes.filter((o) => estaAtrasada(o, hoy)), hoy);
@@ -111,7 +124,7 @@ export function resumirAtrasadas<T extends ParaResumir>(ordenes: T[], hoy: strin
 
   return {
     total: atrasadas.length,
-    urgentes: atrasadas.filter((o) => String(o.prioridad ?? "").toUpperCase() === "ALTA").length,
+    urgentes: atrasadas.filter(esGutAlto).length,
     masVieja: atrasadas[0] ?? null,
     atrasadas,
     porSector: [...porSector.entries()]

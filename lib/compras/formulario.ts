@@ -20,7 +20,9 @@
 import { norm } from "@/lib/compras/texto";
 import { serialDelDia, serialDelInstante } from "@/lib/core/fechaDeSheets";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna, comoTexto } from "@/lib/core/sheets";
+import {
+  leerValores, escribirCeldas, filaSiguienteSegunLaColumna, comoTexto, textoParaLaCelda,
+} from "@/lib/core/sheets";
 import { empresaParaPlanilla, indexarColumnas } from "@/lib/compras/sheets";
 import { maximoDeLaColumna } from "@/lib/compras/serieDeRi";
 
@@ -248,18 +250,23 @@ export function celdasDelAlta(
 
   const serialNecesidad = datos.fecha_necesidad ? serialDelDia(datos.fecha_necesidad) : null;
 
+  // Lo que tipea quien pide va por `textoParaLaCelda`; el N° de RI, las dos
+  // marcas de fecha y la cantidad son número y se escriben como tales, que es
+  // de lo que dependen la fórmula del RI y el orden del master. El código ya
+  // tenía su propio forzado —`comoTexto`, por los ceros adelante— y lo
+  // conserva: ahí el problema no es la fórmula sino perder el `00`.
   const valores: Partial<Record<Clave, string>> = {
     nro_ri: String(datos.nro_ri),
     marca: String(serialMarca),
-    nombre: datos.nombre,
-    apellido: datos.apellido,
-    area: datos.area,
-    descripcion: datos.descripcion,
+    nombre: textoParaLaCelda(datos.nombre),
+    apellido: textoParaLaCelda(datos.apellido),
+    area: textoParaLaCelda(datos.area),
+    descripcion: textoParaLaCelda(datos.descripcion),
     codigo: datos.codigo ? comoTexto(datos.codigo) : "",
     cantidad: datos.cantidad !== null ? String(datos.cantidad) : "",
-    ubicacion: datos.ubicacion ?? "",
+    ubicacion: textoParaLaCelda(datos.ubicacion),
     fecha_necesidad: serialNecesidad !== null ? String(serialNecesidad) : "",
-    detalle_extra: datos.detalle_extra ?? "",
+    detalle_extra: textoParaLaCelda(datos.detalle_extra),
     imagen: datos.imagen_url ?? "",
   };
 

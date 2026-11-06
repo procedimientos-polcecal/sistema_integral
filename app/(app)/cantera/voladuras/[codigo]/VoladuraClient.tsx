@@ -15,11 +15,14 @@ import { totalMetros, totalPozos, type Tramo } from "@/lib/cantera/tramos";
 import { ETIQUETA_TIPO_CONSUMO } from "@/lib/cantera/vocabulario";
 import type { Consumo, Insumo, Voladura, Yacimiento } from "@/lib/cantera/types";
 import ConciliacionOdoo from "../../ConciliacionOdoo";
+import { numeroDeCampo } from "@/lib/cantera/numero";
 
 const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 const money = (v: number | null) => (v === null ? "—" : `$ ${ars.format(v)}`);
-const n = (v: string) => (v.trim() === "" ? null : Number(v));
+// La misma lectura que la ruta, que es el punto: `Number("2,5")` daba NaN y
+// el campo terminaba guardado vacío (ver `lib/cantera/numero.ts`).
+const n = (v: string) => numeroDeCampo(v);
 const INPUT_CLS = "mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50";
 
 /** Un color por tipo de consumo, para que la lista de insumos no sea un bloque gris — detonador en ámbar (material peligroso), otros insumos en celeste. */
@@ -123,9 +126,11 @@ function tramosIniciales(
 function tramosLimpios(filas: TramoUI[]): Tramo[] {
   const out: Tramo[] = [];
   for (const f of filas) {
-    const p = Number(f.pozos);
-    const m = Number(f.metros.replace(",", "."));
-    if (Number.isInteger(p) && p > 0 && isFinite(m) && m > 0) out.push({ pozos: p, metros: m });
+    const p = numeroDeCampo(f.pozos);
+    // Antes tenía su propio `replace(",", ".")`: entendía la coma pero no el
+    // punto de miles, y era la cuarta lectura distinta de la misma cadena.
+    const m = numeroDeCampo(f.metros);
+    if (p !== null && m !== null && Number.isInteger(p) && p > 0 && m > 0) out.push({ pozos: p, metros: m });
   }
   return out;
 }
@@ -538,19 +543,19 @@ export default function VoladuraClient({
                   return (
                     <div
                       key={ins.id}
-                      className="grid grid-cols-12 items-center gap-2 px-2 py-1.5"
+                      className="grid grid-cols-2 sm:grid-cols-12 items-center gap-2 px-2 py-1.5"
                       style={{ backgroundColor: i % 2 === 1 ? estilo.zebra : undefined }}
                     >
-                      <span className="col-span-7 text-sm text-slate-700">{ins.nombre}</span>
+                      <span className="col-span-full sm:col-span-7 text-sm text-slate-700">{ins.nombre}</span>
                       <input
-                        className="col-span-2 rounded border border-slate-300 bg-white px-2 py-1 text-sm disabled:bg-slate-50"
+                        className="sm:col-span-2 rounded border border-slate-300 bg-white px-2 py-1 text-sm disabled:bg-slate-50"
                         disabled={dis}
                         placeholder="cant."
                         value={fila.cantidad}
                         onChange={(e) => actualizarFilaCatalogo(ins.id, { cantidad: e.target.value })}
                       />
                       <input
-                        className="col-span-3 rounded border border-slate-300 bg-white px-2 py-1 text-sm disabled:bg-slate-50"
+                        className="sm:col-span-3 rounded border border-slate-300 bg-white px-2 py-1 text-sm disabled:bg-slate-50"
                         disabled={dis}
                         placeholder="USD"
                         value={fila.precio_usd}
@@ -572,14 +577,14 @@ export default function VoladuraClient({
           </p>
           <div className="mt-2 space-y-2">
             {renglonesOtros.map((r, i) => (
-              <div key={i} className="grid grid-cols-12 items-center gap-2">
+              <div key={i} className="grid grid-cols-2 sm:grid-cols-12 items-center gap-2">
                 {r.insumo_id ? (
-                  <span className="col-span-4 text-xs text-slate-400" title="Era un insumo del catálogo que se desactivó después de cargarse">
+                  <span className="col-span-full sm:col-span-4 text-xs text-slate-400" title="Era un insumo del catálogo que se desactivó después de cargarse">
                     (insumo desactivado)
                   </span>
                 ) : (
                   <input
-                    className="col-span-4 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                    className="col-span-full sm:col-span-4 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
                     disabled={dis}
                     placeholder="Nombre"
                     value={r.insumo_raw}
@@ -587,7 +592,7 @@ export default function VoladuraClient({
                   />
                 )}
                 <select
-                  className="col-span-3 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                  className="col-span-full sm:col-span-3 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
                   disabled={dis || r.insumo_id !== null}
                   value={r.tipo}
                   onChange={(e) => actualizarRenglonOtro(i, { tipo: e.target.value })}
@@ -596,14 +601,14 @@ export default function VoladuraClient({
                   <option value="otros_insumos">{ETIQUETA_TIPO_CONSUMO.otros_insumos}</option>
                 </select>
                 <input
-                  className="col-span-2 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                  className="sm:col-span-2 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
                   disabled={dis}
                   placeholder="cant."
                   value={r.cantidad}
                   onChange={(e) => actualizarRenglonOtro(i, { cantidad: e.target.value })}
                 />
                 <input
-                  className="col-span-2 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                  className="sm:col-span-2 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
                   disabled={dis}
                   placeholder="USD"
                   value={r.precio_usd}
@@ -612,7 +617,7 @@ export default function VoladuraClient({
                 {!dis && (
                   <button
                     onClick={() => setRenglonesOtros((prev) => prev.filter((_, j) => j !== i))}
-                    className="col-span-1 text-slate-400 hover:text-red-600"
+                    className="col-span-full justify-self-end sm:col-span-1 sm:justify-self-auto text-slate-400 hover:text-red-600"
                     aria-label="Quitar"
                   >
                     ✕

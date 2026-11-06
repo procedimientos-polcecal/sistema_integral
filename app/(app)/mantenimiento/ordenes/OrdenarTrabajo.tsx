@@ -151,11 +151,11 @@ export default function OrdenarTrabajo({ puedeEditar }: { puedeEditar: boolean }
                   atrasada
                 </span>
               )}
-              {String(o.prioridad ?? "").toUpperCase() === "ALTA" && (
-                <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
-                  alta
-                </span>
-              )}
+              {/* Acá hubo una pastilla `alta` que nunca se dibujó: comparaba
+                  `prioridad` contra "ALTA" y la planilla guarda "🟠 Alta". Se
+                  sacó en vez de arreglarla: dentro de una lista que ya ordena
+                  el GUT, habría sido dos escalas diciendo "alta" a cinco
+                  píxeles. La prioridad sigue en los filtros y en el detalle. */}
 
               {/* Los botones no son un adorno: arrastrar no anda en el teléfono,
                   que es desde donde se mira esto parado al lado de la máquina. */}

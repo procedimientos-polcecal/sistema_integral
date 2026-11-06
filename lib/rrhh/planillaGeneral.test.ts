@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dia, diasSuperpuestos, diasHabilesSuperpuestos, extrasSinValidar } from "./planillaGeneral";
+import { dia, diasSuperpuestos, diasHabilesSuperpuestos, extrasSinValidar, horasDeFrancoAPagar } from "./planillaGeneral";
 
 // Julio 2026: el 1 cae miércoles. Domingos: 5, 12, 19, 26. Sábados: 4, 11, 18, 25.
 const sinFeriados = new Set<number>();
@@ -108,5 +108,47 @@ describe("extrasSinValidar", () => {
     expect(
       extrasSinValidar([dia(8, 0, true), dia(4, 0, false), dia(0, 0, false), dia(0, 7.5, false)])
     ).toEqual({ dias: 2, horas50: 4, horas100: 7.5 });
+  });
+});
+
+/**
+ * EL FRANCO SE PAGA CUANDO SE TOMA, NO CUANDO SE GANA.
+ *
+ * Hasta el 02/11/2026 la planilla sumaba las horas de **todos** los francos
+ * cuyo `fecha_generado` caía en el período, sin mirar el estado: el franco
+ * pesaba en el sueldo el mes en que se ganaba aunque la persona todavía no lo
+ * hubiera descansado. Se cambió a pedido.
+ *
+ * La consecuencia que no se deduce sola, y por eso está acá: el período se
+ * filtra por `fecha_generado`, así que un franco que se gana en octubre y se
+ * marca tomado en noviembre **no aparece en noviembre** — aparece en octubre
+ * recién cuando esa planilla se vuelve a emitir.
+ */
+describe("horasDeFrancoAPagar", () => {
+  it("un franco tomado suma sus horas", () => {
+    expect(horasDeFrancoAPagar([{ horas: 8, estado: "TOMADO" }])).toBe(8);
+  });
+
+  it("un franco pendiente no suma nada", () => {
+    expect(horasDeFrancoAPagar([{ horas: 8, estado: "PENDIENTE" }])).toBe(0);
+  });
+
+  it("suma sólo los tomados cuando hay de los dos", () => {
+    expect(
+      horasDeFrancoAPagar([
+        { horas: 8, estado: "TOMADO" },
+        { horas: 8, estado: "PENDIENTE" },
+        { horas: 4, estado: "TOMADO" },
+      ])
+    ).toBe(12);
+  });
+
+  /** `numeric` vuelve de PostgREST como string: sumarlo sin convertir concatena. */
+  it("las horas que llegan como texto se suman como número", () => {
+    expect(horasDeFrancoAPagar([{ horas: "8", estado: "TOMADO" }, { horas: "4.5", estado: "TOMADO" }])).toBe(12.5);
+  });
+
+  it("sin francos da cero", () => {
+    expect(horasDeFrancoAPagar([])).toBe(0);
   });
 });

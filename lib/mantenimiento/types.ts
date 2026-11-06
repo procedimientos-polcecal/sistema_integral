@@ -206,6 +206,14 @@ export interface OrdenTrabajo {
   created_by: string | null;
   created_at_app: string | null;
   schedule_id: string | null;
+  // Las tres notas de la matriz GUT, de 1 a 5. Null mientras la orden no se puntuó.
+  gut_gravedad: number | null;
+  gut_urgencia: number | null;
+  gut_tendencia: number | null;
+  // Es una CLAVE DE ORDEN, no el puntaje: lleva el 27 de las sin puntuar y +1000
+  // a las abiertas. Columna generada, nunca se escribe. No se muestra: el
+  // puntaje sale de `puntajeGut()` con las tres notas.
+  gut_orden: number;
 }
 
 export interface PlanificacionDiaria {
@@ -260,6 +268,33 @@ export interface Aviso {
   repuesto: string | null;
   reference_photos: string[] | null;
   app_created: boolean;
+  /**
+   * De qué área de la empresa es el aviso (`compras_areas`). Decide qué avisos
+   * ve cada uno en `/mis-avisos`. `null` es que no se pudo saber con certeza,
+   * no que no tenga: ver `lib/mantenimiento/areaDelAviso.ts`.
+   */
+  area_id: string | null;
+  /** Quién lo cargó **en el sistema**; los que entraron por la planilla no lo tienen. */
+  creado_por: string | null;
+  /**
+   * Cuándo se decidió que este aviso **no** va a ser orden de trabajo.
+   *
+   * Las tres viajan juntas o ninguna —lo sostiene un `check` de la base—, y
+   * `null` es que nadie lo decidió todavía, que no es lo mismo que "va a
+   * hacerse". Ver `lib/mantenimiento/desestimarAviso.ts`.
+   */
+  desestimado_en: string | null;
+  desestimado_por: string | null;
+  motivo_desestimado: string | null;
+  /**
+   * Cuándo se le enlazó una OT **que ya existía**, con «Ya tiene OT».
+   *
+   * `null` no es "no tiene orden": es que ese enlace no lo hizo ese botón —la
+   * generó el sistema, o el número lo escribió alguien en la planilla—, y por
+   * eso no se puede deshacer. Ver `lib/mantenimiento/enlazarOtAlAviso.ts`.
+   */
+  ot_enlazada_en: string | null;
+  ot_enlazada_por: string | null;
   sheets_row: number | null;
   synced_at: string | null;
   created_at: string;

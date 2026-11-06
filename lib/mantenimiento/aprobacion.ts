@@ -27,6 +27,7 @@
  */
 
 import { dondeSeEscribeElEstado, esDenegacionDeOS } from "@/lib/mantenimiento/denegacion";
+import type { ItemQueEspera } from "@/lib/core/avisoAlInstante";
 
 /** El estado con el que una OS queda aprobada. La palabra es la de la planilla. */
 export const ESTADO_APROBADO = "APROBADO";
@@ -175,4 +176,34 @@ export function porQueNoSePuedeAprobar(
     "planilla, acomodando el seguimiento, y después traerla con «Traer de la " +
     "planilla»."
   );
+}
+
+/**
+ * Las órdenes de servicio que **nacen** esperando una decisión, en esta corrida.
+ *
+ * Gemela de `lasQueNacenEsperando` de Compras, y por el mismo motivo: lo que
+ * interrumpe a alguien es la aparición, no el estado. Una OS que ya esperaba
+ * ayer no vuelve a interrumpir hoy — para eso está el resumen de las 8:30—, y
+ * de ahí sale que no haga falta recordar a quién se le avisó qué.
+ *
+ * Qué significa "espera" no se decide acá: lo decide `esperaDecision`, cuyo
+ * encabezado explica por qué la pregunta se hace sobre la pestaña y no sobre la
+ * columna de estado. Reimplementarlo sería tener dos definiciones de lo mismo,
+ * y la que interrumpe tiene que ser idéntica a la que muestra la pantalla.
+ */
+export function lasOSQueNacenEsperando(
+  registros: {
+    os_number: number;
+    descripcion?: string | null;
+    sheets_tab: string | null;
+    estado: string | null;
+  }[],
+  yaEstaban: Set<number>
+): ItemQueEspera[] {
+  return registros
+    .filter((os) => !yaEstaban.has(os.os_number) && esperaDecision(os))
+    .map((os) => ({
+      etiqueta: `OS ${os.os_number}`,
+      descripcion: (os.descripcion ?? "").trim() || null,
+    }));
 }

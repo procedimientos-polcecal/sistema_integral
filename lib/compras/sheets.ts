@@ -24,12 +24,15 @@ import { linkDeCelda, planillasPorRi } from "@/lib/compras/vincular";
 import { equiposPorRi, resolverElEquipo } from "@/lib/compras/equipoDelFormulario";
 import {
   lasQuePasaronAPedido,
+  lasQueNacenEsperando,
   repartirLasOrdenes,
   type RequerimientoParaLaOrden,
 } from "@/lib/compras/ordenesDesdeLaPlanilla";
+import type { ItemQueEspera } from "@/lib/core/avisoAlInstante";
 import { hayCredencialesOdoo } from "@/lib/odoo/client";
 import { empujarOrdenesDeRequerimiento } from "@/lib/odoo/pushOrden";
 import { fusionarConLoQueYaHabia } from "@/lib/compras/fusionDeLaPlanilla";
+import { borrarLoQueLaPlanillaNoTrajo } from "@/lib/core/borradoDeEspejo";
 import { punterosARefrescar, type DondeEsta } from "@/lib/compras/punteroDeLaPlanilla";
 // Ciclo de imports a propósito: `formulario.ts` toma `empresaParaPlanilla` e
 // `indexarColumnas` de acá. Las cuatro son funciones y ninguna se llama al
@@ -42,7 +45,7 @@ import type { EstadoAprobacion, EstadoCompra, Prioridad } from "@/lib/compras/ty
 import {
   obtenerToken as tokenGoogle, cuentaDeServicio, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA,
 } from "@/lib/core/google";
-import { leerValores } from "@/lib/core/sheets";
+import { leerValores, estaCalculando, errorDeCalculo } from "@/lib/core/sheets";
 
 const HOJA_MASTER = "Requerimientos internos";
 
@@ -62,6 +65,25 @@ const HOJA_MASTER = "Requerimientos internos";
  * puntas coinciden por construcción y no por casualidad.
  */
 export const esPestanaDeArea = (pestana: string) => pestana.startsWith("RI ");
+
+/**
+ * Cómo se llama cada cosa en `compras_requerimientos`, para el borrado.
+ *
+ * El vocabulario no es el de Mantenimiento: acá el sello es
+ * `sheets_sincronizado_en`, el puntero es `sheets_fila` y lo que la app
+ * escribió se reconoce por `origen = "app"`.
+ *
+ * `editado_en_app` se informa pero **no protege**: lo tienen 714 de cada 1.000
+ * filas, así que proteger por eso sería no borrar nunca. Si la planilla manda,
+ * manda también para borrar.
+ */
+const ESPEJO_DE_REQUERIMIENTOS = {
+  tabla: "compras_requerimientos", numero: "nro_ri", sincronizado: "sheets_sincronizado_en",
+  creada: "created_at", fila: "sheets_fila",
+  deLaApp: { columna: "origen", valor: "app" },
+  editada: "editado_en_app",
+  modulo: "compras", entidad: "requerimiento",
+} as const;
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -112,12 +134,38 @@ export function nuevoCacheSheets(): CacheSheets {
   return { encabezados: new Map() };
 }
 
+/**
+ * Una pestaña —o un rango— de la planilla de Compras.
+ *
+ * Es la única lectura propia del módulo: no pasa por `leerValores` porque
+ * necesita rangos (`Requerimientos internos!A:A`) y su propio texto de error,
+ * que viaja a la cola de pendientes. Por eso tiene que repetir acá la guarda
+ * que `leerValores` hace por todos: **una planilla a medio calcular no se
+ * puede leer**.
+ *
+ * Y no era una formalidad. El 19/10/2026 una fórmula de `APROB COMPRAS` quedó
+ * importando el libro contra sí mismo —1.686 celdas con un `IMPORTRANGE` al
+ * propio `PEDIDOS DE COMPRA`—, el `IMPORTRANGE` que alimenta al master no pudo
+ * resolver nunca y `Requerimientos internos` pasó el día entero devolviendo
+ * `Cargando…` y columnas vacías. Esta función lo habría leído como datos: las
+ * diez pestañas por área, que son `FILTER` del master, quedaron en `#N/A` al
+ * mismo tiempo.
+ *
+ * Esa vez no mordió de casualidad —la única fila con algo traía `#VALUE!` en
+ * el N° de RI, que no parsea como número y se saltea, y el freno de
+ * `borradoDeEspejo` cubría el `DELETE`—, pero las dos defensas son accidentes
+ * de ese caso y no una decisión: la importación habría entrado igual con las
+ * columnas vacías si el `QUERY` hubiera resuelto la primera y no el resto. Es
+ * exactamente la trampa de las 621 OT del 13/10/2026, por el mismo motivo.
+ */
 async function leerPestana(pestana: string): Promise<string[][]> {
   const token = await obtenerToken(false);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${idPlanilla()}/values/${encodeURIComponent(pestana)}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
-  return ((await res.json()).values ?? []) as string[][];
+  const valores = ((await res.json()).values ?? []) as string[][];
+  if (estaCalculando(valores)) throw errorDeCalculo(pestana);
+  return valores;
 }
 
 async function listarPestanas(): Promise<string[]> {
@@ -365,6 +413,25 @@ export interface ResultadoSyncCompleto extends ResultadoSync {
    */
   punteros_actualizados: number;
   /**
+   * Cuántos requerimientos se borraron porque la planilla ya no los tiene.
+   *
+   * En régimen tiene que dar 0 —medido el 18/10/2026: 2.159 RI en la planilla
+   * y 2.159 en la base—, y cualquier número distinto de 0 es alguien que borró
+   * una línea a propósito. Si el borrado no se hizo, `borrado` dice por qué.
+   */
+  borradas: number;
+  /** Qué se borró, o por qué no se borró nada. */
+  borrado?: string;
+  /**
+   * Los pedidos que nacieron esperando aprobación en esta corrida.
+   *
+   * La sincronización los **calcula** y no los avisa: quien manda el push es
+   * `avisarDeLosPedidosQueEsperan`, desde la ruta, porque este módulo termina
+   * en el bundle del cliente y `web-push` es de Node. Lo normal es que venga
+   * vacío: la mayoría de las corridas no traen filas nuevas.
+   */
+  nacen_esperando: ItemQueEspera[];
+  /**
    * Si algún puntero no se pudo guardar, por qué. La importación siguió igual:
    * lo que se pierde es que ese RI exporte a la celda que le toca, no el alta
    * de los nuevos. Se devuelve en vez de quedar en un `console.warn` porque un
@@ -410,9 +477,19 @@ interface FilaPlanilla {
   datos: Record<string, unknown>;
 }
 
-export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyncCompleto> {
+export async function importarDesdeSheets(
+  origen = "cron",
+  opciones: { sinFreno?: boolean } = {}
+): Promise<ResultadoSyncCompleto> {
   const comenzo = Date.now();
   const admin = createAdminClient();
+  // Antes de leer: un RI que aparezca después de este instante no estaba en lo
+  // que leimos, y su ausencia no prueba que lo hayan borrado.
+  const inicio = new Date().toISOString();
+  // Uno solo para toda la corrida. Con un `toISOString()` por fila —que es
+  // como estaba— cada una queda con el suyo y despues no se puede preguntar
+  // cuales no tocamos, que es exactamente lo que decide quien sobra.
+  const sincronizadoEn = new Date().toISOString();
 
   try {
     const pestanas = await listarPestanas();
@@ -679,7 +756,7 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
         costo_envio: d.costo_envio ?? null,
         hoja_origen: registro.hoja,
         sheets_fila: registro.fila,
-        sheets_sincronizado_en: new Date().toISOString(),
+        sheets_sincronizado_en: sincronizadoEn,
         // Las nueve columnas que la planilla puede no traer. La regla —y por
         // qué cada una está en la lista— vive en `fusionarConLoQueYaHabia`.
         ...fusion,
@@ -809,6 +886,23 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       else punterosMovidos++;
     }
 
+    // ── Quiénes nacieron esperando una aprobación en esta corrida ──
+    //
+    // Se calcula acá porque éste es el único lugar que sabe cuáles son nuevas,
+    // pero **no se avisa acá**: `web-push` es de Node y este módulo termina en
+    // el bundle del cliente por `empresaParaPlanilla`. El porqué completo está
+    // en `lib/compras/avisoDeAprobacion.ts`, que es quien manda.
+    //
+    // Que el aviso salga de la sincronización y no de la ruta de alta no es un
+    // detalle: de los últimos 400 requerimientos, 397 entraron por la planilla
+    // y 3 por la app. El momento en que el SdG se entera de un pedido nuevo es
+    // el momento en que esta función lo inserta — el webhook del Apps Script la
+    // corre con cada edición.
+    const nacenEsperando = lasQueNacenEsperando(
+      aEscribir as { nro_ri: number; descripcion?: unknown; estado_aprobacion?: unknown }[],
+      previo
+    );
+
     const resultado: ResultadoSync = {
       filas_leidas: leidas,
       filas_nuevas: nuevas,
@@ -820,8 +914,27 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       direccion: "importar", origen, ...resultado, duracion_ms: Date.now() - comenzo,
     });
 
+    // Lo que la planilla dejó de tener. Va después del `upsert` porque lo que
+    // decide quién sobra es no haber sido sellado por esta corrida.
+    //
+    // Compras es la más segura de las cuatro para esto: el master trae **todos**
+    // los RI —2.159 de 2.159, medido el 18/10/2026— así que una pestaña de área
+    // renombrada no deja huérfanas a sus filas. Si falla la lectura de una
+    // pestaña, `leerPestana` tira y no se llega hasta acá.
+    const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_REQUERIMIENTOS, {
+      // Los RI que la planilla trajo, **no** los que esta corrida escribió:
+      // una fila con `editado_en_app` se saltea sin reescribirse —1.678 de
+      // 2.160 el 18/10/2026— y preguntarle al sello la daba por borrada.
+      clavesLeidas: new Set(porRi.keys()),
+      cuando: sincronizadoEn, inicio,
+      sinFreno: opciones.sinFreno,
+      actor: origen === "cron" ? "cron" : "sincronizacion",
+    });
+
     return {
       ...resultado,
+      borradas: borrado.borradas,
+      ...(borrado.aviso ? { borrado: borrado.aviso } : {}),
       // Cuántos de los que se escribieron quedaron con su planilla enlazada.
       comparativas: aEscribir.filter((f) => f.comparativa_drive_id).length,
       comparativas_sin_planilla: sinPlanilla.length,
@@ -836,6 +949,11 @@ export async function importarDesdeSheets(origen = "cron"): Promise<ResultadoSyn
       ...(errorDeEquipos ? { equipos_error: errorDeEquipos } : {}),
       ordenes_odoo: ordenesCreadas,
       ...(errorDeOrdenes ? { ordenes_odoo_error: errorDeOrdenes } : {}),
+      // Va en el resultado que ve quien aprieta el botón y NO en `resultado`,
+      // que es exactamente lo que se inserta en `compras_sincronizaciones` y
+      // esa tabla no tiene la columna. Es la misma razón por la que
+      // `ResultadoSyncCompleto` existe aparte de `ResultadoSync`.
+      nacen_esperando: nacenEsperando,
     };
   } catch (e) {
     const mensaje = e instanceof Error ? e.message : String(e);

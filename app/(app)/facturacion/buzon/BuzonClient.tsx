@@ -9,6 +9,7 @@ import type { EmpresaDelGrupo, ProveedorDelPadron } from "@/lib/facturacion/alta
 import type { LecturaDeFactura } from "@/lib/facturacion/leerArchivo";
 import type { FacturaEnPantalla, OrigenDeFactura } from "@/lib/facturacion/types";
 import type { CandidatoDeOdoo } from "@/lib/odoo/sincronizarFacturas";
+import { sePuedeGuardarSola } from "@/lib/facturacion/sePuedeGuardarSola";
 import BandejaDelCorreo from "./BandejaDelCorreo";
 import LineasDeFactura from "./LineasDeFactura";
 import BorradorEnOdoo from "./BorradorEnOdoo";
@@ -147,11 +148,21 @@ export default function BuzonClient({
    * De ahí para adelante es el mismo camino que arrastrar un PDF, que es el
    * que está medido.
    */
-  async function agregar(archivos: FileList | File[] | null, correoId?: string) {
+  async function agregar(
+    archivos: FileList | File[] | null,
+    correoId?: string,
+    /*
+     * La bandeja manda un id por archivo cuando baja una tanda entera, y
+     * `guardarLasLimpias` cuando quiere que las que el QR resolvió se guarden
+     * sin que nadie las mire. Arrastrar un PDF sigue sin pasar ninguno de los
+     * dos: ese camino no cambió.
+     */
+    opciones?: { correoIdPorArchivo?: (string | undefined)[]; guardarLasLimpias?: boolean }
+  ) {
     if (!archivos || archivos.length === 0) return;
 
     const nuevas: Fila[] = Array.from(archivos).map((archivo, i) => ({
-      correoId,
+      correoId: opciones?.correoIdPorArchivo?.[i] ?? correoId,
       id: `${Date.now()}-${i}-${archivo.name}`,
       archivo,
       estado: "leyendo",
@@ -176,15 +187,43 @@ export default function BuzonClient({
           // receptor: el CUIT que es del grupo es el que recibe.
           cuitsDelGrupo: empresas.map((e) => e.cuit ?? "").filter(Boolean),
         });
+        const estado: EstadoDeFila = lectura.cabecera
+          ? lectura.origenDeLaCabecera === "texto"
+            ? "texto"
+            : "lista"
+          : "sin-datos";
+
         cambiar(fila.id, {
           lectura,
-          estado: lectura.cabecera
-            ? lectura.origenDeLaCabecera === "texto"
-              ? "texto"
-              : "lista"
-            : "sin-datos",
+          estado,
           mensaje: lectura.cabecera ? null : lectura.motivo,
         });
+
+        /*
+         * Y si vino de una tanda de la bandeja, **se guarda acá mismo** en vez
+         * de esperar a que alguien apriete su botón.
+         *
+         * Va factura por factura y no al final: así la cola se vacía a medida
+         * que avanza y lo que queda en pantalla son sólo las que hay que
+         * mirar. De a una y en orden, por lo mismo que `guardarTodas` — el
+         * índice único de la base es el que detecta un duplicado, y en
+         * paralelo dos copias del mismo archivo pasarían las dos.
+         */
+        if (opciones?.guardarLasLimpias) {
+          const empresa = lectura.cabecera?.cuitReceptor
+            ? porCuit.empresas.get(lectura.cabecera.cuitReceptor)
+            : undefined;
+
+          const veredicto = sePuedeGuardarSola({ lectura, empresaReconocida: !!empresa });
+
+          if (veredicto.sola) {
+            await guardar({ ...fila, lectura, estado }, false);
+          } else {
+            // El motivo a la vista: es lo que distingue una fila de la otra
+            // cuando quedan diez en la cola y hay que saber qué mirar.
+            cambiar(fila.id, { mensaje: veredicto.porque });
+          }
+        }
       } catch (e) {
         cambiar(fila.id, {
           estado: "sin-datos",
@@ -342,7 +381,7 @@ export default function BuzonClient({
         que hay para hacer, y arrastrar un archivo pasa a ser lo que se hace
         cuando la factura llegó en papel o por WhatsApp.
       */}
-      {puedeEditar && <BandejaDelCorreo onCargar={(archivos, correoId) => agregar(archivos, correoId)} />}
+      {puedeEditar && <BandejaDelCorreo onCargar={agregar} />}
 
       {puedeEditar && (
         <section className="card p-4">

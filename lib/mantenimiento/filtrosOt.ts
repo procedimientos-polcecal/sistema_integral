@@ -27,11 +27,65 @@ import { ESPECIALIDADES, ESTADOS_DE_OT } from "./ordenes";
  *
  * No son enums de la base —la columna es texto libre, porque el origen es una
  * planilla— así que la lista se declara acá y se la valida contra ella. Salen
- * de mirar las 1.819 órdenes cargadas: `tipo` tiene dos valores, `quien` dos, y
- * `prioridad` tres, todos escritos siempre igual.
+ * de mirar las órdenes cargadas: al 21/10/2026, sobre 2.224, `tipo` tiene dos
+ * valores en uso, `quien` dos y `prioridad` tres, todos escritos siempre igual.
+ *
+ * **PREDICTIVO, MEJORA y MIXTO se sumaron el 21/10/2026 y tienen 0 usos.** No
+ * salen de la planilla: salen de `NuevaOTModal` y `FormularioOTOffline`, que
+ * tenían cada uno su copia de estas dos listas y los ofrecían. Una OT creada
+ * desde ahí con uno de esos tres valores no aparecía al filtrar por nada, que
+ * es exactamente lo que pasó con las prioridades el 16/10.
+ *
+ * Se decidió sumarlos en vez de sacarlos de las pantallas, a pedido. MIXTO
+ * además **ya estaba diseñado**: `loQueFaltaParaCerrar` le exige contratista y
+ * operario, y los dos formularios muestran el campo de contratista cuando se
+ * elige. Era la única de las tres con código detrás.
+ *
+ * Lo que NO hubo que tocar, y conviene saber por qué: el MTBF cuenta fallas con
+ * `tipo === "CORRECTIVO"` (`mtbf.ts`, `mtbfDatos.ts`), así que un PREDICTIVO o
+ * una MEJORA no cuentan como falla — que es lo correcto, no una omisión.
  */
-export const TIPOS_DE_OT = ["PROGRAMADO", "CORRECTIVO"] as const;
-export const QUIENES_DE_OT = ["INTERNO", "CONTRATADO"] as const;
+export const TIPOS_DE_OT = ["PROGRAMADO", "CORRECTIVO", "PREDICTIVO", "MEJORA"] as const;
+export const QUIENES_DE_OT = ["INTERNO", "CONTRATADO", "MIXTO"] as const;
+
+/**
+ * Cómo se escriben esos dos vocabularios cuando los lee una persona.
+ *
+ * ── POR QUÉ SON UN `Record` Y NO UN TERNARIO ────────────────────────────────
+ *
+ * El filtro del listado los armaba así:
+ *
+ *     t === "PROGRAMADO" ? "Programado" : "Correctivo"
+ *     q === "INTERNO"    ? "Interno"    : "Contratado"
+ *
+ * Eso funcionaba mientras las listas tuvieran **exactamente dos** valores. El
+ * 21/10/2026 se sumaron PREDICTIVO, MEJORA y MIXTO, y al día siguiente el
+ * desplegable de tipos mostraba **«Programado, Correctivo, Correctivo,
+ * Correctivo»**: tres opciones distintas con la misma etiqueta, imposibles de
+ * distinguir y por lo tanto de usar. El de «quién lo realiza» mostraba
+ * «Contratado» dos veces.
+ *
+ * Nada lo notó. No hay test de pantallas, y para `tsc` un ternario sobre un
+ * string es perfectamente válido: el `else` se traga cualquier valor nuevo.
+ *
+ * **Un `Record` sobre el propio tuple sí lo nota, y en el compilador**: agregar
+ * un valor a `TIPOS_DE_OT` sin agregarle su etiqueta acá es un error de `tsc`,
+ * que es lo que no pasó. Por eso el tipo se escribe contra la lista
+ * —`(typeof TIPOS_DE_OT)[number]`— y no como un `Record<string, string>` suelto,
+ * que volvería a tragarse el olvido.
+ */
+export const ETIQUETA_DE_TIPO: Record<(typeof TIPOS_DE_OT)[number], string> = {
+  PROGRAMADO: "Programado",
+  CORRECTIVO: "Correctivo",
+  PREDICTIVO: "Predictivo",
+  MEJORA: "Mejora",
+};
+
+export const ETIQUETA_DE_QUIEN: Record<(typeof QUIENES_DE_OT)[number], string> = {
+  INTERNO: "Interno",
+  CONTRATADO: "Contratado",
+  MIXTO: "Mixto",
+};
 
 /**
  * La prioridad viene con el emoji adelante, tal cual la escribe la planilla:
@@ -61,6 +115,41 @@ export const CAMPOS_DE_FECHA = [
 const CAMPOS_VALIDOS: readonly string[] = CAMPOS_DE_FECHA.map(([v]) => v);
 
 /**
+ * En qué orden se listan las órdenes.
+ *
+ * El default es el sugerido —`gut_orden` descendente—, que sube lo abierto por
+ * encima de lo cerrado y dentro de eso lo de más puntaje GUT. Sirve para
+ * repartir trabajo, que es para lo que se mira el listado casi siempre.
+ *
+ * **Pero no sirve para buscar una orden puntual**, y eso es lo que faltaba: con
+ * el sugerido, la OT 2884 puede estar en cualquier página. Por número va de la
+ * más nueva a la más vieja, que es como se las nombra cuando alguien pregunta
+ * "¿qué pasó con la 2884?".
+ *
+ * Ordenar **en la base y no en el cliente**, igual que el resto: son 2.264
+ * filas paginadas de a 50, y ordenar la página que se está mirando no es
+ * ordenar nada.
+ */
+export const ORDENES_DEL_LISTADO = [
+  ["", "Sugerido (GUT)"],
+  ["numero", "N° de OT"],
+] as const;
+
+const ORDENES_VALIDOS: readonly string[] = ORDENES_DEL_LISTADO.map(([v]) => v);
+
+/**
+ * El orden pedido, o `""` —el sugerido— si no se reconoce.
+ *
+ * La lista blanca vive acá y no en la ruta por lo mismo que `columnaDeFecha`:
+ * de esto sale un nombre de columna para la consulta, y dejar que quien lo use
+ * se acuerde de validarlo es cómo alguna vez no se acuerda.
+ */
+export function ordenDelListado(valor: string | null | undefined): string {
+  const elegido = String(valor ?? "");
+  return ORDENES_VALIDOS.includes(elegido) ? elegido : "";
+}
+
+/**
  * La columna que hay que filtrar. Lo que no está en la lista cae en `fecha`.
  *
  * La lista blanca vive **acá y no en la ruta**, aunque sea la ruta la que
@@ -87,6 +176,8 @@ export interface FiltrosOt {
   busqueda: string;
   /** Sobre cuál de las tres fechas corre el rango. `""` es `fecha`. */
   campoFecha: string;
+  /** En qué orden se listan. `""` es el sugerido. Ver `ORDENES_DEL_LISTADO`. */
+  orden: string;
   /** "YYYY-MM-DD", los dos inclusive. `""` es sin límite de ese lado. */
   desde: string;
   hasta: string;
@@ -106,7 +197,7 @@ export interface FiltrosOt {
 }
 
 export const FILTROS_VACIOS: FiltrosOt = {
-  busqueda: "", campoFecha: "", desde: "", hasta: "",
+  busqueda: "", campoFecha: "", orden: "", desde: "", hasta: "",
   estado: [], especialidad: [], tipo: [], quien: [],
   prioridad: [], proveedor: [], sector: [], equipo: [],
 };
@@ -129,6 +220,7 @@ export function leerFiltrosDeLaUrl(
     campoFecha: CAMPOS_VALIDOS.includes(params.get("campo_fecha") ?? "")
       ? params.get("campo_fecha") ?? ""
       : "",
+    orden: ordenDelListado(params.get("orden")),
     desde: laFecha(params, "desde"),
     hasta: laFecha(params, "hasta"),
     estado: losQueEstanEnLaLista(params, "estado", ESTADOS_DE_OT),
@@ -150,12 +242,13 @@ export function leerFiltrosDeLaUrl(
  * cuando no los hay.
  */
 export const hayAlgunFiltro = (f: FiltrosOt): boolean =>
-  hayAlguno({ ...f, campoFecha: "" });
+  hayAlguno({ ...f, campoFecha: "", orden: "" });
 
 /** El orden en que van los filtros en la URL, y con qué nombre. */
 const NOMBRES: readonly [keyof FiltrosOt, string][] = [
   ["busqueda", "q"],
   ["campoFecha", "campo_fecha"],
+  ["orden", "orden"],
   ["desde", "desde"],
   ["hasta", "hasta"],
   ["estado", "estado"],

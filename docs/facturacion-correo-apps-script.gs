@@ -86,26 +86,44 @@ var ETIQUETA = 'SdG/cargado';
 var POR_CORRIDA = 10;
 
 /**
- * Cuánto puede pesar un POST, en bytes **crudos** —antes de base64—.
+ * Qué versión de este archivo está pegada en el editor.
  *
- * El tope no lo pone el SdG sino **Vercel: 4,5 MB por request**, y no se puede
- * subir desde el código. Pasarse da un `413 FUNCTION_PAYLOAD_TOO_LARGE`, que
- * es lo que empezó a fallar el 07/10/2026 cuando una corrida junto diez mails
- * con adjuntos pesados en un solo envío.
- *
- * Base64 infla un 33%, así que 3 MB crudos son unos 4,1 MB de cuerpo: entra
- * con margen para el asunto, el remitente y las llaves del JSON.
+ * Suena a burocracia y no lo es: este script vive **fuera del repo**, en un
+ * proyecto de Apps Script que se actualiza a mano pegando el archivo entero.
+ * Cuando algo falla, la primera pregunta —"¿está puesta la última versión?"—
+ * no se podía contestar con nada, y eso costó una vuelta entera el 16/10/2026:
+ * el mismo 413 podía ser un arreglo que no estaba puesto o un agujero nuevo, y
+ * no había forma de distinguirlos desde afuera. Ahora el número viaja en cada
+ * POST y aparece en todos los errores.
  */
-var MAXIMO_POR_ENVIO = 3 * 1024 * 1024;
+var VERSION = '2026-10-16';
 
 /**
- * Cuánto puede pesar **un adjunto**.
+ * Cuánto base64 entra en un POST, **medido y no estimado**.
  *
- * Decía 20 MB —el límite del bucket del SdG— y era una medida del lugar
- * equivocado: un adjunto que no entra en un POST no llega nunca, por grande
- * que sea el bucket. El techo real es el del envío.
+ * El tope no lo pone el SdG sino **Vercel: 4,5 MB por request**, y no se puede
+ * subir desde el código. Pasarse da un `413 FUNCTION_PAYLOAD_TOO_LARGE`.
+ *
+ * Las dos versiones anteriores contaban **bytes crudos** y multiplicaban por
+ * 4/3 de cabeza para estimar el cuerpo. Las dos se pasaron igual —el 07/10 y
+ * el 13/10—, así que el problema no era el número sino **contar una cosa para
+ * predecir otra**. Esto cuenta directamente lo que viaja: `contenido.length`
+ * es exactamente la cantidad de caracteres base64 que van en el JSON.
+ *
+ * El margen que queda —unos 600 KB— es para el asunto, el remitente, los
+ * nombres de archivo y las llaves. Y si aun así se pasa, está la red de abajo.
  */
-var MAXIMO_BYTES = MAXIMO_POR_ENVIO;
+var MAXIMO_CUERPO = 3900000;
+
+/**
+ * Cuánto puede pesar **un adjunto**, en bytes crudos.
+ *
+ * Acá el valor crudo sí sirve, porque es un filtro previo: se usa para no
+ * molestarse en leer un archivo que no va a entrar en ningún POST. Es
+ * deliberadamente holgado; quien decide de verdad es `MAXIMO_CUERPO`, sobre el
+ * base64 ya calculado.
+ */
+var MAXIMO_BYTES = 3 * 1024 * 1024;
 
 /** Saca los espacios de los costados. Apps Script no tiene `String.trim` viejo. */
 function limpiar(valor) {
@@ -124,6 +142,7 @@ function revisarLasPropiedades() {
   var props = PropertiesService.getScriptProperties().getProperties();
   var claves = Object.keys(props);
 
+  Logger.log('Version de este script: ' + VERSION);
   Logger.log('Propiedades cargadas en ESTE proyecto: ' + (claves.length ? claves.join(', ') : '(ninguna)'));
 
   ['URL_APP', 'SECRETO', 'BUSQUEDA'].forEach(function (clave) {
@@ -191,7 +210,7 @@ function revisarElCorreo() {
    */
   for (var h = 0; h < hilos.length; h++) {
     var mensajes = mensajesDelHilo(hilos[h], muyGrandes);
-    if (mensajes.length) enviarPorTandas(url, secreto, mensajes);
+    if (mensajes.length) enviarPorTandas(url, secreto, mensajes, muyGrandes);
 
     // Los hilos sin nada que mandar se etiquetan igual: un hilo con adjuntos
     // que no sirven no tiene que volver a mirarse en cada corrida.
@@ -208,11 +227,16 @@ function revisarElCorreo() {
    * factura se carga a mano desde el mail.
    */
   if (muyGrandes.length) {
+    /*
+     * El motivo lo trae cada entrada y no este mensaje, porque hay dos causas
+     * distintas: el filtro previo por tamaño del archivo, y el servidor
+     * rechazando uno que ya iba solo. Decir "pesan más de 3 MB" para las dos
+     * era mentira en la segunda — y era mi propio texto el que la decía.
+     */
     throw new Error(
-      'Entró todo lo demás, pero ' + muyGrandes.length + ' adjunto(s) pesan más de ' +
-      Math.round(MAXIMO_BYTES / (1024 * 1024)) + ' MB y no se pueden mandar ' +
-      '(el tope es de Vercel, no del SdG). Hay que cargarlos a mano desde el ' +
-      'mail: ' + muyGrandes.join(' · ')
+      'Entró todo lo demás, pero ' + muyGrandes.length + ' adjunto(s) no se ' +
+      'pudieron mandar (el tope es de Vercel, no del SdG). Hay que cargarlos a ' +
+      'mano desde el mail (script ' + VERSION + '): ' + muyGrandes.join(' · ')
     );
   }
 }
@@ -245,7 +269,7 @@ function mensajesDelHilo(hilo, muyGrandes) {
       if (archivo.getSize() > MAXIMO_BYTES) {
         muyGrandes.push(
           archivo.getName() + ' (' + Math.round(archivo.getSize() / (1024 * 1024)) +
-          ' MB, de ' + mensaje.getFrom() + ')'
+          ' MB, de ' + mensaje.getFrom() + '): más grande que el tope por adjunto'
         );
         continue;
       }
@@ -275,28 +299,22 @@ function mensajesDelHilo(hilo, muyGrandes) {
 /**
  * Manda los adjuntos en varios POST, para no pasarse del tope de Vercel.
  *
- * Se corta por **bytes acumulados**, no por cantidad: diez mails livianos
- * entran juntos y una factura escaneada de 3 MB va sola.
+ * Se corta por **base64 acumulado** —`contenido.length`, que es exactamente lo
+ * que viaja— y no por cantidad ni por bytes crudos. Diez mails livianos entran
+ * juntos; un escaneo grande va solo.
  *
  * ## La unidad es el adjunto, no el mensaje
  *
- * La primera versión de esto cortaba por mensaje y **nunca partía uno**, con
- * el argumento de que sus adjuntos tenían que viajar juntos para que el UNIQUE
- * por (mensaje, adjunto) del SdG siguiera valiendo. **Ese argumento estaba
- * mal**: la clave es el par, así que cada adjunto es una fila independiente y
- * mandar la mitad en un POST y la otra mitad en el siguiente da exactamente el
- * mismo resultado, y reintentar también.
+ * La primera versión cortaba por mensaje y **nunca partía uno**, con el
+ * argumento de que sus adjuntos tenían que viajar juntos para que el UNIQUE
+ * por (mensaje, adjunto) del SdG siguiera valiendo. Ese argumento estaba mal:
+ * la clave es el par, así que cada adjunto es una fila independiente y mandar
+ * la mitad en un POST y la otra mitad en el siguiente da el mismo resultado.
  *
- * Y el costo de esa regla inventada fue un 413 el 13/10/2026, seis días
- * después de arreglar el primero. Un mensaje con **dos adjuntos de 2 MB** pasa
- * el filtro por adjunto —ninguno llega al tope de 3 MB— y arma un cuerpo de
- * 5,33 MB. Uno con doce de 400 KB arma 6,25 MB. Medido con los dos casos, que
- * quedaron en el banco de pruebas.
- *
- * Cortando por adjunto, un POST no puede pasarse salvo que un solo adjunto lo
- * haga, y para eso está el tope de `MAXIMO_BYTES`, que es el mismo número.
+ * El mismo mensaje puede aparecer en dos tandas, cada vez con los adjuntos que
+ * le tocaron y repitiendo su cabecera.
  */
-function enviarPorTandas(url, secreto, mensajes) {
+function enviarPorTandas(url, secreto, mensajes, muyGrandes) {
   var tanda = [];
   var acumulado = 0;
 
@@ -305,19 +323,14 @@ function enviarPorTandas(url, secreto, mensajes) {
 
     for (var a = 0; a < mensaje.adjuntos.length; a++) {
       var adjunto = mensaje.adjuntos[a];
-      var pesa = adjunto.bytes || 0;
+      var pesa = adjunto.contenido.length;
 
-      if (tanda.length && acumulado + pesa > MAXIMO_POR_ENVIO) {
-        enviar(url, secreto, tanda);
+      if (tanda.length && acumulado + pesa > MAXIMO_CUERPO) {
+        enviarPartiendoSiHaceFalta(url, secreto, tanda, muyGrandes);
         tanda = [];
         acumulado = 0;
       }
 
-      /*
-       * El mismo mensaje puede aparecer en dos tandas, cada vez con los
-       * adjuntos que le tocaron. Del lado del SdG son filas distintas y la
-       * cabecera —remitente, asunto, fecha— se repite igual en las dos.
-       */
       var ultimo = tanda.length ? tanda[tanda.length - 1] : null;
       if (!ultimo || ultimo.id !== mensaje.id) {
         ultimo = {
@@ -335,16 +348,97 @@ function enviarPorTandas(url, secreto, mensajes) {
     }
   }
 
-  if (tanda.length) enviar(url, secreto, tanda);
+  if (tanda.length) enviarPartiendoSiHaceFalta(url, secreto, tanda, muyGrandes);
 }
 
+/**
+ * Manda una tanda y, **si el servidor igual dice 413, la parte al medio**.
+ *
+ * Ésta es la parte que importa, y existe porque el cálculo de arriba ya falló
+ * dos veces: el 07/10/2026 y el 13/10/2026, las dos con un número que parecía
+ * bien calculado. Un tope elegido a mano es una predicción sobre lo que el
+ * otro lado va a aceptar; un 413 es el otro lado diciendo qué acepta de
+ * verdad. **Cuando los dos no coinciden, gana el 413.**
+ *
+ * Partir al medio y reintentar convierte el tope en una pista: si está bien,
+ * esto nunca corre; si quedó corto, la corrida se acomoda sola en vez de
+ * fallar y dejar el correo sin entrar. Y cuando ya no se puede partir —un solo
+ * adjunto que el servidor no acepta— se informa ese adjunto y **sigue con el
+ * resto**, en vez de tirar la corrida entera por un archivo.
+ */
+function enviarPartiendoSiHaceFalta(url, secreto, tanda, muyGrandes) {
+  var r = enviar(url, secreto, tanda);
+  if (r.ok) return;
+
+  if (r.codigo !== 413) {
+    throw new Error(
+      'El SdG contestó ' + r.codigo + ' (script ' + VERSION + '): ' + r.texto.slice(0, 300)
+    );
+  }
+
+  if (contarAdjuntos(tanda) <= 1) {
+    var solo = tanda[0].adjuntos[0];
+    muyGrandes.push(
+      solo.nombre + ' (' + Math.round(solo.contenido.length / (1024 * 1024)) +
+      ' MB ya codificado, de ' + tanda[0].remitente + '): el servidor lo rechazó por tamaño'
+    );
+    return;
+  }
+
+  var mitades = partirAlMedio(tanda);
+  enviarPartiendoSiHaceFalta(url, secreto, mitades[0], muyGrandes);
+  enviarPartiendoSiHaceFalta(url, secreto, mitades[1], muyGrandes);
+}
+
+/** Cuántos adjuntos hay en una tanda, sumando los de todos sus mensajes. */
+function contarAdjuntos(tanda) {
+  var n = 0;
+  for (var i = 0; i < tanda.length; i++) n += tanda[i].adjuntos.length;
+  return n;
+}
+
+/**
+ * Parte una tanda en dos, por **adjunto** y no por mensaje.
+ *
+ * Por mensaje no alcanzaría: una tanda de un solo mensaje con cuatro adjuntos
+ * no se podría partir, que es justo el caso que hizo falta arreglar.
+ */
+function partirAlMedio(tanda) {
+  var mitad = Math.ceil(contarAdjuntos(tanda) / 2);
+  var primera = [];
+  var segunda = [];
+  var vistos = 0;
+
+  for (var i = 0; i < tanda.length; i++) {
+    var m = tanda[i];
+    for (var a = 0; a < m.adjuntos.length; a++) {
+      var donde = vistos < mitad ? primera : segunda;
+      var ultimo = donde.length ? donde[donde.length - 1] : null;
+      if (!ultimo || ultimo.id !== m.id) {
+        ultimo = { id: m.id, remitente: m.remitente, asunto: m.asunto, fecha: m.fecha, adjuntos: [] };
+        donde.push(ultimo);
+      }
+      ultimo.adjuntos.push(m.adjuntos[a]);
+      vistos++;
+    }
+  }
+
+  return [primera, segunda];
+}
+
+/**
+ * El POST. Devuelve qué contestó en vez de tirar, para que quien llama decida.
+ *
+ * Un 413 no es lo mismo que un 500: el primero se arregla partiendo y el
+ * segundo no. Tirar acá los hacía indistinguibles.
+ */
 function enviar(url, secreto, mensajes) {
   var limpios = [];
   for (var i = 0; i < mensajes.length; i++) {
     var m = mensajes[i];
     var adjuntos = [];
     for (var a = 0; a < m.adjuntos.length; a++) {
-      // `bytes` es de acá: sirve para armar las tandas y no tiene que viajar.
+      // `bytes` es de acá: sirve para el filtro previo y no tiene que viajar.
       adjuntos.push({
         nombre: m.adjuntos[a].nombre,
         tipo: m.adjuntos[a].tipo,
@@ -364,19 +458,21 @@ function enviar(url, secreto, mensajes) {
     method: 'post',
     contentType: 'application/json',
     headers: { 'x-webhook-secret': secreto },
-    payload: JSON.stringify({ mensajes: limpios }),
+    payload: JSON.stringify({ version: VERSION, mensajes: limpios }),
     muteHttpExceptions: true,
   });
 
   var codigo = respuesta.getResponseCode();
 
   /*
-   * Se corta en el primer error, y por eso el hilo de esta tanda no se
-   * etiqueta: un error del servidor que dejara el mail marcado como cargado
-   * haría que esa factura no se cargue nunca — y nadie se enteraría, que es la
-   * peor forma de fallar.
+   * El hilo se etiqueta sólo si el SdG contestó que sí: un error del servidor
+   * que dejara el mail marcado como cargado haría que esa factura no se cargue
+   * nunca, y nadie se enteraría. Como acá no se tira, el corte lo hace quien
+   * llama —y eso pasa antes de etiquetar.
    */
-  if (codigo < 200 || codigo >= 300) {
-    throw new Error('El SdG contestó ' + codigo + ': ' + respuesta.getContentText().slice(0, 300));
-  }
+  return {
+    ok: codigo >= 200 && codigo < 300,
+    codigo: codigo,
+    texto: respuesta.getContentText(),
+  };
 }

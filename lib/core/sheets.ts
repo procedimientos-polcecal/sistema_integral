@@ -265,6 +265,52 @@ export async function asegurarColumnas(
  */
 export const comoTexto = (valor: string): string => `'${valor}`;
 
+/**
+ * Un texto escrito por una persona, como hay que mandarlo para que la planilla
+ * no lo interprete.
+ *
+ * Es el complemento de `comoTexto`: aquélla fuerza, ésta decide cuándo. Y no
+ * contradice la nota de arriba, porque **la prosa sigue sin forzarse**: sólo se
+ * escapa lo que no es prosa. Dos casos, los dos medidos contra cómo lee Google
+ * un `USER_ENTERED`:
+ *
+ * - Lo que **arranca** con `=`, `+`, `-` o `@`: entra como fórmula. Un `=A1`
+ *   escrito en una observación deja la celda mostrando otra celda, y lo peor es
+ *   que parece un dato.
+ * - Lo que es **sólo** dígitos y separadores: `12/10` se vuelve una fecha,
+ *   `19,58` un número según el locale. "Se rompió el 12 de octubre" no entra
+ *   acá —tiene letras— y va tal cual, que es lo que se quiere.
+ *
+ * El apóstrofo no se ve en la planilla: Google lo consume y guarda el valor
+ * como texto.
+ *
+ * ── POR QUÉ NO SE SACA, AUNQUE HOY NO HAGA FALTA ──────────
+ *
+ * Medido el 23/10/2026 sobre las cinco tablas que escriben texto libre —2.255
+ * OT, 2.186 requerimientos, 4.650 movimientos de inventario, 1.538 de envases
+ * y 187 avisos—: **cero** textos arrancan con uno de esos cuatro caracteres.
+ * El único en toda la base es una observación de OS que dice `--`. O sea que
+ * esto no arregla nada de lo que ya hay, y por eso se puede sacar sin que
+ * ningún test se ponga rojo y sin que nada se vea mal.
+ *
+ * Lo que defiende es lo otro. El 19/10/2026 la planilla de Compras pasó el día
+ * entera en blanco por un lazo de `IMPORTRANGE` —1.686 celdas que no resuelven
+ * nunca, y las once pestañas se vaciaron juntas porque las diez por área son
+ * `FILTER` del master—. Nadie lo escribió a propósito: se duplicó una pestaña.
+ * Un `=IMPORTRANGE(...)` tipeado en una descripción hace lo mismo a mano, y
+ * desde el 22/10/2026 el alta de avisos la puede usar cualquier autenticado
+ * —pasó de 4 personas a 14—. El costo de tenerlo puesto es un apóstrofo que no
+ * se ve; el de no tenerlo, un día de planilla.
+ */
+export function textoParaLaCelda(valor: string | null | undefined): string {
+  const v = String(valor ?? "");
+  // Vacío es como se borra una celda, y un apóstrofo solo no la borraría.
+  if (v === "") return "";
+  if (/^[=+\-@]/.test(v)) return comoTexto(v);
+  if (/^[\d.,:/\s-]+$/.test(v)) return comoTexto(v);
+  return v;
+}
+
 /*
  * `valor` acepta número desde el 16/09/2026, y conviene usarlo.
  *
@@ -315,7 +361,9 @@ export async function escribirCeldas(
  * Una fila vacía en el medio no corta la cuenta: se busca la última con algo,
  * no la primera sin nada.
  */
-export function filaSiguienteSegunLaColumna(columna: string[][]): number {
+export function filaSiguienteSegunLaColumna(
+  columna: readonly (readonly unknown[])[]
+): number {
   for (let i = columna.length - 1; i >= 0; i--) {
     if (String(columna[i]?.[0] ?? "").trim()) return i + 2;
   }
@@ -648,4 +696,373 @@ export async function crearPestana(
   }
 
   return true;
+}
+
+/**
+ * Reemplazar el contenido entero de una pestaña por estas filas.
+ *
+ * Es lo que necesita una instantánea de respaldo: no hay nada que conservar
+ * abajo, la pestaña se reescribe completa cada noche.
+ *
+ * **Borra antes de escribir, y eso no es un detalle.** Un `PUT` sólo pisa el
+ * rango que se le manda, así que una instantánea más corta que la de ayer
+ * —alguien que ya no está en el padrón, un movimiento que se anuló— dejaría la
+ * cola vieja abajo, sin ninguna marca de que es vieja. Un respaldo que muestra
+ * un empleado dado de baja como si siguiera es peor que no tenerlo.
+ *
+ * **Va en un solo `PUT` y no celda por celda.** `escribirCeldas` manda un rango
+ * por celda, que es lo correcto cuando se tocan cinco celdas de una planilla
+ * que alguien más mantiene; acá serían 40.000 rangos en un pedido para una
+ * instantánea de 4.000 filas, y Google lo rechaza.
+ *
+ * Crea la pestaña si no está, así que un libro vacío alcanza para empezar.
+ *
+ * Escribe con `USER_ENTERED` como el resto del sistema: los números van como
+ * número y las fechas con `serialDelDia()`. Un `"19,58"` mandado como texto lo
+ * interpreta la planilla según su locale, que es la misma trampa que dio vuelta
+ * 885 fechas en Compras, por el otro lado.
+ */
+export async function reemplazarPestana(
+  planillaId: string,
+  pestana: string,
+  filas: (string | number)[][]
+): Promise<void> {
+  // Devuelve false si ya existía, que es el caso normal a partir de la segunda
+  // noche. No es un error y no se mira.
+  await crearPestana(planillaId, pestana);
+
+  const token = await obtenerToken([SCOPE_SHEETS]);
+
+  const limpieza = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+      `/values/${encodeURIComponent(pestana)}:clear`,
+    { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!limpieza.ok) {
+    throw new Error(
+      mensajeDeGoogle(limpieza.status, await limpieza.text(), cuentaDeServicio(), "escribir")
+    );
+  }
+
+  if (filas.length === 0) return;
+
+  // El ancho lo decide la fila más larga: las filas de datos pueden tener menos
+  // columnas que el encabezado si la última viene vacía, y un rango más angosto
+  // que la matriz hace que Google rechace el pedido entero.
+  const ancho = Math.max(...filas.map((f) => f.length));
+  const rango = `${pestana}!A1:${letraDeColumna(ancho - 1)}${filas.length}`;
+
+  const res = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+      `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ values: filas }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "escribir"));
+  }
+}
+
+/** El `sheetId` (gid) de una pestaña por su nombre, o null si no está. */
+async function idDePestana(planillaId: string, pestana: string): Promise<number | null> {
+  const token = await obtenerToken([SCOPE_SHEETS_LECTURA]);
+  const res = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}?fields=sheets.properties(sheetId,title)`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
+  }
+  const datos = (await res.json()) as { sheets?: { properties: { sheetId: number; title: string } }[] };
+  return datos.sheets?.find((s) => s.properties.title === pestana)?.properties.sheetId ?? null;
+}
+
+/** Los formatos que sabe aplicar `formatearColumnas`. */
+export type FormatoDeColumna = "fecha" | "hora";
+
+const PATRON: Record<FormatoDeColumna, { type: string; pattern: string }> = {
+  fecha: { type: "DATE", pattern: "dd/mm/yyyy" },
+  hora: { type: "DATE_TIME", pattern: "hh:mm" },
+};
+
+/**
+ * Darle formato de fecha o de hora a columnas enteras de una pestaña.
+ *
+ * **Hace falta, y no es cosmético.** Las fechas se escriben como serial —texto
+ * sería interpretado según el locale de la planilla, que es la trampa que dio
+ * vuelta 885 fechas en Compras—, pero un serial sin formato se muestra tal
+ * cual: la columna "Ingreso" de un libro recién creado decía `45903` en vez de
+ * `01/08/1991`. En las planillas que ya existen el formato está puesto desde
+ * siempre y por eso nunca se notó; en un libro nuevo las columnas nacen en
+ * "Automático" y un número se queda número.
+ *
+ * Un respaldo que hay que descifrar no es legible, y legible es exactamente
+ * para lo que existe.
+ *
+ * Se aplica **desde la fila 3**: arriba están el aviso y el encabezado, que son
+ * texto. Formatearlos no rompe nada, pero tampoco hace nada, y acotar el rango
+ * deja claro dónde empiezan los datos.
+ *
+ * `formatos` va alineado a las columnas: un `null` es "esta columna no se
+ * toca".
+ */
+export async function formatearColumnas(
+  planillaId: string,
+  pestana: string,
+  formatos: (FormatoDeColumna | null)[]
+): Promise<void> {
+  const conFormato = formatos
+    .map((f, i) => ({ f, i }))
+    .filter((x): x is { f: FormatoDeColumna; i: number } => x.f !== null);
+  if (conFormato.length === 0) return;
+
+  const sheetId = await idDePestana(planillaId, pestana);
+  if (sheetId === null) throw new Error(`La pestaña "${pestana}" no existe en la planilla`);
+
+  const token = await obtenerToken([SCOPE_SHEETS]);
+  const res = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requests: conFormato.map(({ f, i }) => ({
+          repeatCell: {
+            range: { sheetId, startRowIndex: 2, startColumnIndex: i, endColumnIndex: i + 1 },
+            cell: { userEnteredFormat: { numberFormat: PATRON[f] } },
+            fields: "userEnteredFormat.numberFormat",
+          },
+        })),
+      }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "escribir"));
+  }
+}
+
+/**
+ * Borrar una pestaña por nombre. Devuelve false si no estaba.
+ *
+ * Existe para la `Sheet1` que Google crea sola con cada libro nuevo: queda
+ * vacía al lado de las del respaldo y hace dudar de si falta algo.
+ */
+export async function borrarPestana(planillaId: string, pestana: string): Promise<boolean> {
+  const sheetId = await idDePestana(planillaId, pestana);
+  if (sheetId === null) return false;
+
+  const token = await obtenerToken([SCOPE_SHEETS]);
+  const res = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ requests: [{ deleteSheet: { sheetId } }] }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "escribir"));
+  }
+  return true;
+}
+
+/**
+ * Escribir un bloque rectangular a partir de una celda, en un solo `PUT`.
+ *
+ * Es el hermano acotado de `reemplazarPestana`: ésa borra la pestaña entera y
+ * sirve para un libro que el sistema genera; ésta toca **sólo el rectángulo que
+ * se le da** y existe para las planillas donde hay columnas de fórmula
+ * intercaladas que no se pueden pisar —el kardex de Envases tiene la B, la G y
+ * la K en el medio de las literales—.
+ *
+ * Un `PUT` y no `escribirCeldas`: esa manda un rango por celda, que está bien
+ * para cinco celdas y es imposible para 1.500 filas × 4 columnas.
+ *
+ * `filaInicial` y `columnaInicial` van en base 1 y base 0 respectivamente, como
+ * en el resto del archivo.
+ */
+export async function escribirBloque(
+  planillaId: string,
+  pestana: string,
+  columnaInicial: number,
+  filaInicial: number,
+  filas: (string | number)[][]
+): Promise<void> {
+  if (filas.length === 0) return;
+
+  const ancho = Math.max(...filas.map((f) => f.length));
+  const rango =
+    `${pestana}!${letraDeColumna(columnaInicial)}${filaInicial}:` +
+    `${letraDeColumna(columnaInicial + ancho - 1)}${filaInicial + filas.length - 1}`;
+
+  const token = await obtenerToken([SCOPE_SHEETS]);
+  const res = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+      `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ values: filas }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "escribir"));
+  }
+}
+
+/**
+ * Hasta qué fila llega la fórmula de una columna.
+ *
+ * Hace falta antes de bajar un kardex entero: las planillas de stock tienen las
+ * fórmulas **arrastradas hasta mucho más abajo de los datos** —la de Envases
+ * tiene datos hasta la 1.525 y fórmulas hasta la 3.304— y escribir un
+ * movimiento más abajo de donde llega la fórmula deja una fila **sin stock y
+ * sin que nada avise**: la columna queda en blanco y parece un renglón más.
+ *
+ * Devuelve 0 si la columna no tiene ninguna fórmula.
+ */
+export async function hastaDondeLlegaLaFormula(
+  planillaId: string,
+  pestana: string,
+  columna: number
+): Promise<number> {
+  const filas = await leerFormulas(planillaId, pestana);
+  let ultima = 0;
+  for (let i = 0; i < filas.length; i++) {
+    if (String(filas[i]?.[columna] ?? "").startsWith("=")) ultima = i + 1;
+  }
+  return ultima;
+}
+
+/**
+ * Dejar una pestaña donde **sólo el sistema puede escribir**.
+ *
+ * Probado el 19/10/2026 contra un libro real, porque era la duda que bloqueaba
+ * todo el cambio de dirección:
+ *
+ * | | |
+ * |---|---|
+ * | ¿Escribe con la protección puesta? | **sí** |
+ * | Al crearla, ¿quién queda de editor? | el servicio **y** los administradores del archivo |
+ * | ¿Puede sacar a las personas y quedar sola? | **sí** |
+ * | ¿Puede excluirse a sí misma? | **no**: `You can't remove yourself as an editor` |
+ *
+ * Lo último parece un límite y es una garantía: **no existe la forma de dejar
+ * una pestaña que el sistema tenga que escribir y no pueda**.
+ *
+ * Son dos llamadas y no una porque Google agrega sola a la cuenta de servicio
+ * —y a los administradores— al crear la protección; depurar la lista es un
+ * `updateProtectedRange` aparte.
+ *
+ * Es **idempotente**: si la pestaña ya está protegida, actualiza los editores
+ * de la protección que hay en vez de apilar una segunda.
+ */
+export async function protegerPestana(
+  planillaId: string,
+  pestana: string,
+  descripcion = "La escribe el sistema"
+): Promise<{ creada: boolean; editores: string[] }> {
+  const sheetId = await idDePestana(planillaId, pestana);
+  if (sheetId === null) throw new Error(`La pestaña "${pestana}" no existe en la planilla`);
+
+  const token = await obtenerToken([SCOPE_SHEETS]);
+  const batch = async (requests: unknown[]) => {
+    const res = await pedir(`https://sheets.googleapis.com/v4/spreadsheets/${planillaId}:batchUpdate`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ requests }),
+    });
+    const cuerpo = await res.text();
+    if (!res.ok) {
+      throw new Error(mensajeDeGoogle(res.status, cuerpo, cuentaDeServicio(), "escribir"));
+    }
+    return JSON.parse(cuerpo);
+  };
+
+  const leerProtecciones = async (): Promise<{ protectedRangeId: number; range?: { sheetId?: number } }[]> => {
+    const res = await pedir(
+      `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+        `?fields=sheets(properties.sheetId,protectedRanges(protectedRangeId,range.sheetId,editors))`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
+    const datos = (await res.json()) as {
+      sheets?: { properties: { sheetId: number }; protectedRanges?: { protectedRangeId: number; range?: { sheetId?: number } }[] }[];
+    };
+    return datos.sheets?.find((s) => s.properties.sheetId === sheetId)?.protectedRanges ?? [];
+  };
+
+  // Una protección de la hoja entera no trae `range.startRowIndex`: es la que
+  // interesa. Si ya está, se reusa en vez de apilar otra.
+  const yaHay = (await leerProtecciones())[0];
+  let protectedRangeId = yaHay?.protectedRangeId;
+  const creada = protectedRangeId === undefined;
+
+  if (creada) {
+    const r = await batch([{ addProtectedRange: { protectedRange: { range: { sheetId }, description: descripcion } } }]);
+    protectedRangeId = r.replies[0].addProtectedRange.protectedRange.protectedRangeId;
+  }
+
+  // Dejar sólo a la cuenta de servicio. `domainUsersCanEdit: false` es lo que
+  // saca al resto del dominio; sin eso la protección no frena a nadie.
+  await batch([
+    {
+      updateProtectedRange: {
+        protectedRange: {
+          protectedRangeId,
+          description: descripcion,
+          editors: { users: [cuentaDeServicio()], domainUsersCanEdit: false },
+        },
+        fields: "editors,description",
+      },
+    },
+  ]);
+
+  const final = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}?fields=sheets.protectedRanges(protectedRangeId,editors)`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  const datos = (await final.json()) as {
+    sheets?: { protectedRanges?: { protectedRangeId: number; editors?: { users?: string[] } }[] }[];
+  };
+  const editores =
+    datos.sheets
+      ?.flatMap((s) => s.protectedRanges ?? [])
+      .find((p) => p.protectedRangeId === protectedRangeId)?.editors?.users ?? [];
+
+  return { creada, editores };
+}
+
+/** Saca la protección de una pestaña. Devuelve cuántas sacó. */
+export async function desprotegerPestana(planillaId: string, pestana: string): Promise<number> {
+  const sheetId = await idDePestana(planillaId, pestana);
+  if (sheetId === null) return 0;
+
+  const token = await obtenerToken([SCOPE_SHEETS]);
+  const res = await pedir(
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+      `?fields=sheets(properties.sheetId,protectedRanges.protectedRangeId)`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
+  const datos = (await res.json()) as {
+    sheets?: { properties: { sheetId: number }; protectedRanges?: { protectedRangeId: number }[] }[];
+  };
+  const ids = (datos.sheets?.find((s) => s.properties.sheetId === sheetId)?.protectedRanges ?? []).map(
+    (p) => p.protectedRangeId
+  );
+  if (ids.length === 0) return 0;
+
+  const borrar = await pedir(`https://sheets.googleapis.com/v4/spreadsheets/${planillaId}:batchUpdate`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ requests: ids.map((protectedRangeId) => ({ deleteProtectedRange: { protectedRangeId } })) }),
+  });
+  if (!borrar.ok) {
+    throw new Error(mensajeDeGoogle(borrar.status, await borrar.text(), cuentaDeServicio(), "escribir"));
+  }
+  return ids.length;
 }

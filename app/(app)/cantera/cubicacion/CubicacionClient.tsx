@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { FilaCierreCubicacion, LecturaDeCubicacion } from "@/lib/cantera/cubicacion";
 import { CLAVE_C1C3, MATERIALES_DE_CANTERA, type DesgloseDeMaterial, type ExistenciaDeMaterial } from "@/lib/cantera/cubicacionPorMaterial";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import { numeroDeCampo } from "@/lib/cantera/numero";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -129,11 +130,16 @@ export default function CubicacionClient({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /** Vacío es "sin medir"; un texto que no es número es un error. */
+  /**
+   * Vacío es "sin medir"; un texto que no es número es un error. Lee con
+   * `numeroDeCampo`: un `replace(",", ".")` propio entendía la coma pero no el
+   * punto de miles, y "2.240" entraba como 2,24 (3 de las 16 cubicaciones
+   * cargadas pasan las mil toneladas, la mayor 2240).
+   */
   function numeroOpcional(texto: string): number | null | "invalido" {
     if (texto.trim() === "") return null;
-    const n = Number(texto.replace(",", "."));
-    return isFinite(n) && n >= 0 ? n : "invalido";
+    const n = numeroDeCampo(texto);
+    return n !== null && n >= 0 ? n : "invalido";
   }
 
   async function guardar(tarjeta: Tarjeta) {
@@ -274,15 +280,15 @@ export default function CubicacionClient({
                 <BadgeLectura lectura={fila?.lectura ?? null} />
               </div>
 
-              <dl className="mt-3 grid grid-cols-3 gap-y-2 text-sm">
+              <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
                 <dt className="text-slate-500">Exist. inicial</dt>
-                <dd className="col-span-2 text-right font-mono tabular-nums text-slate-700">{t(fila?.existenciaInicial ?? null)}</dd>
+                <dd className="text-right font-mono tabular-nums text-slate-700">{t(fila?.existenciaInicial ?? null)}</dd>
                 <dt className="text-slate-500">Voladuras</dt>
-                <dd className="col-span-2 text-right font-mono tabular-nums text-slate-700">{t(fila?.voladuras ?? 0)}</dd>
+                <dd className="text-right font-mono tabular-nums text-slate-700">{t(fila?.voladuras ?? 0)}</dd>
                 <dt className="text-slate-500">Acarreo</dt>
-                <dd className="col-span-2 text-right font-mono tabular-nums text-slate-700">{t(fila?.acarreo ?? 0)}</dd>
+                <dd className="text-right font-mono tabular-nums text-slate-700">{t(fila?.acarreo ?? 0)}</dd>
                 <dt className="font-medium text-slate-700">Stock teórico</dt>
-                <dd className="col-span-2 text-right font-mono tabular-nums font-medium text-slate-900">{t(fila?.stockTeorico ?? null)}</dd>
+                <dd className="text-right font-mono tabular-nums font-medium text-slate-900">{t(fila?.stockTeorico ?? null)}</dd>
               </dl>
 
               <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">

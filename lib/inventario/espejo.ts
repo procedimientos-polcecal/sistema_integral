@@ -13,7 +13,9 @@
  * de OT, OS y comparativas.
  */
 
-import { leerValores, escribirCeldas, filaSiguienteSegunLaColumna, comoTexto } from "@/lib/core/sheets";
+import {
+  leerValores, escribirCeldas, filaSiguienteSegunLaColumna, comoTexto, textoParaLaCelda,
+} from "@/lib/core/sheets";
 
 /**
  * Las columnas del kardex `Entradas  Salidas`, en base 0.
@@ -101,6 +103,10 @@ export function entradaYSalida(m: MovimientoAEspejar): { entrada: string; salida
  *
  * Va aparte de la llamada a Google para poder probarla: es la parte que decide
  * qué se toca y qué no, y tocar la G de más sería romper la planilla entera.
+ *
+ * Las cinco columnas de texto —descripción, solicitante, proveedor, sector y
+ * equipo— pasan por `textoParaLaCelda`. El RI, la entrada, la salida y la
+ * fecha no: son número, y la planilla los suma.
  */
 export function celdasDelMovimiento(
   m: MovimientoAEspejar,
@@ -117,14 +123,14 @@ export function celdasDelMovimiento(
     // pero eso es una propiedad de la planilla y no del codigo. Ver
     // `comoTexto` en el nucleo, que trae el caso medido.
     celda(COL.codigo, comoTexto(m.codigo)),
-    celda(COL.descripcion, m.descripcion ?? ""),
+    celda(COL.descripcion, textoParaLaCelda(m.descripcion)),
     celda(COL.entrada, entrada),
     celda(COL.salida, salida),
-    celda(COL.solicitante, m.solicitante ?? ""),
+    celda(COL.solicitante, textoParaLaCelda(m.solicitante)),
     celda(COL.fecha, fechaParaLaPlanilla(m.fecha)),
-    celda(COL.proveedor, m.proveedor ?? ""),
-    celda(COL.sector, m.sector ?? ""),
-    celda(COL.equipo, m.equipo ?? ""),
+    celda(COL.proveedor, textoParaLaCelda(m.proveedor)),
+    celda(COL.sector, textoParaLaCelda(m.sector)),
+    celda(COL.equipo, textoParaLaCelda(m.equipo)),
   ];
 }
 

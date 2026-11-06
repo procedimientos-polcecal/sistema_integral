@@ -2,6 +2,7 @@ import type { Clasificacion } from "@/lib/core/types";
 import type { OrdenDeCarga } from "./types";
 import { textoParaLaPlanilla } from "./clasificacion";
 import { instanteEnElDia, minutosDeLaHoraTipeada, horaComoSeEscribe } from "./orden";
+import { textoParaLaCelda } from "@/lib/core/sheets";
 
 /**
  * La planilla `Órdenes de Carga`: cómo se lee y cómo se escribe.
@@ -69,22 +70,27 @@ export function fechaComoSeEscribe(fecha: string): string {
  * Sin clasificación cae al nombre crudo del producto en vez de dejar la celda
  * vacía: la planilla la sigue leyendo gente, y "FILLER A GRANEL" les dice algo,
  * el vacío no. En el sistema esa orden se ve como "sin clasificar".
+ *
+ * El cliente, el material y las notas los tipea quien carga la orden, así que
+ * van por `textoParaLaCelda`. El N° y los cuatro horarios no: el número ordena
+ * y las horas son horas, y escribirlos como texto dejaría las columnas J y K
+ * —que son `=F2-E2` y `=H2-G2`— restando texto.
  */
 export function filaDeLaPlanilla(orden: OrdenDeCarga, clasificacion: Clasificacion | null): string[] {
   const material = clasificacion
     ? textoParaLaPlanilla(clasificacion)
-    : (orden.producto_raw ?? "");
+    : textoParaLaCelda(orden.producto_raw);
 
   return [
     fechaComoSeEscribe(orden.fecha),
     orden.numero,
-    orden.cliente_raw ?? "",
+    textoParaLaCelda(orden.cliente_raw),
     material,
     horaComoSeEscribe(orden.inicio_carga),
     horaComoSeEscribe(orden.fin_carga),
     horaComoSeEscribe(orden.entrada_predio),
     horaComoSeEscribe(orden.salida_predio),
-    orden.notas ?? "",
+    textoParaLaCelda(orden.notas),
   ];
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
 import { TIPOS_AUSENCIA, labelTipoAusencia } from "@/lib/rrhh/tiposAusencia";
@@ -14,6 +15,17 @@ function firstOfMonth() {
 }
 function today() {
   return hoyEnArgentina();
+}
+
+/**
+ * La ficha del empleado, con el mismo período que se está mirando acá.
+ *
+ * Llevarse el rango no es un adorno: la ficha abre el mes en curso por
+ * defecto, así que entrar desde un listado de septiembre mostraba octubre
+ * vacío y parecía que la persona no tenía nada.
+ */
+function fichaDelEmpleado(id: string, desde: string, hasta: string) {
+  return `/rrhh/empleados/${id}?desde=${desde}&hasta=${hasta}`;
 }
 
 function ClasificarModal({ seleccion, onClose, onSaved }: {
@@ -205,7 +217,11 @@ function AsistenciaPeriodo() {
               {(resumen?.empleados ?? []).map((e: any) => (
                 <tr key={e.employeeId} className="border-b last:border-0">
                   <td className="py-2">{e.legajo}</td>
-                  <td className="py-2">{e.nombre}</td>
+                  <td className="py-2">
+                    <Link href={fichaDelEmpleado(e.employeeId, desde, hasta)} className="text-blue-600 hover:underline">
+                      {e.nombre}
+                    </Link>
+                  </td>
                   <td className="py-2">{e.diasEsperados}</td>
                   <td className="py-2">{e.presentes}</td>
                   <td className="py-2">{e.ausenciasJustificadas}</td>
@@ -271,7 +287,12 @@ function AsistenciaDia() {
               {(roster?.empleados ?? []).map((e) => (
                 <tr key={e.employeeId} className="border-b last:border-0">
                   <td className="py-2">{e.legajo}</td>
-                  <td className="py-2">{e.nombre}</td>
+                  <td className="py-2">
+                    {/* El mes del dia que se esta mirando, no el mes en curso. */}
+                    <Link href={fichaDelEmpleado(e.employeeId, `${dia.slice(0, 7)}-01`, dia)} className="text-blue-600 hover:underline">
+                      {e.nombre}
+                    </Link>
+                  </td>
                   <td className="py-2">
                     {!e.ausente ? (
                       <span className="text-green-700">Presente</span>

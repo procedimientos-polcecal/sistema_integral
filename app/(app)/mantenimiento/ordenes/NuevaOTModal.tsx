@@ -2,12 +2,50 @@
 
 import { useEffect, useState } from "react";
 import Select from "@/components/Select";
+import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
+import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
+import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
+import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import { AYUDA_GUT, ESCALAS_GUT } from "@/lib/mantenimiento/gut";
+import InfoTip from "@/components/InfoTip";
+import {
+  copiarDeLaOT, numeroDeOT, avisoDeReutilizada, type Vocabulario,
+} from "@/lib/mantenimiento/reutilizarOT";
+import RepuestosDeLaOT from "@/components/RepuestosDeLaOT";
+import FallaDeLaOT, { FALLA_VACIA, type LaFalla } from "@/components/FallaDeLaOT";
+import type { LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
+import { CartelDelResultado } from "@/app/cargar/envio";
+import { mandarOEncolar, type Resultado } from "@/lib/core/mandarOEncolar";
+import CalendarioDeFecha from "./CalendarioDeFecha";
 
-const ESPECIALIDADES = ["MECÁNICO", "ELÉCTRICO", "INSTRUMENTACIÓN", "CIVIL", "OTRO"];
-const TIPOS = ["PROGRAMADO", "CORRECTIVO", "PREDICTIVO", "MEJORA"];
-const QUIEN_OPTIONS = ["INTERNO", "CONTRATADO", "MIXTO"];
-const PRIORIDADES = ["ALTA", "MEDIA", "BAJA"];
+/**
+ * Los cuatro vocabularios, de `lib/`, no una copia.
+ *
+ * LA PRIORIDAD YA HABÍA PASADO POR ESTO. Tenía la suya —`["ALTA", "MEDIA",
+ * "BAJA"]`— y el 16/10/2026 se vio lo que costaba: lo que se elegía acá no era
+ * lo que decía el filtro del listado, así que una OT creada desde la app no
+ * aparecía al filtrar por «Media». El servidor igual lo traduce, pero **lo que
+ * se elige tiene que ser lo que se filtra**.
+ *
+ * Y LAS OTRAS TRES SEGUÍAN IGUAL HASTA EL 21/10/2026, con el mismo agujero y
+ * sin que nada lo notara: ofrecían INSTRUMENTACIÓN y OTRO, que no estaban en
+ * `ESPECIALIDADES`; PREDICTIVO y MEJORA, que no estaban en `TIPOS_DE_OT`; y
+ * MIXTO, que no estaba en `QUIENES_DE_OT`. Y la de especialidades, además, **no
+ * ofrecía LUBRICACIÓN**, así que desde acá no se podía crear ninguna de las de
+ * ese oficio ni copiar las 7 que existen. Los cinco valores de más se sumaron
+ * al vocabulario; el porqué medido está en los encabezados de `ordenes.ts` y
+ * `filtrosOt.ts`.
+ *
+ * Mientras esta lista salga de `lib/`, elegir y filtrar no se pueden separar.
+ */
+const PRIORIDADES = PRIORIDADES_DE_OT;
+/**
+ * Los estados **sí** son una lista propia, y es a propósito: es un
+ * subconjunto de `ESTADOS_DE_OT` —le falta SUSPENDIDA— porque una OT no nace
+ * suspendida, y lleva etiquetas de pantalla que el vocabulario no tiene.
+ * Ofrecer menos no abre el agujero de arriba; ofrecer de más, sí.
+ */
 const ESTADOS_OT = [
   { value: "POR_HACER",  label: "Por hacer" },
   { value: "EN_PROCESO", label: "En proceso" },
@@ -15,29 +53,112 @@ const ESTADOS_OT = [
   { value: "ATRASADO",   label: "Atrasado" },
 ];
 
+/**
+ * Lo que los desplegables de este formulario pueden mostrar.
+ *
+ * Sale de las mismas constantes que se renderizan, no de una copia: una OT
+ * vieja con un valor que no está acá no se copia, y se avisa. Copiarla dejaría
+ * el desplegable en "—" y el formulario guardando otra cosa.
+ *
+ * **Las 7 OT con especialidad LUBRICACIÓN ya se copian**, desde el 21/10/2026.
+ * Eran el ejemplo que ilustraba esta regla, y en realidad eran un síntoma de la
+ * otra: no se copiaban porque la lista de arriba era una copia a mano que no
+ * tenía LUBRICACIÓN. Ahora que sale de `lib/`, el único valor que de verdad
+ * puede quedar afuera es el de una OT vieja con algo que nadie ofrece hoy — que
+ * es para lo que esto existe.
+ */
+const VOCABULARIO: Vocabulario = {
+  especialidades: ESPECIALIDADES,
+  tipos: TIPOS_DE_OT,
+  quien: QUIENES_DE_OT,
+  estados: ESTADOS_OT.map(o => o.value),
+  prioridades: PRIORIDADES,
+};
+
 export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: {
   sectores: any[];
   equipos: any[];
   onClose: () => void;
-  onCreated: () => void;
+  /** Se creó. `aviso` es lo que no salió del todo, para que se muestre. */
+  onCreated: (aviso?: string | null) => void;
 }) {
   const [saving, setSaving] = useState(false);
+  // Sólo se pregunta si la orden nace cerrada: en una que recién se pide, la
+  // falla todavía no pasó.
+  const [falla, setFalla] = useState<LaFalla>(FALLA_VACIA);
   const [error, setError]   = useState("");
+  /** Cómo salió el envío. El `error` de arriba es sólo lo que se valida acá adentro. */
+  const [resultado, setResultado] = useState<Resultado | null>(null);
+
+  /* ── Reutilizar una OT vieja ──────────────────────────────────────────
+   * Se cargan trabajos ya hechos en tanda, varios del mismo día y con la
+   * misma gente. `vieneDe` queda puesto hasta que se guarda: es lo que
+   * sostiene la barra que pide revisar, porque estos campos no los escribió
+   * quien está mirando la pantalla. */
+  const [numeroViejo, setNumeroViejo] = useState("");
+  const [trayendo, setTrayendo] = useState(false);
+  const [errorAlTraer, setErrorAlTraer] = useState("");
+  const [vieneDe, setVieneDe] = useState<string | null>(null);
+
+  async function traerLaVieja() {
+    const numero = numeroDeOT(numeroViejo);
+    if (!numero) { setErrorAlTraer("Poné el número de la OT que querés copiar."); return; }
+
+    setTrayendo(true); setErrorAlTraer("");
+    try {
+      const res = await fetch(`/api/mantenimiento/ordenes/reutilizar?numero=${numero}`);
+      const body = await res.json().catch(() => ({}));
+      // Nada se toca si no se pudo traer: lo que ya hubiera escrito queda.
+      if (!res.ok) { setErrorAlTraer(body.error ?? "No se pudo traer esa OT."); return; }
+
+      const { campos, lineas, noEntraron } = copiarDeLaOT(body.data, VOCABULARIO);
+      setForm(prev => ({ ...prev, ...campos }));
+      // Un renglón vacío y no una lista vacía: el formulario tiene que quedar
+      // listo para escribir, igual que recién abierto.
+      setRepuestos(lineas.length > 0 ? lineas : [{ cantidad: "", nombre: "" }]);
+      setVieneDe(avisoDeReutilizada(numero, noEntraron));
+    } catch {
+      setErrorAlTraer("No se pudo traer esa OT.");
+    } finally {
+      setTrayendo(false);
+    }
+  }
 
   // La lista de Configuración, igual que al registrar el trabajo hecho: se
   // elige de ella en vez de escribir. Escribir el nombre cada vez es cómo
   // "Piparo" y "piparo" terminan siendo dos personas, y cómo la orden deja de
   // sumar horas a nadie.
   const [operarios, setOperarios] = useState<{ id: string; slot: number; nombre: string }[]>([]);
+  // Los proveedores marcados como contratistas —hoy PIPARO y CANDIA—. Se elige
+  // de la lista en vez de escribir, igual que al registrar el trabajo hecho:
+  // es lo que evita que "Candia" y "CANDIA" terminen siendo dos.
+  const [contratistas, setContratistas] = useState<{ id: string; nombre: string }[]>([]);
 
   useEffect(() => {
     let vigente = true;
-    fetch("/api/mantenimiento/operarios")
-      .then((r) => (r.ok ? r.json() : { data: [] }))
-      .then((b) => { if (vigente) setOperarios(b.data ?? []); })
+    Promise.all([
+      fetch("/api/mantenimiento/operarios").then((r) => (r.ok ? r.json() : { data: [] })),
+      fetch("/api/mantenimiento/proveedores").then((r) => (r.ok ? r.json() : { data: [] })),
+    ])
+      .then(([o, c]) => {
+        if (!vigente) return;
+        setOperarios(o.data ?? []);
+        setContratistas(c.data ?? []);
+      })
       .catch(() => {});
     return () => { vigente = false; };
   }, []);
+
+  /*
+   * Los repuestos van aparte de `form` y no adentro: `form` se derrama entero
+   * al cuerpo del POST con `...form`, y una lista no es un campo de texto.
+   * Arranca con un renglón vacío para que el formulario se vea como antes —un
+   * campo listo para escribir— y no como una lista que hay que estrenar.
+   */
+  const [repuestos, setRepuestos] = useState<LineaDeRepuesto[]>([{ cantidad: "", nombre: "" }]);
+
+  /** El calendario que se abre desde la fecha de inicio para ver qué tiene cada día. */
+  const [verCalendario, setVerCalendario] = useState(false);
 
   const [form, setForm] = useState({
     equipment_id:   "",
@@ -46,9 +167,9 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     tipo:           "CORRECTIVO",
     quien:          "INTERNO",
     descripcion:    "",
-    repuesto:       "",
     fecha:          hoyEnArgentina(),
     fecha_ejecucion: "",
+    fecha_fin:      "",
     fecha_cierre:   "",
     estado:         "POR_HACER",
     contratista:    "",
@@ -56,7 +177,13 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     operario_1:     "",
     operario_2:     "",
     operario_3:     "",
-    prioridad:      "MEDIA",
+    prioridad:      "🟡 Media",
+    // Las tres notas GUT arrancan VACÍAS, y no a la manera de `prioridad`
+    // (que arranca en Media y no tiene opción vacía): tres desplegables en 3
+    // fabricarían un 27 que nadie contestó, impreso como si fuera una medición.
+    gut_gravedad:   "",
+    gut_urgencia:   "",
+    gut_tendencia:  "",
     requiere_parada_sector: false,
   });
 
@@ -71,34 +198,97 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     });
   }
 
+  /** Si esta orden nace cerrada. Lo decide la fecha, no el desplegable. */
+  const cierraAlCrearse = estadoSegunElCierre(form.fecha_cierre, form.estado) === "REALIZADO"
+    && Boolean(form.fecha_cierre.trim());
+
+  /**
+   * Lo que el formulario dice y se contradice, **calculado en cada render**.
+   *
+   * Se pidió que la alerta salte apenas estén las dos fechas y no recién al
+   * guardar, y por eso vive acá y no adentro de `submit`. Es una función pura
+   * de `form`, así que no necesita estado propio ni un efecto: un `useEffect`
+   * con `setState` sería un segundo render para guardar algo que ya se sabe,
+   * que es lo que marca `react-hooks/set-state-in-effect`.
+   *
+   * `loQueSeContradice` **se calla mientras falte la fecha de inicio**, así
+   * que esto no grita mientras se completa el formulario: aparece recién
+   * cuando las dos están y no cierran. De eso depende que la alerta sea una
+   * alerta y no un cartel que está siempre.
+   */
+  const contradicciones = loQueSeContradice(form);
+
   const filteredEquip = form.sector_id
     ? equipos.filter((e: any) => e.sector_id === form.sector_id)
     : equipos;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.descripcion.trim()) { setError("La descripción es requerida."); return; }
-    setSaving(true); setError("");
+    // Todo lo que falta, de una sola vez: los obligatorios de siempre y, si
+    // viene con fecha de cierre, también las horas y quién la hizo. Un solo
+    // mensaje — que un campo sea obligatorio siempre o sólo al cerrar es una
+    // distinción del código, no de quien está completando.
+    const falta = loQueFaltaParaCrear(form);
+    if (falta.length > 0) {
+      setError(`Falta cargar ${falta.join(", ")}.`);
+      return;
+    }
+    // Y después, con otro verbo: acá los datos están y lo que no cierra es lo
+    // que dicen entre ellos —una fecha de fin o de cierre anterior al inicio—.
+    // La misma función que corre la ruta, que hasta hoy era la única que la
+    // corría: el formulario mandaba la orden y se enteraba por un 400.
+    if (contradicciones.length > 0) {
+      setError(`No se puede guardar porque ${contradicciones.join(", ")}.`);
+      return;
+    }
+    setSaving(true); setError(""); setResultado(null);
 
     const eq = equipos.find((eq: any) => eq.id === form.equipment_id);
     const sec = sectores.find((s: any) => s.id === form.sector_id);
 
-    const res = await fetch("/api/mantenimiento/ordenes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const salida = await mandarOEncolar("orden", {
         ...form,
+        // Los renglones; la ruta arma con ellos el texto de la celda de la
+        // planilla, que tiene una sola.
+        repuestos,
+        // Las tres claves son las de la base. Si la orden no nace cerrada no
+        // hubo falla que contar, y van vacías.
+        ...(cierraAlCrearse ? falla : FALLA_VACIA),
         horas:       form.horas ? Number(form.horas) : null,
+        // Sin elegir viaja como null, no como 0 ni como "": una nota que nadie
+        // puso no puede quedar guardada como si fuera una.
+        gut_gravedad:  form.gut_gravedad  ? Number(form.gut_gravedad)  : null,
+        gut_urgencia:  form.gut_urgencia  ? Number(form.gut_urgencia)  : null,
+        gut_tendencia: form.gut_tendencia ? Number(form.gut_tendencia) : null,
+        // El mismo cálculo que hace el servidor. Mandarlo igual es para que lo
+        // que se vio en pantalla sea lo que viaja; quien decide es la ruta.
+        estado:      estadoSegunElCierre(form.fecha_cierre, form.estado),
         equipo_raw:  eq ? `${eq.code} – ${eq.name}` : null,
         equipo_code: eq?.code ?? null,
         sector_raw:  sec?.nombre ?? null,
         equipment_id: form.equipment_id || null,
         sector_id:   form.sector_id || null,
-      }),
     });
-    const data = await res.json();
-    if (!res.ok) { setError(data.error ?? "Error al crear"); setSaving(false); return; }
-    onCreated();
+    setSaving(false);
+
+    // Lo que entró cierra el modal, como siempre. Lo que quedó esperando y lo
+    // que se rechazó se cuentan con el mismo cartel que la pantalla sin señal:
+    // es la misma situación y ya está redactada ahí.
+    if (salida.estado !== "mandada") { setResultado(salida); return; }
+
+    // Lo que salió a medias se dice, no se calla. La OT se creó —por eso el
+    // modal se cierra igual— pero si el aviso del que nació no quedó marcado,
+    // alguien puede generar una segunda orden para el mismo problema; el
+    // 16/10/2026 una OT no llegó a la planilla y la pantalla no dijo una
+    // palabra.
+    //
+    // **ESE TEXTO YA NO SE ARMA ACÁ.** Lo arma `loQueQuedoPendiente` de
+    // `public/cola/colaOffline.js`, que es por donde pasan los dos caminos
+    // —éste y el de la cola sin señal—. Hasta el 02/11/2026 este modal leía
+    // `repuestos_error` por su cuenta y redactaba lo de la planilla aparte, así
+    // que la misma OT contaba una cosa cargada con la app abierta y otra
+    // cuando salía de la cola.
+    onCreated(salida.advertencia);
   }
 
   return (
@@ -114,8 +304,48 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
         </div>
 
         <form onSubmit={submit} className="p-6 space-y-5">
+          {/* Arriba de todo y no escondido entre los campos: es lo primero que
+              se hace cuando se carga una tanda de órdenes del mismo día. */}
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-2">
+            <label className="block text-xs font-medium text-slate-600">
+              Reutilizar una OT
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={numeroViejo}
+                onChange={e => { setNumeroViejo(e.target.value); setErrorAlTraer(""); }}
+                /* Enter traería la OT y además mandaría el formulario: dentro
+                   de un <form>, un input suelto lo envía. Acá se corta y se
+                   hace sólo lo primero. */
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); traerLaVieja(); } }}
+                className="input flex-1 min-w-0"
+                placeholder="N° de OT — ej: 2814"
+                inputMode="numeric"
+                aria-label="Número de la OT a reutilizar"
+              />
+              <button
+                type="button"
+                onClick={traerLaVieja}
+                disabled={trayendo}
+                className="shrink-0 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+              >{trayendo ? "Trayendo…" : "Traer"}</button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Copia todo menos las fechas, que las ponés vos.
+            </p>
+            {errorAlTraer && <p className="text-sm text-red-600">{errorAlTraer}</p>}
+          </div>
+
+          {/* La barra queda hasta que se guarda. Estos campos no los escribió
+              quien está mirando, y ésa es toda la razón por la que existe. */}
+          {vieneDe && (
+            <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {vieneDe}
+            </p>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
-            <F label="Sector">
+            <F label="Sector" required>
               <Select value={form.sector_id} onChange={e => f("sector_id", e.target.value)} className="input">
                 <option value="">— Todos —</option>
                 {sectores.map((s: any) => (
@@ -123,7 +353,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
                 ))}
               </Select>
             </F>
-            <F label="Equipo">
+            <F label="Equipo" required>
               <Select value={form.equipment_id} onChange={e => f("equipment_id", e.target.value)} className="input">
                 <option value="">— Sin asignar —</option>
                 {filteredEquip.map((eq: any) => (
@@ -138,47 +368,116 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               rows={3} className="input resize-none" placeholder="Describí el trabajo a realizar..." />
           </F>
 
-          <div className="grid grid-cols-3 gap-4">
-            <F label="Especialidad">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <F label="Especialidad" required>
               <Select value={form.especialidad} onChange={e => f("especialidad", e.target.value)} className="input">
                 <option value="">—</option>
                 {ESPECIALIDADES.map(v => <option key={v} value={v}>{v}</option>)}
               </Select>
             </F>
-            <F label="Tipo">
+            <F label="Tipo" required>
               <Select value={form.tipo} onChange={e => f("tipo", e.target.value)} className="input">
-                {TIPOS.map(v => <option key={v} value={v}>{v}</option>)}
+                {TIPOS_DE_OT.map(v => <option key={v} value={v}>{v}</option>)}
               </Select>
             </F>
-            <F label="Quién realiza">
+            <F label="Quién realiza" required>
               <Select value={form.quien} onChange={e => f("quien", e.target.value)} className="input">
-                {QUIEN_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+                {QUIENES_DE_OT.map(v => <option key={v} value={v}>{v}</option>)}
               </Select>
             </F>
           </div>
 
-          <F label="Repuesto utilizado">
-            <input value={form.repuesto} onChange={e => f("repuesto", e.target.value)}
-              className="input" placeholder="Ej: Rodamiento 32222..." />
+          <F label="Repuestos utilizados">
+            {/* Acá sí busca contra el inventario: esta pantalla ya depende del
+                servidor para dibujarse. El formulario sin señal usa el mismo
+                componente con la búsqueda apagada — ver su encabezado. */}
+            <RepuestosDeLaOT
+              lineas={repuestos}
+              onCambiar={setRepuestos}
+              deshabilitado={saving}
+              buscarEnInventario
+            />
           </F>
 
-          <div className="grid grid-cols-3 gap-4">
+
+          {/* Dos columnas y no tres desde que son cuatro fechas: en tres, la
+              de cierre quedaba sola en un segundo renglón. En el teléfono va
+              una por renglón, como todo el resto. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <F label="Fecha creación">
               <input type="date" value={form.fecha} onChange={e => f("fecha", e.target.value)} className="input" />
             </F>
-            <F label="Fecha ejecución">
-              <input type="date" value={form.fecha_ejecucion} onChange={e => f("fecha_ejecucion", e.target.value)} className="input" />
+            <F label="Fecha de inicio" required>
+              {/* El campo sigue siendo escribible: el calendario es para
+                  decidir viendo qué hay cada día, no para reemplazarlo. */}
+              <div className="flex gap-2">
+                <input type="date" value={form.fecha_ejecucion} onChange={e => f("fecha_ejecucion", e.target.value)} className="input flex-1 min-w-0" />
+                <button
+                  type="button"
+                  onClick={() => setVerCalendario(true)}
+                  className="btn-secondary shrink-0"
+                  title="Ver qué órdenes tiene cada día antes de elegir"
+                >
+                  Ver el mes
+                </button>
+              </div>
+            </F>
+            {/* Estimada —la real es la de cierre— y obligatoria desde el
+                04/11/2026, a pedido. Nació opcional dos días antes con el
+                argumento de que quien carga la orden no siempre sabe cuándo
+                termina; lo que se gana al exigirla es que toda OT cargada a
+                mano tenga ventana. Quién la exige es `loQueFaltaParaCrear`, no
+                este `required`, que sólo pinta el asterisco. */}
+            {/* El `min` de las dos es la fecha de inicio: el calendario del
+                navegador deja en gris los días anteriores, así que el dedo que
+                erra por un día no llega ni a elegirlos. Es la primera defensa y
+                no la regla —un `min` se saltea tipeando—: quien decide es
+                `loQueSeContradice`, en el submit y en el servidor. Vacío no
+                limita nada, que es lo que corresponde cuando todavía no se
+                eligió el inicio. */}
+            <F label="Fecha de fin (estimada)" required>
+              <input type="date" value={form.fecha_fin} min={form.fecha_ejecucion || undefined} onChange={e => f("fecha_fin", e.target.value)} className="input" />
             </F>
             <F label="Fecha cierre">
-              <input type="date" value={form.fecha_cierre} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
+              <input type="date" value={form.fecha_cierre} min={form.fecha_ejecucion || undefined} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
             </F>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          {/* ── LA ALERTA, EN EL MOMENTO Y NO AL GUARDAR ───────────────────
+              Pegada a las fechas, que es donde está mirando quien las acaba de
+              completar: el cartel de error de este modal vive abajo de todo,
+              al lado de los botones, y en un teléfono eso son dos pantallas.
+              Los dos dicen la misma frase a propósito — éste cuando pasa, y
+              aquél si alguien aprieta guardar igual. */}
+          {contradicciones.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+              No se puede guardar porque {contradicciones.join(", ")}.
+            </div>
+          )}
+
+          {/* Debajo de la fecha de cierre y no arriba: es ella la que lo hace
+              aparecer, y en un teléfono una sección que se abre más arriba
+              empuja hacia abajo el campo que se está completando. */}
+          {cierraAlCrearse && (
+            <FallaDeLaOT falla={falla} onCambiar={setFalla} deshabilitado={saving} />
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Con fecha de cierre el estado deja de ser una pregunta: la orden
+                ya se hizo. Se muestra fijo en vez de esconderse, para que lo
+                que se ve sea lo que se guarda — el servidor aplica la misma
+                regla, así que esconderlo dejaría la pantalla diciendo una cosa
+                y la base otra. */}
             <F label="Estado inicial">
-              <Select value={form.estado} onChange={e => f("estado", e.target.value)} className="input">
-                {ESTADOS_OT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </Select>
+              {cierraAlCrearse ? (
+                <p className="input flex items-center bg-slate-50 text-slate-600">
+                  Realizado <span className="ml-2 text-xs text-slate-400">— tiene fecha de cierre</span>
+                </p>
+              ) : (
+                <Select value={form.estado} onChange={e => f("estado", e.target.value)} className="input">
+                  {ESTADOS_OT.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </Select>
+              )}
             </F>
             <F label="Prioridad">
               <Select value={form.prioridad} onChange={e => f("prioridad", e.target.value)} className="input">
@@ -191,15 +490,49 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
             </F>
           </div>
 
+          {/* Puntaje GUT: opcional y sin valor por defecto. Las tres van juntas
+              o no cuenta ninguna; con una sola o dos, la orden queda sin
+              puntaje y se puede completar después. */}
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-slate-600">
+              Puntaje GUT <span className="text-slate-400 font-normal">— opcional, las tres juntas</span>
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {([
+                ["gut_gravedad",  "Gravedad",  ESCALAS_GUT.gravedad],
+                ["gut_urgencia",  "Urgencia",  ESCALAS_GUT.urgencia],
+                ["gut_tendencia", "Tendencia", ESCALAS_GUT.tendencia],
+              ] as const).map(([campo, etiqueta, escala]) => (
+                <F key={campo} label={etiqueta} ayuda={AYUDA_GUT[campo]}>
+                  <Select value={form[campo]} onChange={e => f(campo, e.target.value)} className="input">
+                    <option value="">—</option>
+                    {escala.map((palabra, i) => (
+                      <option key={i + 1} value={String(i + 1)}>{i + 1} · {palabra}</option>
+                    ))}
+                  </Select>
+                </F>
+              ))}
+            </div>
+          </div>
+
           {(form.quien === "CONTRATADO" || form.quien === "MIXTO") && (
             <F label="Contratista">
-              <input value={form.contratista} onChange={e => f("contratista", e.target.value)} className="input" />
+              <Select value={form.contratista} onChange={e => f("contratista", e.target.value)} className="input">
+                <option value="">—</option>
+                {/* Si vino copiado de una OT vieja y no está en la lista, se
+                    suma para no perderlo al guardar: la planilla escribió ese
+                    nombre y borrarlo sería corregir hacia atrás. */}
+                {[...new Set([
+                  ...contratistas.map((c) => c.nombre),
+                  ...(form.contratista ? [form.contratista] : []),
+                ])].sort().map((n) => <option key={n} value={n}>{n}</option>)}
+              </Select>
             </F>
           )}
           {/* Cada columna de la orden tiene su propia lista de gente: quién
               puede ir primero no es quién puede ir tercero. Es el mismo `slot`
               que usa el modal de registrar. */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {([1, 2, 3] as const).map((slot) => {
               const campo = `operario_${slot}` as "operario_1" | "operario_2" | "operario_3";
               const elegido = form[campo];
@@ -243,6 +576,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
             </span>
           </label>
 
+          <CartelDelResultado tipo="orden" resultado={resultado} />
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <div className="flex gap-2 pt-1 border-t border-slate-100">
@@ -257,15 +591,26 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           </div>
         </form>
       </div>
+
+      {verCalendario && (
+        <CalendarioDeFecha
+          valor={form.fecha_ejecucion}
+          onElegir={(dia) => { f("fecha_ejecucion", dia); setVerCalendario(false); }}
+          onCerrar={() => setVerCalendario(false)}
+        />
+      )}
     </div>
   );
 }
 
-function F({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function F({ label, required, ayuda, children }: {
+  label: string; required?: boolean; ayuda?: string; children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1">
       <label className="block text-xs font-medium text-slate-600">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+        {ayuda && <> <InfoTip text={ayuda} /></>}
       </label>
       {children}
     </div>

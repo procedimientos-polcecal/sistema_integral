@@ -20,7 +20,9 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["**/*.test.ts"],
+    // `scripts/` tiene un único test, y es `.mjs` porque el script que prueba
+    // también lo es y se corre con `node` directo, sin compilar.
+    include: ["**/*.test.ts", "scripts/**/*.test.mjs"],
     /*
      * Sin esto, los tests de los worktrees de los agentes corren también.
      *

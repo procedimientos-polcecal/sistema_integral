@@ -34,6 +34,7 @@
  */
 
 import type { EstadoCompra } from "./types";
+import type { ItemQueEspera } from "@/lib/core/avisoAlInstante";
 
 /** Lo que hace falta saber de un requerimiento para decidir. */
 export interface RequerimientoParaLaOrden {
@@ -135,4 +136,40 @@ export function repartirLasOrdenes(
   listos.sort((a, b) => a - b);
 
   return { aCrear: listos.slice(0, tope), sinDatos, postergadas: listos.slice(tope) };
+}
+
+/**
+ * Las que **nacen** esperando la aprobación de alguien, en esta corrida.
+ *
+ * Gemela de `lasQuePasaronAPedido` y sobre los mismos dos argumentos: lo que
+ * esta corrida escribió, contra lo que ya había. Lo que importa es "nace" —un
+ * requerimiento que ya estaba pendiente ayer no interrumpe a nadie hoy, para
+ * eso está el resumen de las 8:30—, y de ahí sale gratis que no haga falta
+ * recordar a quién se le avisó qué: la corrida siguiente ve estas filas como
+ * existentes.
+ *
+ * Los dos estados que esperan son los mismos dos que cuenta la campana en
+ * `lib/home/avisosDeUsuario.ts`. No se eligen de nuevo acá a propósito: lo que
+ * interrumpe y lo que la pantalla muestra no pueden decir cosas distintas.
+ */
+export function lasQueNacenEsperando(
+  escritas: { nro_ri: number; descripcion?: unknown; estado_aprobacion?: unknown }[],
+  previas: Map<number, unknown>
+): ItemQueEspera[] {
+  return escritas
+    .filter(
+      (f) =>
+        !previas.has(f.nro_ri) &&
+        (f.estado_aprobacion === "PENDIENTE" || f.estado_aprobacion === "EN_REVISION")
+    )
+    .map((f) => {
+      const texto = String(f.descripcion ?? "").trim();
+      return {
+        etiqueta: `RI ${f.nro_ri}`,
+        // `(sin descripción)` es el relleno que pone el importador cuando la
+        // celda vino vacía. Escribirlo en una notificación sería ocupar el
+        // renglón útil con un cartel que no dice nada.
+        descripcion: texto && texto !== "(sin descripción)" ? texto : null,
+      };
+    });
 }

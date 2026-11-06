@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
-  estadoDeTexto, filaDeOrden, celdasParaRegistrar,
+  estadoDeTexto, filaDeOrden, paraLaBase, celdasParaRegistrar,
   repartirRegistroDeOT,
+  columnaDeFechaFin, fechaFinDeLaFila, faltaLaColumna,
   esEstadoDeOT,
   ESTADOS_DE_OT,
 } from "./ordenes";
@@ -86,6 +87,36 @@ describe("una fila de la planilla como orden de trabajo", () => {
   });
 });
 
+/**
+ * `OrdenLeida` no es uno a uno con `ordenes_trabajo`, y la sincronizacion la
+ * manda entera al `upsert`. Lo que esto fija es el filtro del medio: un campo
+ * que existe solo para leer la planilla no puede viajar a la base, porque
+ * PostgREST no lo ignora -corta el lote entero con un 400-.
+ */
+describe("paraLaBase", () => {
+  const fila = [
+    623, 45992, "Planta de trituración 1", "PO-A1-07 – Rompedora de cono",
+    "MECÁNICO", "PROGRAMADO", "INTERNO", "Cambio de rodamientos del eje",
+    "Dos rodamientos 32222", 45992, 45994, "Atrasado", "Realizado", "-", "-",
+  ];
+
+  it("deja afuera el campo que no es columna", () => {
+    const o = filaDeOrden(fila, 3);
+    expect(o).not.toBeNull();
+    if (!o) return;
+    expect(o.estado_raw).toBe("Realizado");
+    expect("estado_raw" in paraLaBase(o)).toBe(false);
+  });
+
+  it("no toca ningun otro campo", () => {
+    const o = filaDeOrden(fila, 3);
+    if (!o) return;
+    const { estado_raw, ...resto } = o;
+    expect(estado_raw).not.toBeUndefined();
+    expect(paraLaBase(o)).toEqual(resto);
+  });
+});
+
 describe("celdasParaRegistrar", () => {
   const registro = {
     estado: "REALIZADO",
@@ -104,7 +135,10 @@ describe("celdasParaRegistrar", () => {
     const de = (letra: string) => celdas.find((c) => c.letra === letra)?.valor;
 
     // Verificado contra la planilla: M estado, K cierre, O horas, W observaciones.
-    expect(de("M")).toBe("Realizado");
+    // La M llega como función porque puede depender de la fila; con un estado
+    // que no sea «por hacer» da la palabra, cualquiera sea el renglón.
+    expect(typeof de("M") === "function" ? (de("M") as (f: number) => string)(9) : de("M"))
+      .toBe("Realizado");
     expect(de("K")).toBe("25/08/2026");
     expect(de("O")).toBe("3.5");
     expect(de("N")).toBe("ConMet");
@@ -118,11 +152,41 @@ describe("celdasParaRegistrar", () => {
     expect(celdasParaRegistrar(registro).map((c) => c.letra)).not.toContain("L");
   });
 
+  /** El valor de la M depende de la fila, así que llega como función. */
+  const estadoEnLaFila = (estado: string, fila: number) => {
+    const m = celdasParaRegistrar({ estado }).find((c) => c.letra === "M")!;
+    return typeof m.valor === "function" ? m.valor(fila) : m.valor;
+  };
+
   it("escribe el estado como lo escribe la planilla, no como lo guarda la app", () => {
-    expect(celdasParaRegistrar({ estado: "EN_PROCESO" }).find((c) => c.letra === "M")?.valor)
-      .toBe("En proceso");
-    expect(celdasParaRegistrar({ estado: "POR_HACER" }).find((c) => c.letra === "M")?.valor)
-      .toBe("Por hacer");
+    expect(estadoEnLaFila("EN_PROCESO", 2276)).toBe("En proceso");
+    expect(estadoEnLaFila("REALIZADO", 2276)).toBe("Realizado");
+  });
+
+  /**
+   * «Por hacer» no va como palabra: va la fórmula de la planilla, que lee la
+   * fecha de ejecución y la L de **esa misma fila**. Así la celda pasa sola a
+   * «Atrasado» el día que la fecha se vence, que es lo que un literal no hace.
+   * Hasta el 29/10/2026 no se escribía nada y la celda quedaba en blanco: ocho
+   * órdenes sin estado en la planilla, dos de ellas ya atrasadas.
+   */
+  it("por hacer va como la fórmula de su propia fila, no como palabra", () => {
+    expect(estadoEnLaFila("POR_HACER", 2276)).toBe('=IF(J2276="","",L2276)');
+    expect(estadoEnLaFila("POR_HACER", 7)).toBe('=IF(J7="","",L7)');
+  });
+
+  /**
+   * Que nombre a su propia fila no es un detalle: el master se reordena por N°
+   * de OT, y una fórmula que apuntara a una fila fija empezaría a leer el J de
+   * otra orden. Ésta lee siempre el renglón donde está.
+   */
+  it("la fórmula del estado nombra la fila donde cae, no una fija", () => {
+    expect(estadoEnLaFila("POR_HACER", 100)).toContain("J100");
+    expect(estadoEnLaFila("POR_HACER", 100)).not.toContain("J101");
+  });
+
+  it("vaciar el estado vacía la celda, sin fórmula", () => {
+    expect(estadoEnLaFila("", 2276)).toBe("");
   });
 
   it("sólo manda lo que se pasó", () => {
@@ -228,5 +292,135 @@ describe("esEstadoDeOT", () => {
     expect(esEstadoDeOT(null)).toBe(false);
     expect(esEstadoDeOT(undefined)).toBe(false);
     expect(esEstadoDeOT(1)).toBe(false);
+  });
+});
+
+/*
+ * `escribirCeldas` manda `USER_ENTERED`, asi que la planilla de produccion
+ * interpreta lo que llega. El 19/10/2026 un lazo de IMPORTRANGE dejo las once
+ * pestanas de Compras en blanco todo el dia, y una descripcion tipeada hace
+ * lo mismo a mano. El nucleo lo resuelve con `textoParaLaCelda`; aca se fija
+ * que el registro de la ejecucion la use, y que NO la use donde rompe.
+ */
+describe("el registro no deja entrar una formula", () => {
+  it("escapa los cinco campos que tipea una persona", () => {
+    const celdas = celdasParaRegistrar({
+      contratista: "=HYPERLINK(\"http://x\")",
+      operario_1: "-Perez",
+      operario_2: "+Gomez",
+      operario_3: "@Lopez",
+      observaciones: "=IMPORTRANGE(\"https://x\";\"A1\")",
+    });
+    const de = (letra: string) => celdas.find((c) => c.letra === letra)?.valor;
+
+    expect(de("N")).toBe("'=HYPERLINK(\"http://x\")");
+    expect(de("P")).toBe("'-Perez");
+    expect(de("Q")).toBe("'+Gomez");
+    expect(de("R")).toBe("'@Lopez");
+    expect(de("W")).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+  });
+
+  it("un texto normal no cambia", () => {
+    const celdas = celdasParaRegistrar({
+      contratista: "ConMet",
+      observaciones: "Se cambio el rodamiento a=3 - quedo bien",
+    });
+    const de = (letra: string) => celdas.find((c) => c.letra === letra)?.valor;
+
+    expect(de("N")).toBe("ConMet");
+    expect(de("W")).toBe("Se cambio el rodamiento a=3 - quedo bien");
+  });
+
+  /*
+   * La otra mitad de la regla, y la que se olvida: prefijar un numero lo
+   * convierte en texto. Las horas se suman en la planilla y la fecha de
+   * cierre alimenta la columna de atrasado/al dia.
+   */
+  it("las horas y la fecha siguen entrando como numero y como fecha", () => {
+    const celdas = celdasParaRegistrar({ horas: 3.5, fecha_cierre: "2026-08-25" });
+    const de = (letra: string) => celdas.find((c) => c.letra === letra)?.valor;
+
+    expect(de("O")).toBe("3.5");
+    expect(de("K")).toBe("25/08/2026");
+  });
+});
+
+describe("repartirRegistroDeOT y la falla", () => {
+  /*
+   * Las tres columnas de la falla son del sistema y no de la planilla: si se
+   * colaran en `registro`, la ruta intentaria escribir celdas que no existen.
+   */
+  it("manda los tres campos a la tabla y ninguno a la planilla", () => {
+    const { update, registro } = repartirRegistroDeOT({
+      falla_modo: "ROTURA", falla_causa: "FRICCION", falla_detalle: "eje lado motor",
+    });
+    expect(update).toMatchObject({
+      falla_modo: "ROTURA", falla_causa: "FRICCION", falla_detalle: "eje lado motor",
+    });
+    expect(registro).toEqual({});
+  });
+
+  /*
+   * El modal manda todos sus campos en cada guardado. Que "no vino" y "vino
+   * vacio" sean lo mismo es como alguien que reabre una OT para corregir las
+   * horas le borra la falla sin enterarse.
+   */
+  it("no mandar un campo deja lo que habia; mandarlo vacio lo borra", () => {
+    expect(repartirRegistroDeOT({ horas: 2 }).update).not.toHaveProperty("falla_modo");
+    expect(repartirRegistroDeOT({ falla_modo: "" }).update.falla_modo).toBeNull();
+    expect(repartirRegistroDeOT({ falla_detalle: "   " }).update.falla_detalle).toBeNull();
+  });
+});
+
+describe("la fecha de fin que trae el master", () => {
+  const encabezado = ["N° OT", "FECHA", "SECTOR", "FECHA DE INICIO", "ESTADO", "FECHA DE FIN"];
+
+  it("busca la columna por el nombre del encabezado y no por la letra", () => {
+    expect(columnaDeFechaFin(encabezado)).toBe(5);
+    // La misma columna, mudada de lugar: sigue encontrándola.
+    expect(columnaDeFechaFin(["FECHA DE FIN", "N° OT"])).toBe(0);
+  });
+
+  it("dice -1 si el master todavía no tiene la columna", () => {
+    expect(columnaDeFechaFin(["N° OT", "FECHA", "ESTADO"])).toBe(-1);
+  });
+
+  it("lee el serial como fecha", () => {
+    // 46328 = 2026-11-02 en el calendario de Sheets.
+    expect(fechaFinDeLaFila([1, 0, 0, 0, 0, 46328], 5, null)).toBe("2026-11-02");
+  });
+
+  it("una celda vacía no borra lo que el sistema ya sabe", () => {
+    // El master recibe la fila por IMPORTRANGE y tarda: importar la celda
+    // vacía borraría la fecha que el alta acaba de guardar.
+    expect(fechaFinDeLaFila([1, 0, 0, 0, 0, ""], 5, "2026-11-05")).toBe("2026-11-05");
+    expect(fechaFinDeLaFila([1], 5, "2026-11-05")).toBe("2026-11-05");
+  });
+
+  it("lo que dice el master gana cuando trae algo", () => {
+    expect(fechaFinDeLaFila([1, 0, 0, 0, 0, 46328], 5, "2026-11-05")).toBe("2026-11-02");
+  });
+
+  it("sin la columna en el master, queda lo que el sistema tenga", () => {
+    expect(fechaFinDeLaFila([1, 0, 0], -1, "2026-11-05")).toBe("2026-11-05");
+    expect(fechaFinDeLaFila([1, 0, 0], -1, null)).toBeNull();
+  });
+});
+
+describe("faltaLaColumna", () => {
+  it("reconoce los dos textos de «la migración no corrió»", () => {
+    expect(faltaLaColumna("column ordenes_trabajo.fecha_fin does not exist", "fecha_fin")).toBe(true);
+    expect(
+      faltaLaColumna("Could not find the 'fecha_fin' column of 'ordenes_trabajo' in the schema cache", "fecha_fin")
+    ).toBe(true);
+  });
+
+  it("un corte o un timeout no es una columna que falta", () => {
+    expect(faltaLaColumna("fetch failed", "fecha_fin")).toBe(false);
+    expect(faltaLaColumna("canceling statement due to statement timeout", "fecha_fin")).toBe(false);
+  });
+
+  it("que falte otra columna tampoco es ésta", () => {
+    expect(faltaLaColumna("column ordenes_trabajo.otra does not exist", "fecha_fin")).toBe(false);
   });
 });

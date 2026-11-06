@@ -4,8 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { leerValores, escribirCeldas, agregarFila } from "@/lib/core/sheets";
 import {
-  pestanaDeSector, filaParaComparativa, coincideLaFila,
-  COLUMNA_ELECCION, COLUMNAS_COMPARATIVA,
+  pestanaDeSector, filaParaComparativa, coincideLaFila, elTotalLoCalculaLaPlanilla,
+  COLUMNA_ELECCION, COLUMNA_PRECIO_TOTAL, COLUMNAS_COMPARATIVA,
 } from "@/lib/mantenimiento/comparativas";
 import { codigoDeEquipo } from "@/lib/mantenimiento/planilla";
 import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
@@ -262,10 +262,21 @@ export async function DELETE(request: Request) {
   const admin = createAdminClient();
   const { data: cot } = await admin
     .from("os_comparativas")
-    .select("id, os_number, proveedor, sheets_tab, sheets_row")
+    .select("id, os_number, proveedor, sheets_tab, sheets_row, precio_unitario, iva, precio_total")
     .eq("id", id)
     .maybeSingle();
   if (!cot) return NextResponse.json({ error: "No existe esa cotización" }, { status: 404 });
+
+  /*
+   * El PRECIO TOTAL de la planilla es la fórmula `=H+(H*I)`, así que vaciarlo
+   * la mata igual que la mataba el alta. Sólo se vacía cuando el alta escribió
+   * ahí un número —el total pisado a mano, el único caso en que ya no hay
+   * fórmula—: dejarlo sería un número suelto en una fila por lo demás vacía.
+   *
+   * Cuando la fórmula está viva, no tocar la J la deja mostrando $0,00 sobre
+   * una fila vacía, que es exactamente como se ve el resto de la pestaña.
+   */
+  const laFormulaSigueViva = elTotalLoCalculaLaPlanilla(cot);
 
   // Vaciar la fila y no borrarla: borrarla correría todas las de abajo y
   // dejaría mal el número de fila de las demás cotizaciones.
@@ -275,12 +286,14 @@ export async function DELETE(request: Request) {
 
     await escribirCeldas(
       planilla,
-      Array.from({ length: COLUMNAS_COMPARATIVA }, (_, columna) => ({
-        pestana: cot.sheets_tab!,
-        fila: cot.sheets_row!,
-        columna,
-        valor: "",
-      }))
+      Array.from({ length: COLUMNAS_COMPARATIVA }, (_, columna) => columna)
+        .filter((columna) => !(columna === COLUMNA_PRECIO_TOTAL && laFormulaSigueViva))
+        .map((columna) => ({
+          pestana: cot.sheets_tab!,
+          fila: cot.sheets_row!,
+          columna,
+          valor: "",
+        }))
     );
   } catch (e) {
     return NextResponse.json(

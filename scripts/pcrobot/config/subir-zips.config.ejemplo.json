@@ -1,0 +1,23 @@
+{
+  "_comentario": "Versión para el contenedor. Copiar como subir-zips.config.json en esta misma carpeta, junto con el JSON de la cuenta de servicio. Esta carpeta se monta en /config de sólo lectura y NO se commitea: lleva la credencial.",
+
+  "_credencial": "Ruta DENTRO del contenedor. El archivo va al lado de éste, en scripts/pcrobot/config/.",
+  "credencial": "/config/cuenta-de-servicio.json",
+
+  "_carpetaDrive": "Id de la carpeta de destino. TIENE que estar dentro de una unidad compartida, no en 'Mi unidad' de nadie. Se saca de la URL: drive.google.com/drive/folders/<ESTO>",
+  "carpetaDrive": "PONER_EL_ID_DE_LA_CARPETA",
+
+  "_origenes": "Rutas DENTRO del contenedor, no del servidor: el docker-compose.yml monta los recursos compartidos en /datos. 'nombre' es el prefijo que el SdG usa para saber de qué molino es el archivo, así que no se cambia a la ligera.",
+  "_origenes_cuales": "Los dos fillers son los que el SdG LEE. Los otros cuatro se suben para no perder el dato y todavía no se leen: Planta 02 es un PC Robot pero su CSV es un horímetro por hora y sin kilos; Hornos son planillas mensuales respaldadas a diario; Portería es el respaldo del escritorio de esa PC, ~10 MB por día; y Pesadas Balanza son los CSV crudos de la balanza.",
+  "_carpetaEntera": "Sin esto se sube UN archivo, el .zip más nuevo. Con esto se suben TODOS los de la carpeta con su propio nombre. Va sólo donde el dato son varios archivos y cada uno acumula lo suyo — hoy la balanza, con un CSV por camión.",
+  "origenes": [
+    { "nombre": "Filler 1", "carpeta": "/datos/filler1" },
+    { "nombre": "Filler 2", "carpeta": "/datos/filler2" },
+    { "nombre": "Planta 02", "carpeta": "/datos/planta02" },
+    { "nombre": "Hornos", "carpeta": "/datos/hornos" },
+    { "nombre": "Porteria", "carpeta": "/datos/porteria" },
+    { "nombre": "Pesadas Balanza", "carpeta": "/datos/balanza", "carpetaEntera": true }
+  ],
+
+  "_log": "Sin definir a propósito: adentro de un contenedor el log es `docker compose logs`, que ya rota. Un archivo acá se perdería al recrear el contenedor."
+}

@@ -21,10 +21,13 @@ import type { EntradaAlPanol } from "@/lib/inventario/types";
 import { justificacionQueExplica } from "@/lib/core/justificacion";
 import { linkDeLaComparativa } from "@/lib/compras/vincular";
 import Select from "@/components/Select";
+import MontoAlto from "./MontoAlto";
+import type { HistoricoDelArticulo } from "@/lib/compras/historicoDelArticulo";
+import MarcaMontoAlto from "../../MarcaMontoAlto";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
-  esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [], ordenesOdoo = [], odoo,
+  esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [], ordenesOdoo = [], odoo, umbralMontoAlto, historicoDelArticulo,
 }: {
   requerimiento: RequerimientoConRelaciones;
   /** Lo que el pañol registró contra este RI. Vacío si no entró nada todavía. */
@@ -39,6 +42,9 @@ export default function RequerimientoDetalle({
   ordenesOdoo?: OrdenDeOdoo[];
   /** A qué instancia de Odoo se le va a escribir. Producción o staging. */
   odoo?: { base: string; esStaging: boolean };
+  /** A partir de cuánto un requerimiento es de monto alto. */
+  umbralMontoAlto: number;
+  historicoDelArticulo: HistoricoDelArticulo | null;
   esAsignado: boolean;
   aprobadores: { id: string; nombre: string; apellido: string }[];
   /** Con qué convertir los presupuestos que vinieron en dólares. */
@@ -61,6 +67,11 @@ export default function RequerimientoDetalle({
   const [comparativaUrl, setComparativaUrl] = useState(r.comparativa_url ?? "");
   const [ocNumero, setOcNumero] = useState(r.oc_numero ?? "");
   const [asignadoA, setAsignadoA] = useState(r.compra_asignada_a ?? "");
+  // Se carga al registrar el pedido. Acá está para poder corregirla: un
+  // proveedor que avisa que se atrasa no tiene por qué dejar en pantalla una
+  // fecha que ya no va a cumplir, y éste es el único lugar donde se edita
+  // desde que salió del formulario de recepción.
+  const [fechaEstimada, setFechaEstimada] = useState(r.fecha_estimada_recepcion ?? "");
 
   const [motivoRechazo, setMotivoRechazo] = useState("");
   const [mostrarRechazo, setMostrarRechazo] = useState(false);
@@ -121,6 +132,7 @@ export default function RequerimientoDetalle({
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-xs text-slate-400">RI N° {r.nro_ri}</span>
             <Chip {...etiquetaPrioridad(r.prioridad)} />
+            <MarcaMontoAlto montoConocido={r.monto_conocido} manual={r.monto_alto_manual} umbral={umbralMontoAlto} />
             <span className="text-xs text-slate-500">Paga: {etiquetaEmpresa(r.empresas?.nombre, r.paga_ambas)}</span>
           </div>
           <h1 className="mt-1 text-xl font-bold text-slate-900">{r.descripcion}</h1>
@@ -257,6 +269,14 @@ export default function RequerimientoDetalle({
                     persona puede aprobar la compra.
                   </p>
                 </Campo>
+                <Campo label="Fecha estimada de recepción">
+                  <input type="date"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    value={fechaEstimada} onChange={(e) => setFechaEstimada(e.target.value)} />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Es lo que ve quien lo pidió. Si el proveedor se atrasa, se corrige acá.
+                  </p>
+                </Campo>
                 <Campo label="Enlace a la comparativa">
                   <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     value={comparativaUrl} onChange={(e) => setComparativaUrl(e.target.value)} placeholder="https://…" />
@@ -273,6 +293,7 @@ export default function RequerimientoDetalle({
                     comparativa_url: comparativaUrl.trim() || null,
                     oc_numero: ocNumero.trim() || null,
                     compra_asignada_a: asignadoA || null,
+                    fecha_estimada_recepcion: fechaEstimada || null,
                   })
                 }
                 disabled={guardando}
@@ -449,6 +470,65 @@ export default function RequerimientoDetalle({
               <p className="text-sm text-slate-500">Pendiente de aprobación.</p>
             )}
           </section>
+
+          {/* La marca se ofrece en cualquier estado, y no sólo con el RI
+              aprobado: existe para llegar ANTES del número —los que esperan a
+              gerencia no tienen ninguno—, así que condicionarla al estado la
+              volvía inútil justo donde hace falta. La puede poner quien
+              gestiona o quien aprueba. */}
+          <MontoAlto
+            montoConocido={r.monto_conocido}
+            manual={r.monto_alto_manual}
+            umbral={umbralMontoAlto}
+            origenDelMonto={
+              r.costo_iva !== null
+                ? "Costo de la compra, con IVA y envío"
+                : "El presupuesto más alto que se cargó"
+            }
+            puedeMarcar={puedeEditar || puedeAprobar}
+            guardando={guardando}
+            onCambiar={(valor) => guardar({ monto_alto_manual: valor })}
+          />
+
+          {/*
+            Qué costó antes lo mismo. Es un HECHO sobre requerimientos pasados,
+            no una inferencia sobre éste: por eso se muestra y no se marca solo.
+            Marcar por histórico se midió y acierta entre el 82% y el 93% —o
+            sea que se equivoca entre 1 de cada 14 y 1 de cada 5—, y un aviso
+            que se equivoca una de cada cinco veces enseña a ignorar los avisos.
+            Acá el número es cierto siempre y juzga la persona, con la marca
+            manual a un clic. Ver `lib/compras/historicoDelArticulo.ts`.
+          */}
+          {historicoDelArticulo && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              <p>
+                Ya se pidió lo mismo{" "}
+                {historicoDelArticulo.veces === 1
+                  ? "una vez"
+                  : `${historicoDelArticulo.veces} veces`}
+                . La última fue el{" "}
+                <Link
+                  href={`/compras/requerimientos/${historicoDelArticulo.ultimo.nro_ri}`}
+                  className="font-mono text-xs font-semibold text-[var(--primary)]"
+                >
+                  RI {historicoDelArticulo.ultimo.nro_ri}
+                </Link>
+                , y costó {moneda(historicoDelArticulo.ultimo.monto_conocido)}
+                {historicoDelArticulo.ultimo.proveedor
+                  ? ` a ${historicoDelArticulo.ultimo.proveedor}`
+                  : ""}
+                .
+              </p>
+              {/* El rango sólo cuando dice algo: con un solo pedido anterior,
+                  máximo y mínimo son el mismo número y repetirlo es ruido. */}
+              {historicoDelArticulo.maximo !== historicoDelArticulo.minimo && (
+                <p className="mt-1 text-xs text-slate-500">
+                  En los anteriores fue de {moneda(historicoDelArticulo.minimo)} a{" "}
+                  {moneda(historicoDelArticulo.maximo)}: el precio de este artículo salta.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Resumen de compra */}
           <section className="rounded-xl border border-slate-200 bg-white p-5">

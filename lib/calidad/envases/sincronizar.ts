@@ -40,6 +40,73 @@ const logra = (datos: Datos): Resultado => ({ ok: true, datos });
 const falla = (status: number, error: string): Resultado => ({ ok: false, status, error });
 const mensaje = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/**
+ * Quién manda sobre el **kardex** de envases.
+ *
+ * **`false` desde el 21/10/2026: vuelve a mandar la planilla.** El corte se
+ * hizo el 19/10 y duró dos días. No se dio vuelta porque la bajada fallara
+ * —funcionó— sino por una decisión de arriba: el sector sigue cargando en la
+ * planilla hasta que los números del SdG y los de la planilla empaten y eso se
+ * sostenga en el tiempo. Carbonilla empató el 21/10 (135,220 / 0,227, exacto),
+ * y ése es el ensayo que tiene que probar el patrón antes de volver a cortar.
+ *
+ * **Lo que obligaba a desandarlo ya, y no la semana que viene:** la bajada
+ * corre los lunes a las 03:00 y `filasAVaciar()` borra toda fila que el SdG no
+ * tenga. Con la gente cargando en la planilla —que es lo que se decidió—, el
+ * lunes siguiente les habría borrado lo cargado, en silencio y sin que nadie
+ * lo relacionara con esto. Un bloqueo avisa en el momento; esto no.
+ *
+ * El espejo **no se toca**: `espejo.ts` sigue escribiendo cada movimiento que
+ * se carga en el SdG en el momento en que se carga, así que la planilla sigue
+ * recibiendo lo del sistema. Lo que se apaga es la reescritura semanal, que es
+ * la parte destructiva.
+ *
+ * ── CÓMO SE VUELVE A CORTAR ─────────────────────────────────────────────
+ *
+ * Poner esto en `true`, encender de nuevo el `schedule` de
+ * `.github/workflows/calidad-envases-bajada.yml`, y volver a proteger la
+ * pestaña dejando sola a la cuenta de servicio. **Antes**, correr
+ * `scripts/simular-bajada-envases.mts` y que dé cero diferencias reales: la
+ * bajada escribe lo que el SdG tiene, así que con el SdG atrasado borra lo que
+ * no vio — es lo que el ensayo del 19/10 destapó con 18 movimientos.
+ *
+ * ── LO QUE ERA EL CORTE ─────────────────────────────────────────────────
+ *
+ * Con `true` manda el SdG, la planilla es una bajada —`bajada.ts` la reescribe
+ * entera— y esta sincronización **deja de traer los movimientos**.
+ *
+ * ── POR QUÉ ESTO NO PUEDE QUEDAR ENCENDIDO JUNTO CON LA BAJADA ──────────
+ *
+ * Los movimientos se insertan con `upsert(..., { onConflict: "sheets_fila" })`.
+ * Mientras los dos lados coincidan fila por fila eso es inocuo, pero **la
+ * bajada compacta**: el día que alguien borre un movimiento en el SdG, todos
+ * los de abajo se corren una fila y su `sheets_fila` guardado deja de apuntar
+ * a donde están. La sincronización siguiente escribiría los datos de una fila
+ * sobre la clave de otra, sin fallar y sin avisar.
+ *
+ * ── LO QUE SIGUE ENTRANDO DE LA PLANILLA, Y NO ES UN OLVIDO ─────────────
+ *
+ * **Sólo el kardex cambia de dueño.** El listado de artículos, los proveedores
+ * y las referencias **se siguen leyendo de la planilla**, porque ahí es donde
+ * se mantienen y porque la fórmula del stock (columna G) saca de
+ * `Listado articulos GRAL` el stock inicial de cada artículo: si el SdG
+ * dejara de leer ese listado, perdería el punto de partida de su propia
+ * cuenta.
+ *
+ * El kardex **se sigue leyendo** aunque no se guarden sus movimientos: de su
+ * columna K —un ARRAYFORMULA que el SdG no escribe— sale el grupo de cada
+ * artículo.
+ *
+ * ── CÓMO SE VUELVE ATRÁS ────────────────────────────────────────────────
+ *
+ * Poniendo esto en `false` y desplegando: la sincronización vuelve a traer los
+ * movimientos y la planilla vuelve a mandar. Hay que **sacar la protección de
+ * la pestaña** también, o la gente sigue sin poder escribir ahí. Es una
+ * constante y no una variable de entorno a propósito: así el estado está en
+ * git, se ve en el diff y no depende de acordarse de redesplegar.
+ */
+export const EL_SISTEMA_MANDA_EL_KARDEX = false;
+
 const PLANILLA = () => process.env.GOOGLE_SHEETS_ENVASES_ID ?? "";
 const TAB_LISTADO = () => process.env.GOOGLE_SHEETS_ENVASES_TAB ?? "Listado articulos GRAL";
 /** Lleva **doble espacio**, que es como está en la planilla. */
@@ -303,19 +370,30 @@ async function traerDeLaPlanilla(): Promise<Resultado> {
     }];
   });
 
+  // ── Los movimientos, si es que todavía los trae la planilla ──
+  //
+  // Desde el corte del 19/10/2026 no los trae: manda el SdG y la planilla es
+  // una bajada. El kardex se leyó igual —de su columna K sale el grupo de cada
+  // artículo— así que acá sólo se saltea el guardado.
+  //
+  // `filas.length` se informa igual, y eso es deliberado: es cuántos
+  // movimientos tiene la planilla, así que si algún día deja de coincidir con
+  // lo que el SdG escribió, hay alguien cargando ahí pese a la protección.
   let guardadosMovimientos = 0;
-  for (let i = 0; i < filas.length; i += 500) {
-    const lote = filas.slice(i, i + 500);
-    const { error } = await admin
-      .from("calidad_envases_movimientos")
-      .upsert(lote, { onConflict: "sheets_fila" });
-    if (error) {
-      await registrarSincronizacion({
-        modulo: "calidad", recurso: "envases_movimientos", ok: false, error: error.message,
-      });
-      return falla(400, error.message);
+  if (!EL_SISTEMA_MANDA_EL_KARDEX) {
+    for (let i = 0; i < filas.length; i += 500) {
+      const lote = filas.slice(i, i + 500);
+      const { error } = await admin
+        .from("calidad_envases_movimientos")
+        .upsert(lote, { onConflict: "sheets_fila" });
+      if (error) {
+        await registrarSincronizacion({
+          modulo: "calidad", recurso: "envases_movimientos", ok: false, error: error.message,
+        });
+        return falla(400, error.message);
+      }
+      guardadosMovimientos += lote.length;
     }
-    guardadosMovimientos += lote.length;
   }
 
   await registrarSincronizacion({

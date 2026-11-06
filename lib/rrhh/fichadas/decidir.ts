@@ -138,6 +138,56 @@ export function elegirAbiertoPrevio(
   return elegidas;
 }
 
+/** Un turno YA cerrado de antes del lote, reducido a lo que hace falta mirar. */
+export interface SalidaCerradaPrevia {
+  empleadoId: string;
+  fecha: string; // "YYYY-MM-DD", el día de la ENTRADA
+  horaSalida: string; // ISO
+}
+
+/**
+ * Por empleado, la hora ("HH:MM") de la primera marca de su primer día que
+ * **ya está contada** por un turno de antes del lote.
+ *
+ * POR QUÉ EXISTE, QUE ES LO QUE NO SE DEDUCE DEL CÓDIGO
+ *
+ * `reconciliarTokens` empareja por posición, así que da por sentado que la
+ * primera marca del primer día es una entrada. Para quien hace noche eso es
+ * falso: su primera marca del día es la SALIDA de la noche anterior, y esa
+ * noche vive fuera de la ventana que se está importando.
+ *
+ * Mientras ese turno de afuera sigue **abierto**, `elegirAbiertoPrevio` lo
+ * encadena y la marca se consume bien. El agujero aparece cuando una corrida
+ * anterior ya lo cerró **correctamente**: entonces no hay nada pendiente a qué
+ * pegarla, la marca asciende a entrada y se empareja con la entrada de esa
+ * misma noche. Medido contra la base el 30/10/2026: 17 fichadas con la forma
+ * `03:44 → 19:35` desde que entró Lenox —dieciséis horas que nadie trabajó— y
+ * encima duplicando horas que la noche anterior ya tenía contadas.
+ *
+ * Lo que lo vuelve seguro es que **no adivina**: no mira si la hora "parece"
+ * de madrugada ni cuánto dura el turno. Compara el instante de una salida que
+ * ya está guardada contra la marca que llegó, y sólo saca la que es
+ * exactamente esa. Si no coincide, no toca nada — que es la misma regla que
+ * gobierna los enlaces por texto libre en este repo: no enlazar es mejor que
+ * enlazar al que se le parece.
+ */
+export function marcasYaContadas(
+  cerradas: SalidaCerradaPrevia[],
+  primerDiaPorEmpleado: Map<string, string>
+): Map<string, string> {
+  const marcas = new Map<string, string>();
+  for (const c of cerradas) {
+    const primerDia = primerDiaPorEmpleado.get(c.empleadoId);
+    // Sólo cuenta si el turno arrancó ANTES del lote y su salida cae justo en
+    // el primer día: eso es una marca partida por el borde de la ventana.
+    if (primerDia === undefined || c.fecha >= primerDia) continue;
+    const salida = new Date(c.horaSalida);
+    if (diaIso(fechaArgentinaDe(salida)) !== primerDia) continue;
+    marcas.set(c.empleadoId, formatHHMM(salida));
+  }
+  return marcas;
+}
+
 /**
  * Un solo aviso para las fichadas que quedaron abiertas de antes y que este
  * lote ya no puede cerrar, o null si no hay ninguna.
@@ -462,7 +512,8 @@ export interface LoteArmado {
  */
 export function armarTurnos(
   empleados: DiasDeEmpleado[],
-  abiertas: Map<string, FichadaAbierta>
+  abiertas: Map<string, FichadaAbierta>,
+  yaContadas: Map<string, string> = new Map()
 ): LoteArmado {
   const turnos: TurnoNuevo[] = [];
   const cierres: Cierre[] = [];
@@ -478,7 +529,18 @@ export function armarTurnos(
       ? { fecha: abiertoFecha!, entradaStr: formatHHMM(new Date(abierto.horaEntrada)) }
       : null;
 
-    const { turnos: resueltos, avisos: avisosDelEmpleado } = reconciliarTokens(emp.dias, abiertoPrevio);
+    // La primera marca del primer día, cuando ya la consumió un turno cerrado
+    // de antes del lote (ver `marcasYaContadas`). Se saca ACÁ y no dentro de
+    // `reconciliarTokens` a propósito: ahí no se sabe nada de lo que hay
+    // guardado, y el Excel subido a mano pasa por la misma función sin tener
+    // este problema.
+    const yaContada = yaContadas.get(emp.empleadoId);
+    const dias =
+      yaContada && emp.dias[0]?.tokens[0]?.hora === yaContada
+        ? [{ ...emp.dias[0], tokens: emp.dias[0].tokens.slice(1) }, ...emp.dias.slice(1)]
+        : emp.dias;
+
+    const { turnos: resueltos, avisos: avisosDelEmpleado } = reconciliarTokens(dias, abiertoPrevio);
 
     for (const t of resueltos) {
       // Los días del lote son todos posteriores a la abierta, así que un turno
@@ -550,8 +612,14 @@ export function turnosYaEmparejados(turnos: TurnoNuevo[]): LoteArmado {
  * sólo cuentan para las marcas: un turno ya emparejado nunca cierra otra
  * fichada.
  */
-export function armarLote(lote: LoteAAplicar, abiertas: Map<string, FichadaAbierta>): LoteArmado {
-  return lote.tipo === "marcas" ? armarTurnos(lote.empleados, abiertas) : turnosYaEmparejados(lote.turnos);
+export function armarLote(
+  lote: LoteAAplicar,
+  abiertas: Map<string, FichadaAbierta>,
+  yaContadas: Map<string, string> = new Map()
+): LoteArmado {
+  return lote.tipo === "marcas"
+    ? armarTurnos(lote.empleados, abiertas, yaContadas)
+    : turnosYaEmparejados(lote.turnos);
 }
 
 /** Legajo de cada empleado del lote, para que los mensajes se puedan leer. */

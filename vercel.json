@@ -4,6 +4,10 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/agenda",
+      "schedule": "0 5 * * *"
+    },
+    {
       "path": "/api/cron/remises-notificaciones",
       "schedule": "0 22 * * *"
     },
@@ -38,6 +42,18 @@
     {
       "path": "/api/cron/rrhh-lenox-sync",
       "schedule": "30 10 * * *"
+    },
+    {
+      "path": "/api/cron/avisos-diarios",
+      "schedule": "30 11 * * *"
+    },
+    {
+      "path": "/api/cron/produccion-molinos-sync",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/syh-respaldo-de-fotos",
+      "schedule": "30 4 * * *"
     }
   ]
 }

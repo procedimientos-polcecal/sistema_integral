@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { TIPOS_AUSENCIA, labelTipoAusencia } from "@/lib/rrhh/tiposAusencia";
 import FichadaEditModal from "@/components/rrhh/FichadaEditModal";
 import { useConfirm } from "@/components/ConfirmProvider";
@@ -46,8 +46,14 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
   const [tab, setTab] = useState<Tab>("fichadas");
   const [editando, setEditando] = useState(false);
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
-  const [desde, setDesde] = useState(firstOfMonth());
-  const [hasta, setHasta] = useState(today());
+  // El rango puede venir por la URL, y eso es lo que permite que Asistencia
+  // traiga acá el mes que se estaba mirando: sin esto, al entrar desde un
+  // listado de septiembre la ficha abría octubre y parecía que no había datos.
+  // Si no viene, o viene cualquier cosa, el mes en curso como siempre.
+  const params = useSearchParams();
+  const esDia = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const [desde, setDesde] = useState(esDia(params.get("desde")) ?? firstOfMonth());
+  const [hasta, setHasta] = useState(esDia(params.get("hasta")) ?? today());
 
   const [dias, setDias] = useState<any[] | null>(null);
   const [cargandoDias, setCargandoDias] = useState(false);
@@ -319,7 +325,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
       {errorEliminar && <p className="text-sm text-red-600 mb-4">{errorEliminar}</p>}
 
       {editando && (
-        <form onSubmit={guardarEdicion} className="card p-5 mb-6 grid grid-cols-3 gap-4">
+        <form onSubmit={guardarEdicion} className="card p-5 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm text-slate-600 mb-1">Nombre</label>
             <input required value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} className="input" />
@@ -365,7 +371,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </Select>
           </div>
-          <div className="col-span-3">
+          <div className="col-span-full">
             <button type="submit" disabled={guardandoEdicion} className="btn-primary disabled:opacity-50">
               {guardandoEdicion ? "Guardando..." : "Guardar cambios"}
             </button>
@@ -385,7 +391,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
       <div className="card p-5">
         {tab === "fichadas" && (
           <div>
-            <div className="flex gap-3 items-end mb-4">
+            <div className="flex flex-wrap gap-3 items-end mb-4">
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Desde</label>
                 <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
@@ -393,6 +399,30 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Hasta</label>
                 <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
+              </div>
+              {/*
+                Los dos bajan exactamente lo que muestra la tabla de abajo,
+                para el mismo rango: el .xlsx y el PDF salen de las mismas
+                funciones que esta pantalla (`lib/rrhh/marcacionesDelMes.ts`).
+                Son <a> y no <button> a propósito — el PDF se abre en otra
+                pestaña y el Excel es una descarga, así que el clic del medio y
+                el "abrir en pestaña nueva" funcionan como cualquiera espera.
+              */}
+              <div className="flex gap-2 ml-auto">
+                <a
+                  href={`/api/rrhh/asistencia/empleado/${empleado.id}/export?desde=${desde}&hasta=${hasta}`}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  Excel
+                </a>
+                <a
+                  href={`/rrhh/empleados/${empleado.id}/imprimir?desde=${desde}&hasta=${hasta}`}
+                  target="_blank"
+                  rel="noopener"
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  PDF
+                </a>
               </div>
             </div>
             {cargandoDias ? (
@@ -670,7 +700,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
               <div>
                 <div className="text-sm text-slate-500">Días correspondientes</div>
                 <div className="text-2xl font-semibold">{vacaciones.correspondientes}</div>

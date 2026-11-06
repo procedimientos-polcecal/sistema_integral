@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ajustarFichadasPorTurno, intervalsParaDia } from "./recalcular-puro";
+import { ajustarFichadasPorTurno, cubiertoPorTurnoDeLaVispera, intervalsParaDia } from "./recalcular-puro";
 import { toUtcDateOnly } from "../dates";
 
 // Hora de pared en Argentina (UTC-3 fijo), sin depender del huso horario de
@@ -16,35 +16,75 @@ describe("intervalsParaDia", () => {
     expect(intervals).toEqual([{ start: d(2026, 6, 5, 8), end: d(2026, 6, 5, 16) }]);
   });
 
-  it("turno 20 a 4: la parte antes de medianoche queda en el día que entró", () => {
+  /**
+   * EL TURNO DE NOCHE VA ENTERO AL DÍA EN QUE ARRANCÓ.
+   *
+   * Hasta el 30/10/2026 se partía en la medianoche local, para que cada mitad
+   * cobrara el recargo del día que le tocaba. En la práctica eso peleaba con
+   * quien liquida: de los 85 turnos de octubre que cruzan medianoche, **73**
+   * ya habían sido corregidos a mano para poner las 8 horas en el día del
+   * turno. Partir dejaba además 347 horas del mes imputadas al día siguiente.
+   *
+   * Se cambió a pedido, con el riesgo escrito: las horas que caen pasada la
+   * medianoche de un sábado o de un feriado dejan de llevar el recargo de ESE
+   * día y toman el del día en que empezó el turno.
+   */
+  it("turno 20 a 4: va entero al día en que entró", () => {
     const dia = toUtcDateOnly(2026, 5, 1); // 2026-06-01
     const fichadas = [{ fecha: dia, horaEntrada: d(2026, 6, 1, 19, 40), horaSalida: d(2026, 6, 2, 3, 40) }];
     const intervals = intervalsParaDia(dia, fichadas);
-    expect(intervals).toEqual([{ start: d(2026, 6, 1, 19, 40), end: d(2026, 6, 2, 0, 0) }]);
+    expect(intervals).toEqual([{ start: d(2026, 6, 1, 19, 40), end: d(2026, 6, 2, 3, 40) }]);
   });
 
-  it("turno 20 a 4: la parte después de medianoche queda en el día siguiente", () => {
+  it("turno 20 a 4: el día siguiente no recibe nada", () => {
     const diaSiguiente = toUtcDateOnly(2026, 5, 2); // 2026-06-02
     const fichadaAnterior = { fecha: toUtcDateOnly(2026, 5, 1), horaEntrada: d(2026, 6, 1, 19, 40), horaSalida: d(2026, 6, 2, 3, 40) };
-    const intervals = intervalsParaDia(diaSiguiente, [fichadaAnterior]);
-    expect(intervals).toEqual([{ start: d(2026, 6, 2, 0, 0), end: d(2026, 6, 2, 3, 40) }]);
+    expect(intervalsParaDia(diaSiguiente, [fichadaAnterior])).toEqual([]);
   });
 
-  it("suma las horas totales correctamente entre ambos días (8h repartidas)", () => {
+  it("las 8 horas quedan completas en un solo día", () => {
     const dia1 = toUtcDateOnly(2026, 5, 1);
     const dia2 = toUtcDateOnly(2026, 5, 2);
     const fichadas = [{ fecha: dia1, horaEntrada: d(2026, 6, 1, 19, 40), horaSalida: d(2026, 6, 2, 3, 40) }];
-    const antesMedianoche = intervalsParaDia(dia1, fichadas)[0];
-    const despuesMedianoche = intervalsParaDia(dia2, fichadas)[0];
-    const horasDia1 = (antesMedianoche.end.getTime() - antesMedianoche.start.getTime()) / 3_600_000;
-    const horasDia2 = (despuesMedianoche.end.getTime() - despuesMedianoche.start.getTime()) / 3_600_000;
-    expect(horasDia1 + horasDia2).toBeCloseTo(8);
+    const [tramo] = intervalsParaDia(dia1, fichadas);
+    expect((tramo.end.getTime() - tramo.start.getTime()) / 3_600_000).toBeCloseTo(8);
+    expect(intervalsParaDia(dia2, fichadas)).toEqual([]);
   });
 
   it("fichada abierta (sin salida) no aporta intervalo", () => {
     const dia = toUtcDateOnly(2026, 5, 1);
     const fichadas = [{ fecha: dia, horaEntrada: d(2026, 6, 1, 19, 40), horaSalida: null }];
     expect(intervalsParaDia(dia, fichadas)).toEqual([]);
+  });
+});
+
+/**
+ * La otra mitad del cambio del 30/10/2026. Con el turno imputado entero al
+ * día en que arrancó, el día siguiente se queda sin horas — pero la persona
+ * SÍ estuvo trabajando esa madrugada, así que marcarla ausente es falso. Eso
+ * ya pasaba y era peor: el 30/10 cuatro personas figuraban AUSENTE **y** con
+ * 4 horas el mismo día.
+ */
+describe("cubiertoPorTurnoDeLaVispera", () => {
+  it("un turno de la víspera que cruza medianoche cubre el día", () => {
+    const anoche = { fecha: toUtcDateOnly(2026, 5, 1), horaEntrada: d(2026, 6, 1, 19, 40), horaSalida: d(2026, 6, 2, 3, 40) };
+    expect(cubiertoPorTurnoDeLaVispera(toUtcDateOnly(2026, 5, 2), [anoche])).toBe(true);
+  });
+
+  it("un turno de la víspera que cerró antes de medianoche no cubre nada", () => {
+    const ayer = { fecha: toUtcDateOnly(2026, 5, 1), horaEntrada: d(2026, 6, 1, 8), horaSalida: d(2026, 6, 1, 16) };
+    expect(cubiertoPorTurnoDeLaVispera(toUtcDateOnly(2026, 5, 2), [ayer])).toBe(false);
+  });
+
+  it("un turno de dos días antes no cubre", () => {
+    const anteayer = { fecha: toUtcDateOnly(2026, 4, 30), horaEntrada: d(2026, 5, 30, 19, 40), horaSalida: d(2026, 5, 31, 3, 40) };
+    expect(cubiertoPorTurnoDeLaVispera(toUtcDateOnly(2026, 5, 2), [anteayer])).toBe(false);
+  });
+
+  /** Una abierta no prueba que haya estado: no se sabe cuándo se fue. */
+  it("una fichada abierta de la víspera no cubre", () => {
+    const abierta = { fecha: toUtcDateOnly(2026, 5, 1), horaEntrada: d(2026, 6, 1, 19, 40), horaSalida: null };
+    expect(cubiertoPorTurnoDeLaVispera(toUtcDateOnly(2026, 5, 2), [abierta])).toBe(false);
   });
 });
 
@@ -168,7 +208,8 @@ describe("ajustarFichadasPorTurno", () => {
     expect(retiroAnticipadoPorDia.get(dia.getTime())).toBe(false);
   });
 
-  it("turno que cruza medianoche: se reparte igual entre los dos días calendario", () => {
+  /** Con el ajuste por turno encima, las 8 horas siguen cayendo en un solo día. */
+  it("turno que cruza medianoche: las 8 horas quedan en el día en que entró", () => {
     const dia = toUtcDateOnly(2026, 5, 1);
     const diaSiguiente = toUtcDateOnly(2026, 5, 2);
     const fichadas = [{ fecha: dia, horaEntrada: d(2026, 6, 1, 22, 5), horaSalida: d(2026, 6, 2, 6, 10) }];
@@ -176,10 +217,10 @@ describe("ajustarFichadasPorTurno", () => {
     expect(ajustadas).toEqual([{ fecha: dia, horaEntrada: d(2026, 6, 1, 22, 0), horaSalida: d(2026, 6, 2, 6, 0) }]);
     expect(tardePorDia.get(dia.getTime())).toBe(false);
 
-    const antesMedianoche = intervalsParaDia(dia, ajustadas)[0];
-    const despuesMedianoche = intervalsParaDia(diaSiguiente, ajustadas)[0];
-    const horasDia1 = (antesMedianoche.end.getTime() - antesMedianoche.start.getTime()) / 3_600_000;
-    const horasDia2 = (despuesMedianoche.end.getTime() - despuesMedianoche.start.getTime()) / 3_600_000;
-    expect(horasDia1 + horasDia2).toBeCloseTo(8);
+    const [tramo] = intervalsParaDia(dia, ajustadas);
+    expect((tramo.end.getTime() - tramo.start.getTime()) / 3_600_000).toBeCloseTo(8);
+    expect(intervalsParaDia(diaSiguiente, ajustadas)).toEqual([]);
+    // Y la madrugada del 2 no es una ausencia: estuvo trabajando.
+    expect(cubiertoPorTurnoDeLaVispera(diaSiguiente, ajustadas)).toBe(true);
   });
 });

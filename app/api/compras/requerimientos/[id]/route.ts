@@ -11,6 +11,7 @@ import { puedeAprobarLaCompra, esAprobacionNueva } from "@/lib/compras/aprobarCo
 import { hayCredencialesOdoo } from "@/lib/odoo/client";
 import { empujarOrdenesDeRequerimiento } from "@/lib/odoo/pushOrden";
 import { faltaElMotivo } from "@/lib/compras/devolucion";
+import { faltaLaFechaEstimada, creaLaOrdenEnOdoo } from "@/lib/compras/registrarElPedido";
 import { faltaLaJustificacion, POR_QUE_HACE_FALTA } from "@/lib/compras/denegacion";
 import { auditar } from "@/lib/core/auditoria";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -38,6 +39,23 @@ const CAMPOS_APROBACION = ["estado_aprobacion", "motivo_rechazo"] as const;
  * a que el 68% del histórico esté marcado URGENTE.
  */
 const CAMPOS_DEL_APROBADOR = ["prioridad", "empresa_id", "paga_ambas"] as const;
+
+/**
+ * La marca de monto alto va sola, y no con los campos de la compra.
+ *
+ * Estaba ahí y no servía para nada: ese grupo exige que el RI esté APROBADO, y
+ * los requerimientos que esperan a gerencia **sin ningún monto** son justo los
+ * que alguien querría marcar a mano. Medido el 19/10/2026: de los 2.159 RI hay
+ * 308 sin ningún número, y los que esperan aprobación no tienen ninguno.
+ *
+ * No es una decisión sobre la compra: es un aviso de "ojo, esto va a ser caro",
+ * así que lo puede poner quien gestiona y también quien aprueba. Y no pide
+ * ningún estado, porque su razón de ser es llegar ANTES del número.
+ *
+ * Tampoco cuenta para `tocaPlanilla`: esta columna no se exporta a ningún
+ * libro, y mandarla a escribir gastaba una llamada a Sheets por cada marca.
+ */
+const CAMPOS_MONTO_ALTO = ["monto_alto_manual"] as const;
 
 const CAMPOS_COMPRA = [
   "estado_compra", "comparativa_url", "proveedor_id", "costo_iva",
@@ -176,6 +194,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
    * compra en Odoo. Se anota acá y se dispara después de guardar.
    */
   let generaOrdenEnOdoo = false;
+
+  if (CAMPOS_MONTO_ALTO.some((c) => c in body)) {
+    if (!permisos.puedeEditar && !permisos.puedeAprobar) {
+      return NextResponse.json(
+        { error: "No tenés permiso para marcar el monto de un requerimiento" },
+        { status: 403 }
+      );
+    }
+    // Los tres estados y nada más: `null` es "manda el monto". Un `"true"` de
+    // texto lo rechazaría Postgres, pero con un error que habla de tipos y no
+    // de lo que pasó.
+    const marca = body.monto_alto_manual;
+    if (marca !== null && typeof marca !== "boolean") {
+      return NextResponse.json(
+        { error: "La marca de monto alto sólo puede ser sí, no, o sin definir" },
+        { status: 400 }
+      );
+    }
+    cambios.monto_alto_manual = marca;
+  }
 
   if (CAMPOS_COMPRA.some((c) => c in body)) {
     if (!permisos.puedeEditar) {
@@ -323,7 +361,40 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
 
-    generaOrdenEnOdoo = nuevoEstado === "PEDIDO" && actual.estado_compra !== "PEDIDO";
+    /*
+     * La fecha estimada de recepción va **al entrar** a PEDIDO.
+     *
+     * No está en la tabla `FALTA` de arriba a propósito: esa corre con cada
+     * cuerpo que nombre al estado, y el formulario de recepción manda
+     * `estado_compra: "PEDIDO"` en cada guardado sin fecha de recepción. Metida
+     * ahí, dejaría sin poder cargarse los 349 RI que ya están en PEDIDO sin
+     * fecha. El porqué de pedirla acá y no en la recepción está en
+     * `registrarElPedido.ts`.
+     */
+    if (
+      faltaLaFechaEstimada({
+        estadoActual: actual.estado_compra as string,
+        nuevoEstado,
+        fechaEstimada:
+          "fecha_estimada_recepcion" in cambios
+            ? (cambios.fecha_estimada_recepcion as string | null)
+            : (actual.fecha_estimada_recepcion as string | null),
+        vuelveDeLaEspera,
+      })
+    ) {
+      return NextResponse.json(
+        { error: "Antes de avanzar hay que cargar para cuándo se espera que llegue." },
+        { status: 409 }
+      );
+    }
+
+    // La orden de compra en Odoo se crea sola al entrar a PEDIDO, como siempre;
+    // lo nuevo es que el modal puede saltearla con un `false` explícito.
+    generaOrdenEnOdoo = creaLaOrdenEnOdoo({
+      estadoActual: actual.estado_compra as string,
+      nuevoEstado,
+      quiere: body.crear_orden_odoo,
+    });
 
     // Fechas automáticas al avanzar de etapa, si no vinieron explícitas.
     if (nuevoEstado === "PEDIDO" && !actual.fecha_pedido && !("fecha_pedido" in cambios)) {

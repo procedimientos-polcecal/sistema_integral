@@ -1,0 +1,43 @@
+-- ============================================================
+-- SdG — Un solo ancla por lunes
+--
+-- EL PROBLEMA. `mant_programacion_referencia` guarda de dónde se cuenta la
+-- rotación del taller: un lunes, qué grupo estaba en 4 a 12 y qué electricista
+-- en cada turno. La ruta que la carga rechaza una segunda fila para el mismo
+-- lunes, pero lo hace **leyendo primero y escribiendo después**: dos envíos
+-- simultáneos leen los dos "no hay", y los dos insertan. Cargar la referencia
+-- es algo que el encargado hace una vez cada tanto, así que parece improbable;
+-- un doble clic en el botón alcanza.
+--
+-- POR QUÉ NO ES UNA MOLESTIA SINO UN DATO FALSO. La pantalla elige qué ancla
+-- rige una semana con `order by lunes desc limit 1` entre las que no son
+-- posteriores a esa semana. Con dos filas del mismo lunes el orden entre ellas
+-- no está definido, así que Postgres devuelve la que se le ocurra, y puede
+-- ser otra mañana. Lo que cambia no es una semana: son **todas las semanas
+-- desde ese lunes en adelante y las anteriores sin ancla**, para quien las
+-- mire. Y no se nota: ninguna da error, simplemente el taller aparece con otro
+-- turno.
+--
+-- LA DEFENSA ES LA BASE, NO LA RUTA. El chequeo de la ruta se queda porque da un
+-- mensaje que se entiende, pero una comprobación que lee antes de escribir no
+-- puede ser la garantía: la garantía es un índice único, que no deja pasar
+-- dos filas ni aunque entren al mismo milisegundo.
+--
+-- ES UN ÍNDICE ÚNICO COMÚN Y NO UN PARCIAL, a propósito. Uno con `where` no
+-- sirve como destino de un `ON CONFLICT`, y esta base ya cayó en eso tres
+-- veces (ver el README de migraciones). Hoy nadie hace un upsert sobre esta
+-- tabla, pero la que lo necesite mañana no tiene que descubrirlo en el primer
+-- uso. `lunes` es `not null`, así que el parcial además no aportaría nada.
+--
+-- SI YA HUBIERA DOS FILAS DEL MISMO LUNES esta migración falla al crear el
+-- índice —con `could not create unique index … Key (lunes) is duplicated`— y,
+-- como el editor la corre dentro de una transacción, no deja nada hecho.
+-- Medido al escribirla (26/10/2026): la tabla no tenía ni una fila, así que no pasa.
+-- Si en el medio alguien cargó dos, hay que decidir cuál vale y borrar la otra
+-- a mano; elegir por él sería inventar cuál de las dos era la verdadera.
+--
+-- Se puede correr dos veces: `if not exists`.
+-- ============================================================
+
+create unique index if not exists mant_programacion_referencia_lunes_unico
+  on mant_programacion_referencia (lunes);

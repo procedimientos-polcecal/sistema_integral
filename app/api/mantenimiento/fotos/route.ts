@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 
 export const maxDuration = 120;
 
@@ -13,6 +12,12 @@ export const maxDuration = 120;
  * compartida como editor. Por eso la app vieja necesitaba un Apps Script
  * desplegado aparte, que corre con la cuota de una persona.
  *
+ * La puede subir cualquier usuario activo, tenga o no el módulo Mantenimiento:
+ * quien ve que una máquina anda mal trabaja en Producción, en Cantera o en el
+ * laboratorio, y la foto del aviso es parte de avisar. Es el mismo criterio
+ * que el alta de un requerimiento en Compras. El módulo sigue decidiendo qué
+ * se ve, no quién puede mandar una foto.
+ *
  * El link que se devuelve sirve en el sistema siempre. Para que sirva también
  * en la planilla —que la mira gente sin sesión— el bucket tiene que ser
  * público; si no lo es, se dice y la foto queda sólo en el sistema.
@@ -20,8 +25,16 @@ export const maxDuration = 120;
 
 const BUCKET = "execution-photos";
 
-/** Lo que una cámara de teléfono puede producir. Nada más. */
-const TIPOS = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+/**
+ * Lo que una cámara de teléfono puede producir. Nada más.
+ *
+ * Tiene que coincidir con `allowed_mime_types` del bucket (migración 006): esa
+ * lista no tiene `image/heif`, y cuando esta sí lo tenía una foto HEIF pasaba
+ * el chequeo de acá y la rechazaba Storage con un 502 que no explicaba nada. Se
+ * sacó de acá y no se agregó al bucket porque lo primero no necesita a una
+ * persona corriendo SQL. Si se suma un tipo, va en los dos lados.
+ */
+const TIPOS = ["image/jpeg", "image/png", "image/webp", "image/heic"];
 
 /** Diez megas: una foto de teléfono anda por tres o cuatro. */
 const MAXIMO = 10 * 1024 * 1024;
@@ -31,11 +44,15 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  if (!(await puedeEditarMantenimiento(supabase, user.id))) {
-    return NextResponse.json(
-      { error: "Subir una foto requiere nivel de edición en Mantenimiento" },
-      { status: 403 }
-    );
+  // Mismo chequeo que el alta de un requerimiento de Compras: alcanza con ser
+  // un usuario activo. El 401 de arriba sigue siendo el de la falta de sesión.
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("activo")
+    .eq("id", user.id)
+    .single();
+  if (!usuario?.activo) {
+    return NextResponse.json({ error: "Tu usuario está desactivado" }, { status: 403 });
   }
 
   const formulario = await request.formData();
@@ -55,11 +72,26 @@ export async function POST(request: Request) {
     );
   }
 
-  // La ruta lleva de qué OT es y cuándo: en el bucket van a convivir cientos, y
-  // "imagen.jpg" no le dice nada a nadie dentro de seis meses.
-  const ot = String(formulario.get("ot") ?? "").trim() || "sin-ot";
-  const extension = archivo.name.split(".").pop()?.toLowerCase() || "jpg";
-  const ruta = `ordenes/${ot}/${Date.now()}.${extension}`;
+  // La ruta lleva de qué es la foto y cuándo: en el bucket van a convivir
+  // cientos, y "imagen.jpg" no le dice nada a nadie dentro de seis meses.
+  //
+  // Una foto de aviso va a `avisos/<oa>/` y no a `ordenes/sin-ot/`: un aviso no
+  // es una orden, y dentro de seis meses "sin-ot" no le diría nada a nadie.
+  // Lo que llega en `aviso`, en `ot` y en el nombre del archivo termina siendo
+  // parte de una ruta del bucket, y esta ruta ya no la usa sólo gente de
+  // Mantenimiento: cualquier usuario activo puede mandar lo que quiera. Por eso
+  // los tres se limpian —un archivo llamado `a./../x` daría extensión `/x`—.
+  // Si vienen `aviso` y `ot` gana `aviso`.
+  const limpio = (texto: string) => texto.trim().replace(/[^A-Za-z0-9_-]/g, "-");
+  const aviso = limpio(String(formulario.get("aviso") ?? ""));
+  const ot = limpio(String(formulario.get("ot") ?? "")) || "sin-ot";
+  const extensionCruda = archivo.name.includes(".")
+    ? (archivo.name.split(".").pop()?.toLowerCase() ?? "")
+    : "";
+  const extension = /^[a-z0-9]{1,5}$/.test(extensionCruda) ? extensionCruda : "jpg";
+  const ruta = aviso
+    ? `avisos/${aviso}/${Date.now()}.${extension}`
+    : `ordenes/${ot}/${Date.now()}.${extension}`;
 
   const admin = createAdminClient();
 

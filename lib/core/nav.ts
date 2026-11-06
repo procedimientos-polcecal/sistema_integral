@@ -34,14 +34,28 @@ export interface NavItem {
   children?: NavItem[];
 }
 
-// Estructura de navegación del SdG. La visibilidad real se filtra por permisos.
+/*
+ * Estructura de navegación del SdG. La visibilidad real se filtra por permisos.
+ *
+ * **Cada grupo lleva su propia raíz como primer hijo**, y eso no es una
+ * repetición de más: desde el 04/11/2026 el encabezado de un grupo sólo
+ * despliega y no navega, así que ese hijo es el **único** camino a la portada
+ * del módulo desde el menú. Un grupo nuevo sin él deja su página huérfana, y
+ * nada lo avisa — por eso hay un test en `nav.test.ts` que lo exige.
+ */
 export const NAV: NavItem[] = [
   { label: "Inicio", href: "/" },
+  // Sin `modulo`, como Inicio, y es deliberado: la Agenda no es un módulo con
+  // permisos sino una sección que ven los catorce usuarios, y cada uno ve sólo
+  // lo que creó o a lo que lo invitaron (eso lo resuelve RLS, no el menú).
+  // Ponerle un `modulo` la escondería de quien no tiene ninguno de los doce.
+  { label: "Agenda", href: "/agenda" },
   {
     label: "RRHH",
     href: "/rrhh",
     modulo: "rrhh",
     children: [
+      { label: "Tablero", href: "/rrhh", modulo: "rrhh" },
       {
         label: "Administración",
         href: "/rrhh/empleados",
@@ -91,6 +105,7 @@ export const NAV: NavItem[] = [
     href: "/remises",
     modulo: "remises",
     children: [
+      { label: "Tablero", href: "/remises", modulo: "remises" },
       { label: "Hoy", href: "/remises/hoy", modulo: "remises" },
       { label: "Semana", href: "/remises/semana", modulo: "remises" },
       { label: "Empleados", href: "/remises/empleados", modulo: "remises" },
@@ -107,11 +122,38 @@ export const NAV: NavItem[] = [
     // mira una máquina, y de ahí para abajo el trabajo — lo que se avisa, lo
     // que se hace y lo que se planifica.
     children: [
+      { label: "Tablero", href: "/mantenimiento", modulo: "mantenimiento" },
       { label: "Equipos", href: "/mantenimiento/equipos", modulo: "mantenimiento" },
+      { label: "MTBF", href: "/mantenimiento/mtbf", modulo: "mantenimiento" },
       { label: "Avisos", href: "/mantenimiento/avisos", modulo: "mantenimiento" },
       { label: "Órdenes de trabajo", href: "/mantenimiento/ordenes", modulo: "mantenimiento" },
+      /*
+       * ACÁ VIVÍA «Cargar sin señal», Y SE SACÓ EL 02/11/2026.
+       *
+       * `/cargar` sigue existiendo y no se tocó: es donde se ve y se corrige
+       * lo que quedó esperando, y se llega por la barra que el layout monta
+       * sola cuando hay algo pendiente. Lo que dejó de tener sentido es que
+       * fuera un **destino de menú**, porque eso obligaba a acordarse de ir
+       * ahí *antes* de quedarse sin red, que es justo lo que nadie hace.
+       *
+       * Ahora los botones de siempre —«Avisar de una falla», «Nueva orden de
+       * trabajo» y «Nueva condición»— caen solos a la cola cuando el envío no
+       * sale. El camino sin señal dejó de ser algo que se elige.
+       *
+       * Y de paso se arregló un efecto que nadie había mirado: esta entrada
+       * estaba bajo `modulo: "mantenimiento"`, así que quien tenía Seguridad e
+       * Higiene y no Mantenimiento **no veía ningún link** a la única pantalla
+       * desde la que se podía cargar una condición insegura.
+       */
       { label: "Órdenes de servicio", href: "/mantenimiento/ordenes-servicio", modulo: "mantenimiento" },
+      // Debajo de las órdenes de servicio porque es lo mismo visto por el otro
+      // lado: allá se le pide un trabajo a un tercero, acá se carga el papel
+      // con el que un tercero dice qué hizo cada día.
+      { label: "Partes de contratista", href: "/mantenimiento/partes-contratista", modulo: "mantenimiento" },
       { label: "Planificación", href: "/mantenimiento/planificacion", modulo: "mantenimiento" },
+      // La ve sólo el admin de Mantenimiento, que es el encargado del taller: la
+      // semana de turnos y quién falta. No es una pantalla de consulta general.
+      { label: "Programación", href: "/mantenimiento/programacion", modulo: "mantenimiento", soloAdmin: true },
       { label: "Producción", href: "/mantenimiento/produccion", modulo: "mantenimiento" },
       { label: "Historial", href: "/mantenimiento/historial", modulo: "mantenimiento" },
       {
@@ -126,10 +168,15 @@ export const NAV: NavItem[] = [
     label: "Compras",
     href: "/compras",
     modulo: "compras",
-    // El tablero primero —dice cuánto trabajo hay en cada etapa—, después el
-    // trabajo del día a día. El dashboard de gráficos es la raíz del módulo,
-    // fuera de esta lista, mismo caso que Cantera.
+    // "Gráficos" y no "Tablero" como en los otros trece: esa raíz es el
+    // dashboard de gráficos, y acá "Tablero" ya es otra pantalla —la de las
+    // cinco etapas del circuito con sus montos—. Dos ítems con el mismo
+    // nombre y distinto destino es peor que una etiqueta despareja.
+    //
+    // Después del tablero va el trabajo del día a día, que es el orden del
+    // circuito: se piden, se aprueban, se compran, se reciben.
     children: [
+      { label: "Gráficos", href: "/compras", modulo: "compras" },
       { label: "Tablero", href: "/compras/tablero", modulo: "compras" },
       { label: "Requerimientos", href: "/compras/requerimientos", modulo: "compras" },
       // Después de Requerimientos, que es el orden del circuito: se piden, se
@@ -173,6 +220,7 @@ export const NAV: NavItem[] = [
     // propósito, mismo caso que Cantera: así clickear el nombre del módulo en
     // la barra lateral entra directo, en vez de sólo desplegar.
     children: [
+      { label: "Tablero", href: "/inventario", modulo: "inventario" },
       { label: "Stock", href: "/inventario/stock", modulo: "inventario" },
       // Después del stock y no al final: es la lista corta que sale del stock
       // —los que faltan **y** se usan— y quien entra a mirar si hay algo es el
@@ -199,8 +247,14 @@ export const NAV: NavItem[] = [
     // raíz del módulo es el dashboard, fuera de esta lista — mismo caso que
     // Cantera e Inventario.
     children: [
+      { label: "Tablero", href: "/produccion", modulo: "produccion" },
       { label: "El día", href: "/produccion/dia", modulo: "produccion" },
       { label: "Resúmenes", href: "/produccion/resumenes", modulo: "produccion" },
+      // Lo que midió el PC Robot en los molinos: no es el parte de fábrica de las
+      // dos de arriba (aquel cuenta producto terminado, éste lo que se muele).
+      { label: "Molinos", href: "/produccion/molinos", modulo: "produccion" },
+      { label: "Molinos del mes", href: "/produccion/molinos/mes", modulo: "produccion" },
+      { label: "Paradas sin explicar", href: "/produccion/molinos/sin-explicar", modulo: "produccion" },
       { label: "Renglones del parte", href: "/produccion/productos", modulo: "produccion", soloAdmin: true },
     ],
   },
@@ -224,6 +278,7 @@ export const NAV: NavItem[] = [
     //
     // Ver docs/CALIDAD.md, docs/CALIDAD-ENVASES.md y docs/CALIDAD-ENSAYOS.md.
     children: [
+      { label: "Tablero", href: "/calidad", modulo: "calidad" },
       {
         label: "Carbonilla",
         href: "/calidad/carbonilla",
@@ -274,6 +329,11 @@ export const NAV: NavItem[] = [
           { label: "Límites", href: "/calidad/ensayos/limites", modulo: "calidad", soloAdmin: true },
         ],
       },
+      // Lo de antes del SdG: los tres años que vivían en el Excel del
+      // laboratorio. De sólo lectura, y la búsqueda encuentra también lo que
+      // Ensayos carga hoy — quien atiende un reclamo no tiene por qué saber de
+      // qué año es el dato antes de buscarlo. Ver docs/CALIDAD-HISTORICO.md.
+      { label: "Histórico", href: "/calidad/historico", modulo: "calidad" },
     ],
   },
   {
@@ -286,6 +346,7 @@ export const NAV: NavItem[] = [
     // raíz del módulo es el dashboard, fuera de esta lista — mismo caso que
     // Cantera.
     children: [
+      { label: "Tablero", href: "/despacho", modulo: "despacho" },
       { label: "Movimientos diarios", href: "/despacho/movimientos", modulo: "despacho" },
       { label: "Órdenes de carga", href: "/despacho/ordenes", modulo: "despacho" },
       { label: "Recepción de material", href: "/despacho/recepciones", modulo: "despacho" },
@@ -301,21 +362,17 @@ export const NAV: NavItem[] = [
     // queda por vincular se mira después, no durante. La raíz del módulo es
     // el dashboard, fuera de esta lista — mismo caso que Cantera.
     children: [
+      { label: "Tablero", href: "/facturacion", modulo: "facturacion" },
       { label: "El buzón", href: "/facturacion/buzon", modulo: "facturacion" },
       { label: "Sin vincular", href: "/facturacion/buzon?estado=recibida", modulo: "facturacion" },
     ],
   },
   {
     label: "Cantera",
-    // `href` propio, distinto al de todos los `children`: es justamente esa
-    // diferencia la que en `Sidebar.tsx` decide que el ítem se renderice como
-    // un link que navega (a la página de inicio del módulo) y despliega, en
-    // vez de sólo desplegar como el resto de los módulos — el usuario pidió
-    // las dos cosas juntas: mantener el desplegable y que clickear "Cantera"
-    // entre a una página propia con el adelanto de Registros y del informe.
     href: "/cantera",
     modulo: "cantera",
     children: [
+      { label: "Tablero", href: "/cantera", modulo: "cantera" },
       { label: "Registros", href: "/cantera/registros", modulo: "cantera" },
       { label: "Acarreo", href: "/cantera/acarreo", modulo: "cantera" },
       { label: "Destape", href: "/cantera/destape", modulo: "cantera" },
@@ -332,6 +389,7 @@ export const NAV: NavItem[] = [
     href: "/taller-vial",
     modulo: "taller_vial",
     children: [
+      { label: "Tablero", href: "/taller-vial", modulo: "taller_vial" },
       { label: "Cargas", href: "/taller-vial/cargas", modulo: "taller_vial" },
       { label: "Estados", href: "/taller-vial/estados", modulo: "taller_vial" },
       { label: "Services", href: "/taller-vial/services", modulo: "taller_vial" },
@@ -345,15 +403,43 @@ export const NAV: NavItem[] = [
     href: "/trituracion",
     modulo: "trituracion",
     children: [
+      { label: "Tablero", href: "/trituracion", modulo: "trituracion" },
       { label: "Partes", href: "/trituracion/partes", modulo: "trituracion" },
       { label: "Informe mensual", href: "/trituracion/informes", modulo: "trituracion" },
       { label: "Plantas", href: "/trituracion/plantas", modulo: "trituracion", soloAdmin: true },
+    ],
+  },
+  {
+    label: "Seguridad e Higiene",
+    href: "/seguridad-higiene",
+    modulo: "seguridad_higiene",
+    // La raíz del módulo es un tablero con una tarjeta por frente, y hoy hay
+    // uno solo; queda fuera de esta lista — mismo caso que Calidad y Cantera.
+    // Cuando llegue el segundo frente (accidentes, capacitaciones…) se agrega
+    // acá junto con su tarjeta, sin mudar el primero.
+    children: [
+      { label: "Tablero", href: "/seguridad-higiene", modulo: "seguridad_higiene" },
+      { label: "Condiciones inseguras", href: "/seguridad-higiene/condiciones", modulo: "seguridad_higiene" },
     ],
   },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir
   // sus propios pedidos, aunque no trabaje en Compras. Pedir no compromete
   // nada; aprobar y comprar sí, y eso queda dentro del módulo.
   { label: "Mis pedidos", href: "/mis-pedidos" },
+  // Sin `modulo`, por lo mismo: quien ve una máquina rota trabaja en Producción,
+  // en Cantera o en el laboratorio y no tiene Mantenimiento. Contar que algo anda
+  // mal no compromete nada; decidir qué se hace con eso —generar la OT,
+  // desestimarlo— sí, y eso queda adentro del módulo.
+  { label: "Mis avisos", href: "/mis-avisos" },
+  // Sin `modulo`, por lo mismo: quién no viene y qué día lo necesita saber quien
+  // arma un turno o pide un camión, tenga o no RRHH. El motivo no sale en
+  // ninguna de las dos pestañas; qué se ve del ausentismo lo decide la ruta.
+  //
+  // **Se llama «Disponibilidad» y nunca «Avisos»**: esa palabra ya está
+  // ocupada dos veces —los avisos de Mantenimiento y la campana de
+  // notificaciones— y un tercer significado es el tipo de confusión que ya
+  // costó caro acá.
+  { label: "Disponibilidad", href: "/disponibilidad" },
   // Los usuarios y las empresas son de todo el SdG, no de un módulo: se
   // administran acá y no repetidos dentro de cada uno. Estaban colgados de RRHH
   // y de Mantenimiento, que es donde alguien los fue necesitando primero.
@@ -362,6 +448,7 @@ export const NAV: NavItem[] = [
     href: "/administracion",
     soloAdminGlobal: true,
     children: [
+      { label: "Tablero", href: "/administracion", soloAdminGlobal: true },
       { label: "Usuarios", href: "/administracion/usuarios", soloAdminGlobal: true },
       { label: "Empresas", href: "/administracion/empresas", soloAdminGlobal: true },
     ],
@@ -394,4 +481,28 @@ export function puedeVerItem(item: NavItem, ctx: ContextoNav): boolean {
   if (item.soloAprobadorCompras) return ctx.esAprobadorCompras;
   if (item.soloAdmin) return item.modulo ? ctx.adminModulos.has(item.modulo) : ctx.esAdminGlobal;
   return true;
+}
+
+/**
+ * Si una ruta cae **dentro** de un sector: su propia página o cualquiera
+ * debajo. Es lo que decide qué grupo del menú lateral se despliega solo.
+ *
+ * Mira el prefijo y no la igualdad porque las dos formas de entrar a un módulo
+ * la necesitan, y con igualdad las dos dejaban el menú cerrado: la tarjeta del
+ * Inicio lleva a la raíz (`/compras`), que no es el href de ningún hijo —los
+ * trece grupos tienen esa forma—, y una página de detalle como
+ * `/cantera/voladuras/ABC` no figura en el menú.
+ *
+ * La barra del final no es de adorno, y tiene dos trabajos. Sin ella
+ * `/remises` daría verdadero para `/remisesX`; hoy ningún módulo es prefijo de
+ * otro, pero eso es una propiedad de la lista de hoy y no una garantía. Y hace
+ * que la raíz `/` del Inicio no contenga a todo el sistema, que es lo que
+ * pasaría con un `startsWith` pelado.
+ *
+ * El query no cuenta: `/rrhh/ausencias?tab=licencias` y
+ * `/rrhh/ausencias?tab=injustificadas` están las dos dentro de RRHH.
+ */
+export function estaDentroDe(href: string, pathname: string): boolean {
+  const raiz = href.split("?")[0];
+  return pathname === raiz || pathname.startsWith(`${raiz}/`);
 }

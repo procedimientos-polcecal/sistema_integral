@@ -1,4 +1,8 @@
-import { llamar, idDeRelacion, nombreDeRelacion } from "./client";
+import { llamar, buscarLeer, idDeRelacion, nombreDeRelacion } from "./client";
+import type {
+  FacturaAnterior,
+  LineaContabilizada,
+} from "@/lib/facturacion/laLineaQueSeRepite";
 import type { HistorialDeCuentas, VecesPorCuenta } from "@/lib/facturacion/sugerirCuenta";
 
 /**
@@ -130,4 +134,75 @@ export async function traerHistorialDeAnalitica(
   }
 
   return { porProducto, delProveedor };
+}
+
+// ── Las últimas facturas enteras, para la regla de la unanimidad ─────
+
+/**
+ * Las últimas `cuantas` facturas de este proveedor, con sus líneas.
+ *
+ * Es el único consumidor que **no** puede usar `read_group`: la unanimidad se
+ * mide por factura y no en el agregado. Un proveedor que imputó 40 veces a
+ * Fletes y 1 a Repuestos sale 97% en un `read_group` y **no es unánime** si esa
+ * una es la última — y ésa es justamente la diferencia que decide si se pone o
+ * se sugiere.
+ *
+ * Dos viajes y no uno: primero los ids de las tres facturas más nuevas, después
+ * sus líneas. Leer líneas con un `limit` y agrupar después tiene un borde feo
+ * —la factura más vieja de la ventana puede venir cortada por la mitad y
+ * parecer unánime—, y acá un falso unánime se escribe solo en un asiento.
+ *
+ * Se acota a una empresa: Polcecal y Polysan pueden imputar distinto al mismo
+ * proveedor, y mezclarlas haría que ninguna de las dos fuera unánime.
+ */
+export async function traerLasUltimasFacturas(
+  partnerId: number,
+  companyId: number,
+  cuantas: number
+): Promise<FacturaAnterior[]> {
+  const movimientos = await buscarLeer<{ id: number }>(
+    "account.move",
+    [
+      ["move_type", "in", ["in_invoice", "in_refund"]],
+      ["state", "=", "posted"],
+      ["partner_id", "=", partnerId],
+      ["company_id", "=", companyId],
+    ],
+    ["id"],
+    { limite: cuantas, orden: "invoice_date desc, id desc", empresa: companyId }
+  );
+
+  if (!movimientos.length) return [];
+
+  const lineas = await buscarLeer<{
+    move_id: unknown;
+    product_id: unknown;
+    account_id: unknown;
+    analytic_distribution: Record<string, number> | false;
+  }>(
+    "account.move.line",
+    [
+      ["move_id", "in", movimientos.map((m) => m.id)],
+      ["display_type", "=", "product"],
+    ],
+    ["move_id", "product_id", "account_id", "analytic_distribution"],
+    { limite: 500, empresa: companyId }
+  );
+
+  const porMovimiento = new Map<number, LineaContabilizada[]>();
+  for (const l of lineas) {
+    const mid = idDeRelacion(l.move_id);
+    if (mid === null) continue;
+    if (!porMovimiento.has(mid)) porMovimiento.set(mid, []);
+    porMovimiento.get(mid)!.push({
+      productoId: idDeRelacion(l.product_id),
+      productoNombre: nombreDeRelacion(l.product_id),
+      cuentaId: idDeRelacion(l.account_id),
+      cuentaNombre: nombreDeRelacion(l.account_id),
+      analitica: l.analytic_distribution || null,
+    });
+  }
+
+  // En el orden en que vinieron: de la más nueva a la más vieja.
+  return movimientos.map((m) => ({ lineas: porMovimiento.get(m.id) ?? [] }));
 }

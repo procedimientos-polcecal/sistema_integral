@@ -65,6 +65,12 @@ preguntando. Medido el 16/09/2026 cruzando `information_schema.tables` con
   029 —que cerró `avisos`, `ordenes_servicio`, `os_comparativas` y las demás
   con `mant_puede_ver()`— no llegó a éstas. No parece deliberado, y sigue
   siendo una decisión abierta (ver Pendientes).
+- **`avisos`, desde el 22/10/2026**: la `20261022101507` la volvió a `using (true)`
+  —la 029 la había cerrado— y es la **segunda excepción deliberada** a ese cierre,
+  después de `equipos`. El motivo es el de Compras: el circuito es transversal, y
+  `/mis-avisos` la lee quien no tiene Mantenimiento (10 de 14 usuarios). El
+  asistente puede leer los avisos de cualquiera que le pregunte. La cifra de 30
+  de 102 es del 16/09 y no la incluye.
 
 **No tocar:** `cantera_finanzas`, `compras_aprobadores` y `os_aprobadores` son
 padrones de permisos —tablas de `usuario_id`, quién puede conciliar o aprobar—,
@@ -131,7 +137,7 @@ npm run catalogo
 
 Corre `scripts/generar-catalogo-asistente.mts` con la service role, lee
 `information_schema` y los `pg_enum`, y escribe
-`lib/asistente/catalogo.generado.json` (hoy: 102 tablas, 1.184 columnas, 27
+`lib/asistente/catalogo.generado.json` (hoy: 129 tablas, 1.464 columnas, 29
 enums). Se regenera **a mano cuando cambia el esquema** — no hay hook que lo
 dispare solo.
 
@@ -142,12 +148,28 @@ enteran de que existe. Es la diferencia entre una tabla nueva invisible —se
 nota, alguien pregunta por qué el asistente no la conoce— y una expuesta sin
 que nadie lo haya decidido. Cada vez que se corre `npm run catalogo` después de
 una migración que agrega una tabla, hay que mirar esa lista y agregar la
-entrada en `MODULO_DE_TABLA` (o dejarla afuera a propósito, si es una tabla que
-no le sirve a nadie preguntar, como `asistente_consultas`).
+entrada en `MODULO_DE_TABLA` — o, si es una tabla que no le sirve a nadie
+preguntar, en **`SIN_MAPEAR_A_PROPOSITO`**, con el motivo escrito.
 
-El catálogo por módulo pesa entre 4.820 caracteres (Producción) y 11.789
-(Mantenimiento) — conviene tenerlo presente si se agregan notas largas: es
-prompt que se manda en cada pregunta.
+**Esa segunda lista existe porque el reporte dejó de leerse.** Hasta el
+22/10/2026 mezclaba lo que faltaba decidir con lo ya decidido, así que cantaba
+siempre las mismas cuatro tablas y se volvió ruido de fondo. Mientras tanto el
+mapa se atrasó 29 tablas, incluidos **dos módulos enteros** —`taller_vial` y
+`trituracion`, sin una sola tabla— cuya gente sólo veía el núcleo. El reporte
+lo venía diciendo en cada corrida. Ahora separa las dos cosas: si aparece algo
+bajo "sin mapear", hay una decisión pendiente; si no aparece nada, no la hay.
+
+El catálogo por módulo pesa entre 6.348 caracteres (Trituración) y 16.446
+(Mantenimiento), sobre un piso de 5.605 que es el núcleo solo — conviene
+tenerlo presente si se agregan notas largas: es prompt que se manda en cada
+pregunta.
+
+Mantenimiento pasó de 14.029 a 16.446 el 22/10/2026, al mapear sus cuatro
+tablas que faltaban y escribirles nota. **Ése es el costo de mapear**, y es el
+único: no es un permiso, porque RLS decide igual quién ve qué fila. Lo que se
+paga es prompt en cada pregunta de cada persona de ese módulo, y el riesgo de
+que el modelo conteste desde la tabla equivocada — que es lo que las notas
+están para evitar.
 
 ## Dónde tocar cuando una respuesta sale mal
 
@@ -265,7 +287,9 @@ tiene en cuenta (`await convertToModelMessages(mensajes)`).
   incluido el de este módulo: sin él, el asistente no podía contestar cómo se
   usa a sí mismo.
 - ~~Media Mantenimiento con lectura abierta~~ — cerrada por la migración
-  `20260916110349`, salvo `equipos`, que queda abierta **a propósito**: la leen
+  `20260916110349`, salvo `equipos` —y, desde el 22/10/2026, `avisos`, que la
+  `20261022101507` volvió a abrir a propósito, ver arriba—. `equipos` queda
+  abierta **a propósito**: la leen
   Compras (dos pantallas, una ruta y la exportación a la planilla), Inventario,
   Facturación y el buscador global del header. En los hechos dejó de ser una
   tabla de Mantenimiento y es un catálogo del núcleo; cerrarla dejaría a un

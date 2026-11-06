@@ -7,23 +7,101 @@
  *
  * Cada una registra su corrida —salga bien o mal— para que la pantalla pueda
  * decir cuándo se actualizó por última vez.
+ *
+ * LAS TRES BORRAN, DESDE EL 18/10/2026
+ *
+ * Hasta ahora sólo traían y pisaban, así que una fila que alguien sacaba de la
+ * planilla seguía viva en el SdG para siempre: el espejo dejaba de ser un
+ * espejo y nada avisaba. Ahora, lo que la planilla no trajo se borra.
+ *
+ * El cómo —qué se protege y cuándo no se borra nada— está en
+ * `lib/core/borradoDeEspejo.ts`, que es donde vive la decisión y donde están
+ * los tests. Acá cada sincronización sólo dice cómo se llaman sus columnas.
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { registrarSincronizacion } from "@/lib/core/sincronizaciones";
-import { leerValores, leerFormulas, listarPestanas } from "@/lib/core/sheets";
+import { traerTodo } from "@/lib/core/paginado";
+import { avisarAQuienDecide } from "@/lib/core/avisoAlInstante";
+import { lasOSQueNacenEsperando } from "@/lib/mantenimiento/aprobacion";
+import { borrarLoQueLaPlanillaNoTrajo } from "@/lib/core/borradoDeEspejo";
+import {
+  borrarLosEventosDeLasOT, loQueSeAnotaDeLosEventos, presupuestoDeGoogle, seguirALasOT,
+} from "@/lib/agenda/elEventoSigueALaOT";
+import {
+  barrerLasQueFaltan, juntarLoAnotado, loQueSeAnotaDelBarrido, TOPE_POR_CORRIDA, type LoQueBarrio,
+} from "@/lib/agenda/barridoDeNuevas";
+import { leerValores, leerFormulas, listarPestanas, escribirCeldas, leerFormulasDeRango
+} from "@/lib/core/sheets";
 import { linkDeCelda } from "@/lib/core/links";
 import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
 import { filaDeAviso } from "@/lib/mantenimiento/avisos";
-import { filaDeOrden } from "@/lib/mantenimiento/ordenes";
+import { resolverElArea, repartirPorArea } from "@/lib/mantenimiento/areaDelAviso";
 import {
-  COMPARATIVA_PESTANAS, filaDeComparativa, pareceCotizacion,
+  filaDeOrden, paraLaBase, columnaDeFechaFin, fechaFinDeLaFila, faltaLaColumna, celdasParaRegistrar, COLUMNA_ESTADO, COLUMNA_OT,
+  type OrdenLeida,
+} from "@/lib/mantenimiento/ordenes";
+import { letraDeColumna } from "@/lib/core/columnaDeSheets";
+import { lasQueLesFaltaLaFormula } from "@/lib/mantenimiento/formulaDelEstado";
+import { contrastar, type OrdenDelSistema } from "@/lib/mantenimiento/contraste";
+import { loQueSeGuardaDelContraste } from "@/lib/mantenimiento/divergencias";
+import { generarLasPeriodicas } from "@/lib/mantenimiento/generarPeriodicas";
+import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
+import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
+import { escribirEnLaFilaDeLaOS } from "@/lib/mantenimiento/planillaDeOS";
+import { loQueHayQueExportarDeLaOS } from "@/lib/mantenimiento/pendienteDeLaOS";
+import { escribirEnLaFilaDelAviso } from "@/lib/mantenimiento/planillaDelAviso";
+import { camposDelPendiente, celdasDelAviso, elIntentoDelAviso } from "@/lib/mantenimiento/pendienteDelAviso";
+import { cualesReintentar } from "@/lib/mantenimiento/reintentoDePendientes";
+import {
+  COMPARATIVA_PESTANAS, filaDeComparativa, pareceCotizacion, pestanasQueFaltan,
 } from "@/lib/mantenimiento/comparativas";
 import {
   OS_PESTANAS, mapearEncabezados, filaDeOS, seguimientoHuerfano,
 } from "@/lib/mantenimiento/os";
 
 type Datos = Record<string, unknown>;
+
+/**
+ * Cómo se llama cada cosa en las tres tablas que se espejan.
+ *
+ * Las tres comparten el vocabulario porque vinieron de la misma app: `*_number`
+ * para el número de la planilla, `synced_at` para el sello de la corrida,
+ * `app_created` + `sheets_row` para distinguir lo que la app escribió y
+ * todavía no exportó.
+ */
+const ESPEJO_DE_OT = {
+  tabla: "ordenes_trabajo", numero: "ot_number", sincronizado: "synced_at",
+  creada: "created_at_app", fila: "sheets_row",
+  deLaApp: { columna: "app_created", valor: true },
+  modulo: "mantenimiento", entidad: "orden_trabajo",
+} as const;
+
+const ESPEJO_DE_AVISOS = {
+  tabla: "avisos", numero: "oa_number", sincronizado: "synced_at",
+  creada: "created_at", fila: "sheets_row",
+  deLaApp: { columna: "app_created", valor: true },
+  modulo: "mantenimiento", entidad: "aviso",
+} as const;
+
+const ESPEJO_DE_OS = {
+  tabla: "ordenes_servicio", numero: "os_number", sincronizado: "synced_at",
+  creada: "created_at", fila: "sheets_row",
+  deLaApp: { columna: "app_created", valor: true },
+  modulo: "mantenimiento", entidad: "orden_servicio",
+} as const;
+
+/**
+ * Lo que una corrida puede pedir.
+ *
+ * `sinFreno` levanta el tope del borrado masivo. Lo pasa la ruta cuando una
+ * persona confirmó el número; **el cron no lo pasa nunca**, y ésa es toda la
+ * diferencia: un borrado grande de verdad lo autoriza alguien que lo miró.
+ */
+export interface OpcionesDeCorrida {
+  sinFreno?: boolean;
+  actor?: "sincronizacion" | "cron";
+}
 
 /**
  * Cómo salió una sincronización.
@@ -127,11 +205,142 @@ async function porQueNoSeLeyo(
   );
 }
 
+/**
+ * Lo que hace falta para ponerle área a los avisos que llegan de la planilla:
+ * el resolvedor de nombres y qué áreas tienen ya guardadas los avisos.
+ *
+ * Son dos lecturas por corrida, y de la segunda se trae **sólo lo que ya tiene
+ * área**: es lo que hay que proteger, y filtrar por la condición evita tanto
+ * un `.in()` con cientos de números como traer los que no aportan nada.
+ *
+ * **Los usuarios se traen TODOS, también los dados de baja, y es deliberado:**
+ * `indiceDeCatalogo` documenta que se arma con las filas activas, y esto lo
+ * contradice a propósito. Filtrar por `activo` perdería el área de los avisos
+ * cargados por gente ya dada de baja —la planilla los re-trae en cada corrida,
+ * así que cada vez quedarían sin área—. El riesgo contrario, que una persona
+ * inactiva comparta nombre normalizado con una activa y vuelva ambiguo el
+ * resultado, no existe hoy entre los 14 usuarios. Si algún día pasa, el aviso
+ * queda en null y se ve: es el fallo seguro. No lo «arregles» agregando
+ * `.eq("activo", true)` sin pensar en los avisos de quien ya no está.
+ *
+ * **Si cualquiera falla devuelve `{ error }` y la sincronización sigue sin tocar
+ * el área.** Frenar toda la corrida por esto dejaría sin actualizar los avisos por
+ * una columna secundaria; en cambio no mandar `area_id` es siempre seguro, y lo
+ * que quedó sin completar se completa en la corrida siguiente.
+ */
+async function cargarLasAreasDeLosAvisos(admin: ReturnType<typeof createAdminClient>): Promise<
+  | { areaDe: ReturnType<typeof resolverElArea>; guardadas: Map<string, string> }
+  | { error: string }
+> {
+  try {
+    const usuarios = await traerTodo((desde, hasta) =>
+      admin
+        .from("usuarios")
+        .select("id, nombre, apellido, usuario_areas_compras(area_id)")
+        .order("id")
+        .range(desde, hasta)
+    );
+    const conArea = await traerTodo((desde, hasta) =>
+      admin
+        .from("avisos")
+        .select("oa_number, area_id")
+        .not("area_id", "is", null)
+        .order("oa_number")
+        .range(desde, hasta)
+    );
+
+    return {
+      areaDe: resolverElArea(
+        usuarios.map((u) => ({
+          id: u.id,
+          nombre: u.nombre ?? "",
+          apellido: u.apellido ?? "",
+          areas: (u.usuario_areas_compras ?? []).map((a) => a.area_id as string),
+        }))
+      ),
+      guardadas: new Map(conArea.map((a) => [String(a.oa_number), a.area_id as string])),
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * Reescribe lo que no llegó a la planilla de avisos, y devuelve los N° OA que
+ * **siguen** sin llegar.
+ *
+ * Hermana de `exportarLoPendiente` (OT) y `exportarLoPendienteDeOS`, con una
+ * diferencia que no se deduce: acá no se rearma el registro entero desde la
+ * fila, sino **sólo el campo que falló**, porque `OT ASIGNADA` la escriben a
+ * mano —182 de 186— y reescribirla por un fallo de la otra columna podría
+ * vaciar un número que el sync todavía no importó. El porqué completo está en
+ * `lib/mantenimiento/pendienteDelAviso.ts`.
+ */
+export async function exportarLoPendienteDeAvisos(
+  admin: ReturnType<typeof createAdminClient>
+): Promise<{ siguenPendientes: Set<string>; problema: string | null }> {
+  const siguenPendientes = new Set<string>();
+
+  // La cadena va literal: armada en una variable, Supabase pierde la inferencia.
+  const { data: pendientes, error } = await admin
+    .from("avisos")
+    .select("id, oa_number, sheets_row, ot_asignada, observaciones, sheets_pendiente_campos")
+    .not("sheets_pendiente", "is", null);
+
+  // Y si no se pudo leer la cola, se dice. Con la migración `20261029081402`
+  // sin aplicar, PostgREST contesta que no existe la columna y un `?? []` haría
+  // que esto no reintentara nada ni salteara nada —la protección apagada,
+  // importando igual y sin una palabra—. Mismo criterio que en las OS: no
+  // aborta la corrida, pero no se calla.
+  if (error) {
+    return {
+      siguenPendientes,
+      problema:
+        `No se pudo leer la cola de exportación de los avisos, así que esta corrida no ` +
+        `reintentó nada y pudo pisar un enlace o una desestimación: ${error.message}`,
+    };
+  }
+
+  for (const aviso of pendientes ?? []) {
+    const celdas = celdasDelAviso(aviso, camposDelPendiente(aviso.sheets_pendiente_campos));
+
+    // Sin campos reconocibles no hay nada que reescribir: se limpia la marca en
+    // vez de reintentar para siempre, igual que cuando una OT deja de tener
+    // algo que exportar.
+    if (!celdas) {
+      await admin.from("avisos")
+        .update({ sheets_pendiente: null, sheets_pendiente_campos: null, sheets_intentado_en: new Date().toISOString() })
+        .eq("id", aviso.id);
+      continue;
+    }
+
+    const fallo = await escribirEnLaFilaDelAviso(aviso, celdas);
+    if (fallo) siguenPendientes.add(aviso.oa_number as string);
+
+    await admin.from("avisos")
+      .update(elIntentoDelAviso(fallo, camposDelPendiente(aviso.sheets_pendiente_campos)))
+      .eq("id", aviso.id);
+  }
+
+  return { siguenPendientes, problema: null };
+}
+
 /** Trae los avisos de su planilla. */
-export async function sincronizarAvisos(): Promise<Resultado> {
+export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_AVISOS_ID ?? "";
   const pestana = process.env.GOOGLE_SHEETS_AVISOS_TAB ?? "AVISOS";
   if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_AVISOS_ID");
+
+  // Antes de leer: lo que aparezca después de este instante no estaba en lo
+  // que leímos, y su ausencia no prueba que alguien lo haya borrado.
+  const inicio = new Date().toISOString();
+  const admin = createAdminClient();
+
+  // Primero sale lo que el sistema sabe y la planilla no, igual que en las OT y
+  // las OS: así lo que acabamos de escribir vuelve con el resto en la lectura
+  // de abajo, en vez de ser pisado por una columna vieja.
+  const { siguenPendientes: sinExportar, problema: colaSinLeer } =
+    await exportarLoPendienteDeAvisos(admin);
 
   let filas: string[][];
   try {
@@ -142,52 +351,274 @@ export async function sincronizarAvisos(): Promise<Resultado> {
 
   if (filas.length < 2) return logra({ leidas: 0, guardados: 0, sin_equipo: 0 });
 
-  const admin = createAdminClient();
   const enlaces = await cargarEnlaces(admin);
+  // Uno solo para toda la corrida: es el sello que después distingue lo que la
+  // planilla trajo de lo que sobra. Con un `toISOString()` por fila, cada una
+  // quedaba con el suyo y no se podía preguntar "cuáles no toqué".
+  const cuando = new Date().toISOString();
 
   const registros: Datos[] = [];
+  /** Lo que la planilla trajo, esté o no entre lo que vamos a escribir. */
+  const trajoLaPlanilla = new Set<string>();
   let sinEquipo = 0;
 
   for (let i = 0; i < filas.length - 1; i++) {
     const aviso = filaDeAviso(filas[i + 1], i + 2);
     if (!aviso) continue;
 
+    // Contado antes del salteo, no después: un aviso salteado sigue estando en
+    // la planilla, y dejarlo fuera de `clavesLeidas` lo manda a borrar. Ver el
+    // comentario largo en `sincronizarOrdenes`.
+    trajoLaPlanilla.add(aviso.oa_number);
+
+    // Lo que no se pudo exportar no se pisa: la planilla todavía no sabe lo que
+    // el sistema sabe, y leerla ahora le borraría el enlace o la observación.
+    if (sinExportar.has(aviso.oa_number)) continue;
+
     const { equipment_id, sector_id } = resolver(enlaces, aviso);
     if (!equipment_id) sinEquipo += 1;
 
-    registros.push({ ...aviso, equipment_id, sector_id, synced_at: new Date().toISOString() });
+    registros.push({ ...aviso, equipment_id, sector_id, synced_at: cuando });
   }
 
   let guardados = 0;
   const { unicos, repetidos } = unaPorNumero(registros, "oa_number");
 
-  for (let i = 0; i < unicos.length; i += 500) {
-    const lote = unicos.slice(i, i + 500);
-    const { error } = await admin.from("avisos").upsert(lote, { onConflict: "oa_number" });
+  // El área no viene de la planilla —no tiene columna para eso— sino del nombre
+  // de quien avisó, y sólo se **completa**: lo que alguien ya eligió en la app
+  // no se toca. Ver `areaParaElUpsert` para el porqué, y `repartirPorArea` para
+  // por qué van dos upserts y no uno. Se lee acá, después de la planilla y justo
+  // antes de escribir, para que la ventana en la que alguien pueda elegir un
+  // área sin que la veamos sea la más corta posible.
+  const areas = await cargarLasAreasDeLosAvisos(admin);
+  const { conArea, sinArea } =
+    "error" in areas
+      ? { conArea: [], sinArea: unicos }
+      : repartirPorArea(
+          unicos as (Datos & { oa_number: string; quien_aviso?: string | null })[],
+          areas.guardadas,
+          areas.areaDe
+        );
 
-    if (error) {
-      await registrarSincronizacion({
-        modulo: "mantenimiento", recurso: "avisos", ok: false, error: error.message,
-      });
-      return falla(400, error.message);
+  for (const grupo of [conArea, sinArea]) {
+    for (let i = 0; i < grupo.length; i += 500) {
+      const lote = grupo.slice(i, i + 500);
+      const { error } = await admin.from("avisos").upsert(lote, { onConflict: "oa_number" });
+
+      if (error) {
+        await registrarSincronizacion({
+          modulo: "mantenimiento", recurso: "avisos", ok: false, error: error.message,
+        });
+        return falla(400, error.message);
+      }
+      guardados += lote.length;
     }
-    guardados += lote.length;
   }
 
-  await registrarSincronizacion({
-    modulo: "mantenimiento", recurso: "avisos", ok: true, filas: guardados,
+  const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_AVISOS, {
+    clavesLeidas: trajoLaPlanilla,
+    cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
   });
+
+  // Si no se pudieron leer las áreas, la corrida **no se anota como limpia**: el
+  // JSON de abajo lo ve quien la dispara a mano, pero el cron corre solo, y si
+  // esa lectura fallara todos los días los avisos nuevos entrarían sin área sin
+  // que nadie se enterara. Se anota como el resto de los fallos —`ok: false` y
+  // el motivo en `error`—, que es lo que la pantalla de Avisos muestra en rojo
+  // con el texto al pasar el mouse. Los avisos sí se guardaron, y el mensaje lo
+  // dice para que no se lea como una corrida perdida.
+  await registrarSincronizacion(
+    "error" in areas
+      ? {
+          modulo: "mantenimiento", recurso: "avisos", ok: false, filas: guardados,
+          error: `Los avisos se guardaron pero no se pudieron leer las áreas: ${areas.error}`,
+        }
+      : { modulo: "mantenimiento", recurso: "avisos", ok: true, filas: guardados }
+  );
   return logra({
     leidas: filas.length - 1, guardados, sin_equipo: sinEquipo,
     numeros_repetidos: repetidos,
+    areas_completadas: conArea.length,
+    // Sólo cuando lo hay, para que no sea un campo que está siempre en null y
+    // se deja de mirar. Hoy el único caso es la migración sin aplicar.
+    ...(colaSinLeer ? { cola_sin_leer: colaSinLeer } : {}),
+    // Un fallo acá no frena la corrida, así que se dice en el resultado: si no,
+    // los avisos nuevos quedarían sin área sin que nadie supiera por qué.
+    ...("error" in areas ? { area_sin_leer: areas.error } : {}),
+    borrados: borrado.borradas, borrado: borrado.aviso,
   });
 }
 
 /** Trae las órdenes de trabajo de su planilla. */
-export async function sincronizarOrdenes(): Promise<Resultado> {
+/**
+ * Las órdenes cuyo estado, cierre, horas u operarios todavía no llegaron al
+ * master. Devuelve los `ot_number` que **siguen** pendientes después de
+ * intentarlo.
+ *
+ * Corre **antes de importar**, y ése es el punto. Una OT creada desde el
+ * sistema nace con esos datos y su fila del master todavía no existe —llega por
+ * `IMPORTRANGE` y tarda—, así que el alta no los pudo escribir. Si se importara
+ * primero, el master —con la `M` y la `O` vacías— le borraría el estado y las
+ * horas justo antes de que los exportemos.
+ *
+ * Y lo que sigue pendiente, la importación **no lo pisa**: la planilla todavía
+ * no sabe lo que el sistema sabe. Es el mismo principio que `editado_en_app` en
+ * Compras y que "no pisa lo que una persona corrigió" en las marcaciones.
+ *
+ * ── DESDE EL 21/10/2026 YA NO ES EL ÚNICO DRENAJE, Y ESO ERA EL PROBLEMA ────
+ *
+ * Esto era lo único que vaciaba la cola, y corre con la sincronización: en la
+ * práctica **cada 3 a 5 horas**, no cada quince minutos como dice su workflow.
+ * Medido: de la K en adelante, las columnas que sólo viven en el master
+ * tardaban entre 3 horas y 53 en llegar, y dos órdenes estaban esperando desde
+ * hacía horas. Ahora también lo llaman el `after()` de la ruta de alta —que
+ * insiste cuatro minutos— y la pantalla de Órdenes al abrirse. Esto queda de
+ * piso: es lo que agarra lo que aquéllos no pudieron.
+ *
+ * `conFreno` es para esos dos: no reintenta una orden que se intentó hace menos
+ * de diez minutos, porque la pantalla se abre todo el día y una orden que no se
+ * va a poder escribir nunca haría una lectura del master por cada visita.
+ */
+export async function exportarLoPendiente(
+  admin: ReturnType<typeof createAdminClient>,
+  opciones: { conFreno?: boolean } = {}
+): Promise<Set<number>> {
+  const siguenPendientes = new Set<number>();
+
+  const { data: todos } = await admin
+    .from("ordenes_trabajo")
+    .select("id, ot_number, estado, fecha_cierre, horas, contratista, operario_1, operario_2, operario_3, sheets_intentado_en")
+    .not("sheets_pendiente", "is", null);
+
+  // Con freno cuando lo dispara una visita a la pantalla, y sin freno cuando lo
+  // dispara la sincronización: ésa es el piso y tiene que intentarlo todo. Ver
+  // `MINIMO_ENTRE_INTENTOS_MS`.
+  const pendientes = opciones.conFreno
+    ? cualesReintentar(todos ?? [], Date.now())
+    : (todos ?? []);
+
+  for (const orden of pendientes) {
+    const registro = loQueHayQueExportar(orden);
+
+    // Dejó de tener algo que exportar: alguien lo borró o lo cambió en el
+    // sistema. Se limpia la marca en vez de reintentar para siempre.
+    if (!registro) {
+      await admin.from("ordenes_trabajo")
+        .update({ sheets_pendiente: null, sheets_intentado_en: new Date().toISOString() })
+        .eq("id", orden.id);
+      continue;
+    }
+
+    const fallo = await escribirEnLaFilaDeLaOT(orden, celdasParaRegistrar(registro));
+    if (fallo) siguenPendientes.add(orden.ot_number as number);
+
+    await admin.from("ordenes_trabajo")
+      .update({ sheets_pendiente: fallo, sheets_intentado_en: new Date().toISOString() })
+      .eq("id", orden.id);
+  }
+
+  return siguenPendientes;
+}
+
+/**
+ * Contrasta los dos lados y deja anotado lo que no coincide.
+ *
+ * Corre dentro de la sincronización y **antes del upsert**, que es el único
+ * momento en que las dos versiones existen a la vez: después, el sistema es la
+ * planilla por construcción. Lo que queda anotado es, entonces, exactamente lo
+ * que esta corrida está por reemplazar sin que nadie se entere.
+ *
+ * **La tabla se rehace entera**: una divergencia que se arregló tiene que
+ * desaparecer sola, porque su tamaño es lo que cuenta el aviso. Si las filas se
+ * acumularan, el aviso contaría problemas viejos y dejaría de mirarse.
+ *
+ * **Nunca tira.** Si la tabla todavía no existe —la migración la corre una
+ * persona— o la escritura falla, se devuelve el motivo y la sincronización
+ * sigue. Importar las órdenes es lo que no puede fallar; anotar lo que hay que
+ * mirar es valioso y es secundario, y romper lo primero por lo segundo sería
+ * exactamente el mal negocio que este módulo ya aprendió con los carteles del
+ * listado.
+ */
+async function anotarLasDivergencias(
+  admin: ReturnType<typeof createAdminClient>,
+  deLaPlanilla: readonly OrdenLeida[]
+): Promise<{ cuantas: number; recortadas: number; error: string | null }> {
+  const vacio = { cuantas: 0, recortadas: 0 };
+  try {
+    // `traerTodo` porque son 2.300 y PostgREST corta en 1.000 sin avisar.
+    const delSistema = await traerTodo<OrdenDelSistema>((desde, hasta) =>
+      admin
+        .from("ordenes_trabajo")
+        .select("ot_number, sector_raw, equipo_raw, especialidad, tipo, quien, descripcion, fecha_ejecucion, fecha_cierre, estado, contratista, horas, operario_1, operario_2, operario_3, prioridad, sheets_pendiente, fecha_ejecucion_pendiente")
+        .range(desde, hasta)
+    );
+
+    const { filas, total, recortadas } = loQueSeGuardaDelContraste(
+      contrastar(delSistema, deLaPlanilla)
+    );
+
+    // Se vacía y se vuelve a llenar. PostgREST exige un filtro para borrar, y
+    // `ot_number >= 0` las toma todas: los números de OT son positivos.
+    const borrado = await admin.from("mantenimiento_divergencias").delete().gte("ot_number", 0);
+    if (borrado.error) return { ...vacio, error: borrado.error.message };
+
+    if (filas.length > 0) {
+      const alta = await admin.from("mantenimiento_divergencias").insert(filas);
+      if (alta.error) return { ...vacio, error: alta.error.message };
+    }
+
+    return { cuantas: total, recortadas, error: null };
+  } catch (e) {
+    return { ...vacio, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * Les escribe la fórmula del ESTADO a las órdenes que nacieron sin ella.
+ *
+ * Qué celdas son lo decide `lasQueLesFaltaLaFormula`, en `lib/` y con tests; lo
+ * de acá es hablar con Google. **Nunca tira**: la sincronización no puede
+ * fallar porque una escritura de más no salga, así que devuelve el motivo.
+ */
+async function ponerLaFormulaDelEstado(
+  planilla: string,
+  pestana: string,
+  filas: readonly (readonly unknown[])[]
+): Promise<{ escritas: number; freno: string | null; error: string | null }> {
+  try {
+    const letra = letraDeColumna(COLUMNA_ESTADO);
+    const formulas = await leerFormulasDeRango(
+      planilla, pestana, `${letra}1:${letra}${filas.length}`
+    );
+
+    const { celdas, freno } = lasQueLesFaltaLaFormula(
+      filas, formulas, COLUMNA_OT, COLUMNA_ESTADO
+    );
+    if (freno) return { escritas: 0, freno, error: null };
+    if (celdas.length === 0) return { escritas: 0, freno: null, error: null };
+
+    await escribirCeldas(
+      planilla,
+      celdas.map((c) => ({ pestana, fila: c.fila, columna: c.columna, valor: c.valor }))
+    );
+    return { escritas: celdas.length, freno: null, error: null };
+  } catch (e) {
+    return { escritas: 0, freno: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_OT_ID ?? "";
   const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
   if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_OT_ID");
+
+  const inicio = new Date().toISOString();
+
+  // Primero sale lo que el sistema sabe y la planilla no. Después se lee: así
+  // lo que acabamos de escribir vuelve con el resto, en vez de ser pisado por
+  // una columna vacía.
+  const admin = createAdminClient();
+  const sinExportar = await exportarLoPendiente(admin);
 
   let filas: string[][];
   try {
@@ -198,16 +629,94 @@ export async function sincronizarOrdenes(): Promise<Resultado> {
 
   if (filas.length < 2) return logra({ leidas: 0, guardadas: 0, sin_equipo: 0 });
 
-  const admin = createAdminClient();
   const enlaces = await cargarEnlaces(admin);
+  const cuando = new Date().toISOString();
 
   const registros: Datos[] = [];
   const sinProveedor = new Set<string>();
   let sinEquipo = 0;
 
+  // Lo que la planilla trajo, **esté o no entre lo que vamos a escribir**.
+  //
+  // Es lo que después decide quién sobra, y por eso se cuenta acá arriba y no
+  // de `unicos`: una orden salteada por tener la exportación pendiente sigue
+  // estando en la planilla, así que contarla como ausente es decir que alguien
+  // la borró de ahí. Eso la mandaba a `borrarLoQueLaPlanillaNoTrajo`, donde no
+  // la protege nada —`nuncaEstuvoEnLaPlanilla` pide `app_created` y fila nula,
+  // y ésta tiene las dos al revés— y se la llevaba con sus notas, sus repuestos
+  // y su aviso en cascada. O sea: la marca que existe para que no la pisen la
+  // mandaba a borrar. Es la misma lección que Compras pagó con las 1.678 filas
+  // `editado_en_app`, y está fijada con un test en `borradoDeEspejo.test.ts`.
+  const trajoLaPlanilla = new Set<number>();
+
+  /** Todas las de la planilla, para contrastarlas antes de pisar nada. */
+  const leidasDeLaPlanilla: OrdenLeida[] = [];
+
+  // ── LAS FECHAS QUE YA SALIERON Y TODAVIA NO DERRAMARON ────────────────────
+  //
+  // Postergar una OT escribe su fecha en «Altas del sistema», y de ahi al
+  // master derrama entre 3 y 53 horas despues (medido el 21/10/2026). En esa
+  // ventana la J del master sigue diciendo la fecha vieja: importarla seria
+  // deshacer la postergacion, y a la corrida siguiente volver a deshacerla.
+  //
+  // `fecha_ejecucion_pendiente` es lo que lo evita. Se lee entero y no por OT
+  // porque son dos columnas de una tabla que ya se consulta igual.
+  const enCamino = new Map<number, string>();
+  {
+    const { data } = await admin
+      .from("ordenes_trabajo")
+      .select("ot_number, fecha_ejecucion_pendiente")
+      .not("fecha_ejecucion_pendiente", "is", null);
+    for (const o of data ?? []) {
+      enCamino.set(o.ot_number as number, String(o.fecha_ejecucion_pendiente));
+    }
+  }
+  /** Las que el derrame ya alcanzo: se les limpia la marca al final. */
+  const yaDerramaron: number[] = [];
+
+  // ── LA FECHA DE FIN, QUE LLEGA POR EL ENCABEZADO ──────────────────────────
+  //
+  // Se lee lo que el sistema ya sabe porque una celda vacía del master no
+  // puede borrarlo: ver `fechaFinDeLaFila`. La columna se busca por su nombre.
+  //
+  // Si la lectura falla —la migración `ot_fecha_fin` todavía no corrió y la
+  // columna no existe— `finDelSistema` queda en null y **la clave no entra al
+  // upsert**: PostgREST corta el lote entero si le llega una columna que no
+  // conoce, y eso sería dejar sin importar las 2.300 órdenes por un dato
+  // secundario.
+  const columnaDeFin = columnaDeFechaFin(filas[0] ?? []);
+  let finDelSistema: Map<number, string> | null = null;
+  let fechaFinSinImportar: string | null = null;
+  try {
+    const conFin = await traerTodo<{ ot_number: number; fecha_fin: string }>((desde, hasta) =>
+      admin
+        .from("ordenes_trabajo")
+        .select("ot_number, fecha_fin")
+        .not("fecha_fin", "is", null)
+        .order("ot_number")
+        .range(desde, hasta)
+    );
+    finDelSistema = new Map(conFin.map((o) => [o.ot_number, String(o.fecha_fin)]));
+  } catch (e) {
+    finDelSistema = null;
+    // Sin la columna es lo esperado (la migración no corrió). Cualquier otra
+    // cosa es un fallo de esta corrida, y se dice: si no, tras aplicar la
+    // migración un corte pasajero dejaría de importar `fecha_fin` sin que nadie
+    // lo sepa.
+    const mensaje = e instanceof Error ? e.message : String(e);
+    if (!faltaLaColumna(mensaje, "fecha_fin")) fechaFinSinImportar = mensaje;
+  }
+
   for (let i = 0; i < filas.length - 1; i++) {
     const orden = filaDeOrden(filas[i + 1], i + 2);
     if (!orden) continue;
+
+    trajoLaPlanilla.add(orden.ot_number);
+    leidasDeLaPlanilla.push(orden);
+
+    // Lo que no se pudo exportar no se pisa: la planilla todavía no sabe lo
+    // que el sistema sabe, y leerla ahora le borraría el estado y las horas.
+    if (sinExportar.has(orden.ot_number)) continue;
 
     const { equipment_id, sector_id } = resolver(enlaces, orden);
     if (!equipment_id) sinEquipo += 1;
@@ -217,11 +726,39 @@ export async function sincronizarOrdenes(): Promise<Resultado> {
     const proveedor_id = proveedorDe(enlaces, orden.contratista);
     if (orden.contratista && !proveedor_id) sinProveedor.add(orden.contratista);
 
+    // Una fecha en camino no se pisa con la del master. Y si el master YA la
+    // trae, el derrame llego: se importa normal y la marca se limpia al final.
+    // Limpiarla acá, antes de que el upsert entre, dejaría la OT descubierta
+    // si el lote falla.
+    const esperando = enCamino.get(orden.ot_number);
+    const fecha_ejecucion = esperando && esperando !== orden.fecha_ejecucion
+      ? esperando
+      : orden.fecha_ejecucion;
+    if (esperando && esperando === orden.fecha_ejecucion) yaDerramaron.push(orden.ot_number);
+
+    // `paraLaBase` y no `...orden`: la orden leída lleva campos que no son
+    // columnas —hoy `estado_raw`, que es del contraste— y PostgREST corta el
+    // lote entero si le llega uno. Ver el comentario de esa función.
     registros.push({
-      ...orden, equipment_id, sector_id, proveedor_id,
-      synced_at: new Date().toISOString(),
+      ...paraLaBase(orden), fecha_ejecucion, equipment_id, sector_id, proveedor_id, synced_at: cuando,
+      ...(finDelSistema
+        ? { fecha_fin: fechaFinDeLaFila(filas[i + 1], columnaDeFin, finDelSistema.get(orden.ot_number) ?? null) }
+        : {}),
     });
   }
+
+  // ── EL CONTRASTE VA ACÁ: ANTES DE PISAR, NO DESPUÉS ───────────────────────
+  //
+  // Después del upsert los dos lados coinciden por construcción, así que
+  // contrastar ahí sólo encontraría lo que la importación salteó. Lo que
+  // importa es justamente lo otro: la orden que decía algo distinto y que esta
+  // misma corrida está por reemplazar con lo de la planilla. Eso es lo que se
+  // perdía en silencio, y es lo que queda anotado.
+  //
+  // No cuesta ninguna lectura de Google: la planilla ya está leída. Lo único
+  // que suma es traer las columnas del sistema, que es lo que `contrastar`
+  // necesita del otro lado.
+  const divergencias = await anotarLasDivergencias(admin, leidasDeLaPlanilla);
 
   let guardadas = 0;
   const { unicos, repetidos } = unaPorNumero(registros, "ot_number");
@@ -241,30 +778,213 @@ export async function sincronizarOrdenes(): Promise<Resultado> {
     guardadas += lote.length;
   }
 
+  // El derrame alcanzó a estas: el master ya dice la fecha que se había
+  // escrito, así que la marca dejó de proteger algo y se saca. Va DESPUÉS del
+  // upsert a propósito —si el lote hubiera fallado, la OT tiene que seguir
+  // protegida— y es lo único que cierra el ciclo: sin esto la marca quedaría
+  // puesta para siempre y la OT invisible para el contraste.
+  if (yaDerramaron.length > 0) {
+    await admin
+      .from("ordenes_trabajo")
+      .update({ fecha_ejecucion_pendiente: null })
+      .in("ot_number", yaDerramaron);
+  }
+
+  // ── Y SE LES PONE LA FÓRMULA A LAS QUE NACIERON SIN ESTADO ───────────────
+  //
+  // Una OT que entra por el formulario no pasa por ninguna ruta del SdG, así
+  // que nadie le escribe la `M`: nace con el ESTADO en blanco y se queda así
+  // para siempre. Medido el 02/11/2026: tres en tres días, las tres
+  // `app_created = false`. Mientras esa celda está vacía esa orden **no tiene
+  // estado para quien mira la planilla**, ni siquiera cuando se vence.
+  //
+  // Va acá, al final y después del upsert, porque necesita las dos lecturas y
+  // porque escribir es lo último que conviene hacer. Cuesta una lectura más
+  // —las fórmulas de la columna M, que `leerValores` no trae—, y tiene el
+  // mismo freno que el borrado: si hubiera demasiadas, no escribe ninguna y
+  // dice por qué, porque una planilla recalculando devuelve vacío lo que no
+  // resolvió y «vacío» es justo el criterio de esto.
+  const estadosPuestos = await ponerLaFormulaDelEstado(planilla, pestana, filas);
+
+  const presupuestoDeLaAgenda = presupuestoDeGoogle();
+  const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_OT, {
+    clavesLeidas: trajoLaPlanilla,
+    cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
+    // El evento de Google de una OT se borra ANTES que la OT, y si no se puede,
+    // esa OT no se borra en esta corrida. Ver `borrarLosEventosDeLasOT`.
+    // Y el tiempo que se le dedica a Google es UNO para borrar y para mover, con
+    // la mitad reservada para mover: ver `LIMITE_DE_GOOGLE_MS`.
+    antesDeBorrar: (ids) => borrarLosEventosDeLasOT(admin, ids, { presupuesto: presupuestoDeLaAgenda.borrar }),
+  });
+
+  // La corrida se anota ANTES de tocar la Agenda. Lo que sigue habla con Google,
+  // que puede colgarse, y si la invocación muere por tiempo el registro de que
+  // las órdenes se importaron bien no puede perderse con ella: la pantalla
+  // mostraría la corrida vieja y los avisos de ritmo mentirían sobre un módulo
+  // que sí se actualizó.
   await registrarSincronizacion({
     modulo: "mantenimiento", recurso: "ordenes", ok: true, filas: guardadas,
   });
+
+  // ── EL EVENTO DE LA AGENDA SIGUE A LA OT ──────────────────────────────────
+  //
+  // Va después del borrado: las OT que acaban de irse se llevaron su evento y
+  // no hay nada que mover. Un evento que ya divergió en Google no se pisa y un
+  // fallo de escritura va a la cola (`google_pendiente`); lo que no se pudo ni
+  // guardar sale acá y en el registro, y no en un `console.warn`. Tiene un
+  // límite de tiempo (`LIMITE_DE_GOOGLE_MS`): corre dentro del cron que sigue
+  // con las otras tres sincronizaciones.
+  const eventos = await seguirALasOT(admin, { presupuesto: presupuestoDeLaAgenda.mover });
+
+  // ── Y LAS QUE FALTAN, ENTRAN ──────────────────────────────────────────────
+  //
+  // Toda OT con fecha futura, abierta y sin evento. Va **después** de mover: lo
+  // que acaba de crear no tiene nada que reubicar, y mover primero no lo cuenta.
+  // Comparte el tramo `mover` del presupuesto de Google (no tiene uno propio, así
+  // que la Agenda en conjunto no se pasa del límite que ya tenía): si el
+  // movimiento se comió el tiempo, el barrido no empieza y lo dice en `quedaron`.
+  // No lanza —su contrato—, y aun así va atrapado: la sincronización ya está
+  // anotada como buena y un error acá no puede deshacerlo.
+  let barrido: LoQueBarrio;
+  try {
+    barrido = await barrerLasQueFaltan(admin, new Date(), TOPE_POR_CORRIDA, presupuestoDeLaAgenda.mover);
+  } catch (e) {
+    barrido = {
+      creados: 0, quedaron: 0, fechasIlegibles: [],
+      fallos: [`El barrido de las órdenes sin evento se cortó: ${e instanceof Error ? e.message : String(e)}`],
+    };
+  }
+
+  // Si no se pudo mover algún evento, o no se alcanzó, la última anotación pasa a
+  // decirlo: las OT sí se guardaron, y el mensaje lo dice para que no se lea
+  // como una corrida perdida. Mismo criterio que las áreas de los avisos. El
+  // barrido suma lo suyo al mismo renglón: es una sola anotación por corrida.
+  const loAnotado = juntarLoAnotado(loQueSeAnotaDeLosEventos(eventos), loQueSeAnotaDelBarrido(barrido));
+  if (loAnotado) {
+    await registrarSincronizacion({ modulo: "mantenimiento", recurso: "ordenes", filas: guardadas, ...loAnotado });
+  }
   return logra({
     leidas: filas.length - 1,
     guardadas,
     sin_equipo: sinEquipo,
     numeros_repetidos: repetidos,
     sin_proveedor: [...sinProveedor],
+    borradas: borrado.borradas,
+    borrado: borrado.aviso,
+    // Cuántas dicen distinto los dos lados. Va en el resultado aunque el aviso
+    // ya lo cuente: quien corre la sincronización a mano lo ve en el momento.
+    fechas_que_derramaron: yaDerramaron.length,
+    eventos_movidos: eventos.movidos,
+    eventos_avisados: eventos.avisados,
+    eventos_divergidos_sin_tocar: eventos.respetados,
+    eventos_pendientes_de_google: eventos.pendientes,
+    eventos_sin_alcanzar: eventos.sinAlcanzar,
+    ...(eventos.fallos.length > 0 ? { eventos_con_fallos: eventos.fallos } : {}),
+    eventos_creados_por_el_barrido: barrido.creados,
+    eventos_sin_crear_todavia: barrido.quedaron,
+    ...(barrido.fallos.length > 0 ? { eventos_que_no_entraron: barrido.fallos } : {}),
+    ...(barrido.fechasIlegibles.length > 0 ? { eventos_con_fecha_ilegible: barrido.fechasIlegibles } : {}),
+    estados_sin_formula: estadosPuestos.escritas,
+    ...(estadosPuestos.freno ? { estado_freno: estadosPuestos.freno } : {}),
+    ...(estadosPuestos.error ? { estado_error: estadosPuestos.error } : {}),
+    divergencias: divergencias.cuantas,
+    ...(divergencias.recortadas > 0 ? { divergencias_recortadas: divergencias.recortadas } : {}),
+    // Un fallo acá no frena la corrida —anotar es secundario, importar no—, así
+    // que se dice. Mientras la migración no esté corrida, esto dice por qué.
+    ...(divergencias.error ? { divergencias_sin_anotar: divergencias.error } : {}),
+    // Las órdenes entraron, pero esta corrida no trajo `fecha_fin`: la lectura
+    // falló por algo que no es la migración sin correr.
+    ...(fechaFinSinImportar ? { fecha_fin_sin_importar: fechaFinSinImportar } : {}),
   });
 }
 
+/**
+ * Reescribe el seguimiento de las OS que no llegaron a la planilla, y devuelve
+ * los números que **siguen** sin llegar.
+ *
+ * Gemela de `exportarLoPendiente` para las órdenes de trabajo, y existe por lo
+ * mismo: `filaDeOS` vuelve a leer las cinco columnas del seguimiento, así que
+ * importar una OS cuyo cambio todavía no se exportó la pisa con la celda vieja.
+ * Los números que vuelven son los que la importación tiene que saltear.
+ *
+ * Sin freno de tiempo, a diferencia de la de OT: acá no hay un botón de
+ * pantalla que la dispare: la llama sólo la sincronización, que es el piso y
+ * tiene que intentarlo todo.
+ */
+export async function exportarLoPendienteDeOS(
+  admin: ReturnType<typeof createAdminClient>
+): Promise<{ siguenPendientes: Set<number>; problema: string | null }> {
+  const siguenPendientes = new Set<number>();
+
+  // La cadena va literal y no armada en una variable: así Supabase infiere los
+  // tipos de lo que vuelve. Es la regla del CLAUDE.md, y acá avisó con un
+  // `GenericStringError` en vez de dejarlo pasar.
+  const { data: pendientes, error } = await admin
+    .from("ordenes_servicio")
+    .select("id, os_number, sheets_tab, sheets_row, estado, proveedor_elegido, fecha_pedido, fecha_realizacion, observaciones")
+    .not("sheets_pendiente", "is", null);
+
+  // **Y si no se pudo leer la cola, se dice.** El caso concreto es la migración
+  // `20261026112137` sin aplicar: PostgREST contesta que no existe la columna,
+  // `data` viene null y el `?? []` de abajo haría que esto no reintentara nada
+  // y no salteara nada — o sea, la protección apagada, importando igual y sin
+  // una palabra. Un diagnóstico que no se distingue del éxito es peor que
+  // ninguno. No aborta la corrida: traer las OS sigue siendo mejor que no
+  // traerlas, pero quien mire la sincronización tiene que ver por qué.
+  if (error) {
+    return {
+      siguenPendientes,
+      problema:
+        `No se pudo leer la cola de exportación de las OS, así que esta corrida no ` +
+        `reintentó nada y pudo pisar un seguimiento sin exportar: ${error.message}`,
+    };
+  }
+
+  for (const os of pendientes ?? []) {
+    const campos = loQueHayQueExportarDeLaOS(os);
+
+    // Dejó de tener algo que exportar: alguien lo borró o lo cambió en el
+    // sistema. Se limpia la marca en vez de reintentar para siempre.
+    if (!campos) {
+      await admin.from("ordenes_servicio")
+        .update({ sheets_pendiente: null, sheets_intentado_en: new Date().toISOString() })
+        .eq("id", os.id);
+      continue;
+    }
+
+    const fallo = await escribirEnLaFilaDeLaOS(os, campos);
+    if (fallo) siguenPendientes.add(os.os_number as number);
+
+    await admin.from("ordenes_servicio")
+      .update({ sheets_pendiente: fallo, sheets_intentado_en: new Date().toISOString() })
+      .eq("id", os.id);
+  }
+
+  return { siguenPendientes, problema: null };
+}
+
 /** Trae las órdenes de servicio de su planilla, una pestaña por área. */
-export async function sincronizarOrdenesDeServicio(): Promise<Resultado> {
+export async function sincronizarOrdenesDeServicio(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_OS_ID ?? "";
   if (!planilla) return falla(503, "Falta configurar GOOGLE_SHEETS_OS_ID");
 
+  const inicio = new Date().toISOString();
   const admin = createAdminClient();
+
+  // Primero sale lo que el sistema sabe y la planilla no, igual que en las OT:
+  // así lo que acabamos de escribir vuelve con el resto en la lectura de abajo,
+  // en vez de ser pisado por una columna vieja.
+  const { siguenPendientes: sinExportar, problema: colaSinLeer } =
+    await exportarLoPendienteDeOS(admin);
+
   const enlaces = await cargarEnlaces(admin);
   const cuando = new Date().toISOString();
 
   // Una OS puede aparecer en la hoja maestra y en la de su área: se queda la
   // última leída, que es la que trae el seguimiento.
   const porNumero = new Map<number, Datos>();
+  /** Lo que la planilla trajo, esté o no entre lo que vamos a escribir. */
+  const trajoLaPlanilla = new Set<number>();
   const sinLeer: string[] = [];
   const huerfanas: string[] = [];
   const sinProveedor = new Set<string>();
@@ -298,6 +1018,15 @@ export async function sincronizarOrdenesDeServicio(): Promise<Resultado> {
         continue;
       }
 
+      // Contada como traída antes del salteo, no después: una OS salteada
+      // sigue estando en la planilla, y dejarla afuera de `clavesLeidas` la
+      // manda a borrar. Ver el comentario largo en `sincronizarOrdenes`.
+      trajoLaPlanilla.add(os.os_number);
+
+      // Lo que no se pudo exportar no se pisa: la planilla todavía no sabe lo
+      // que el sistema sabe, y leerla ahora le borraría el seguimiento.
+      if (sinExportar.has(os.os_number)) continue;
+
       const link = linkDeCelda(formulas[i]?.[idx.comparativa], null);
       const { equipment_id, sector_id } = resolver(enlaces, os);
       if (!equipment_id) sinEquipo += 1;
@@ -327,6 +1056,22 @@ export async function sincronizarOrdenesDeServicio(): Promise<Resultado> {
     );
   }
 
+  // Qué números ya estaban, para saber cuáles nacen en esta corrida. Va antes
+  // del `upsert` porque después todas existen y la pregunta deja de tener
+  // respuesta — a diferencia de Compras, que distingue el alta de la
+  // actualización dentro de su propio bucle.
+  //
+  // `traerTodo` y no un `select` pelado: son 261 filas hoy, pero PostgREST
+  // corta en 1000 sin avisar y el día que se pase, esto empezaría a anunciar
+  // como nuevas las que quedaron afuera de la primera página.
+  const yaEstaban = new Set(
+    (
+      await traerTodo<{ os_number: number }>((desde, hasta) =>
+        admin.from("ordenes_servicio").select("os_number").range(desde, hasta)
+      )
+    ).map((o) => o.os_number)
+  );
+
   let guardadas = 0;
   for (let i = 0; i < registros.length; i += 500) {
     const lote = registros.slice(i, i + 500);
@@ -343,15 +1088,54 @@ export async function sincronizarOrdenesDeServicio(): Promise<Resultado> {
     guardadas += lote.length;
   }
 
+  // `sinLeer` entra como freno: la OS lee una pestaña por área, y si falla la
+  // de Calcinación sus órdenes faltan en bloque. Borrarlas sería vaciar un
+  // área entera por un error de red.
+  const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_OS, {
+    clavesLeidas: trajoLaPlanilla,
+    cuando, inicio, fuentesSinLeer: sinLeer,
+    sinFreno: opciones.sinFreno, actor: opciones.actor,
+  });
+
   await registrarSincronizacion({
     modulo: "mantenimiento", recurso: "ordenes-servicio", ok: true, filas: guardadas,
   });
+
+  // El aviso al instante a quien aprueba una OS. Va al final, después de que
+  // todo está guardado y registrado: `avisarAQuienDecide` no tira, así que un
+  // push service caído no puede hacer que esta corrida figure como fallada.
+  //
+  // La url es la de Compras y no la de Mantenimiento: las órdenes de servicio
+  // se aprueban en /compras/aprobaciones, que es donde se ejerce la decisión,
+  // aunque la OS sea una entidad de este módulo.
+  const aviso = await avisarAQuienDecide(admin, {
+    lista: "os_aprobadores",
+    // El cast es por `Datos = Record<string, unknown>`, que es como se arma lo
+    // que va al `upsert`: los cuatro campos los pone `filaDeOS` y están
+    // declarados en `OrdenServicioLeida`, pero el tipo del mapa los borra.
+    items: lasOSQueNacenEsperando(
+      registros as unknown as Parameters<typeof lasOSQueNacenEsperando>[0],
+      yaEstaban
+    ),
+    nombre: { singular: "Una orden de servicio", plural: "órdenes de servicio" },
+    url: "/compras/aprobaciones",
+  });
+
   return logra({
     guardadas,
     sin_equipo: sinEquipo,
     sin_leer: sinLeer,
     huerfanas,
     sin_proveedor: [...sinProveedor],
+    borradas: borrado.borradas,
+    borrado: borrado.aviso,
+    // Sólo cuando lo hay, para que no sea un campo que está siempre en null y
+    // se deja de mirar. Hoy el único caso es la migración sin aplicar.
+    ...(colaSinLeer ? { cola_sin_leer: colaSinLeer } : {}),
+    // Un 0 es lo normal: la mayoría de las corridas no traen OS nuevas y fuera
+    // de la ventana 7:00–21:00 no se manda nada a propósito.
+    avisos_al_instante: aviso.enviadas,
+    ...(aviso.motivo ? { avisos_al_instante_motivo: aviso.motivo } : {}),
   });
 }
 
@@ -380,6 +1164,18 @@ export async function sincronizarComparativas(): Promise<Resultado> {
   // el otro: quedaron a medias y hay que ir a mirarlas a la planilla.
   let leidas = 0;
   const sinParsear: string[] = [];
+
+  // Una pestaña que la planilla sumó y el sistema no conoce no rompe nada, y
+  // ése es el problema: sus cotizaciones no se leen nunca y las que se carguen
+  // desde la app para ese sector caen en "Otros". Pasó con `Cantera` y
+  // `Despacho`. Que la planilla no se pueda listar no frena la corrida: es un
+  // aviso, no la sincronización.
+  let pestanasNuevas: string[] = [];
+  try {
+    pestanasNuevas = pestanasQueFaltan(await listarPestanas(planilla));
+  } catch {
+    // Sin la lista no hay aviso que dar, y las pestañas conocidas se leen igual.
+  }
 
   for (const pestana of COMPARATIVA_PESTANAS) {
     let filas: string[][];
@@ -510,7 +1306,15 @@ export async function sincronizarComparativas(): Promise<Resultado> {
       `${sinParsear.slice(0, 20).join(", ")}${sinParsear.length > 20 ? "…" : ""}.`
     : null;
 
-  const aviso = [sobrantes, celdasRepetidas, noEntraron].filter(Boolean).join(" ") || null;
+  const avisoPestanas = pestanasNuevas.length > 0
+    ? `La planilla tiene ${pestanasNuevas.length} pestaña(s) que el sistema no conoce: ` +
+      `${pestanasNuevas.join(", ")}. Sus cotizaciones no se leen, y una cargada desde ` +
+      "la app para esos sectores va a parar a «Otros». Hay que sumarlas a " +
+      "COMPARATIVA_PESTANAS."
+    : null;
+
+  const aviso =
+    [sobrantes, celdasRepetidas, noEntraron, avisoPestanas].filter(Boolean).join(" ") || null;
 
   const ordenes = new Set(unicos.map((c) => c.os_number)).size;
   await registrarSincronizacion({
@@ -523,6 +1327,7 @@ export async function sincronizarComparativas(): Promise<Resultado> {
     ...(sinParsear.length > 0 ? { sin_parsear: sinParsear } : {}),
     ...(sobrantes ? { sobrantes } : {}),
     ...(celdasRepetidas ? { celdas_repetidas: repetidos } : {}),
+    ...(pestanasNuevas.length > 0 ? { pestanas_nuevas: pestanasNuevas } : {}),
   });
 }
 
@@ -531,8 +1336,43 @@ export const SINCRONIZACIONES = [
   // Los equipos y sectores ya están; lo demás cuelga de ellos. Las órdenes de
   // servicio antes que sus comparativas, para que una cotización nunca quede
   // apuntando a una OS que todavía no existe.
-  { recurso: "avisos", correr: sincronizarAvisos },
-  { recurso: "ordenes", correr: sincronizarOrdenes },
-  { recurso: "ordenes-servicio", correr: sincronizarOrdenesDeServicio },
-  { recurso: "comparativas", correr: sincronizarComparativas },
+  //
+  // Las cuatro se envuelven con la misma firma para que el reloj pueda decir
+  // quién es: sin eso, un borrado hecho por el cron de las 6 queda en la
+  // auditoría indistinguible del que hizo alguien apretando el botón, que es
+  // justo la diferencia para la que existe la columna `actor`. Comparativas
+  // acepta las opciones y no las usa: su borrado es anterior a todo esto.
+  { recurso: "avisos", correr: (o?: OpcionesDeCorrida) => sincronizarAvisos(o) },
+  { recurso: "ordenes", correr: (o?: OpcionesDeCorrida) => sincronizarOrdenes(o) },
+  { recurso: "ordenes-servicio", correr: (o?: OpcionesDeCorrida) => sincronizarOrdenesDeServicio(o) },
+  { recurso: "comparativas", correr: (_o?: OpcionesDeCorrida) => sincronizarComparativas() },
+  // ── Y AL FINAL, LAS PERIÓDICAS ────────────────────────────────────────────
+  //
+  // Va **después** de `ordenes` y no antes, y es la única razón por la que
+  // tiene un lugar fijo en esta lista: una OT recién creada todavía no está en
+  // el master —su fila llega por `IMPORTRANGE`—, así que si la importación
+  // corriera después la encontraría ausente. No la borra, porque `app_created`
+  // con `sheets_row` en null la protege, pero igual no tiene sentido crear algo
+  // y leer la planilla sin eso adentro en la misma corrida.
+  //
+  // No tira: `generarLasPeriodicas` devuelve qué pasó con cada programado y
+  // esto lo pasa a `Resultado`. Un programado que no se pudo crear no frena al
+  // siguiente, y ninguno frena las cuatro sincronizaciones de arriba.
+  {
+    recurso: "periodicas",
+    correr: async (_o?: OpcionesDeCorrida): Promise<Resultado> => {
+      const r = await generarLasPeriodicas();
+      return logra({
+        generadas: r.generadas.length,
+        ot: r.generadas.map((g) => g.ot_number),
+        incompletos: r.incompletos,
+        fallaron: r.fallaron,
+        cerrados: r.cerrados,
+        sin_estado_todavia: r.sinEstadoTodavia,
+        // El evento que no se pudo crear de una periódica no tiene otro
+        // lugar donde decirse: la corrida de estas no tiene pantalla.
+        ...(r.sinCalendario.length > 0 ? { sin_calendario: r.sinCalendario } : {}),
+      });
+    },
+  },
 ] as const;

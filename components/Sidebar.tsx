@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactElement } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { NAV, puedeVerItem, type NavItem } from "@/lib/core/nav";
+import { NAV, puedeVerItem, estaDentroDe, type NavItem } from "@/lib/core/nav";
 import { esAdminDelNucleo } from "@/lib/core/access";
 import { useNavMovil } from "./NavMovil";
 import type { Modulo, Rol } from "@/lib/core/types";
@@ -23,6 +23,9 @@ function esRutaActiva(href: string, pathname: string, search: string): boolean {
 // entre módulos cuando el concepto es el mismo — ej. "Historial" o "Configuración").
 const ICONOS: Record<string, () => ReactElement> = {
   "Inicio": IconDash,
+  // Sin esta línea cae en el ícono de Inicio (`iconForItem`) y los dos primeros
+  // renglones del menú se ven iguales.
+  "Agenda": IconCalendar,
   "RRHH": IconUsers,
   "Remises": IconCar,
   "Mantenimiento": IconWrench,
@@ -62,6 +65,8 @@ const ICONOS: Record<string, () => ReactElement> = {
   "Stock": IconList,
   "Movimientos": IconBolt,
   "Proveedores": IconUsers,
+  // El histórico del laboratorio: lo de antes del SdG.
+  "Histórico": IconFile,
   // Compras.
   "Compras": IconCart,
   "Tablero": IconKanban,
@@ -204,8 +209,12 @@ export function Sidebar({
     });
   };
 
-  // Si la ruta actual pertenece a un sector (o sub-grupo) con sub-páginas, lo
-  // despliega solo.
+  // Si la ruta actual pertenece a un sector (o sub-grupo), lo despliega solo.
+  //
+  // Cuenta tanto una sub-página del menú como cualquier ruta debajo de la raíz
+  // del sector: entrar a `/compras` desde una tarjeta del Inicio, o a una
+  // página de detalle que no está en el menú, dejaban el menú cerrado — y los
+  // trece grupos tenían el problema, porque ninguno repite su raíz como hijo.
   //
   // Se ajusta durante el render y no en un efecto. Con el efecto habia un commit
   // en el que la pagina nueva ya estaba pintada y el menu todavia mostraba el
@@ -223,9 +232,13 @@ export function Sidebar({
       if (!item.children) continue;
       const hijoDirectoActivo = item.children.some((c) => !c.children && esRutaActiva(c.href, pathname, search));
       const subgrupoActivo = item.children.find((c) => c.children?.some((n) => esRutaActiva(n.href, pathname, search)));
-      if (hijoDirectoActivo || subgrupoActivo) {
+      if (hijoDirectoActivo || subgrupoActivo || estaDentroDe(item.href, pathname)) {
         setAbierto(item.label);
-        if (subgrupoActivo) setAbiertoSub(subgrupoActivo.label);
+        // Se fija en vez de sólo abrirse: al entrar por la raíz no hay
+        // sub-grupo activo, y dejar el del módulo anterior mostraba uno
+        // desplegado que no correspondía. Resetear al cambiar de ruta es lo
+        // que el comentario de arriba ya promete.
+        setAbiertoSub(subgrupoActivo?.label ?? null);
         break;
       }
     }
@@ -245,7 +258,8 @@ export function Sidebar({
 
       <aside
         className={[
-          "flex flex-col shrink-0 transition-[width] duration-200",
+          // No va al papel: el armazón se esconde al imprimir.
+          "no-print flex flex-col shrink-0 transition-[width] duration-200",
           // En un teléfono es un cajón: encima del contenido, y sólo cuando se
           // lo pide. Sin esto se comía 240 de los 375 px de pantalla.
           "fixed inset-y-0 left-0 z-50 w-72",
@@ -314,23 +328,20 @@ export function Sidebar({
             (c) => esRutaActiva(c.href, pathname, search) || c.children?.some((n) => esRutaActiva(n.href, pathname, search))
           );
 
-          // La mayoría de los módulos repiten el `href` del padre en su primer
-          // hijo (es la misma página, "Dashboard"): ahí el grupo entero se
-          // sigue tratando como un desplegable puro, sin navegar, que es el
-          // comportamiento de siempre. Cantera es la excepción: su `href` no
-          // lo tiene ningún hijo porque es una página propia (el inicio del
-          // módulo, con el adelanto de Registros y del informe) — eso es lo
-          // que activa que el encabezado navegue además de desplegar.
-          const hrefEsPropio = !item.children.some((c) => c.href === item.href);
-          const activoPropio = hrefEsPropio && esRutaActiva(item.href, pathname, search);
+          // El encabezado de un grupo **sólo despliega**, no navega. La portada
+          // del módulo se alcanza por su primer hijo ("Tablero"), que está en
+          // `NAV` justamente para eso — ver el comentario de arriba de `NAV`.
+          //
+          // Hasta el 04/11/2026 el encabezado era un link que navegaba y
+          // desplegaba a la vez, y el comentario que estaba acá decía que sólo
+          // Cantera era así. Era falso: medido, los catorce grupos lo eran.
 
           // Colapsado: sin lugar para desplegar sub-ítems, un click entra
-          // directo a la página del sector — la propia si la tiene, si no la
-          // primera de sus hijos (o del primer sub-grupo).
+          // directo a la primera página del sector, que es su portada.
           if (colapsado) {
-            const primerHref = hrefEsPropio ? item.href : (hijosVisibles[0]?.children?.[0]?.href ?? hijosVisibles[0]?.href ?? item.href);
+            const primerHref = hijosVisibles[0]?.children?.[0]?.href ?? hijosVisibles[0]?.href ?? item.href;
             return (
-              <Link key={item.href} href={primerHref} title={item.label} className={`nav-link justify-center ${hijoActivo || activoPropio ? "active" : ""}`}>
+              <Link key={item.href} href={primerHref} title={item.label} className={`nav-link justify-center ${hijoActivo ? "active" : ""}`}>
                 <Icon />
               </Link>
             );
@@ -338,33 +349,20 @@ export function Sidebar({
 
           const desplegado = abierto === item.label;
           const alternarDesplegado = () => setAbierto(desplegado ? null : item.label);
-          const encabezadoActivo = hijoActivo || activoPropio;
+          const encabezadoActivo = hijoActivo;
 
           return (
             <div key={item.href}>
-              {hrefEsPropio ? (
-                <Link
-                  href={item.href}
-                  onClick={alternarDesplegado}
-                  aria-expanded={desplegado}
-                  className={`nav-link ${encabezadoActivo ? "active" : ""}`}
-                >
-                  <Icon />
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  <ChevronIcon abierto={desplegado} />
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  onClick={alternarDesplegado}
-                  aria-expanded={desplegado}
-                  className={`nav-link ${encabezadoActivo ? "active" : ""}`}
-                >
-                  <Icon />
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  <ChevronIcon abierto={desplegado} />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={alternarDesplegado}
+                aria-expanded={desplegado}
+                className={`nav-link ${encabezadoActivo ? "active" : ""}`}
+              >
+                <Icon />
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                <ChevronIcon abierto={desplegado} />
+              </button>
               {desplegado && (
                 <div>
                   {hijosVisibles.map((c) => {
@@ -415,6 +413,21 @@ export function Sidebar({
             </div>
           );
         })}
+
+        {/* Fuera de los módulos y sin permiso que pedir: instalar la app la
+            puede hacer cualquiera. Va al final y separado porque se usa una
+            vez —después queda el ícono en el teléfono— y no compite con las
+            páginas de todos los días. */}
+        <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--sidebar-border)" }}>
+          <Link
+            href="/instalar"
+            title={colapsado ? "Instalar la app" : undefined}
+            className={`nav-link ${esRutaActiva("/instalar", pathname, search) ? "active" : ""} ${colapsado ? "justify-center" : ""}`}
+          >
+            <IconInstalar />
+            {!colapsado && "Instalar la app"}
+          </Link>
+        </div>
       </nav>
       </aside>
     </>
@@ -648,6 +661,13 @@ function IconKanban() {
     <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M9 4v16M15 4v16" />
+    </svg>
+  );
+}
+function IconInstalar() {
+  return (
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="shrink-0">
+      <path d="M12 3v11m0 0l-4-4m4 4l4-4M5 17v2a2 2 0 002 2h10a2 2 0 002-2v-2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

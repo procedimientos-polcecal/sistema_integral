@@ -6,7 +6,11 @@ import Link from "next/link";
 import FichaTecnica from "./FichaTecnica";
 import ComponentesYRepuestos from "./ComponentesYRepuestos";
 import CostoDelEquipo, { type CostoDelEquipoProps } from "./CostoDelEquipo";
+import ConfiabilidadDelEquipo, { type ConfiabilidadProps } from "./ConfiabilidadDelEquipo";
+import FallasDelEquipo from "./FallasDelEquipo";
+import type { FallaContada } from "@/lib/mantenimiento/fallas";
 import Select from "@/components/Select";
+import { comoSeLee } from "@/lib/core/fechas";
 
 const OT_ESTADO: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   ATRASADO:   { label: "Atrasado",   color: "#DC2626", bg: "#FEF2F2", dot: "#EF4444" },
@@ -47,12 +51,14 @@ function nombreCompleto(u: { nombre?: string; apellido?: string } | null | undef
   return `${u.nombre ?? ""} ${u.apellido ?? ""}`.trim() || "—";
 }
 
-export default function EquipoDetalle({ equipo, sectores, historial, canEdit, costo }: {
+export default function EquipoDetalle({ equipo, sectores, historial, canEdit, costo, confiabilidad, fallas }: {
   equipo: any;
   sectores: any[];
   historial: any[];
   canEdit: boolean;
   costo: Omit<CostoDelEquipoProps, "equipoId">;
+  confiabilidad: ConfiabilidadProps;
+  fallas: FallaContada[];
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -285,6 +291,10 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
 
       <ComponentesYRepuestos equipoId={equipo.id} puedeEditar={canEdit} />
 
+      <ConfiabilidadDelEquipo {...confiabilidad} />
+
+      <FallasDelEquipo fallas={fallas} />
+
       {historial.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold text-slate-700 mb-2">Historial de estado</h2>
@@ -342,8 +352,14 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
                       <span className="w-1.5 h-1.5 rounded-full" style={{ background: m.dot }} />
                       {m.label}
                     </span>
+                    {/* `comoSeLee` y no `new Date(...)`: `ordenes_trabajo.fecha`
+                        es una columna `date` y llega como "2026-10-26", que
+                        `new Date()` toma como medianoche UTC. En Argentina
+                        —UTC-3— eso cae a las 21:00 del día anterior, así que
+                        las últimas cinco OT del equipo se leían un día antes
+                        que en la planilla y que en el listado de órdenes. */}
                     {o.fecha && (
-                      <p className="text-xs text-slate-400">{new Date(o.fecha).toLocaleDateString("es-AR")}</p>
+                      <p className="text-xs text-slate-400">{comoSeLee(o.fecha)}</p>
                     )}
                   </div>
                 </div>

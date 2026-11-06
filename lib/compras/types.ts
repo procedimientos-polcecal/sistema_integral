@@ -140,6 +140,13 @@ export interface Requerimiento {
   cumplio_proveedor: Cumplio | null;
   seguimiento_fila: number | null;
   seguimiento_pendiente: string | null;
+  /**
+   * El monto que se sabe: el costo si está comprado, si no el presupuesto más
+   * alto. Lo mantiene un trigger. Null = todavía no hay ningún número.
+   */
+  monto_conocido: number | null;
+  /** Lo que dijo una persona sobre si es caro. Null = manda el monto. */
+  monto_alto_manual: boolean | null;
   /** Si el material se usó. Null es "todavía no contestaron". */
   se_aplico: "SI" | "NO" | null;
   /** Cuándo se usó. El tiempo en stock sale de restarle `fecha_recepcion`. */

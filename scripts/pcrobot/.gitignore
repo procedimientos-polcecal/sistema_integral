@@ -1,0 +1,17 @@
+# Un .gitignore propio de esta carpeta, y no una línea en el de la raíz, para
+# no tocar un archivo que suele tener otra sesión abierta.
+#
+# Lo que se ignora acá es lo que lleva secretos: la contraseña de la cuenta que
+# lee el servidor de archivos, y el JSON de la cuenta de servicio de Google.
+# Los `.ejemplo` sí se commitean, porque no tienen nada adentro.
+
+.env
+config/*
+!config/*.ejemplo.json
+subir-zips.config.json
+*.log
+
+# El .gitignore de la raiz tiene `.env*`, que tambien se lleva al ejemplo.
+# Esta linea lo rescata: la plantilla no tiene nada adentro y tiene que
+# viajar con el repo, porque es de donde se copia el .env de verdad.
+!.env.ejemplo

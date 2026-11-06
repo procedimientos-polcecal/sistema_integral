@@ -156,3 +156,48 @@ describe("el equipo va a la columna K", () => {
     expect(columnas).not.toContain(11);
   });
 });
+
+/*
+ * `escribirCeldas` manda `USER_ENTERED`: lo que arranca con `=`, `+`, `-` o
+ * `@` entra como formula en la planilla del almacen. El precedente es del
+ * 19/10/2026, cuando un lazo de IMPORTRANGE vacio las once pestanas de
+ * Compras por un dia. El nucleo lo resuelve con `textoParaLaCelda`.
+ */
+describe("el kardex no deja entrar una formula", () => {
+  it("escapa las cinco columnas de texto", () => {
+    const celdas = celdasDelMovimiento(
+      mov({
+        descripcion: "=IMPORTRANGE(\"https://x\";\"A1\")",
+        solicitante: "-Lopez",
+        proveedor: "+Ferreteria",
+        sector: "@MANTENIMIENTO",
+        equipo: "=A1",
+      }),
+      500,
+      "Entradas  Salidas"
+    );
+    const de = (columna: number) => celdas.find((c) => c.columna === columna)?.valor;
+
+    expect(de(COL.descripcion)).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+    expect(de(COL.solicitante)).toBe("'-Lopez");
+    expect(de(COL.proveedor)).toBe("'+Ferreteria");
+    expect(de(COL.sector)).toBe("'@MANTENIMIENTO");
+    expect(de(COL.equipo)).toBe("'=A1");
+  });
+
+  it("un texto normal no cambia", () => {
+    const celdas = celdasDelMovimiento(mov({}), 500, "Entradas  Salidas");
+    const de = (columna: number) => celdas.find((c) => c.columna === columna)?.valor;
+
+    expect(de(COL.descripcion)).toBe("GUANTES DE DESCARNE");
+    expect(de(COL.solicitante)).toBe("Lopez");
+  });
+
+  /* La otra mitad: prefijar la cantidad la volveria texto y el saldo deja de sumar. */
+  it("la entrada y la salida siguen siendo numero", () => {
+    const celdas = celdasDelMovimiento(
+      mov({ tipo: "entrada", cantidad: 20 }), 500, "Entradas  Salidas"
+    );
+    expect(celdas.find((c) => c.columna === COL.entrada)?.valor).toBe("20");
+  });
+});

@@ -2,18 +2,12 @@
 
 import { useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
+import { BotonNotificaciones } from "@/components/BotonNotificaciones";
 
-function urlBase64ToUint8Array(base64: string): Uint8Array {
-  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const base64Safe = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(base64Safe);
-  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
-}
 
 export default function MiRemisClient({ nombre }: { nombre: string }) {
   const [dia, setDia] = useState<"hoy" | "manana">("manana");
   const [asignaciones, setAsignaciones] = useState<any[] | null>(null);
-  const [notifEstado, setNotifEstado] = useState<"desconocido" | "activando" | "activo" | "no-soportado" | "denegado">("desconocido");
 
   useCargar(async (vigente) => {
     setAsignaciones(null);
@@ -22,38 +16,7 @@ export default function MiRemisClient({ nombre }: { nombre: string }) {
     setAsignaciones(d.asignaciones ?? []);
   }, [dia]);
 
-  // Que el navegador soporte push no es un dato del render: se pregunta una vez
-  // al montar. Va por `useCargar` para que la respuesta no se pinte si el
-  // componente ya se fue.
-  useCargar(async (vigente) => {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-      setNotifEstado("no-soportado");
-      return;
-    }
-    const reg = await navigator.serviceWorker.getRegistration();
-    const sub = await reg?.pushManager.getSubscription();
-    if (!vigente() || !sub) return;
-    setNotifEstado("activo");
-  }, []);
 
-  async function activarNotificaciones() {
-    setNotifEstado("activando");
-    const permiso = await Notification.requestPermission();
-    if (permiso !== "granted") { setNotifEstado("denegado"); return; }
-    try {
-      const reg = await navigator.serviceWorker.register("/sw.js");
-      const { publicKey } = await fetch("/api/remises/mi-remis/push-token").then((r) => r.json());
-      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource });
-      await fetch("/api/remises/mi-remis/push-token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sub.toJSON()),
-      });
-      setNotifEstado("activo");
-    } catch {
-      setNotifEstado("desconocido");
-    }
-  }
 
   return (
     <div className="max-w-md mx-auto">
@@ -89,19 +52,12 @@ export default function MiRemisClient({ nombre }: { nombre: string }) {
         </div>
       )}
 
-      <div className="mt-6 text-center">
-        {notifEstado === "activo" ? (
-          <p className="text-xs text-emerald-600">Notificaciones activadas</p>
-        ) : notifEstado === "no-soportado" ? (
-          <p className="text-xs text-slate-400">Tu navegador no soporta notificaciones push.</p>
-        ) : notifEstado === "denegado" ? (
-          <p className="text-xs text-amber-600">Permiso de notificaciones denegado. Activalo desde la configuración del navegador.</p>
-        ) : (
-          <button onClick={activarNotificaciones} disabled={notifEstado === "activando"}
-            className="text-sm text-blue-600 hover:underline disabled:opacity-50">
-            {notifEstado === "activando" ? "Activando..." : "Activar notificaciones"}
-          </button>
-        )}
+      {/* El mismo componente que `/mi-cuenta`. Antes esto tenía su propia
+          copia de todo —pedir permiso, registrar el service worker, suscribir,
+          guardar— y era el único lugar del sistema donde se podían prender las
+          notificaciones, escondido en una pantalla que ve un puñado de gente. */}
+      <div className="mt-6">
+        <BotonNotificaciones />
       </div>
     </div>
   );

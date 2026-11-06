@@ -12,7 +12,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "migracion": "node scripts/nueva-migracion.mjs",
-    "catalogo": "npx tsx scripts/generar-catalogo-asistente.mts"
+    "planillas": "npx tsx scripts/revisar-planillas.mts",
+    "contrastar-ot": "npx tsx scripts/contrastar-ot.mts",
+    "catalogo": "npx tsx scripts/generar-catalogo-asistente.mts",
+    "mapa-de-apis": "npx tsx scripts/mapa-de-apis.mts"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.105",
@@ -42,6 +45,7 @@
     "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.11"

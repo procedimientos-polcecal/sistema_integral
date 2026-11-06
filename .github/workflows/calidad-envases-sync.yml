@@ -1,0 +1,88 @@
+# Trae de la planilla de envases (Calidad) cada 30 minutos.
+#
+# POR QUE SE AGREGO, EL 19/10/2026
+#
+# Envases era el unico de los cinco espejos sin corrida automatica: su unica
+# entrada era el boton de la pantalla, que exige usuario logueado. O sea que el
+# stock del modulo solo estaba al dia si alguien se acordaba de apretarlo.
+#
+# No se acordaban. La ultima sincronizacion habia sido el 14/10 a las 11:04, el
+# ultimo movimiento que el SdG tenia era del 10/10, y la planilla ya llevaba 18
+# movimientos de los cinco dias siguientes. Aca MANDA LA PLANILLA, asi que
+# durante cinco dias el stock del SdG estuvo mal -10 de 25 articulos- sin que
+# nada lo dijera.
+#
+# Cada 30 y no cada 15 como Compras o Mantenimiento: la carga de envases es de
+# unos pocos movimientos por dia, no de varios por hora.
+#
+# El cron vive aca y no en vercel.json por lo mismo que los otros: el plan Hobby
+# de Vercel limita cuantos crons se declaran, y pasarse no degrada el cron, hace
+# fallar el deploy entero.
+#
+# El endpoint se protege solo: exige el mismo CRON_SECRET, y sin el responde 503
+# en vez de quedar abierto.
+
+name: Sincronizar Calidad · Envases
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  # Para poder correrlo a mano desde la pestaña Actions cuando haga falta.
+  workflow_dispatch:
+
+concurrency:
+  # Si una corrida se demora, la siguiente espera en vez de pisarla: dos
+  # lecturas a la vez insertarian los mismos movimientos dos veces.
+  group: calidad-envases-sync
+  cancel-in-progress: false
+
+jobs:
+  sincronizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar que estén las variables
+        # Por `env:` y no interpolados en el comando, igual que en backup.yml:
+        # Interpolar un secreto con la sintaxis de expresiones de Actions mete
+        # su VALOR dentro del script que corre el shell, así que un secreto con
+        # una comilla o un backtick rompe el test — o se ejecuta. Actions
+        # enmascara el valor en el log, no en la línea de comando.
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          # Sin esto, curl falla con "URL rejected: No host part in the URL" y
+          # hay que leer el log entero para entender que faltaba una variable.
+          # Compras estuvo días fallando así, en silencio.
+          faltan=""
+          [ -n "$APP_URL" ]     || faltan="$faltan APP_URL(variable)"
+          [ -n "$CRON_SECRET" ] || faltan="$faltan CRON_SECRET(secret)"
+
+          if [ -n "$faltan" ]; then
+            echo "::error::Falta configurar en el repositorio:$faltan"
+            exit 1
+          fi
+
+      - name: Pedir la sincronización
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          # Sin espacios ni saltos: el secreto se pega a mano y un Enter de más
+          # al final rompe el header antes de que salga de acá.
+          secreto=$(printf '%s' "$CRON_SECRET" | tr -d ' \t\r\n')
+
+          codigo=$(curl -sS -o respuesta.json -w "%{http_code}" \
+            --max-time 300 \
+            -H "Authorization: Bearer $secreto" \
+            "${APP_URL%/}/api/cron/calidad-envases-sync")
+
+          cat respuesta.json
+
+          # 207 es "algunas salieron y otras no": se registra en el log y en la
+          # pantalla, pero no tira abajo la corrida — lo que sí anduvo, anduvo.
+          if [ "$codigo" = "200" ] || [ "$codigo" = "207" ]; then
+            echo "::notice::Sincronización terminada con $codigo"
+          else
+            echo "::error::La sincronización devolvió $codigo"
+            exit 1
+          fi

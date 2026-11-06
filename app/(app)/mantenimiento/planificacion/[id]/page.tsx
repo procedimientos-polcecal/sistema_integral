@@ -19,9 +19,11 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
     supabase.from("planificacion_diaria")
       .select("*, created_by_user:created_by(nombre, apellido), planificacion_diaria_items(*, assigned_user:assigned_to(nombre, apellido))")
       .eq("id", id).single(),
-    // OTs pendientes (no REALIZADO)
+    // OTs pendientes (no REALIZADO). Las tres notas del GUT van en la consulta:
+    // PlanDetalle ordena por ellas, y sin las columnas toda orden cuenta como
+    // sin puntaje y el orden no se mueve — sin error.
     supabase.from("ordenes_trabajo")
-      .select("id, ot_number, especialidad, sector_raw, equipo_raw, descripcion, repuesto, fecha_ejecucion, estado, sector_id")
+      .select("id, ot_number, especialidad, sector_raw, equipo_raw, descripcion, repuesto, fecha_ejecucion, estado, sector_id, gut_gravedad, gut_urgencia, gut_tendencia")
       .in("estado", ["POR_HACER", "EN_PROCESO", "ATRASADO"])
       .order("ot_number", { ascending: false })
       .limit(300),

@@ -4,6 +4,10 @@ import { nivelMantenimientoDe } from "@/lib/mantenimiento/auth";
 import EquipoDetalle from "./EquipoDetalle";
 import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
 import { traerTodo } from "@/lib/core/paginado";
+import { hoyEnArgentina } from "@/lib/core/fechas";
+import { mtbfDeLaPlanta } from "@/lib/mantenimiento/mtbfDatos";
+import { confiabilidadDeLaFicha } from "@/lib/mantenimiento/mtbfVista";
+import { rankingDeFallas, type OtConFalla } from "@/lib/mantenimiento/fallas";
 import {
   costoDelEquipo,
   type OrdenDeServicio,
@@ -21,7 +25,7 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: equipo }, sectores, { data: historial }] = await Promise.all([
+  const [{ data: equipo }, sectores, { data: historial }, mtbf, fallas] = await Promise.all([
     supabase
       .from("equipos")
       .select("*, sectores(id, nombre, empresas(id, nombre))")
@@ -34,6 +38,36 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
       .eq("equipment_id", id)
       .order("changed_at", { ascending: false })
       .limit(10),
+    // La cuenta es de toda la planta: el MTBF de un equipo depende de los días
+    // observados, que salen de la primera falla de cualquiera.
+    // Es una tarjeta secundaria: si la lectura falla, la ficha de la máquina se
+    // ve igual. Pero el fallo se devuelve como `null` y no como "sin fallas":
+    // `confiabilidadDeLaFicha` lo convierte en "no se pudo calcular", que es lo
+    // único verdadero.
+    mtbfDeLaPlanta(supabase, hoyEnArgentina()).catch((error: unknown) => {
+      console.error("No se pudo calcular el MTBF de la ficha del equipo", error);
+      return null;
+    }),
+    // Las OT de este equipo donde alguien anoto una falla. `traerTodo` y no un
+    // `.limit()`: PostgREST corta en 1000 sin avisar, y lo que se muestra es un
+    // conteo — una pagina de mas o de menos cambiaria el numero.
+    traerTodo<OtConFalla>((desde, hasta) =>
+      supabase
+        .from("ordenes_trabajo")
+        .select("ot_number, fecha_ejecucion, falla_modo, falla_causa, falla_detalle")
+        .eq("equipment_id", id)
+        .or("falla_modo.not.is.null,falla_causa.not.is.null,falla_detalle.not.is.null")
+        // El numero desempata: `fecha_ejecucion` sola no es unica y Postgres
+        // ademas pone los nulos primero al ordenar descendente, asi que sin
+        // esto dos corridas pueden devolver las mismas filas en otro orden.
+        .order("fecha_ejecucion", { ascending: false })
+        .order("ot_number", { ascending: false })
+        .range(desde, hasta)
+    ).catch((error: unknown) => {
+      // Tarjeta secundaria: si falla la lectura, la ficha se ve igual.
+      console.error("No se pudieron leer las fallas del equipo", error);
+      return [] as OtConFalla[];
+    }),
   ]);
 
   if (!equipo) notFound();
@@ -50,6 +84,8 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
       historial={historial ?? []}
       canEdit={canEdit}
       costo={costo}
+      confiabilidad={confiabilidadDeLaFicha(mtbf, id)}
+      fallas={rankingDeFallas(fallas)}
     />
   );
 }

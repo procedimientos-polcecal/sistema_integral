@@ -1,0 +1,23 @@
+-- ============================================================
+-- SdG — El módulo Seguridad e Higiene entra al enum
+--
+-- Viaja solo y no hace nada más. Un valor nuevo de enum no se puede usar en la
+-- misma transacción en que se agrega: Postgres devuelve 55P04 ("unsafe use of
+-- new value of enum type"). Cualquier función o policy que mencione
+-- 'seguridad_higiene' —incluso en el cuerpo, que se valida al crearla— tiene
+-- que ir en un archivo posterior, ya corrido y confirmado éste.
+--
+-- Es la trampa #1 del README de migraciones, y ya mordió dos veces.
+-- Precedentes: 015 (compras), 045 (inventario), 20260907154332 (producción),
+-- 20260908104728 (despacho), 20260916090407 (calidad).
+--
+-- Va primero de tres, y el orden importa:
+--   1. éste (el enum, solo);
+--   2. 20261029111053_syh_schema.sql (tablas, funciones y policies);
+--   3. 20261029111056_syh_bucket_de_fotos.sql (el bucket y sus policies).
+--
+-- Diseño: docs/superpowers/specs/2026-10-29-seguridad-e-higiene-design.md
+-- Plan:   docs/superpowers/plans/2026-10-29-seguridad-e-higiene.md (Tarea 2)
+-- ============================================================
+
+alter type modulo add value if not exists 'seguridad_higiene';

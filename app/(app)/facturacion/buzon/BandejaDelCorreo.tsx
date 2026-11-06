@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
+import { POR_TANDA } from "@/lib/facturacion/sePuedeGuardarSola";
 
 /**
  * Lo que llegó por mail y todavía nadie cargó.
@@ -46,12 +47,22 @@ export default function BandejaDelCorreo({
   onCargar,
 }: {
   /** Mete el archivo en la cola del buzón, como si lo hubieran arrastrado. */
-  onCargar: (archivos: File[], correoId: string) => void | Promise<void>;
+  onCargar: (
+    archivos: File[],
+    correoId?: string,
+    opciones?: { correoIdPorArchivo?: (string | undefined)[]; guardarLasLimpias?: boolean }
+  ) => void | Promise<void>;
 }) {
   const [pendientes, setPendientes] = useState<Pendiente[]>([]);
   const [cargando, setCargando] = useState(true);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tanda, setTanda] = useState<{ bajados: number; total: number } | null>(null);
+  /*
+   * Un ref y no un estado: lo lee el bucle mientras corre, y un estado le
+   * llegaría con el valor que tenía cuando arrancó.
+   */
+  const parar = useRef(false);
 
   // `useCargar` y no un efecto que llama y listo: descarta la respuesta que
   // llega tarde. Ver `lib/core/useCargar.ts`.
@@ -102,6 +113,70 @@ export default function BandejaDelCorreo({
     }
   }
 
+  /**
+   * Baja las próximas `POR_TANDA` y las manda a la cola **para que se guarden
+   * solas** las que el QR resolvió enteras.
+   *
+   * Es lo que vacía el buzón. Hasta el 29/10/2026 cada pendiente eran dos
+   * clics en serie —uno acá, que baja y lee, y otro en la fila, que guarda— y
+   * la bandeja deshabilitaba todo mientras una estaba en curso: con 398
+   * pendientes eran 796 clics, y el sistema tenía 3 facturas cargadas.
+   *
+   * **De a 25 y no las 398**: leer un QR rasteriza la página a 3600 px y ocupa
+   * el hilo del navegador. Todas de una dejarían la pestaña congelada varios
+   * minutos sin poder parar, que es peor que el problema que esto resuelve.
+   *
+   * Qué se guarda solo y qué no lo decide `sePuedeGuardarSola`, que es pura y
+   * está testeada. Acá va sólo bajar los archivos y llevar la cuenta.
+   */
+  async function cargarLaTanda() {
+    const proximos = pendientes.filter((p) => p.url).slice(0, POR_TANDA);
+    if (!proximos.length) return;
+
+    parar.current = false;
+    setError(null);
+    setTanda({ bajados: 0, total: proximos.length });
+
+    const archivos: File[] = [];
+    const ids: (string | undefined)[] = [];
+    const fallaron: string[] = [];
+
+    for (const p of proximos) {
+      if (parar.current) break;
+      try {
+        const res = await fetch(p.url!);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        archivos.push(new File([blob], p.adjunto, { type: p.tipo ?? blob.type }));
+        ids.push(p.id);
+      } catch (e) {
+        /*
+         * Un archivo que no baja no corta la tanda: se anota y sigue. Cortar
+         * dejaría veinticuatro sin cargar por uno, que es la forma de fallar
+         * que este botón viene a sacar.
+         */
+        fallaron.push(`${p.adjunto} (${e instanceof Error ? e.message : String(e)})`);
+      }
+      setTanda((t) => (t ? { ...t, bajados: t.bajados + 1 } : t));
+    }
+
+    if (fallaron.length) {
+      setError(`No se pudieron bajar ${fallaron.length}: ${fallaron.join(" · ")}`);
+    }
+
+    if (archivos.length) {
+      await onCargar(archivos, undefined, {
+        correoIdPorArchivo: ids,
+        guardarLasLimpias: true,
+      });
+    }
+
+    setTanda(null);
+    // La lista se vuelve a pedir una vez al final: las que se guardaron solas
+    // ya no están pendientes.
+    setTimeout(() => mirar(), 1500);
+  }
+
   async function descartar(p: Pendiente) {
     const motivo = window.prompt(`¿Por qué no es una factura?\n\n${p.adjunto}`, "No es una factura");
     if (motivo === null) return;
@@ -137,6 +212,45 @@ export default function BandejaDelCorreo({
         Cargar baja el archivo y lo lee acá mismo, igual que si lo arrastraras.
       </p>
 
+      {/*
+        * El botón de la tanda, arriba y no al final de la lista: con 398
+        * pendientes, al final no lo ve nadie.
+        */}
+      <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg bg-slate-50 px-3 py-2">
+        {tanda ? (
+          <>
+            <span className="text-sm text-slate-700">
+              Bajando {tanda.bajados} de {tanda.total}…
+            </span>
+            <button
+              onClick={() => {
+                parar.current = true;
+              }}
+              className="text-xs font-medium text-slate-600 underline"
+            >
+              Parar
+            </button>
+            <span className="text-xs text-slate-400">
+              termina la que está en curso y no arranca la siguiente
+            </span>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => void cargarLaTanda()}
+              disabled={ocupado !== null || !pendientes.some((p) => p.url)}
+              className="btn-primary text-sm disabled:opacity-40"
+            >
+              Cargar {pendientes.length > POR_TANDA ? `las próximas ${POR_TANDA}` : "todas"}
+            </button>
+            <span className="text-xs text-slate-500">
+              Las que el QR resuelve enteras se guardan solas; las demás quedan abajo para que
+              las mires, con el motivo.
+            </span>
+          </>
+        )}
+      </div>
+
       <ul className="space-y-2">
         {pendientes.map((p) => (
           <li
@@ -165,14 +279,14 @@ export default function BandejaDelCorreo({
             <span className="flex shrink-0 items-baseline gap-3 text-xs">
               <button
                 onClick={() => void cargar(p)}
-                disabled={ocupado !== null || !p.url}
+                disabled={ocupado !== null || tanda !== null || !p.url}
                 className="font-semibold text-[var(--primary)] hover:underline disabled:opacity-40"
               >
                 {ocupado === p.id ? "Bajando…" : "Cargar"}
               </button>
               <button
                 onClick={() => void descartar(p)}
-                disabled={ocupado !== null}
+                disabled={ocupado !== null || tanda !== null}
                 className="text-slate-500 hover:underline disabled:opacity-40"
               >
                 No es una factura

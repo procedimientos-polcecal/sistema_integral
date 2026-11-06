@@ -2,15 +2,17 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
+import { ESPECIALIDADES, LO_QUE_NO_SE_CORRIGE_EN_EL_MASTER } from "@/lib/mantenimiento/ordenes";
 import MultiSelect from "@/components/MultiSelect";
 import type { UbicacionEnlazada } from "@/lib/compras/ubicaciones";
 import {
   leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, consultaDeLaRuta, hayAlgunFiltro,
   FILTROS_VACIOS, TIPOS_DE_OT, QUIENES_DE_OT, PRIORIDADES_DE_OT, CAMPOS_DE_FECHA,
+  ETIQUETA_DE_TIPO, ETIQUETA_DE_QUIEN, ORDENES_DEL_LISTADO,
   type FiltrosOt,
 } from "@/lib/mantenimiento/filtrosOt";
 import { leerPaginaDeLaUrl } from "@/lib/core/filtrosUrl";
+import { comoSeLee } from "@/lib/core/fechas";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import NuevaOTModal from "./NuevaOTModal";
@@ -18,8 +20,18 @@ import IniciarOTModal from "./IniciarOTModal";
 import RegistrarOTModal from "./RegistrarOTModal";
 import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
 import RepuestosOTModal from "./RepuestosOTModal";
+import JustificacionOT from "./JustificacionOT";
+import PostergarOTModal from "./PostergarOTModal";
+import MandarAlCalendarioModal from "./MandarAlCalendarioModal";
+import { fechaParaElCalendario, laOTEstaCerrada } from "@/lib/agenda/evento";
+import { pideJustificacion } from "@/lib/mantenimiento/notas";
+import { prioridadEfectiva } from "@/lib/mantenimiento/prioridad";
 import OrdenarTrabajo from "./OrdenarTrabajo";
+import PuntajeGut from "./PuntajeGut";
+import PuntuarGutModal from "./PuntuarGutModal";
+import { ESCALAS_GUT, puntajeGut } from "@/lib/mantenimiento/gut";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import InfoTip from "@/components/InfoTip";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
@@ -34,6 +46,23 @@ const ESTADOS = [
 
 export function estadoMeta(v: string) {
   return ESTADOS.find((e) => e.value === v) ?? { label: v, color: "#64748B", bg: "#F8FAFC", dot: "#94A3B8" };
+}
+
+/**
+ * Una de las fechas de la orden como la lee una persona: 12/10/2026.
+ *
+ * Envuelve a `comoSeLee` nada más que para aceptar el null: las tres fechas
+ * pueden faltar, y qué se pone en su lugar lo decide cada lugar de la pantalla.
+ *
+ * Lo que no hay que volver a escribir acá es `new Date(valor)`. `fecha`,
+ * `fecha_ejecucion` y `fecha_cierre` son columnas `date`, así que llegan como
+ * "2026-10-12", y `new Date()` sobre una fecha pelada la toma como **medianoche
+ * UTC**: en Argentina —UTC-3— eso cae a las 21:00 del día anterior, y las tres
+ * se leían **un día menos que la planilla**. `comoSeLee` no pasa por `Date`, así
+ * que el día es el que dice la celda desde cualquier huso.
+ */
+function fechaDeLaOT(valor: string | null | undefined): string | null {
+  return valor ? comoSeLee(valor) : null;
 }
 
 export default function OrdenesClient({
@@ -98,6 +127,10 @@ export default function OrdenesClient({
   const [proveedor, setProveedor] = useState(arranque.proveedor);
   const [sector, setSector] = useState(arranque.sector);
   const [equipo, setEquipo] = useState(arranque.equipo);
+  // No es un filtro —no saca filas— pero viaja igual que ellos: va a la URL y
+  // a la consulta, porque el orden lo resuelve la base. Por eso queda afuera de
+  // `hayAlgunFiltro` y de «Limpiar»: no es algo que esconda órdenes.
+  const [orden, setOrden] = useState(arranque.orden);
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
   const [avisoSync, setAvisoSync] = useState<string | null>(null);
@@ -113,13 +146,52 @@ export default function OrdenesClient({
   const [kanbanLoading, setKanbanLoading] = useState(false);
   const [iniciando, setIniciando] = useState<any | null>(null);
   const [registrando, setRegistrando] = useState<any | null>(null);
+  const [puntuando, setPuntuando] = useState<any | null>(null);
   const [sinProveedor, setSinProveedor] = useState<string[]>([]);
   const [verRepuestos, setVerRepuestos] = useState<any | null>(null);
 
+  /**
+   * Todo lo que está pendiente, con sus notas de GUT, para la línea que
+   * sugiere puntuar. Es una consulta aparte de la del listado a propósito: el
+   * listado está paginado y filtrado, y "cuántas pendientes no tienen GUT" es
+   * una pregunta sobre todas, no sobre la página que se está mirando.
+   *
+   * Si falla queda en null y la línea simplemente no aparece: una sugerencia
+   * no vale un cartel de error.
+   *
+   * Sólo se pide si la línea se va a ver: la ve quien puede puntuar (`canEdit`)
+   * y sólo en el listado. Sin ese filtro cada visita —de quien sólo mira, o en
+   * el tablero o en "qué hacer primero"— traía hasta 300 filas con todas las
+   * columnas para una línea que nunca se pinta.
+   */
+  const [pendientes, setPendientes] = useState<any[] | null>(null);
+  const recargarPendientes = useCargar(async (vigente) => {
+    if (!canEdit || view !== "list") return;
+    try {
+      const res = await fetch("/api/mantenimiento/ordenes?pendientes=1");
+      if (!res.ok) return;
+      const body = await res.json();
+      if (!vigente()) return;
+      setPendientes(body.data ?? []);
+    } catch {
+      // Sin la línea. El listado anda igual.
+    }
+  }, [canEdit, view]);
+
+  /**
+   * Cuáles de las que se están viendo ya tienen una justificación.
+   *
+   * Va en un pedido aparte del listado para que la pantalla **no dependa** de
+   * que la tabla de notas exista: si falla, el `catch` deja el conjunto vacío,
+   * los carteles no aparecen y las órdenes se siguen viendo igual. Un listado
+   * roto por un cartel sería un mal negocio.
+   */
+  const [justificadas, setJustificadas] = useState<Set<string>>(new Set());
+
   const filtros: FiltrosOt = useMemo(() => ({
-    busqueda: busquedaAplicada, campoFecha, desde, hasta,
+    busqueda: busquedaAplicada, campoFecha, orden, desde, hasta,
     estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo,
-  }), [busquedaAplicada, campoFecha, desde, hasta,
+  }), [busquedaAplicada, campoFecha, orden, desde, hasta,
        estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo]);
 
   const hayFiltros = hayAlgunFiltro(filtros);
@@ -173,14 +245,42 @@ export default function OrdenesClient({
     window.history.replaceState(window.history.state, "", destino);
   }, [query]);
 
+  /**
+   * Cuáles de estas órdenes ya tienen quien explique por qué siguen abiertas.
+   *
+   * Sólo se pregunta por las abiertas: una realizada no debe ninguna, y
+   * mandarlas igual sería la mitad de los ids de la página para nada.
+   *
+   * Nunca tira: si la tabla no está —la migración no corrió— o el pedido
+   * falla, se queda sin carteles y el listado anda igual.
+   */
+  const cargarJustificadas = useCallback(async (ordenes: any[]) => {
+    const abiertas = ordenes.filter((o) => pideJustificacion(o.estado)).map((o) => o.id);
+    if (abiertas.length === 0) {
+      setJustificadas(new Set());
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/mantenimiento/ordenes/justificadas?ordenes=${abiertas.join(",")}`
+      );
+      const body = await res.json().catch(() => ({}));
+      setJustificadas(new Set<string>(res.ok ? body.data ?? [] : []));
+    } catch {
+      setJustificadas(new Set());
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     const res = await fetch(`/api/mantenimiento/ordenes?${consultaDeLaRuta(filtros, page)}`);
     const json = await res.json();
-    setOrders(json.data ?? []);
+    const data = json.data ?? [];
+    setOrders(data);
     setCount(json.count ?? 0);
     setLoading(false);
-  }, [page, filtros]);
+    void cargarJustificadas(data);
+  }, [page, filtros, cargarJustificadas]);
 
   async function sincronizar() {
     setSincronizando(true);
@@ -237,12 +337,35 @@ export default function OrdenesClient({
    * suele estar frente a la OT decidiéndolo. Pedir confirmación para cada
    * tilde molesta más de lo que protege.
    */
+  /**
+   * Lo que la ruta contesta, mostrado.
+   *
+   * Las dos acciones de abajo hacían `await fetch(...)` y no miraban nada: ni
+   * `res.ok`, ni el `planilla_error`. Un 403 se veía igual que un cambio que
+   * salió bien, y lo que no llegó a la planilla no se enteraba nadie — que es
+   * como la OT 2796 quedó registrada sólo en el sistema el 16/10/2026.
+   */
+  async function contar(res: Response, queSeHizo: string) {
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setAvisoSync(`No se pudo ${queSeHizo}: ${body.error ?? "error desconocido"}`);
+      return false;
+    }
+    // Con `planilla_reintentando` el mensaje cambia de sentido: no es "andá a
+    // completarla a mano" sino "la fila del master todavía no existe y el
+    // sistema insiste solo". Es el mismo aviso que da el alta.
+    const aviso = avisoDelPendiente(body.planilla_error, Boolean(body.planilla_reintentando));
+    if (aviso) setAvisoSync(aviso);
+    return true;
+  }
+
   async function cambiarParada(id: string, valor: boolean) {
-    await fetch("/api/mantenimiento/ordenes", {
+    const res = await fetch("/api/mantenimiento/ordenes", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, requiere_parada_sector: valor }),
     });
+    await contar(res, "cambiar la marca de parar el sector");
     load();
   }
 
@@ -278,11 +401,12 @@ export default function OrdenesClient({
       confirmText: "Cambiar estado",
     });
     if (!ok) return;
-    await fetch("/api/mantenimiento/ordenes", {
+    const res = await fetch("/api/mantenimiento/ordenes", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, estado }),
     });
+    await contar(res, `pasar la OT a «${meta.label}»`);
     if (view === "kanban") loadKanban();
     else load();
   }
@@ -368,6 +492,10 @@ export default function OrdenesClient({
 
       {view === "list" && (
         <div className="space-y-2">
+          {canEdit && (
+            <SugerenciaGut pendientes={pendientes} onPuntuar={setPuntuando} />
+          )}
+
           {/* Los estados siguen siendo botones y no un desplegable: son cuatro,
               tienen color, y es el filtro que se usa siempre. Lo que cambia es
               que ahora se pueden tildar varios — "qué hay abierto" son tres
@@ -418,12 +546,18 @@ export default function OrdenesClient({
             <MultiSelect valores={especialidad} onCambio={setEspecialidad}
               vacio="Toda especialidad" plural="especialidades"
               opciones={ESPECIALIDADES.map((e) => [e, e])} />
+            {/* Las etiquetas salen de `lib/` y no de un ternario acá: el que
+                había mandaba todo lo que no fuera PROGRAMADO a «Correctivo», y
+                el día que la lista pasó de dos a cuatro valores el desplegable
+                mostró «Correctivo» tres veces. Ver `ETIQUETA_DE_TIPO`. Y el
+                texto de «sin filtrar» ya no enumera los valores, por lo mismo:
+                «Programado y correctivo» dejó de ser cierto sin avisar. */}
             <MultiSelect valores={tipo} onCambio={setTipo}
-              vacio="Programado y correctivo" plural="tipos"
-              opciones={TIPOS_DE_OT.map((t) => [t, t === "PROGRAMADO" ? "Programado" : "Correctivo"])} />
+              vacio="Todo tipo" plural="tipos"
+              opciones={TIPOS_DE_OT.map((t) => [t, ETIQUETA_DE_TIPO[t]])} />
             <MultiSelect valores={quien} onCambio={setQuien}
-              vacio="Interno y contratado" plural="formas"
-              opciones={QUIENES_DE_OT.map((q) => [q, q === "INTERNO" ? "Interno" : "Contratado"])} />
+              vacio="Toda forma" plural="formas"
+              opciones={QUIENES_DE_OT.map((q) => [q, ETIQUETA_DE_QUIEN[q]])} />
             <MultiSelect valores={prioridad} onCambio={setPrioridad}
               vacio="Toda prioridad" plural="prioridades"
               opciones={PRIORIDADES_DE_OT.map((x) => [x, x])} />
@@ -483,6 +617,19 @@ export default function OrdenesClient({
                 Sin fechas
               </button>
             )}
+
+            {/* El orden va en esta fila y no entre los desplegables de arriba
+                porque no es un filtro: no saca ninguna orden de la lista, las
+                acomoda. Por eso tampoco cuenta para «Limpiar» ni para el cartel
+                de "hay filtros puestos". */}
+            <span className="ml-auto text-sm text-slate-400">ordenar por</span>
+            <Select
+              value={orden}
+              onChange={(e) => setOrden(e.target.value)}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
+            >
+              {ORDENES_DEL_LISTADO.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+            </Select>
           </div>
         </div>
       )}
@@ -545,41 +692,107 @@ export default function OrdenesClient({
               )}
             </div>
           ) : (
-            <div className="card divide-y divide-slate-100 overflow-hidden">
+            <div className="card divide-y divide-slate-300 overflow-hidden">
               {orders.map((o) => {
                 const meta   = estadoMeta(o.estado);
                 const isOpen = expanded === o.id;
                 return (
                   <div key={o.id}>
                     <button onClick={() => setExpanded(isOpen ? null : o.id)}
-                      className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-slate-50 transition-colors">
-                      <span className="text-xs font-mono font-bold text-slate-400 w-12 shrink-0">#{o.ot_number}</span>
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: meta.dot }} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">{o.descripcion ?? "—"}</p>
-                        <p className="text-xs text-slate-400 truncate">{o.sector_raw}{o.equipo_raw ? ` · ${o.equipo_raw}` : ""}</p>
-                      </div>
-                      <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full border hidden sm:inline-flex items-center gap-1"
-                        style={{ color: meta.color, background: meta.bg, borderColor: meta.color + "33" }}>
-                        {meta.label}
-                      </span>
-                      {/* Mientras el trabajo no esté hecho, que pare el sector es
-                          lo más importante de esta fila: bloquea produccion. */}
-                      {o.requiere_parada_sector && o.estado !== "REALIZADO" && (
-                        <span
-                          title="Requiere parar el sector"
-                          className="shrink-0 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"
-                        >
-                          Parar sector
+                      className="w-full px-4 py-3 text-left hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-mono font-bold text-slate-400 w-12 shrink-0">#{o.ot_number}</span>
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: meta.dot }} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">{o.descripcion ?? "—"}</p>
+                          <p className="text-xs text-slate-900 truncate">{o.sector_raw}{o.equipo_raw ? ` · ${o.equipo_raw}` : ""}</p>
+                        </div>
+                        {/* El recuadro abre el modal de puntuar. Va dentro del
+                            botón que despliega la fila, así que no puede ser otro
+                            botón: es un atajo para el mouse, y con el teclado se
+                            llega por el mismo botón del detalle. */}
+                        {canEdit ? (
+                          <span
+                            onClick={(e) => { e.stopPropagation(); setPuntuando(o); }}
+                            className="shrink-0 cursor-pointer rounded-md hover:ring-2 hover:ring-violet-200"
+                          >
+                            <PuntajeGut
+                              orden={o}
+                              pista={puntajeGut(o) === null ? "clic para puntuar con GUT" : "clic para cambiar el puntaje GUT"}
+                            />
+                          </span>
+                        ) : (
+                          <PuntajeGut orden={o} />
+                        )}
+                        <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full border hidden sm:inline-flex items-center gap-1"
+                          style={{ color: meta.color, background: meta.bg, borderColor: meta.color + "33" }}>
+                          {meta.label}
                         </span>
-                      )}
-                      <span className="text-xs text-slate-400 shrink-0 hidden md:block">
-                        {o.fecha ? new Date(o.fecha).toLocaleDateString("es-AR") : "—"}
-                      </span>
-                      <svg className={`w-4 h-4 text-slate-300 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                        fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                        {/* Mientras el trabajo no esté hecho, que pare el sector es
+                            lo más importante de esta fila: bloquea produccion. */}
+                        {o.requiere_parada_sector && o.estado !== "REALIZADO" && (
+                          <span
+                            title="Requiere parar el sector"
+                            className="shrink-0 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"
+                          >
+                            Parar sector
+                          </span>
+                        )}
+                        {/* Se marca la que NO tiene, que es la que hay que ir a
+                            buscar. La que sí tiene no lleva cartel: para leerla
+                            se abre la orden, y un cartel en las cuarenta no
+                            distinguiría ninguna. */}
+                        {pideJustificacion(o.estado) && !justificadas.has(o.id) && (
+                          <span
+                            title="Sigue abierta y nadie dejó dicho por qué"
+                            className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700"
+                          >
+                            Sin justificar
+                          </span>
+                        )}
+                        {/* Las dos fechas que se miran de un vistazo: cuándo se
+                            emitió la orden y cuándo se hace. La de ejecución es
+                            la que más se busca —es la que contesta "¿cuándo
+                            toca?"— y estaba sólo adentro del detalle, así que
+                            averiguarla era abrir las órdenes de a una.
+                            Van rotuladas porque dos fechas peladas, una debajo
+                            de la otra, no se distinguen; el rótulo va más claro
+                            para que lo que se lea sigan siendo los números, y
+                            alineadas a la derecha para que los días queden en
+                            columna aunque los rótulos midan distinto. */}
+                        <span
+                          title="Fecha de la orden y fecha de inicio"
+                          className="shrink-0 hidden md:block text-right leading-tight tabular-nums"
+                        >
+                          <span className="block text-xs text-slate-400 whitespace-nowrap">
+                            <span className="text-slate-300">Orden</span> {fechaDeLaOT(o.fecha) ?? "—"}
+                          </span>
+                          <span className="block text-xs text-slate-400 whitespace-nowrap">
+                            <span className="text-slate-300">Ejec.</span> {fechaDeLaOT(o.fecha_ejecucion) ?? "—"}
+                          </span>
+                        </span>
+                        <svg className={`w-4 h-4 text-slate-300 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                          fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                      {/* Las mismas dos fechas, en el teléfono.
+                          Van en un renglón propio y no adentro de la fila
+                          porque ahí no entran, medido a 375 px: la tarjeta da
+                          342 px útiles y al bloque de la descripción le quedan
+                          158 —y 74 cuando la fila lleva el cartel "Sin
+                          justificar"—, contra los 88 que mide sola "Ejec.
+                          26/10/2026". Metidas ahí, la fecha que se busca se
+                          cortaba justo en las órdenes abiertas, que son las
+                          únicas que llevan ese cartel. A lo ancho sobran: las
+                          dos juntas miden 195 de 310.
+                          En `md:` desaparece, porque ahí las muestra la
+                          columna de la derecha. */}
+                      <p className="md:hidden mt-1.5 text-xs text-slate-400 tabular-nums whitespace-nowrap">
+                        <span className="text-slate-300">Orden</span> {fechaDeLaOT(o.fecha) ?? "—"}
+                        {" · "}
+                        <span className="text-slate-300">Ejec.</span> {fechaDeLaOT(o.fecha_ejecucion) ?? "—"}
+                      </p>
                     </button>
                     {isOpen && (
                       <OTDetail
@@ -587,7 +800,10 @@ export default function OrdenesClient({
                         canEdit={canEdit}
                         onChangeEstado={changeEstado}
                         onVerRepuestos={() => setVerRepuestos(o)}
+                        onPuntuar={() => setPuntuando(o)}
                         onCambiarParada={cambiarParada}
+                        onJustificacion={() => cargarJustificadas(orders)}
+                        onPostergada={load}
                       />
                     )}
                   </div>
@@ -612,7 +828,13 @@ export default function OrdenesClient({
           sectores={sectores}
           equipos={equipos}
           onClose={() => setShowNew(false)}
-          onCreated={() => { setShowNew(false); load(); }}
+          onCreated={(aviso) => {
+            setShowNew(false);
+            // Se reusa el cartel de la sincronización: es el lugar de esta
+            // pantalla donde ya se mira lo que salió a medias.
+            if (aviso) setAvisoSync(aviso);
+            load();
+          }}
         />
       )}
 
@@ -639,6 +861,18 @@ export default function OrdenesClient({
         />
       )}
 
+      {puntuando && (
+        <PuntuarGutModal
+          orden={puntuando}
+          onCerrar={() => setPuntuando(null)}
+          onGuardada={() => {
+            setPuntuando(null);
+            load();
+            recargarPendientes();
+          }}
+        />
+      )}
+
       {iniciando && (
         <IniciarOTModal
           orden={iniciando}
@@ -658,13 +892,98 @@ export default function OrdenesClient({
   );
 }
 
-function OTDetail({ order: o, canEdit, onChangeEstado, onCambiarParada, onVerRepuestos }: {
+/**
+ * Una línea, no un aviso: dice cuántas de las pendientes no tienen GUT y deja
+ * ver cuáles son para puntuarlas desde ahí.
+ *
+ * Vive sólo en esta pantalla a propósito. Un aviso de `lib/home/avisos.ts` va
+ * a la campana y al resumen de las 8:30, y un contador de órdenes sin puntuar
+ * casi no se mueve: diría lo mismo todos los días hasta que alguien lo
+ * descartara para siempre. Acá la ve quien ya está mirando las órdenes, y
+ * desaparece sola cuando no queda ninguna.
+ */
+function SugerenciaGut({ pendientes, onPuntuar }: {
+  pendientes: any[] | null;
+  onPuntuar: (orden: any) => void;
+}) {
+  const [abierta, setAbierta] = useState(false);
+  if (pendientes === null) return null;
+
+  const sinGut = pendientes.filter((o) => puntajeGut(o) === null);
+  if (sinGut.length === 0) return null;
+
+  return (
+    <div className="text-xs text-slate-500">
+      <p className="flex flex-wrap items-center gap-x-2">
+        <span>
+          {pendientes.length === 1
+            ? "La única pendiente no tiene GUT"
+            : `${sinGut.length} de las ${pendientes.length} pendientes ${sinGut.length === 1 ? "no tiene" : "no tienen"} GUT`}
+        </span>
+        <button
+          onClick={() => setAbierta((v) => !v)}
+          className="font-semibold text-slate-600 underline hover:text-slate-900"
+        >
+          {abierta ? "Ocultar" : "Puntuarlas"}
+        </button>
+      </p>
+
+      {abierta && (
+        <ul className="mt-2 max-h-64 divide-y divide-slate-100 overflow-y-auto card">
+          {sinGut.map((o) => (
+            <li key={o.id} className="flex items-center gap-3 px-3 py-2">
+              <p className="min-w-0 flex-1 truncate text-sm text-slate-800">
+                <span className="font-mono text-xs text-slate-400">#{o.ot_number}</span>{" "}
+                {o.descripcion ?? o.equipo_raw ?? "—"}
+              </p>
+              <button
+                onClick={() => onPuntuar(o)}
+                className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Puntuar
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Lo que hay que saber antes de ir a arreglar un dato a la planilla.
+ *
+ * Se arma con la lista de `ordenes.ts` para que no pueda nombrar un campo de
+ * menos: ahí vive junto al mapa de columnas, con un test que exige que cada
+ * columna esté clasificada.
+ */
+const NO_SE_CORRIGE_EN_EL_MASTER =
+  `${LO_QUE_NO_SE_CORRIGE_EN_EL_MASTER.join(", ")} no son datos del master: las ` +
+  `columnas A a J y la S de la pestaña OT son el derrame de un IMPORTRANGE del ` +
+  `libro de respuestas del formulario. Lo que se escriba ahí a mano no queda —o ` +
+  `rompe el derrame con un #REF!, o el derrame lo pisa al recalcular—, y si en el ` +
+  `medio corre una sincronización el sistema toma el valor nuevo y después vuelve ` +
+  `solo al viejo. Se corrigen en la respuesta del formulario, o en la pestaña ` +
+  `«Altas del sistema» si la OT la creó el SdG. El cierre, el estado, las horas, ` +
+  `el contratista y los operarios sí son del master: ésos se corrigen allá o acá.`;
+
+function OTDetail({
+  order: o, canEdit, onChangeEstado, onCambiarParada, onVerRepuestos, onPuntuar, onJustificacion,
+  onPostergada,
+}: {
   onVerRepuestos?: () => void;
+  onPuntuar?: () => void;
   order: any;
   canEdit: boolean;
   onChangeEstado: (id: string, estado: string) => void;
   onCambiarParada: (id: string, valor: boolean) => void;
+  /** Se agregó o se borró una justificación: el cartel de la fila cambió. */
+  onJustificacion?: () => void;
+  /** Se corrió la fecha: el listado tiene que volver a leerse. */
+  onPostergada?: () => void;
 }) {
+  const [postergando, setPostergando] = useState(false);
+  const [mandandoAlCalendario, setMandandoAlCalendario] = useState(false);
   const ESTADO_OPTIONS = ["POR_HACER", "EN_PROCESO", "REALIZADO", "ATRASADO"];
   return (
     <div className="px-4 pb-4 pt-2 bg-slate-50 border-t border-slate-100 space-y-3">
@@ -674,12 +993,54 @@ function OTDetail({ order: o, canEdit, onChangeEstado, onCambiarParada, onVerRep
         <D label="Quién realiza"   value={o.quien} />
         <D label="Contratista"     value={o.contratista} />
         <D label="Horas"           value={o.horas != null ? `${o.horas}h` : null} />
-        <D label="Prioridad"       value={o.prioridad} />
+        <D label="Prioridad"       value={prioridadEfectiva(o)} />
         <D label="Operarios"       value={[o.operario_1, o.operario_2, o.operario_3].filter(Boolean).join(", ") || null} />
         <D label="Repuesto"        value={o.repuesto} />
-        <D label="Fecha ejecución" value={o.fecha_ejecucion ? new Date(o.fecha_ejecucion).toLocaleDateString("es-AR") : null} />
-        <D label="Fecha cierre"    value={o.fecha_cierre   ? new Date(o.fecha_cierre).toLocaleDateString("es-AR")   : null} />
+        <D label="Fecha de inicio" value={fechaDeLaOT(o.fecha_ejecucion)} />
+        <D label="Fecha cierre"    value={fechaDeLaOT(o.fecha_cierre)} />
         {o.app_created && <D label="Origen" value="Creada desde la app" />}
+      </div>
+
+      {/* Qué de esto NO se arregla escribiendo en la planilla.
+          Va acá —en el detalle y no en el encabezado de la pantalla— porque
+          éste es el momento en que alguien mira un dato, ve que está mal y se
+          va a la pestaña OT a corregirlo. Hacer eso no deja nada: esas
+          columnas son derrame de un IMPORTRANGE y se revierten solas, sin
+          error y sin aviso. Eso fue lo que el 26/10/2026 dio vuelta dos veces
+          la fecha de ejecución de la 2896 y la 2897.
+          La frase se arma con la lista de `ordenes.ts`, que está pegada al
+          mapa de columnas y tiene un test que no deja que se despeguen. */}
+      <p className="text-xs text-slate-400">
+        {LO_QUE_NO_SE_CORRIGE_EN_EL_MASTER.length} de estos datos no se corrigen
+        escribiendo en la planilla{" "}
+        <InfoTip text={NO_SE_CORRIGE_EN_EL_MASTER} />
+      </p>
+
+      {/* En una pantalla táctil no hay "pasar por encima": acá las tres notas
+          van escritas, con las palabras de la escala. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span className="flex items-center gap-2">
+          <span className="text-xs text-slate-400">GUT</span>
+          <PuntajeGut orden={o} />
+        </span>
+        {(["gravedad", "urgencia", "tendencia"] as const).map((campo) => {
+          const nota: number | null = o[`gut_${campo}`] ?? null;
+          if (nota == null) return null;
+          return (
+            <span key={campo} className="text-xs text-slate-500">
+              <span className="capitalize">{campo}</span> {nota}
+              {" · "}{ESCALAS_GUT[campo][nota - 1]}
+            </span>
+          );
+        })}
+        {canEdit && (
+          <button
+            onClick={onPuntuar}
+            className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            {puntajeGut(o) !== null ? "Corregir puntaje" : "Puntuar"}
+          </button>
+        )}
       </div>
 
       {canEdit && (
@@ -709,14 +1070,92 @@ function OTDetail({ order: o, canEdit, onChangeEstado, onCambiarParada, onVerRep
           <p className="text-sm text-slate-800">{o.descripcion}</p>
         </div>
       )}
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={onVerRepuestos}
           className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
         >
           Repuestos que hacen falta
         </button>
+
+        {/* ── POSTERGAR, Y POR QUÉ SÓLO EN ALGUNAS ──────────────────────────
+            La fecha de ejecución de una OT del formulario vive en la pestaña
+            que maneja Google Forms, y escribir ahí corre las filas de las
+            demás — es lo que dejó el registro de la OT 2796 pegado a la 2798
+            el 16/10/2026. Las que creó el SdG tienen su fila en «Altas del
+            sistema», que sí se puede reescribir.
+            En vez de esconder el botón sin más, se dice: un botón que no está
+            no se distingue de uno que falta. */}
+        {canEdit && o.app_created && pideJustificacion(o.estado) && (
+          <button
+            onClick={() => setPostergando(true)}
+            className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Postergar
+          </button>
+        )}
+        {canEdit && !o.app_created && pideJustificacion(o.estado) && (
+          <span className="text-xs text-slate-400">
+            La fecha de esta orden se cambia en la planilla: entró por el formulario.
+          </span>
+        )}
+
+        {/* ── AL CALENDARIO ─────────────────────────────────────────────────
+            Sin fecha de ejecución no hay día para el evento, así que el botón
+            queda deshabilitado **diciendo por qué**: uno gris sin explicación
+            no se distingue de uno roto. La fecha que cuenta es la pendiente
+            cuando la hay (`fechaParaElCalendario`), la misma que usa el
+            servidor. */}
+        {/* Una orden cerrada no lleva el botón: crearía un evento futuro de algo
+            que ya pasó. Cerrada es `fecha_cierre` **o** REALIZADO —168 de 986
+            REALIZADO no tienen fecha—, y lo decide `laOTEstaCerrada`, la misma
+            función que usa el servidor. */}
+        {canEdit && !laOTEstaCerrada(o) && (
+          fechaParaElCalendario(o) ? (
+            <button
+              onClick={() => setMandandoAlCalendario(true)}
+              className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Mandar al calendario
+            </button>
+          ) : (
+            <>
+              <button
+                disabled
+                className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 disabled:opacity-40"
+              >
+                Mandar al calendario
+              </button>
+              <span className="text-xs text-slate-400">
+                No se puede mandar al calendario: la orden no tiene fecha de ejecución.
+              </span>
+            </>
+          )
+        )}
       </div>
+
+      {mandandoAlCalendario && (
+        <MandarAlCalendarioModal
+          orden={o}
+          onCerrar={() => setMandandoAlCalendario(false)}
+          onMandada={() => setMandandoAlCalendario(false)}
+        />
+      )}
+
+      {postergando && (
+        <PostergarOTModal
+          orden={o}
+          onCerrar={() => setPostergando(false)}
+          onPostergada={() => { setPostergando(false); onPostergada?.(); }}
+        />
+      )}
+
+      {/* Sólo en las que siguen abiertas: una realizada ya no debe ninguna
+          explicación, y lo que se encontró al hacerla va en la observación de
+          la ejecución, que es otra cosa. */}
+      {pideJustificacion(o.estado) && (
+        <JustificacionOT ordenId={o.id} puedeEditar={canEdit} onCambio={onJustificacion} />
+      )}
 
       {canEdit && (
         <div className="flex items-center gap-2 pt-1 flex-wrap">
@@ -782,7 +1221,12 @@ function KanbanCard({ order: o, canEdit, onChangeEstado }: {
       </div>
       <p className="text-xs font-medium text-slate-800 leading-snug line-clamp-3">{o.descripcion ?? "—"}</p>
       <p className="text-xs text-slate-400 truncate">{o.equipo_raw ?? o.sector_raw ?? "—"}</p>
-      {o.fecha && <p className="text-xs text-slate-300">{new Date(o.fecha).toLocaleDateString("es-AR")}</p>}
+      {/* Cada columna son las 50 de más puntaje GUT y no las 50 más nuevas:
+          sin el recuadro, el orden de las tarjetas no tendría explicación. */}
+      <div className="flex items-center justify-between gap-2">
+        {o.fecha ? <p className="text-xs text-slate-300">{fechaDeLaOT(o.fecha)}</p> : <span />}
+        <PuntajeGut orden={o} />
+      </div>
     </div>
   );
 }

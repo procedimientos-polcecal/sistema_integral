@@ -25,10 +25,18 @@ export async function GET() {
           .order("code")
           .range(desde, hasta)
     ),
-    sectoresDePlanta<{ id: string; nombre: string; codigo: string | null }>(
-      supabase,
-      "id, nombre, codigo"
-    ),
+    // `empresa_id` y `transversal` van porque el alta de un requerimiento
+    // sugiere con ellos quién paga: el sector dice de qué empresa es, y los que
+    // sirven a las dos están marcados transversales. Ver
+    // `lib/compras/sectorDelPedido.ts`. Son dos columnas más en una lista de 29
+    // filas, así que no vale la pena un endpoint aparte para Compras.
+    sectoresDePlanta<{
+      id: string;
+      nombre: string;
+      codigo: string | null;
+      empresa_id: string | null;
+      transversal: boolean | null;
+    }>(supabase, "id, nombre, codigo, empresa_id, transversal"),
   ]);
 
   return NextResponse.json({ equipos, sectores });

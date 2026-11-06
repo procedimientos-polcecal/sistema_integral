@@ -1,0 +1,166 @@
+import { DISPARO, concordado, conSuArticulo } from "@/public/cola/colaOffline.js";
+
+/**
+ * Si una carga rechazada merece un correo, y cuál de los dos textos.
+ *
+ * ## Por qué esto existe
+ *
+ * Una carga hecha sin señal en la planta puede llegar horas después y ser
+ * rechazada cuando la persona ya se fue, convencida de que la cargó. La
+ * pantalla `/cargar` se lo dice si entra a mirar, y el push si lo tiene
+ * prendido —una sola persona de trece, medido el 19/10/2026—. El correo es para
+ * que se entere **sin tener que mirar**.
+ *
+ * ## Las dos condiciones, y por qué son dos
+ *
+ * **Que la haya mandado el teléfono solo**, con la app cerrada. Si salió de la
+ * pantalla, la persona está leyendo el cartel que dice exactamente lo mismo, y
+ * un correo que repite lo que alguien está mirando es cómo se aprende a
+ * ignorar los correos del sistema. El dato viaja en una cabecera desde
+ * `public/sw.js`, que es el único que lo sabe.
+ *
+ * **Que el rechazo sea definitivo.** Los mismos tres que para la cola —400, 403
+ * y 409—, y el criterio sale de `clasificarFallo` de `public/cola/colaOffline.js`:
+ * están escritos en dos lugares porque uno corre en el navegador y el otro en
+ * el servidor, así que si allá cambian, acá hay que mirarlo.
+ *
+ * ## Es pura
+ *
+ * No toca la base, ni `fetch`, ni `process.env`. Decide y arma texto; quien
+ * manda es `lib/core/correo.ts` y quien junta los datos son las dos rutas de
+ * alta. Eso es lo que la hace probable, y acá está casi todo lo que puede
+ * salir mal.
+ */
+
+/**
+ * Si la carga la mandó el teléfono solo, leído de la cabecera que pone
+ * `public/sw.js`.
+ *
+ * **Es el único lugar donde ese texto se vuelve un booleano**, y por eso tiene
+ * test propio: comparar mal acá hace que el correo salga siempre o no salga
+ * nunca, y ningún otro test de este plan lo notaría.
+ *
+ * Todo lo que no sea exactamente la marca del fondo es **no**: una carga
+ * guardada antes de que la cabecera existiera, un cuerpo armado a mano, o un
+ * valor que alguien cambió de un lado y no del otro. Ante la duda no se
+ * molesta a nadie — la pantalla sigue contándolo igual.
+ */
+export function salioDelFondo(cabecera: string | null): boolean {
+  return cabecera === DISPARO.fondo;
+}
+
+/** Los tres que la cola trata como definitivos, y por lo tanto los que avisan. */
+const DEFINITIVOS = [400, 403, 409];
+
+export interface RechazoDeCarga {
+  /** Si la mandó el teléfono solo. Sin este dato no se avisa. */
+  delFondo: boolean;
+  status: number;
+  /** Lo que contestó la ruta, **sin traducir**: es lo que la persona necesita leer. */
+  error: string;
+  /** La fila puede estar en la planilla y no en el sistema: cambia el texto entero. */
+  enDuda: boolean;
+  tipo: "aviso" | "orden";
+  descripcion: string;
+  sector: string | null;
+  /**
+   * El día de la carga, en ISO.
+   *
+   * Para el aviso es el día en que se cargó. Para la orden **es el que la
+   * persona eligió** en «Fecha creación», que puede ser anterior: por eso el
+   * texto dice «la orden del 5/10» y no «la que cargaste el 5/10».
+   */
+  fecha: string;
+}
+
+/** El día como lo escribe este sistema: d/m, nunca m/d. */
+function comoSeEscribe(fecha: string): string {
+  const [, mes, dia] = fecha.split("-");
+  // Sin forma de fecha no se inventa ninguna ni se deja un hueco: hoy la cola
+  // manda siempre ISO, así que esto es la red por si eso deja de ser cierto.
+  if (!dia || !mes) return "(sin fecha)";
+  return `${Number(dia)}/${Number(mes)}`;
+}
+
+/** Qué carga era, lo suficiente para reconocerla entre varias. */
+/**
+ * Cuánto de la descripción entra en un asunto.
+ *
+ * La descripción es un `<textarea>` sin tope en los dos formularios, y el
+ * asunto es una **cabecera**: un salto de línea ahí es una cabecera partida y
+ * dos mil caracteres son un asunto fuera de norma. Es el único campo libre que
+ * llega a una.
+ */
+const LARGO_DEL_ASUNTO = 80;
+
+/** Lo que puede ir en una cabecera: una sola línea y acotada. */
+function paraUnAsunto(texto: string): string {
+  const unaLinea = texto.replace(/\s+/g, " ").trim();
+  return unaLinea.length > LARGO_DEL_ASUNTO ? `${unaLinea.slice(0, LARGO_DEL_ASUNTO - 1)}…` : unaLinea;
+}
+
+function cualEra(rechazo: RechazoDeCarga): string {
+  const sector = rechazo.sector?.trim();
+  // Sin descripción es justo el caso del 400 «Contá qué pasa»: unas comillas
+  // vacías no ayudan a reconocer nada, y encima parecen un error del correo.
+  const que = rechazo.descripcion.trim() ? `«${rechazo.descripcion.trim()}»` : "(sin descripción)";
+  return `${que}${sector ? ` — ${sector}` : ""}`;
+}
+
+export function correoPorElRechazo(
+  rechazo: RechazoDeCarga,
+): { asunto: string; cuerpo: string } | null {
+  if (rechazo.delFondo !== true) return null;
+  if (!DEFINITIVOS.includes(rechazo.status)) return null;
+
+  // Con su artículo y en minúscula, porque acá va adentro de una oración. Es
+  // la misma función que nombra la carga en la pantalla y en el service
+  // worker: tres nombres distintos para la misma cosa ya fue un hallazgo.
+  const laCarga = conSuArticulo(rechazo.tipo);
+  const dia = comoSeEscribe(rechazo.fecha);
+  const dijo = `El sistema dijo: ${rechazo.error}`;
+
+  // Concordados, y no a ojo: la orden de trabajo es femenina y el aviso
+  // masculino. `concordado` existe por esto mismo —su comentario cuenta un
+  // cartel que salía mal con uno y bien con el otro **sin que nada lo notara**—
+  // y acá estaba pasando igual.
+  const quedo = concordado(rechazo.tipo, "cargad");
+  const guardada = concordado(rechazo.tipo, "guardad");
+
+  // A un rechazo por permisos no se le puede decir «corregilo y mandalo de
+  // nuevo»: no hay nada que corregir y mandarlo de nuevo va a fallar igual.
+  const queHacer =
+    rechazo.status === 403
+      ? "Quedó en tu teléfono, en Cargar. Pedí el permiso que falta y después mandala desde ahí."
+      : `Quedó ${guardada} en tu teléfono, en Cargar. Corregila y mandala de nuevo.`;
+
+  // El caso en duda **no puede decir que no se cargó**, porque quizás sí: la
+  // clave quedó reservada y no se sabe si la fila llegó a escribirse en la
+  // planilla. Es el aviso más caro de perderse —si nadie lo mira, termina en
+  // una orden duplicada en la fuente de verdad del módulo— y por eso avisa
+  // igual, con su propio texto.
+  if (rechazo.enDuda) {
+    return {
+      asunto: paraUnAsunto(`Revisá la planilla: ${cualEra(rechazo)} puede haber quedado ${quedo}`),
+      cuerpo: [
+        `${laCarga.charAt(0).toUpperCase()}${laCarga.slice(1)} del ${dia} se mandó, y no sabemos si entró.`,
+        cualEra(rechazo),
+        dijo,
+        `Puede haber quedado ${concordado(rechazo.tipo, "escrit")} en la planilla. Mirala ahí antes de cargarla de nuevo, o quedan dos.`,
+      ].join("\n\n"),
+    };
+  }
+
+  // Ningún enlace, a propósito: la carga vive en el IndexedDB de **ese**
+  // teléfono. Un enlace abriría la pantalla en el aparato donde se lea el
+  // correo, que puede ser la computadora, y ahí no está. Decir dónde está es
+  // verdad; linkear a donde no está, no.
+  return {
+    asunto: paraUnAsunto(`No se pudo cargar ${laCarga} del ${dia}: ${cualEra(rechazo)}`),
+    cuerpo: [
+      cualEra(rechazo),
+      dijo,
+      queHacer,
+    ].join("\n\n"),
+  };
+}

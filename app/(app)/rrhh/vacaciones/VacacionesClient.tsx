@@ -85,7 +85,7 @@ function Balance({ empleados }: { empleados: any[] }) {
 
       {employeeId && balance && (
         <>
-          <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
             <div className="card p-5">
               <div className="text-sm text-slate-500">Días correspondientes</div>
               <div className="text-3xl font-semibold mt-1">{balance.correspondientes}</div>

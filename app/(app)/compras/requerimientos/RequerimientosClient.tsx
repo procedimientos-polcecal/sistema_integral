@@ -9,6 +9,7 @@ import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import NuevoRequerimientoModal from "./NuevoRequerimientoModal";
 import ModalAvanzar from "./ModalAvanzar";
+import { avisoDelPedido } from "@/lib/compras/registrarElPedido";
 import type { ResumenComparativa } from "./ModalAvanzar";
 import AprobarSinComparativa from "../AprobarSinComparativa";
 import {
@@ -17,6 +18,9 @@ import {
   type UbicacionEnlazada,
 } from "@/lib/compras/ubicaciones";
 import MultiSelect from "../MultiSelect";
+import MarcaMontoAlto from "../MarcaMontoAlto";
+import Select from "@/components/Select";
+import { filtroDeMontoAlto } from "@/lib/compras/montoAlto";
 import {
   ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES,
   APROBACION_LABELS, COMPRA_LABELS, PRIORIDAD_LABELS, etiquetaPrioridad,
@@ -44,7 +48,7 @@ function nombreCorto(p: Persona): string {
 
 export default function RequerimientosClient({
   areas, proveedores, empresas, ubicaciones, equipos, sectores, aprobadores,
-  usuarioId, canEdit, filtrosIniciales, paginaInicial, sync,
+  usuarioId, canEdit, filtrosIniciales, paginaInicial, sync, umbralMontoAlto, hayOdoo,
 }: {
   areas: Opcion[];
   proveedores: Opcion[];
@@ -62,6 +66,14 @@ export default function RequerimientosClient({
   paginaInicial: number;
   /** Cuándo se trajo por última vez lo de la planilla. */
   sync: UltimaSync | null;
+  /**
+   * A partir de cuánto un RI es de monto alto. Viene del servidor porque el
+   * filtro lo necesita para armar la consulta y la marca de cada fila, para
+   * decidir si se pinta: los dos tienen que usar el mismo número.
+   */
+  umbralMontoAlto: number;
+  /** Si el sistema tiene credenciales de Odoo. Lo resuelve el servidor. */
+  hayOdoo: boolean;
 }) {
   const confirmar = useConfirm();
   const [filas, setFilas] = useState<RequerimientoConRelaciones[]>([]);
@@ -156,6 +168,7 @@ export default function RequerimientosClient({
   const [ubicacion, setUbicacion] = useState(arranque.filtros.ubicacion);
   const [equipo, setEquipo] = useState(arranque.filtros.equipo);
   const [sector, setSector] = useState(arranque.filtros.sector);
+  const [montoAlto, setMontoAlto] = useState(arranque.filtros.montoAlto);
 
   // Con qué comparativa cuenta cada RI de la página. El diálogo lo usa para no
   // exigir el link cuando ya hay presupuestos, y para mostrar de antemano con
@@ -167,6 +180,16 @@ export default function RequerimientosClient({
   const [avanzando, setAvanzando] = useState<RequerimientoConRelaciones | null>(null);
   const [procesando, setProcesando] = useState<string | null>(null);
   const [errorAccion, setErrorAccion] = useState("");
+  /*
+   * Lo que la ruta contesta cuando el pedido se guarda bien pero algo del otro
+   * lado no: la orden de compra en Odoo, o una celda protegida de la planilla.
+   *
+   * Hasta hoy esta pantalla lo tiraba. La orden se creaba y nadie se enteraba
+   * —ni del número que contabilidad necesita, ni del fallo—, y eso sólo se veía
+   * entrando a la ficha de ese RI: había doce con `odoo_pendiente` el día que
+   * esto se escribió. No es un error, así que no va en rojo.
+   */
+  const [avisoAccion, setAvisoAccion] = useState<string | null>(null);
 
   // La búsqueda espera un momento para no consultar en cada tecla.
   useEffect(() => {
@@ -180,6 +203,7 @@ export default function RequerimientosClient({
   // que disparaba una consulta de mas por cada cambio de filtro.
   const filtrosAhora = JSON.stringify([
     busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector,
+    montoAlto,
   ]);
   const [filtrosPrevios, setFiltrosPrevios] = useState(filtrosAhora);
   if (filtrosAhora !== filtrosPrevios) {
@@ -201,7 +225,7 @@ export default function RequerimientosClient({
    */
   const query = escribirFiltrosEnLaUrl({
     busqueda: busquedaAplicada,
-    area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector,
+    area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector, montoAlto,
     // Acá se cuenta desde cero y en la URL desde uno.
   }, pagina + 1);
   useEffect(() => {
@@ -274,6 +298,11 @@ export default function RequerimientosClient({
     if (sector.length) {
       q = q.in("ubicacion_id", sector.flatMap((s) => ubicacionesDelSector(ubicaciones, s)));
     }
+    // El monto alto se filtra acá, en la consulta, y no sobre las filas ya
+    // traídas: este listado pagina de a 50 en el servidor, y filtrar después
+    // daría páginas incompletas que se leen como "no hay más". La regla es la
+    // de `esMontoAlto`, escrita para PostgREST.
+    if (montoAlto) q = q.or(filtroDeMontoAlto(montoAlto === "1", umbralMontoAlto));
 
     const desde = pagina * POR_PAGINA;
     const { data, error: err, count } = await q
@@ -295,7 +324,7 @@ export default function RequerimientosClient({
     // de menos es preferible a mostrar una comparativa que ya cambió.
     setResumenes({});
 
-  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector, ubicaciones, pagina]);
+  }, [busquedaAplicada, area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector, montoAlto, umbralMontoAlto, ubicaciones, pagina]);
 
   /**
    * Los presupuestos de un requerimiento, recién cuando se los va a mirar.
@@ -355,6 +384,7 @@ export default function RequerimientosClient({
 
     setProcesando(r.id);
     setErrorAccion("");
+    setAvisoAccion(null);
     const res = await fetch(`/api/compras/requerimientos/${r.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -362,11 +392,12 @@ export default function RequerimientosClient({
     });
     setProcesando(null);
 
+    const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
       setErrorAccion(body.error ?? "No se pudo actualizar el estado.");
       return false;
     }
+    setAvisoAccion(avisoDelPedido(body));
     await cargar();
     return true;
   }
@@ -384,7 +415,7 @@ export default function RequerimientosClient({
   // Los que están dentro del panel: la búsqueda queda afuera y se ve sola.
   // Cuenta desplegables con algo puesto y no valores: lo que dice el globito es
   // cuántas preguntas se están haciendo, no cuántas casillas hay tildadas.
-  const filtrosPuestos = [area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector]
+  const filtrosPuestos = [area, aprobacion, compra, prioridad, empresa, proveedor, ubicacion, equipo, sector, montoAlto]
     .filter((f) => f.length > 0).length;
 
   const hayFiltros = !!busquedaAplicada || filtrosPuestos > 0;
@@ -447,7 +478,7 @@ export default function RequerimientosClient({
   function limpiar() {
     setBusqueda(""); setArea([]); setAprobacion([]); setCompra([]);
     setPrioridad([]); setEmpresa([]); setProveedor([]); setUbicacion([]);
-    setEquipo([]); setSector([]);
+    setEquipo([]); setSector([]); setMontoAlto("");
   }
 
   return (
@@ -561,6 +592,21 @@ export default function RequerimientosClient({
                 ? `${e.code} — ${e.name} · ${[e.marca, e.modelo].filter(Boolean).join(" ")}`
                 : `${e.code} — ${e.name}`,
             ])} />
+          {/* Es el único de un solo valor de la fila, y con tres posiciones:
+              «sin monto alto» rara vez se usa, pero existe para poder revisar
+              lo que alguien desmarcó a mano. */}
+          <Select
+            className={`w-full rounded-lg border px-2 py-2 text-sm ${
+              montoAlto ? "border-[var(--primary)] bg-white" : "border-slate-300 bg-white"
+            }`}
+            value={montoAlto}
+            onChange={(e) => setMontoAlto(e.target.value === "1" || e.target.value === "0" ? e.target.value : "")}
+            aria-label="Monto alto"
+          >
+            <option value="">Cualquier monto</option>
+            <option value="1">Sólo monto alto</option>
+            <option value="0">Sin monto alto</option>
+          </Select>
         </div>
         {hayFiltros && (
           <button onClick={limpiar} className="mt-2 hidden text-xs text-slate-500 hover:text-slate-800 md:block">
@@ -578,6 +624,18 @@ export default function RequerimientosClient({
       {errorAccion && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {errorAccion}
+        </div>
+      )}
+
+      {avisoAccion && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>{avisoAccion}</span>
+          <button
+            onClick={() => setAvisoAccion(null)}
+            className="shrink-0 text-xs font-semibold hover:underline"
+          >
+            Cerrar
+          </button>
         </div>
       )}
 
@@ -602,6 +660,7 @@ export default function RequerimientosClient({
               aprobadores={aprobadores}
               usuarioId={usuarioId}
               procesando={procesando === f.id}
+              umbralMontoAlto={umbralMontoAlto}
               onAvanzar={() =>
                 ESTADOS_CON_DIALOGO.includes(f.estado_compra) ? abrirDialogo(f) : avanzar(f)
               }
@@ -657,6 +716,7 @@ export default function RequerimientosClient({
                           {f.descripcion}
                         </Link>
                         {f.codigo && <div className="font-mono text-xs text-slate-400">{f.codigo}</div>}
+                        <MarcaMontoAlto className="mt-1" montoConocido={f.monto_conocido} manual={f.monto_alto_manual} umbral={umbralMontoAlto} />
                         {vencido && (
                           <div className="text-xs font-semibold text-red-600">
                             Vencido hace {Math.abs(dias!)} día{Math.abs(dias!) === 1 ? "" : "s"}
@@ -770,6 +830,7 @@ export default function RequerimientosClient({
           aprobadores={aprobadores}
           proveedores={proveedores}
           comparativa={resumenes[avanzando.id] ?? { cuantos: 0, elegida: null }}
+          hayOdoo={hayOdoo}
           onClose={() => setAvanzando(null)}
           onConfirmar={(extra) => avanzar(avanzando, extra)}
         />
@@ -802,7 +863,7 @@ export default function RequerimientosClient({
  * servidor y el navegador dibujen cosas distintas en la primera pasada.
  */
 function TarjetaRequerimiento({
-  f, href, canEdit, aprobadores, usuarioId, procesando, onAvanzar, onEspera,
+  f, href, canEdit, aprobadores, usuarioId, procesando, umbralMontoAlto, onAvanzar, onEspera,
 }: {
   f: RequerimientoConRelaciones;
   /** La ficha del RI, con el listado al que volver. */
@@ -811,6 +872,7 @@ function TarjetaRequerimiento({
   aprobadores: Persona[];
   usuarioId: string;
   procesando: boolean;
+  umbralMontoAlto: number;
   onAvanzar: () => void;
   onEspera: (aEspera: boolean) => void;
 }) {
@@ -838,6 +900,7 @@ function TarjetaRequerimiento({
         {f.estado_aprobacion !== "APROBADA" && (
           <Chip {...APROBACION_LABELS[f.estado_aprobacion]} />
         )}
+        <MarcaMontoAlto montoConocido={f.monto_conocido} manual={f.monto_alto_manual} umbral={umbralMontoAlto} />
       </div>
 
       <Link

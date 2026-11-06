@@ -61,6 +61,19 @@ export function ahoraEnArgentina(instante: Date = new Date()): string {
 }
 
 /**
+ * La hora de pared en Argentina, de 0 a 23.
+ *
+ * `new Date().getHours()` da la hora de la máquina y `getUTCHours()` da la de
+ * UTC: en Vercel las dos son la misma y las dos están tres horas adelantadas.
+ * A las 22 de Argentina el runtime cree que es la 1 — y ya del día siguiente—,
+ * así que cualquier decisión de "¿es hora de molestar a alguien?" tomada con
+ * esos getters se corre tres horas justo en la punta que importa.
+ */
+export function horaEnArgentina(instante: Date = new Date()): number {
+  return new Date(instante.getTime() - OFFSET_ARGENTINA_MS).getUTCHours();
+}
+
+/**
  * Lo que devuelve un `datetime-local` ("YYYY-MM-DDTHH:mm", hora de pared de
  * Argentina) convertido a un instante ISO sin ambigüedad, para mandarlo a una
  * columna `timestamptz`.
@@ -129,6 +142,27 @@ export function esMesValido(valor: unknown): valor is string {
   if (typeof valor !== "string" || !/^\d{4}-\d{2}$/.test(valor)) return false;
   const mes = Number(valor.slice(5, 7));
   return mes >= 1 && mes <= 12;
+}
+
+/**
+ * Si el texto es una fecha "YYYY-MM-DD" que existe en el calendario: el 31 de
+ * abril y el 30 de febrero no.
+ *
+ * Es la única guarda antes de que un valor de la URL o del cuerpo se
+ * interpole en un filtro de PostgREST (`.gte("fecha", v)`, `.or("...")`), así
+ * que la forma sola no alcanza —`2026-02-30` cumple la regex— y por eso se
+ * reconstruye la fecha y se comprueba que dé lo mismo. Estaba copiada
+ * palabra por palabra en cinco rutas de Mantenimiento; lo que merece
+ * confianza vive acá, donde se puede probar. (Eran cuatro cuando se
+ * consolidó: la quinta, la de `programacion/route.ts`, se le había pasado a
+ * la pasada y se sumó el 26/10/2026 — que es justo lo que hace falta contar
+ * bien, porque el día que queden dos nadie se entera.)
+ */
+export function esFechaIso(v: unknown): v is string {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [a, m, d] = v.split("-").map(Number);
+  const f = new Date(Date.UTC(a, m - 1, d));
+  return f.getUTCFullYear() === a && f.getUTCMonth() === m - 1 && f.getUTCDate() === d;
 }
 
 /** El día de la semana de una fecha "YYYY-MM-DD". 0 = domingo, 6 = sábado. */

@@ -17,18 +17,30 @@
 import {
   texto, fechaDeSheets, codigoDeEquipo, normalizar, monto, porcentaje, siNo,
 } from "@/lib/mantenimiento/planilla";
+import { textoParaLaCelda } from "@/lib/core/sheets";
 
 /**
  * Las pestañas de la planilla, verificadas contra ella.
  *
  * El orden es el de la planilla. "Otros" es donde cae lo que no tiene sector
  * propio, y por eso tiene que existir siempre.
+ *
+ * **Esta lista se queda vieja sola y no avisa.** `Cantera` y `Despacho` las
+ * agregaron a la planilla después de escribir el módulo, y hasta el 16/10/2026
+ * el sistema no las conocía: la sincronización no las leía —sus cuatro
+ * cotizaciones, las tres de la OS 240 y la de la OS 250, no existían en el
+ * espejo— y una cotización cargada desde la app para esos sectores se escribía
+ * en "Otros", que es adonde `pestanaDeSector` manda lo que no reconoce. Nada
+ * falla: la fila entra, el número vuelve bien, y quien va a buscarla a la
+ * pestaña de su sector no la encuentra. Por eso la sincronización ahora
+ * compara esta lista contra las pestañas que la planilla tiene de verdad y lo
+ * dice en el resultado.
  */
 export const COMPARATIVA_PESTANAS = [
   "Planta Filler 2", "Planta Filler 1", "Compresores", "Molienda de cal",
   "Calcinación", "Planta 0-2 mm", "Planta de trituracion 1",
-  "Planta de trituracion 2", "Planta de Trituracion 3", "Hidratacion",
-  "Edificios", "Otros",
+  "Planta de trituracion 2", "Planta de Trituracion 3", "Cantera",
+  "Hidratacion", "Edificios", "Otros", "Despacho",
 ] as const;
 
 /** Columna de cada dato, contando desde A = 0. */
@@ -63,6 +75,22 @@ const PESTANA_POR_NOMBRE = new Map(
  */
 export function pestanaDeSector(sector: string | null | undefined): string {
   return PESTANA_POR_NOMBRE.get(normalizar(sector)) ?? "Otros";
+}
+
+/**
+ * Qué pestañas tiene la planilla que el sistema no conoce.
+ *
+ * Es el aviso que faltó cuando aparecieron `Cantera` y `Despacho`: una pestaña
+ * nueva no rompe nada —las cotizaciones de ese sector caen en "Otros" y la
+ * sincronización ni las mira—, así que sin esto se nota el día que alguien va
+ * a buscar una cotización a la pestaña de su sector y no está.
+ *
+ * Se compara normalizado, por lo mismo que `pestanaDeSector`: la planilla
+ * escribe "Calcinación" y el acento no puede decidir si una pestaña es nueva.
+ */
+export function pestanasQueFaltan(enLaPlanilla: readonly string[]): string[] {
+  const conocidas = new Set(COMPARATIVA_PESTANAS.map(normalizar));
+  return enLaPlanilla.filter((p) => !conocidas.has(normalizar(p)));
 }
 
 export interface CotizacionLeida {
@@ -204,6 +232,9 @@ export function resumenDeCotizaciones<T extends Comparable>(cotizaciones: T[]) {
 /** La columna ELECCIÓN, que es la única que la app cambia sola. */
 export const COLUMNA_ELECCION = COL.eleccion;
 
+/** La columna PRECIO TOTAL, que en la planilla es una fórmula y no un número. */
+export const COLUMNA_PRECIO_TOTAL = COL.precioTotal;
+
 /** Cuántas columnas tiene la planilla: A..O. */
 export const COLUMNAS_COMPARATIVA = 15;
 
@@ -230,28 +261,73 @@ const fechaAR = (iso: string | null | undefined): string =>
   iso ? new Date(String(iso).slice(0, 10) + "T12:00:00").toLocaleDateString("es-AR") : "";
 
 /**
+ * Si el total de la cotización es el que la planilla calcularía sola.
+ *
+ * La columna J no es un número: es `=H+(H*I)`, el precio unitario más el IVA,
+ * y está así en las catorce pestañas. Cuando el total que viene del formulario
+ * es ése, escribirlo sería cambiar una fórmula por su resultado de hoy.
+ *
+ * El IVA viaja como fracción —0,21, que es como lo guarda la planilla y como
+ * lo manda el formulario—, así que la cuenta es `H + H*I` tal cual.
+ *
+ * Sin total no hay nada que escribir y la fórmula hace el trabajo. Sin precio
+ * unitario pasa lo contrario: la fórmula daría cero y el único número que hay
+ * es el total cotizado, así que ése va escrito aunque la pise.
+ *
+ * La comparación tolera un centavo porque el formulario redondea
+ * (`Math.round(u * (1 + iva) * 100) / 100`) y la planilla no: pedir igualdad
+ * exacta entre dos floats daría "no coincide" en cotizaciones que coinciden.
+ */
+export function elTotalLoCalculaLaPlanilla(c: {
+  precio_unitario?: string | null;
+  iva?: number | null;
+  precio_total?: string | null;
+}): boolean {
+  const total = monto(c.precio_total);
+  if (total === null) return true;
+
+  const unitario = monto(c.precio_unitario);
+  if (unitario === null) return false;
+
+  const calculado = unitario + unitario * (c.iva ?? 0);
+  return Math.abs(total - calculado) <= 0.01;
+}
+
+/**
  * Una cotización como las quince celdas de la planilla.
  *
  * El orden es el de las columnas y no puede cambiar: la planilla se lee por
  * posición.
+ *
+ * Un `null` es "esta celda no se toca" —`agregarFila` parte la escritura en
+ * tramos y la saltea—, y es lo que salva la fórmula del PRECIO TOTAL. Las
+ * demás celdas van en `""` aunque estén vacías: ahí no hay fórmula que
+ * cuidar, y dejarlas sin tocar heredaría lo que tuviera la fila de antes.
+ *
+ * Lo que tipea una persona pasa por `textoParaLaCelda`: el sector y el equipo
+ * los copia de la OS, pero el proveedor, la descripción, las condiciones de
+ * pago y las otras especificaciones los escribe quien carga la cotización.
+ * Los precios, el IVA y las fechas no, que son número. Los PLAZOS tampoco:
+ * son días —"30" o "30, 60"— y la columna tiene validación de lista, así que
+ * escribir "30" como texto cambiaría lo que la planilla compara.
  */
-export function filaParaComparativa(c: ParaEscribir): (string | number)[] {
-  const fila = new Array(COLUMNAS_COMPARATIVA).fill("");
+export function filaParaComparativa(c: ParaEscribir): (string | number | null)[] {
+  const fila: (string | number | null)[] = new Array(COLUMNAS_COMPARATIVA).fill("");
 
   fila[COL.osNumber] = c.os_number;
   fila[COL.fecha] = fechaAR(c.fecha);
   fila[COL.area] = c.area ?? "";
-  fila[COL.sector] = c.sector ?? "";
-  fila[COL.equipo] = c.equipo_raw ?? "";
-  fila[COL.descripcion] = c.descripcion ?? "";
-  fila[COL.proveedor] = c.proveedor;
+  fila[COL.sector] = textoParaLaCelda(c.sector);
+  fila[COL.equipo] = textoParaLaCelda(c.equipo_raw);
+  fila[COL.descripcion] = textoParaLaCelda(c.descripcion);
+  fila[COL.proveedor] = textoParaLaCelda(c.proveedor);
   fila[COL.precioUnitario] = c.precio_unitario ?? "";
   fila[COL.iva] = c.iva ?? "";
-  fila[COL.precioTotal] = c.precio_total ?? "";
+  fila[COL.precioTotal] = elTotalLoCalculaLaPlanilla(c) ? null : c.precio_total ?? "";
   fila[COL.vigenciaHasta] = fechaAR(c.vigencia_hasta);
   fila[COL.plazos] = c.plazos ?? "";
-  fila[COL.condicionesPago] = c.condiciones_pago ?? "";
-  fila[COL.otrasEspecificaciones] = c.otras_especificaciones ?? "";
+  fila[COL.condicionesPago] = textoParaLaCelda(c.condiciones_pago);
+  fila[COL.otrasEspecificaciones] = textoParaLaCelda(c.otras_especificaciones);
   fila[COL.eleccion] = c.eleccion ? "TRUE" : "FALSE";
 
   return fila;

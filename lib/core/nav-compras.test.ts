@@ -22,10 +22,16 @@ const visibles = (c: ContextoNav) =>
 
 describe("menu de Compras", () => {
   it("va en el orden del trabajo: primero los resumenes", () => {
-    // Tablero arriba (el dashboard de graficos es la raiz del modulo, fuera
-    // de esta lista), y despues el dia a dia. Queda fijado para que no se de
-    // vuelta sin querer, igual que el orden del circuito.
+    // Los dos resumenes arriba y despues el dia a dia. Queda fijado para que
+    // no se de vuelta sin querer, igual que el orden del circuito.
+    //
+    // "Graficos" es la raiz del modulo, que desde el 04/11/2026 entra a la
+    // lista como primer hijo: el encabezado del grupo paso a solo desplegar,
+    // asi que este item es el unico camino a esa pagina desde el menu. Se
+    // llama distinto que en los otros trece modulos porque aca "Tablero" ya
+    // era otra pantalla.
     expect(itemsDeCompras().map((i) => i.label)).toEqual([
+      "Gráficos",
       "Tablero",
       "Requerimientos",
       // Después de Requerimientos, que es el orden del circuito: se piden, se

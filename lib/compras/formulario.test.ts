@@ -451,3 +451,56 @@ describe("el codigo no se escribe como numero", () => {
     expect(codigoDe(null)).toBe("");
   });
 });
+
+/*
+ * El alta escribe con `USER_ENTERED` en la planilla de produccion: lo que
+ * arranca con `=`, `+`, `-` o `@` entra como formula. El 19/10/2026 un lazo
+ * de IMPORTRANGE vacio las once pestanas de este mismo libro por un dia.
+ */
+describe("el alta no deja entrar una formula", () => {
+  it("escapa las seis columnas que tipea quien pide", () => {
+    const r = celdasDelAlta(
+      ENCABEZADO,
+      {
+        ...DATOS,
+        nombre: "=A1",
+        apellido: "-Perez",
+        area: "+Almacen",
+        descripcion: "=IMPORTRANGE(\"https://x\";\"A1\")",
+        ubicacion: "@Taller",
+        detalle_extra: "=HYPERLINK(\"http://x\")",
+      },
+      1957
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const v = porColumna(r.celdas);
+
+    expect(v.get(2)).toBe("'=A1");                                        // Nombre
+    expect(v.get(3)).toBe("'-Perez");                                     // Apellido
+    expect(v.get(4)).toBe("'+Almacen");                                   // ÁREA
+    expect(v.get(5)).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");         // DESCRIPCIÓN
+    expect(v.get(8)).toBe("'@Taller");                                    // PARA DONDE
+    expect(v.get(10)).toBe("'=HYPERLINK(\"http://x\")");                  // DETALLES EXTRA
+  });
+
+  it("un texto normal no cambia", () => {
+    const r = celdasDelAlta(ENCABEZADO, DATOS, 1957);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(porColumna(r.celdas).get(5)).toBe("Modulo llave punto Kalop");
+  });
+
+  /*
+   * La otra mitad de la regla. El N° de RI lo lee la formula del master y la
+   * cantidad se suma: prefijarlos los volveria texto.
+   */
+  it("el N de RI y la cantidad siguen entrando como numero", () => {
+    const r = celdasDelAlta(ENCABEZADO, DATOS, 1957);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const v = porColumna(r.celdas);
+    expect(v.get(0)).toBe("1954");
+    expect(v.get(7)).toBe("10");
+  });
+});

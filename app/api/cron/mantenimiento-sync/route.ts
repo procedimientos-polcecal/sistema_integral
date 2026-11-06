@@ -30,7 +30,10 @@ export async function GET(request: Request) {
   // corrida, así que la pantalla va a mostrar cuál quedó vieja y por qué.
   for (const { recurso, correr } of SINCRONIZACIONES) {
     try {
-      const r = await correr();
+      // `cron` y no `sincronizacion`: el borrado que haga esto lo decidió un
+      // reloj y no una persona, y la auditoría tiene que poder decir cuál de
+      // los dos fue. El reloj nunca levanta el freno del borrado masivo.
+      const r = await correr({ actor: "cron" });
       resultados[recurso] = r.ok ? r.datos : { error: r.error };
       if (!r.ok) fallaron.push(recurso);
     } catch (e) {

@@ -760,3 +760,50 @@ describe("parsearFila y la casilla de elección", () => {
     expect(parsearFila(fila, mapeo.idx)?.elegida_en_planilla).toBe(false);
   });
 });
+
+/*
+ * La comparativa es el unico lugar donde el SdG escribe formulas a proposito
+ * —el total—, asi que conviene que este fijado cuales NO lo son. Las que
+ * tipea quien carga el presupuesto van escapadas: `USER_ENTERED` interpreta
+ * lo que arranca con `=`, `+`, `-` o `@`, y el 19/10/2026 un lazo de
+ * IMPORTRANGE dejo las once pestanas de Compras en blanco todo el dia.
+ */
+describe("la comparativa no deja entrar una formula de quien cotiza", () => {
+  const armarCon = (cotizacion: CotizacionLeida, descripcion: string) => {
+    const r = mapearEncabezados(ENCABEZADO);
+    if (!r.ok) throw new Error("encabezado inválido");
+    return filaParaPlanilla({
+      idx: r.idx, numeroFila: 7, nroRi: 1850, fecha: "2026-08-21",
+      area: "Mantenimiento", descripcion, cotizacion,
+    });
+  };
+
+  const base: CotizacionLeida = {
+    proveedor_nombre: "Repuestos SA", marca: "XCMG", unidad_medida: "unidad",
+    precio_unitario: 1500.5, cantidad: 4, costo_envio: 800,
+    descuento: 0.1, iva: 0.21, precio_hasta: "2026-08-31",
+    plazos_pago_dias: [30], condiciones_pago: "Transferencia",
+    disponibilidad: "4-7 días", comentario: "",
+  };
+
+  it("escapa la descripcion, el proveedor y el comentario", () => {
+    const fila = armarCon(
+      { ...base, proveedor_nombre: "-Repuestos SA", comentario: "@todos" },
+      "=IMPORTRANGE(\"https://x\";\"A1\")"
+    );
+    expect(fila[3]).toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+    expect(fila[4]).toBe("'-Repuestos SA");
+    expect(fila[17]).toBe("'@todos");
+  });
+
+  it("un texto normal no cambia", () => {
+    const fila = armarCon(base, "Filtro de aceite");
+    expect(fila[3]).toBe("Filtro de aceite");
+    expect(fila[4]).toBe("Repuestos SA");
+  });
+
+  /* Y la formula del total la sigue armando esta funcion, sin escapar. */
+  it("el total sigue siendo formula", () => {
+    expect(armarCon(base, "Filtro de aceite")[12]).toBe("=H7*I7*(1+L7)-(H7*I7*K7)+J7");
+  });
+});

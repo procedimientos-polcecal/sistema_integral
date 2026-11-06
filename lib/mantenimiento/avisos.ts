@@ -17,6 +17,8 @@
  */
 
 import { texto, fechaDeSheets, codigoDeEquipo } from "@/lib/mantenimiento/planilla";
+import { fechaDeTexto, comoSeLee } from "@/lib/core/fechas";
+import { textoParaLaCelda } from "@/lib/core/sheets";
 
 /** Columna de cada dato, contando desde A = 0. */
 const COL = {
@@ -98,6 +100,17 @@ export const URGENCIAS = ["🟠 Alta", "🟡 Media", "🟢 Baja"] as const;
 export const COLUMNA_OT_ASIGNADA = COL.otAsignada;
 
 /**
+ * La columna donde se escribe por qué un aviso no va a ser orden de trabajo.
+ *
+ * Es `OBSERVACIONES` y **no `OT ASIGNADA`**, que sería lo intuitivo: esa otra
+ * quiere decir *cuál* orden, así que una palabra ahí hace que el aviso cuente
+ * como que ya tiene una. Y está vacía en los 183 avisos, medido el
+ * 21/10/2026 — es la columna que existe para esto y que nadie usa para otra
+ * cosa. El porqué completo está en `desestimarAviso.ts`.
+ */
+export const COLUMNA_OBSERVACIONES = COL.observaciones;
+
+/**
  * El próximo número de aviso.
  *
  * Van como `A1`, `A2`… y se compara el número, no el texto: alfabéticamente
@@ -110,6 +123,99 @@ export function proximoNumeroDeAviso(existentes: (string | null | undefined)[]):
   }, 0);
 
   return `A${mayor + 1}`;
+}
+
+/**
+ * Qué fecha trae una carga en su cuerpo: ninguna, una que sirve, o por qué no.
+ *
+ * Hasta ahora las dos rutas de alta fechaban con `hoyEnArgentina()` o con lo
+ * que viniera sin mirarlo, porque la carga era en el momento. Una carga hecha
+ * sin señal el viernes puede entrar el lunes, cuando el teléfono vuelve a tener
+ * red, y quedaría fechada el lunes: de esa fecha salen el historial del equipo
+ * y el MTBF, así que no es un detalle de presentación. Por eso el cuerpo puede
+ * traer la suya.
+ *
+ * LAS TRES RESPUESTAS SON DISTINTAS A PROPÓSITO, y la última es la que importa:
+ *
+ * - `ausente`: no vino ninguna. Quien llama pone hoy, que es lo de siempre.
+ * - `sirve`: la fecha, ya en "YYYY-MM-DD".
+ * - `no-sirve`: vino algo y no se puede usar. **No se corrige a hoy.** Devolver
+ *   hoy calladamente dejaría la carga fechada un día que nadie eligió —y en el
+ *   aviso eso viaja a la planilla— sin que nadie se entere nunca: es la misma
+ *   forma del error que dio vuelta 885 fechas en Compras. Quien llama lo
+ *   devuelve como 400, que para la cola es definitivo, así que la carga queda
+ *   parada y visible con el motivo.
+ *
+ * Una fecha **futura** tampoco entra: el reloj del teléfono lo pone la persona,
+ * y algo fechado el mes que viene no lo encuentra nadie.
+ *
+ * Y TAMPOCO UNA DE HACE MÁS DE UN AÑO, que es el agujero del otro lado y es el
+ * peor de los dos. El futuro se rechazaba y el pasado se aceptaba entero, así
+ * que un teléfono con la hora perdida —la pila que se agotó, el aparato que
+ * vuelve a la fecha de fábrica— fechaba el aviso en 2019 **sin decir nada**, y
+ * de esa fecha salen el historial del equipo y el MTBF. Una futura se nota; una
+ * de 2019 se mete en el medio de la serie y ahí se queda.
+ *
+ * Un año y no un mes porque **cargar algo viejo es legítimo**: estas rutas
+ * también reciben trabajo ya hecho que se carga tarde, y con un tope corto eso
+ * quedaría rechazado sin que nadie tenga nada mal. Lo que un año sí descarta es
+ * el único caso que importa, el reloj que no sabe en qué año está.
+ *
+ * El motivo se escribe para quien cargó, no para el log: nombra el valor que
+ * vino, porque lo primero que hace quien lo lee es buscarlo en su pantalla.
+ *
+ * `hoy` se recibe en vez de calcularse para poder probarla, igual que en
+ * `lib/core/fechas.ts`.
+ */
+export type FechaDeLaCarga =
+  | { estado: "ausente" }
+  | { estado: "sirve"; fecha: string }
+  | { estado: "no-sirve"; motivo: string };
+
+export function fechaDeLaCarga(valor: unknown, hoy: string): FechaDeLaCarga {
+  const crudo = String(valor ?? "").trim();
+  if (crudo === "") return { estado: "ausente" };
+
+  const fecha = fechaDeTexto(crudo);
+  if (!fecha) {
+    return {
+      estado: "no-sirve",
+      motivo: `"${crudo}" no es una fecha. Va como 16/10/2026 o 2026-10-16.`,
+    };
+  }
+
+  // Las dos son "YYYY-MM-DD", así que comparar los textos compara los días.
+  if (fecha > hoy) {
+    return {
+      estado: "no-sirve",
+      motivo: `La fecha ${comoSeLee(fecha)} todavía no llegó. Fijate la hora del teléfono.`,
+    };
+  }
+
+  if (fecha < haceUnAño(hoy)) {
+    return {
+      estado: "no-sirve",
+      motivo:
+        `La fecha ${comoSeLee(fecha)} es de hace más de un año. ` +
+        `Fijate la hora del teléfono.`,
+    };
+  }
+
+  return { estado: "sirve", fecha };
+}
+
+/**
+ * El mismo día del año pasado, en "YYYY-MM-DD", para comparar como texto.
+ *
+ * Restarle uno al año y nada más: un 29 de febrero da un "2025-02-29" que no
+ * existe como día, y eso **no importa** porque nunca se construye una fecha con
+ * esto — sólo se compara texto contra texto, y ahí "2025-02-29" se ordena justo
+ * donde tiene que ordenarse. Hacerlo con `Date` traería los husos horarios a un
+ * cálculo que no los necesita, que es de donde salen los errores de un día.
+ */
+function haceUnAño(hoy: string): string {
+  const [año, resto] = [hoy.slice(0, 4), hoy.slice(4)];
+  return `${String(Number(año) - 1).padStart(4, "0")}${resto}`;
 }
 
 /** Una fecha ISO como la escribe la planilla. */
@@ -125,6 +231,10 @@ const fechaAR = (iso: string | null | undefined): string => {
  * Las columnas H e I quedan vacías a propósito: son restos de una fórmula que
  * parte en dos el nombre de quien avisó, y escribir ahí pisaría lo que la
  * planilla calcula sola.
+ *
+ * El sector, el equipo y la urgencia salen de un desplegable y el N° y la fecha
+ * los arma el sistema; los otros tres los tipea una persona y por eso pasan por
+ * `textoParaLaCelda`.
  */
 export function filaParaLaPlanilla(aviso: {
   oa_number: string;
@@ -135,6 +245,7 @@ export function filaParaLaPlanilla(aviso: {
   urgencia?: string | null;
   quien_aviso?: string | null;
   observaciones?: string | null;
+  reference_photos?: readonly string[] | null;
 }): string[] {
   // Hasta la L —las observaciones—, que es la última que se lee.
   const fila = new Array(COL.observaciones + 1).fill("");
@@ -143,10 +254,14 @@ export function filaParaLaPlanilla(aviso: {
   fila[COL.fecha] = fechaAR(aviso.fecha);
   fila[COL.sector] = aviso.sector_raw ?? "";
   fila[COL.equipo] = aviso.equipo_raw ?? "";
-  fila[COL.descripcion] = aviso.descripcion ?? "";
+  fila[COL.descripcion] = textoParaLaCelda(aviso.descripcion);
   fila[COL.urgencia] = aviso.urgencia ?? "";
-  fila[COL.quien] = aviso.quien_aviso ?? "";
-  fila[COL.observaciones] = aviso.observaciones ?? "";
+  fila[COL.quien] = textoParaLaCelda(aviso.quien_aviso);
+  // Sólo la primera: la columna es una celda con un link y `filaDeAviso` la
+  // lee como uno solo. Sin escribirla, la próxima sincronización lee la K
+  // vacía y la foto cargada en la app desaparece de los dos lados.
+  fila[COL.imagen] = aviso.reference_photos?.[0] ?? "";
+  fila[COL.observaciones] = textoParaLaCelda(aviso.observaciones);
 
   return fila;
 }

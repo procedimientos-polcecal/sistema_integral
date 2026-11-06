@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  estaCalculando, filaSiguienteSegunLaColumna, laPlanillaEncogio, tramosDeLaFila,
+  estaCalculando, filaSiguienteSegunLaColumna, laPlanillaEncogio, textoParaLaCelda,
+  tramosDeLaFila,
 } from "./sheets";
 
 /**
@@ -154,5 +155,40 @@ describe("en que fila escribir, segun la columna que manda", () => {
   it("una pestana vacia empieza en la 2", () => {
     expect(filaSiguienteSegunLaColumna([])).toBe(2);
     expect(filaSiguienteSegunLaColumna([[""], []])).toBe(2);
+  });
+});
+
+/**
+ * Las dos escrituras usan USER_ENTERED, que es lo que hace que un numero entre
+ * como numero y una fecha como fecha. El precio es que un texto libre tambien
+ * se interpreta: "12/10" se vuelve una fecha y "=A1" una formula que lee otra
+ * celda. Para un campo de texto escrito por una persona eso no es lo que se
+ * quiso decir nunca.
+ */
+describe("un texto que la planilla no tiene que interpretar", () => {
+  it("una frase comun va tal cual", () => {
+    expect(textoParaLaCelda("falta el repuesto")).toBe("falta el repuesto");
+    expect(textoParaLaCelda("Se rompio el 12 de octubre")).toBe("Se rompio el 12 de octubre");
+  });
+
+  /** El peligroso: sin escapar, la celda pasa a leer otra celda. */
+  it("lo que arranca como formula se escapa", () => {
+    expect(textoParaLaCelda("=A1")).toBe("'=A1");
+    expect(textoParaLaCelda("+54 11 5555")).toBe("'+54 11 5555");
+    expect(textoParaLaCelda("-")).toBe("'-");
+    expect(textoParaLaCelda("@todos")).toBe("'@todos");
+  });
+
+  /** Y el silencioso: numeros y fechas, que entran sin quejarse. */
+  it("lo que es solo numeros y separadores se escapa", () => {
+    expect(textoParaLaCelda("12/10")).toBe("'12/10");
+    expect(textoParaLaCelda("1500")).toBe("'1500");
+    expect(textoParaLaCelda("19,58")).toBe("'19,58");
+    expect(textoParaLaCelda("3:30")).toBe("'3:30");
+  });
+
+  it("vacio sigue siendo vacio: es como se borra una celda", () => {
+    expect(textoParaLaCelda("")).toBe("");
+    expect(textoParaLaCelda(null)).toBe("");
   });
 });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { importarDesdeSheets } from "@/lib/compras/sheets";
+import { avisarDeLosPedidosQueEsperan } from "@/lib/compras/avisoDeAprobacion";
 
 export const maxDuration = 300;
 
@@ -24,7 +25,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    return NextResponse.json(await importarDesdeSheets("webhook"));
+    const importado = await importarDesdeSheets("webhook");
+    // Este es el camino que importa para el aviso al instante: lo dispara el
+    // Apps Script con cada edicion de la planilla, asi que un pedido cargado
+    // por el formulario llega aca en minutos. El cron de las 6 no.
+    const aviso = await avisarDeLosPedidosQueEsperan(importado.nacen_esperando);
+    return NextResponse.json({
+      ...importado,
+      avisos_al_instante: aviso.enviadas,
+      ...(aviso.motivo ? { avisos_al_instante_motivo: aviso.motivo } : {}),
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },

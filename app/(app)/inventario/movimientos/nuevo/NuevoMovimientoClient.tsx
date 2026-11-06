@@ -166,7 +166,10 @@ export default function NuevoMovimientoClient({
       body: JSON.stringify({
         articulo_id: articulo.id,
         tipo,
-        cantidad: Number(cantidad),
+        // Va el texto tal cual se tipeó y lo lee la ruta con la misma
+        // función que `loQueFalta`. `Number("1,5")` daba NaN, y
+        // `JSON.stringify(NaN)` es null: la cantidad llegaba vacía.
+        cantidad,
         // Van los ids y no los nombres: el texto que termina en la planilla lo
         // resuelve la ruta contra la lista, así un cliente viejo o retocado no
         // puede escribir ahí una palabra que la validación no acepta.
@@ -264,7 +267,7 @@ export default function NuevoMovimientoClient({
       {/* ── Qué pasó con él ──────────────────────────────────── */}
       {articulo && (
         <form onSubmit={guardar} className="space-y-4 card p-4">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {(["entrada", "salida", "ajuste"] as Tipo[]).map((t) => (
               <button
                 key={t}

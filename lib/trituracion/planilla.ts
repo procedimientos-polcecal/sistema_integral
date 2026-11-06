@@ -13,6 +13,7 @@
 import { serialDelDia } from "@/lib/core/fechaDeSheets";
 import { despejarParte } from "./horas";
 import { ETIQUETA_ESTADO, type EstadoParte } from "./vocabulario";
+import { textoParaLaCelda } from "@/lib/core/sheets";
 
 export interface ParteParaPlanilla {
   fecha: string; // "YYYY-MM-DD"
@@ -30,7 +31,15 @@ export interface ParteParaPlanilla {
   observaciones: string | null;
 }
 
-/** `USER_ENTERED`: la fecha va como serial, los números como número — nunca como texto (trampa del núcleo). */
+/**
+ * `USER_ENTERED`: la fecha va como serial, los números como número — nunca
+ * como texto (trampa del núcleo).
+ *
+ * Y por lo mismo al revés: el material, el origen y las observaciones son
+ * texto que tipea una persona y van por `textoParaLaCelda`. Las dos horas no,
+ * aunque también las tipee: "7:30" tiene que entrar como hora, que es de lo
+ * que depende la cuenta de horas teóricas de la planilla.
+ */
 export function filaParte(p: ParteParaPlanilla): (string | number)[] {
   const d = despejarParte({
     horaInicio: p.horaInicio,
@@ -48,8 +57,8 @@ export function filaParte(p: ParteParaPlanilla): (string | number)[] {
   return [
     serial ?? p.fecha,
     ETIQUETA_ESTADO[p.estado],
-    p.material ?? "",
-    p.origen ?? "",
+    textoParaLaCelda(p.material),
+    textoParaLaCelda(p.origen),
     p.horaInicio ?? "",
     p.horaFin ?? "",
     d.horasTeoricas ?? "",
@@ -65,6 +74,6 @@ export function filaParte(p: ParteParaPlanilla): (string | number)[] {
     d.tonPorCamion ?? "",
     d.productividadAbsoluta ?? "",
     d.productividadReal ?? "",
-    p.observaciones ?? "",
+    textoParaLaCelda(p.observaciones),
   ];
 }

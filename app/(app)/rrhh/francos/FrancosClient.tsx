@@ -22,6 +22,7 @@ export default function FrancosClient() {
   const [hasta, setHasta] = useState(today());
   const [francos, setFrancos] = useState<any[] | null>(null);
   const [cargando, setCargando] = useState(false);
+  const [errorDeMarca, setErrorDeMarca] = useState<string | null>(null);
 
   function queryParams() {
     const params = new URLSearchParams();
@@ -39,12 +40,47 @@ export default function FrancosClient() {
     setCargando(false);
   }, [estado, desde, hasta]);
 
+  /*
+   * Marcar tomado no pide ninguna fecha, y la pantalla no muestra ningún día
+   * de descanso. Entre el 26/10 y el 02/11/2026 sí: se pedía el día que la
+   * persona no venía, para que la programación del taller pudiera cruzarlo.
+   * Se revirtió a pedido — en el circuito real el franco **es** el día que ya
+   * tiene esas horas, el que muestra «Generado el», y no hay otro que anotar.
+   */
   async function marcarTomado(id: string) {
-    await fetch(`/api/rrhh/francos/${id}`, {
+    setErrorDeMarca(null);
+    const res = await fetch(`/api/rrhh/francos/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ estado: "TOMADO", fechaTomado: hoyEnArgentina() }),
+      body: JSON.stringify({ estado: "TOMADO" }),
     });
+    if (!res.ok) {
+      const d = await res.json().catch(() => null);
+      setErrorDeMarca(d?.error ?? "No se pudo marcar el franco");
+      return;
+    }
+    cargar();
+  }
+
+  /** Para corregir una marca con el día equivocado: vuelve a pendiente y borra las dos fechas. */
+  async function volverAPendiente(f: any) {
+    const ok = await confirmar({
+      title: "Volver el franco a pendiente",
+      message: `El franco de ${f.empleados?.apellido}, ${f.empleados?.nombre} vuelve a quedar sin tomar. Mientras esté pendiente sus horas no entran en la liquidación.`,
+      confirmText: "Volver a pendiente",
+    });
+    if (!ok) return;
+    setErrorDeMarca(null);
+    const res = await fetch(`/api/rrhh/francos/${f.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ estado: "PENDIENTE" }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => null);
+      setErrorDeMarca(d?.error ?? "No se pudo volver el franco a pendiente");
+      return;
+    }
     cargar();
   }
 
@@ -92,6 +128,11 @@ export default function FrancosClient() {
       </div>
 
       <div className="card p-5">
+        {errorDeMarca && (
+          <p className="mb-3 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+            {errorDeMarca}
+          </p>
+        )}
         {cargando || !francos ? (
           <p className="text-slate-500 text-sm">Cargando...</p>
         ) : (
@@ -120,7 +161,15 @@ export default function FrancosClient() {
                   <td className="py-2">{f.estado}</td>
                   <td className="py-2 text-right whitespace-nowrap">
                     {f.estado === "PENDIENTE" && (
-                      <button onClick={() => marcarTomado(f.id)} className="text-slate-700 underline text-sm">Marcar tomado</button>
+                      <button
+                        onClick={() => marcarTomado(f.id)}
+                        className="text-slate-700 underline text-sm"
+                      >
+                        Marcar tomado
+                      </button>
+                    )}
+                    {f.estado === "TOMADO" && (
+                      <button onClick={() => volverAPendiente(f)} className="text-slate-700 underline text-sm">Volver a pendiente</button>
                     )}
                     <button onClick={() => eliminar(f)} className="text-red-600 underline text-sm ml-3">Eliminar</button>
                   </td>

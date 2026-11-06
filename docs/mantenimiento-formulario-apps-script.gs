@@ -33,9 +33,24 @@
  *   - una OT cargada en el sistema la numera el SdG, que ya lleva la serie, y
  *     la escribe como valor.
  *
- * Los dos cuentan lo mismo sobre la misma columna y ninguno tiene que adivinar
- * dónde va a insertar el otro. La serie sigue siendo una sola, y da igual en
- * qué fila física termine cada uno: el master ordena por número.
+ * Los dos cuentan lo mismo y ninguno tiene que adivinar dónde va a insertar el
+ * otro. La serie sigue siendo una sola.
+ *
+ * ── LO QUE CAMBIÓ EL 16/10/2026 ─────────────────────────────────────────────
+ *
+ * Esta nota decía "da igual en qué fila física termine cada uno: el master
+ * ordena por número". **Era falso**: el master no ordenaba, y se comprobó
+ * leyendo sus cuatro importaciones. Forms empujó dos filas del sistema hacia
+ * abajo, el derrame de los IMPORTRANGE se movió con ellas, las columnas
+ * literales no, y la OT 2798 terminó figurando como realizada con el registro
+ * de la 2796.
+ *
+ * Desde entonces son dos cosas, y hacen falta las dos: el sistema escribe en
+ * su propia pestaña —donde Forms no inserta— y el master **sí** ordena por N°
+ * de OT. Recién ahora la frase de arriba es cierta.
+ *
+ * Para esta función la consecuencia es una sola: **la serie vive en dos hojas
+ * y hay que contar las dos.**
  *
  * ── INSTALACIÓN ─────────────────────────────────────────────────────────────
  *
@@ -124,6 +139,20 @@
 /** La pestaña donde caen las respuestas y donde el SdG agrega sus altas. */
 var HOJA = 'Respuestas de formulario';
 
+/**
+ * La pestaña donde el SdG escribe sus altas, desde el 16/10/2026.
+ *
+ * La serie quedó repartida entre las dos hojas, así que **esta función tiene
+ * que contar las dos**: contar sólo la de respuestas le repartiría a una
+ * respuesta del formulario un número que el sistema ya usó, y la
+ * sincronización hace `upsert` por número. Es exactamente el accidente que
+ * este script existe para evitar, por la otra puerta.
+ *
+ * Si la pestaña todavía no existe, `getSheetByName` devuelve `null` y cuenta
+ * como cero: el formulario tiene que poder numerar igual.
+ */
+var HOJA_ALTAS = 'Altas del sistema';
+
 /** La columna del N° de OT. A = 1. */
 var COL_NRO = 1;
 
@@ -175,8 +204,27 @@ function numerarAlEnviarElFormulario(e) {
  * serie en cada respuesta.
  */
 function siguienteNumero_(hoja, filaQueSeEstaNumerando) {
+  var deLasRespuestas = maximoDeLaHoja_(hoja, filaQueSeEstaNumerando);
+
+  // La hoja de altas del sistema. No hay ninguna fila que excluir ahí: la que
+  // se está numerando es siempre de esta hoja, la de respuestas.
+  var altas = hoja.getParent().getSheetByName(HOJA_ALTAS);
+  var deLasAltas = altas ? maximoDeLaHoja_(altas, 0) : 0;
+
+  return Math.max(deLasRespuestas, deLasAltas) + 1;
+}
+
+/**
+ * El número más alto de la columna A de una hoja.
+ *
+ * `filaAExcluir` es para la fila que se está numerando: Sheets suele
+ * autocompletar en la fila nueva la fórmula de la de arriba, así que esa celda
+ * ya trae un número calculado y contarlo daría el siguiente del siguiente. Se
+ * pasa 0 cuando no hay ninguna que excluir.
+ */
+function maximoDeLaHoja_(hoja, filaAExcluir) {
   var ultima = hoja.getLastRow();
-  if (ultima < PRIMERA_FILA) { return 1; }
+  if (ultima < PRIMERA_FILA) { return 0; }
 
   var valores = hoja
     .getRange(PRIMERA_FILA, COL_NRO, ultima - PRIMERA_FILA + 1, 1)
@@ -184,12 +232,12 @@ function siguienteNumero_(hoja, filaQueSeEstaNumerando) {
 
   var maximo = 0;
   for (var i = 0; i < valores.length; i++) {
-    if (PRIMERA_FILA + i === filaQueSeEstaNumerando) { continue; }
+    if (PRIMERA_FILA + i === filaAExcluir) { continue; }
 
     var n = Number(valores[i][0]);
     if (!isNaN(n) && n > maximo) { maximo = n; }
   }
-  return maximo + 1;
+  return maximo;
 }
 
 /**
@@ -228,11 +276,15 @@ function numerarLasQueFaltan() {
     var nros = hoja.getRange(PRIMERA_FILA, COL_NRO, filas, 1).getValues();
     var marcas = hoja.getRange(PRIMERA_FILA, COL_MARCA, filas, 1).getValues();
 
-    var maximo = 0;
-    for (var i = 0; i < nros.length; i++) {
-      var n = Number(nros[i][0]);
-      if (!isNaN(n) && n > maximo) { maximo = n; }
-    }
+    // De las DOS hojas, por lo mismo que `siguienteNumero_`: esta función
+    // reparte números, y contar sólo las respuestas le daría a una de ellas
+    // uno que el sistema ya usó. Es el modo de falla que más caro sale acá,
+    // porque numera varias filas de corrido.
+    var altas = hoja.getParent().getSheetByName(HOJA_ALTAS);
+    var maximo = Math.max(
+      maximoDeLaHoja_(hoja, 0),
+      altas ? maximoDeLaHoja_(altas, 0) : 0
+    );
 
     var numeradas = 0;
     for (var j = 0; j < nros.length; j++) {

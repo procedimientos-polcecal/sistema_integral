@@ -7,16 +7,8 @@ import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
 import { hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
 import Select from "@/components/Select";
-
-const TYPE_OPTIONS = [
-  { value: "Lubricacion",       label: "Lubricación" },
-  { value: "Inspeccion",        label: "Inspección" },
-  { value: "Limpieza",          label: "Limpieza" },
-  { value: "Ajuste",            label: "Ajuste" },
-  { value: "Reemplazo",         label: "Reemplazo" },
-  { value: "Revision_electrica",label: "Revisión eléctrica" },
-  { value: "Otro",              label: "Otro" },
-];
+import GenerarOTDeMantenimiento from "./GenerarOTDeMantenimiento";
+import { TIPOS_DE_MANTENIMIENTO, etiquetaDeTipo } from "@/lib/mantenimiento/otDesdeMantenimiento";
 
 const SCHEDULE_OPTIONS = [
   { value: "DIARIO",     label: "Diario" },
@@ -89,6 +81,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
   const [otBusy, setOtBusy] = useState<string | null>(null);
   const [otMsg, setOtMsg] = useState<{ id: string; text: string; ok: boolean } | null>(null);
   const [linkModal, setLinkModal] = useState<any>(null);
+  const [otModal, setOtModal] = useState<any>(null);
 
   const otsBySchedule = new Map<string, any[]>();
   for (const ot of linkedOts) {
@@ -97,40 +90,24 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
     otsBySchedule.set(ot.schedule_id, arr);
   }
 
-  async function crearOT(s: any) {
-    const ok = await confirm({
-      title: "Crear orden de trabajo",
-      message: `Se generará una nueva OT a partir de este mantenimiento (${s.equipos?.code ?? ""}). ¿Continuar?`,
-      confirmText: "Crear OT",
-    });
-    if (!ok) return;
-    setOtBusy(s.id); setOtMsg(null);
-    const eq = s.equipos;
-    const body = {
-      equipment_id:    s.equipment_id,
-      sector_id:       eq?.sector_id ?? null,
-      sector_raw:      eq?.sectores?.nombre ?? null,
-      equipo_raw:      eq ? `${eq.code} — ${eq.name}` : null,
-      equipo_code:     eq?.code ?? null,
-      especialidad:    s.maintenance_type ?? null,
-      tipo:            "PROGRAMADO",
-      descripcion:     s.description?.trim() || `${s.maintenance_type} — ${eq?.name ?? ""}`.trim(),
-      fecha_ejecucion: s.next_date ?? null,
-      estado:          "POR_HACER",
-      horas:           s.estimated_hours ?? null,
-      quien:           nombreCompleto(s.assigned_user),
-      schedule_id:     s.id,
-    };
-    const res = await fetch("/api/mantenimiento/ordenes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    setOtBusy(null);
-    if (!res.ok) { setOtMsg({ id: s.id, text: data.error ?? "Error al crear OT", ok: false }); return; }
-    setOtMsg({ id: s.id, text: `OT #${data.ot_number} creada`, ok: true });
-    router.refresh();
+  /**
+   * Generar la OT ya no es un «¿Continuar?» y un POST a ciegas.
+   *
+   * Esta función armaba el cuerpo a mano acá, y así mandaba **el nombre de una
+   * persona** en `quien`, cuyo vocabulario es INTERNO / CONTRATADO, y
+   * `maintenance_type` crudo en `especialidad`, cuyo vocabulario son las cuatro
+   * de `ESPECIALIDADES`. Ninguna de esas dos OT la encontraba después el filtro
+   * del listado. Y desde el 19/10/2026 directamente no generaba nada: sin
+   * `assigned_to` ese nombre salía vacío y el servidor contestaba «Falta cargar
+   * quién lo realiza».
+   *
+   * Ahora el cuerpo lo arma `lib/mantenimiento/otDesdeMantenimiento.ts` y lo
+   * que falta lo contesta la misma función que corre el servidor. Acá sólo se
+   * abre el formulario.
+   */
+  function crearOT(s: any) {
+    setOtMsg(null);
+    setOtModal(s);
   }
 
   async function vincularOT(scheduleId: string, workOrderId: string) {
@@ -399,7 +376,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
                     </span>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500">
-                    <span>{s.maintenance_type}</span>
+                    <span>{etiquetaDeTipo(s.maintenance_type)}</span>
                     <span>·</span>
                     <span>{SCHEDULE_OPTIONS.find((o) => o.value === s.schedule_type)?.label ?? s.schedule_type}</span>
                     {s.interval_days && <span>· cada {s.interval_days} días</span>}
@@ -513,7 +490,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Tipo">
                   <Select value={form.maintenance_type} onChange={(e) => field("maintenance_type", e.target.value)} className="input">
-                    {TYPE_OPTIONS.map((o) => (
+                    {TIPOS_DE_MANTENIMIENTO.map((o) => (
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </Select>
@@ -614,6 +591,18 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
           busy={otBusy === linkModal.id}
           onClose={() => setLinkModal(null)}
           onPick={(otId) => vincularOT(linkModal.id, otId)}
+        />
+      )}
+
+      {otModal && (
+        <GenerarOTDeMantenimiento
+          mantenimiento={otModal}
+          onClose={() => setOtModal(null)}
+          onCreada={(mensaje) => {
+            setOtMsg({ id: otModal.id, text: mensaje, ok: true });
+            setOtModal(null);
+            router.refresh();
+          }}
         />
       )}
     </div>

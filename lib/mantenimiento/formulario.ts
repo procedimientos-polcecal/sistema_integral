@@ -39,11 +39,27 @@
 
 import { serialDelDia, serialDelInstante } from "@/lib/core/fechaDeSheets";
 import {
-  escribirCeldas, filaSiguienteSegunLaColumna, leerFormulas,
+  escribirCeldas, filaSiguienteSegunLaColumna, leerFormulas, leerValores, textoParaLaCelda,
 } from "@/lib/core/sheets";
 
-/** La pestaña donde caen las respuestas y donde el sistema agrega sus altas. */
+/** La pestaña donde caen las respuestas del formulario. */
 export const HOJA_DE_RESPUESTAS = "Respuestas de formulario";
+
+/**
+ * La pestaña donde el sistema escribe sus altas, y **sólo él**.
+ *
+ * Existe desde el 16/10/2026 porque **Google Forms inserta sus respuestas
+ * dentro de su propio rango y empuja hacia abajo cualquier fila ajena**. Con
+ * las dos conviviendo en `Respuestas de formulario`, la OT 2796 del sistema se
+ * corrió dos lugares y su registro —"Realizado, 1 h, dos operarios"— quedó
+ * pegado a la 2798, que es de otro: el derrame de los `IMPORTRANGE` del master
+ * se movió con ella y las columnas literales no.
+ *
+ * Acá Forms no entra. Y para que el orden del master no dependa de la posición
+ * física, sus cuatro importaciones apilan las dos pestañas con `ORDER BY` por
+ * N° de OT — ver el spec `2026-10-16-mantenimiento-altas-del-sistema-design.md`.
+ */
+export const HOJA_DE_ALTAS = "Altas del sistema";
 
 /**
  * Cómo puede llamarse cada columna que el alta llena.
@@ -59,6 +75,9 @@ export const HOJA_DE_RESPUESTAS = "Respuestas de formulario";
 const ALIAS = {
   nro: ["N° OT", "Nº OT", "N OT"],
   marca: ["Marca temporal"],
+  email: ["Dirección de correo electrónico", "Direccion de correo electronico"],
+  nombre: ["NOMBRE"],
+  apellido: ["APELLIDO"],
   sector: ["SECTOR QUE SOLICITA"],
   equipo: ["EQUIPO QUE SOLICITA"],
   especialidad: ["ESPECIALIDAD"],
@@ -67,6 +86,7 @@ const ALIAS = {
   descripcion: ["DESCRIPCIÓN DEL TRABAJO", "DESCRIPCION DEL TRABAJO"],
   repuesto: ["REPUESTO UTILIZADO"],
   fecha: ["FECHA COMPROMETIDA"],
+  fechaFin: ["FECHA DE FIN"],
   prioridad: ["PRIORIDAD"],
 } as const;
 
@@ -112,6 +132,57 @@ export function laSerieEstaCongelada(columna: readonly (readonly unknown[])[]): 
   return true;
 }
 
+/**
+ * El próximo número de la serie y en qué fila va, de **una sola lectura**.
+ *
+ * EL INCIDENTE DEL 16/10/2026, que es de donde sale esta función. La OT 2796 se
+ * creó desde el sistema y no llegó a la planilla: la guarda se negó a escribir
+ * —bien— pero el número ya estaba tomado, porque **salía de una lectura y la
+ * fila de otra**, con una escritura en el medio que podía no pasar. Pedir las
+ * dos juntas es lo que hace que una negativa no cueste nada.
+ *
+ * **La serie está repartida entre dos pestañas** desde ese mismo día: el
+ * formulario escribe en la suya y el sistema en `Altas del sistema`, para que
+ * Forms no pueda empujar las filas del sistema hacia abajo. Por eso el máximo
+ * se cuenta sobre las dos: contar una sola es repartir un número que la otra ya
+ * usó, que es exactamente lo que se está evitando.
+ *
+ * La **fila** es la de las altas, que es donde se escribe. La guarda de las
+ * fórmulas, en cambio, mira **sólo el formulario**: ahí vive la cadena
+ * relativa, y la hoja de altas la escribe el sistema con literales.
+ *
+ * Es pura para poder probarla: lo que habla con Google es `altaEnLaPlanilla`.
+ */
+export type LoQueSigue =
+  | { ok: true; ot_number: number; fila: number }
+  | { ok: false; error: string };
+
+export function loQueSigueEnLaSerie(
+  serieDelFormulario: readonly (readonly unknown[])[],
+  serieDeLasAltas: readonly (readonly unknown[])[]
+): LoQueSigue {
+  if (!laSerieEstaCongelada(serieDelFormulario)) {
+    return {
+      ok: false,
+      error:
+        `La columna ${COLUMNA_SERIE} de «${HOJA_DE_RESPUESTAS}» todavía numera con una ` +
+        `fórmula por fila. Mientras siga así, una OT escrita por el sistema y una ` +
+        `respuesta del formulario pueden quedar con el mismo número, así que no se ` +
+        `escribe ni se toma número. Hay que pegar esa columna como sólo valores — ver ` +
+        `docs/mantenimiento-formulario-apps-script.gs.`,
+    };
+  }
+
+  return {
+    ok: true,
+    ot_number: Math.max(
+      maximoDeLaSerie(serieDelFormulario),
+      maximoDeLaSerie(serieDeLasAltas)
+    ) + 1,
+    fila: filaSiguienteSegunLaColumna(serieDeLasAltas),
+  };
+}
+
 /** El número más alto de la serie, que es de donde sale el siguiente. */
 export function maximoDeLaSerie(columna: readonly (readonly unknown[])[]): number {
   let maximo = 0;
@@ -127,6 +198,20 @@ export interface DatosDelAlta {
   ot_number: number;
   /** Cuándo se creó. Va como serial, nunca como texto. */
   creado: Date;
+  /**
+   * Quién la pidió, de su usuario del sistema.
+   *
+   * Estas tres columnas quedaban vacías a propósito, con esta razón: "poner
+   * algo en el mail o el nombre sería decir que alguien contestó el
+   * formulario". **Esa razón se murió el 18/10/2026**, cuando el alta se mudó a
+   * `Altas del sistema`: una fila ahí no dice que nadie contestó nada, dice que
+   * la creó el sistema — y entonces saber quién fue es información y no una
+   * mentira. Es lo que le faltaba a quien mira la planilla para saber a quién
+   * preguntarle.
+   */
+  email: string | null;
+  nombre: string | null;
+  apellido: string | null;
   sector: string | null;
   equipo: string | null;
   especialidad: string | null;
@@ -134,8 +219,20 @@ export interface DatosDelAlta {
   quien: string | null;
   descripcion: string;
   repuesto: string | null;
-  /** "YYYY-MM-DD". Es la fecha de ejecución comprometida. */
+  /**
+   * "YYYY-MM-DD". La fecha comprometida, que en el master es la J y desde el
+   * 02/11/2026 se llama «FECHA DE INICIO».
+   */
   fecha_ejecucion: string | null;
+  /**
+   * "YYYY-MM-DD". Cuándo se estima que termina — la Y del master.
+   *
+   * **Si el encabezado no trae la columna, esto no se escribe y el alta no se
+   * cae**, que es la regla que ya vale para toda columna que el formulario
+   * puede no tener. O sea que hasta que «FECHA DE FIN» exista en las dos
+   * pestañas, cargarla en la app no deja nada del otro lado.
+   */
+  fecha_fin: string | null;
   prioridad: string | null;
 }
 
@@ -175,16 +272,24 @@ export function celdasDelAlta(
   // `serialDelInstante` no valida —lo dice su propio docstring—: una fecha
   // inválida da NaN, que escrito es "NaN" y deja una marca temporal basura en
   // una fila que ya no se puede distinguir de una respuesta de verdad.
+  // Recortado y, si hace falta, escapado: estas trece columnas son todo lo que
+  // una persona tipea en el alta, y la escritura es `USER_ENTERED`. El N° y la
+  // marca temporal no pasan por acá porque son número, y prefijarlos rompería
+  // la fórmula del RI que los lee.
+  const texto = (v: string | null | undefined): string =>
+    textoParaLaCelda(String(v ?? "").trim());
+
   const marca = serialDelInstante(datos.creado);
   if (!Number.isFinite(marca)) {
     return { ok: false, motivos: [`la fecha de creación no es válida: ${String(datos.creado)}`] };
   }
 
-  const texto = (v: string | null | undefined): string => String(v ?? "").trim();
-
   const valores: Partial<Record<Clave, string | number>> = {
     nro: datos.ot_number,
     marca,
+    email: texto(datos.email),
+    nombre: texto(datos.nombre),
+    apellido: texto(datos.apellido),
     sector: texto(datos.sector),
     equipo: texto(datos.equipo),
     especialidad: texto(datos.especialidad),
@@ -195,10 +300,14 @@ export function celdasDelAlta(
     prioridad: texto(datos.prioridad),
   };
 
-  // La fecha va como serial o no va. Un "14/10/2026" lo interpreta la planilla
-  // según su locale, que es la trampa que dio vuelta 885 fechas en Compras.
+  // Las fechas van como serial o no van. Un "14/10/2026" lo interpreta la
+  // planilla según su locale, que es la trampa que dio vuelta 885 fechas en
+  // Compras.
   const serial = datos.fecha_ejecucion ? serialDelDia(datos.fecha_ejecucion) : null;
   if (serial !== null) valores.fecha = serial;
+
+  const serialFin = datos.fecha_fin ? serialDelDia(datos.fecha_fin) : null;
+  if (serialFin !== null) valores.fechaFin = serialFin;
 
   const celdas: Celda[] = [];
   for (const [clave, valor] of Object.entries(valores) as [Clave, string | number][]) {
@@ -211,6 +320,18 @@ export function celdasDelAlta(
   }
 
   return { ok: true, celdas };
+}
+
+
+/**
+ * Si en esa fila no hay nada todavía.
+ *
+ * Es la guarda de concurrencia del alta: dos altas al mismo tiempo leen la
+ * misma columna y calculan la misma fila libre, y sin esto la segunda pisa a la
+ * primera — una OT que desaparece sin dejar rastro en ningún lado.
+ */
+export function laFilaEstaLibre(celda: readonly (readonly unknown[])[]): boolean {
+  return String(celda[0]?.[0] ?? "").trim() === "";
 }
 
 
@@ -230,21 +351,24 @@ const COLUMNA_SERIE = "A";
  * la primera no se puede contestar: una fórmula que devuelve 2785 se lee igual
  * que un 2785 escrito.
  */
-const serieDeLaPlanilla = (planilla: string): Promise<string[][]> =>
-  leerFormulas(planilla, `${HOJA_DE_RESPUESTAS}!${COLUMNA_SERIE}:${COLUMNA_SERIE}`);
+const serieDeLaPestana = (planilla: string, pestana: string): Promise<string[][]> =>
+  leerFormulas(planilla, `${pestana}!${COLUMNA_SERIE}:${COLUMNA_SERIE}`);
 
-export interface ResultadoDelAlta {
-  ok: boolean;
-  /** En qué fila de la hoja de respuestas quedó. Sólo para informar. */
-  fila?: number;
+export type ResultadoDelAlta =
+  | {
+      ok: true;
+      /** El número que la serie le dio, y que ya está escrito en la planilla. */
+      ot_number: number;
+      /** En qué fila de «Altas del sistema» quedó. Sólo para informar. */
+      fila: number;
+    }
   /** Qué pasó, sin traducir. Un diagnóstico que no se distingue no sirve. */
-  error?: string;
-}
+  | { ok: false; error: string };
 
 /**
- * El número más alto de la serie, leído de donde la serie vive.
+ * El número más alto de la serie, leído de las **dos** pestañas donde vive.
  *
- * **De la hoja de respuestas y no del master.** El master la recibe por
+ * **De la planilla de respuestas y no del master.** El master la recibe por
  * `IMPORTRANGE`, que llega con retraso: dos OT creadas con pocos minutos de
  * diferencia leerían el mismo máximo y tomarían el mismo número. Acá se lee la
  * fuente, que es lo que el Apps Script del formulario también cuenta.
@@ -258,74 +382,312 @@ export async function maximoDeLaSerieEnLaPlanilla(): Promise<number | null> {
   if (!planilla) return null;
 
   try {
-    return maximoDeLaSerie(await serieDeLaPlanilla(planilla));
+    const [form, altas] = await Promise.all([
+      serieDeLaPestana(planilla, HOJA_DE_RESPUESTAS),
+      serieDeLaPestana(planilla, HOJA_DE_ALTAS),
+    ]);
+    return Math.max(maximoDeLaSerie(form), maximoDeLaSerie(altas));
   } catch {
     return null;
   }
 }
 
 /**
- * Escribe el alta al final de la hoja de respuestas.
+ * Da de alta la orden en «Altas del sistema» y devuelve el número que le tocó.
  *
- * No lanza: devuelve qué pasó. Quien llama decide, y lo que decide es decirlo
- * —la OT ya existe en el sistema y que Google esté caído no puede tirarla
- * abajo, pero tampoco se puede callar que no llegó a la planilla—.
+ * **Se llama antes de crear la OT en la base, y ése es el punto.** La planilla
+ * manda en Mantenimiento: una orden existe cuando tiene su fila. Si esto falla,
+ * no se creó nada en ningún lado y no se consumió ningún número — que es
+ * exactamente lo que el 16/10/2026 no pasó y dejó a la 2796 esperando que el
+ * formulario repartiera su número otra vez.
  *
- * Se lee con `leerFormulasDeRango` y no con los valores a propósito: hacen
- * falta las dos cosas de la misma lectura —si la celda es una fórmula y qué
- * número tiene—, y con los valores calculados la primera pregunta no se puede
- * contestar.
+ * Al revés tampoco es gratis, y conviene saberlo: si la fila se escribe y
+ * después falla el insert en la base, la OT queda **sólo en la planilla**. Eso
+ * no es un estado roto sino el estado normal de cualquier orden cargada por el
+ * formulario, y la próxima sincronización la trae. Al derecho, en cambio, la
+ * pérdida era silenciosa.
+ *
+ * **Escribe en `Altas del sistema` y no en la pestaña del formulario**, que es
+ * de donde salió todo esto: Forms inserta dentro de su rango y empuja las filas
+ * ajenas hacia abajo, y el registro de una OT corrida queda pegado a otra.
+ *
+ * No lanza: devuelve qué pasó, sin traducir, para que la pantalla lo muestre.
+ *
+ * Se lee con `leerFormulas` y no con los valores a propósito: hacen falta las
+ * dos cosas de la misma lectura —si la celda es una fórmula y qué número
+ * tiene—, y con los valores calculados la primera no se puede contestar.
  */
-export async function exportarAltaDeOT(datos: DatosDelAlta): Promise<ResultadoDelAlta> {
+export async function altaEnLaPlanilla(
+  datos: Omit<DatosDelAlta, "ot_number">
+): Promise<ResultadoDelAlta> {
   const planilla = PLANILLA();
   if (!planilla) {
     return {
       ok: false,
       error:
-        "Falta configurar GOOGLE_SHEETS_MANTENIMIENTO_FORMULARIO_ID: la OT quedó sólo en la app.",
+        "Falta configurar GOOGLE_SHEETS_MANTENIMIENTO_FORMULARIO_ID, así que no hay " +
+        "dónde escribir la orden ni de dónde sacarle el número.",
     };
   }
 
   try {
-    const serie = await serieDeLaPlanilla(planilla);
+    // Las dos columnas A. El número sale del máximo de las dos y la fila de la
+    // de altas, que es donde se escribe.
+    const [form, altas] = await Promise.all([
+      serieDeLaPestana(planilla, HOJA_DE_RESPUESTAS),
+      serieDeLaPestana(planilla, HOJA_DE_ALTAS),
+    ]);
 
-    // La guarda que no se puede delegar a que alguien se acuerde. Ver el
-    // encabezado de este archivo: con la fórmula viva, la primera fila que
-    // Forms inserte en el medio reparte un número que el sistema ya usó.
-    if (!laSerieEstaCongelada(serie)) {
+    const sigue = loQueSigueEnLaSerie(form, altas);
+    if (!sigue.ok) return sigue;
+
+    // El encabezado de **las altas**: es la pestaña donde se va a escribir, y
+    // la crea una persona a mano. Si quedó sin encabezado, `celdasDelAlta` se
+    // niega diciendo qué columnas faltan en vez de escribir una fila con los
+    // datos en cualquier lado.
+    const encabezado =
+      (await leerFormulas(planilla, `${HOJA_DE_ALTAS}!1:1`))[0] ?? [];
+
+    const armado = celdasDelAlta(encabezado, { ...datos, ot_number: sigue.ot_number });
+    if (!armado.ok) {
       return {
         ok: false,
-        error:
-          `La columna ${COLUMNA_SERIE} de «${HOJA_DE_RESPUESTAS}» todavía numera con una ` +
-          `fórmula por fila. Mientras siga así, una OT escrita por el sistema y una ` +
-          `respuesta del formulario pueden quedar con el mismo número, así que no se ` +
-          `escribe. Hay que pegar esa columna como sólo valores — ver ` +
-          `docs/mantenimiento-formulario-apps-script.gs.`,
+        error: `La pestaña «${HOJA_DE_ALTAS}» no sirve para escribir: ${armado.motivos.join("; ")}`,
       };
     }
 
-    const encabezado =
-      (await leerFormulas(planilla, `${HOJA_DE_RESPUESTAS}!1:1`))[0] ?? [];
-
-    const armado = celdasDelAlta(encabezado, datos);
-    if (!armado.ok) return { ok: false, error: armado.motivos.join("; ") };
-
-    // La fila libre sale de la misma columna que la serie: es la que dice si
-    // una fila tiene datos, y viene de la lectura que ya comprobamos.
-    const fila = filaSiguienteSegunLaColumna(serie);
+    // Releer justo esa celda antes de escribir. Entre la lectura de arriba y
+    // esta línea puede haber entrado otra alta, y las dos calcularon la misma
+    // fila libre: sin esto, la segunda pisa a la primera y la OT perdida no
+    // deja rastro en ningún lado.
+    const destino = await leerFormulas(
+      planilla, `${HOJA_DE_ALTAS}!${COLUMNA_SERIE}${sigue.fila}`
+    );
+    if (!laFilaEstaLibre(destino)) {
+      return {
+        ok: false,
+        error:
+          `La fila ${sigue.fila} de «${HOJA_DE_ALTAS}» se ocupó mientras se preparaba ` +
+          `el alta. No se escribió nada: volvé a intentar.`,
+      };
+    }
 
     await escribirCeldas(
       planilla,
       armado.celdas.map((c) => ({
-        pestana: HOJA_DE_RESPUESTAS,
+        pestana: HOJA_DE_ALTAS,
         columna: c.columna,
-        fila,
+        fila: sigue.fila,
         valor: c.valor,
       }))
     );
 
-    return { ok: true, fila };
+    // Y releer lo escrito. No es ceremonia: es lo único que distingue "quedó
+    // con su número" de "quedó con el de otro", y es lo que Compras aprendió
+    // perdiendo un pedido el 09/09/2026.
+    const quedo = await leerFormulas(
+      planilla, `${HOJA_DE_ALTAS}!${COLUMNA_SERIE}${sigue.fila}`
+    );
+    const escrito = Number(String(quedo[0]?.[0] ?? "").trim());
+    if (escrito !== sigue.ot_number) {
+      return {
+        ok: false,
+        error:
+          `Se escribió la fila ${sigue.fila} de «${HOJA_DE_ALTAS}» pero quedó con el N° ` +
+          `${JSON.stringify(quedo[0]?.[0] ?? "")} en vez de ${sigue.ot_number}. ` +
+          `Revisá esa fila antes de volver a cargarla.`,
+      };
+    }
+
+    return { ok: true, ot_number: sigue.ot_number, fila: sigue.fila };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    const porque = e instanceof Error ? e.message : String(e);
+    // Con el nombre de la pestaña adelante: el 400 de Google por una pestaña
+    // que todavía no existe dice "Unable to parse range", que no le sirve a
+    // nadie si no se sabe qué rango se pidió.
+    return { ok: false, error: `No se pudo escribir en «${HOJA_DE_ALTAS}»: ${porque}` };
+  }
+}
+
+/**
+ * Dónde está la celda de la fecha comprometida de una OT, y qué escribirle.
+ *
+ * ── POR QUÉ NO ALCANZA CON UN UPDATE EN LA BASE ─────────────────────────────
+ *
+ * La fecha de ejecución de una OT en el master es la columna **J**, y esa
+ * columna es derrame de un `QUERY(IMPORTRANGE())`: escribirla no queda. La
+ * fecha de verdad está acá, en `Altas del sistema`, y de acá derrama al master.
+ * Así que postergar una orden es reescribir **esta** celda.
+ *
+ * La fila **se busca por el N° de OT**, no se calcula. Es la misma lección que
+ * dejó escrita `filaDeLaOTenElMaster`: una cuenta que deja de valer no avisa,
+ * sigue devolviendo un número plausible y la escritura se va a la fila de otra
+ * orden.
+ *
+ * Y el valor va como **serial**, no como texto: `USER_ENTERED` interpreta un
+ * "5/11/2026" según el locale de la planilla —que hoy es `es_MX`— y eso es la
+ * trampa que dio vuelta 885 fechas en Compras.
+ *
+ * Es pura para poder probarla: recibe las filas ya leídas y devuelve qué
+ * escribir, o por qué no se puede.
+ */
+export function celdaDeLaFechaComprometida(
+  filas: readonly (readonly unknown[])[],
+  ot_number: number,
+  iso: string
+): { ok: true; fila: number; columna: number; valor: number } | { ok: false; error: string } {
+  const idx = indiceDeColumnas((filas[0] ?? []).map((c) => String(c ?? "")));
+  if (idx.fecha < 0) {
+    return {
+      ok: false,
+      error: `El encabezado de «${HOJA_DE_ALTAS}» no tiene ${ALIAS.fecha.join(" ni ")}.`,
+    };
+  }
+
+  const serial = serialDelDia(iso);
+  if (serial === null) return { ok: false, error: `La fecha ${iso} no existe.` };
+
+  for (let i = 1; i < filas.length; i++) {
+    if (Number(String(filas[i]?.[0] ?? "").trim()) === ot_number) {
+      // La planilla cuenta desde 1 y la fila 0 es el encabezado.
+      return { ok: true, fila: i + 1, columna: idx.fecha, valor: serial };
+    }
+  }
+
+  return {
+    ok: false,
+    error:
+      `La OT ${ot_number} no está en «${HOJA_DE_ALTAS}». Sólo se puede correr la ` +
+      `fecha de las órdenes que creó el sistema: las del formulario viven en otra ` +
+      `pestaña, que maneja Forms, y escribir ahí corre las filas de los demás.`,
+  };
+}
+
+/**
+ * Reescribe la fecha comprometida de una OT. Devuelve el motivo si no se pudo.
+ *
+ * No lanza: la pantalla tiene que poder mostrar **lo que dijo Google, sin
+ * traducir**. Un diagnóstico que no se distingue de otro no es un diagnóstico.
+ */
+export async function corregirLaFechaComprometida(
+  ot_number: number,
+  iso: string
+): Promise<string | null> {
+  const planilla = PLANILLA();
+  if (!planilla) {
+    return "Falta configurar GOOGLE_SHEETS_MANTENIMIENTO_FORMULARIO_ID, así que no hay dónde escribir la fecha.";
+  }
+
+  try {
+    const filas = await leerValores(planilla, HOJA_DE_ALTAS, { sinFormato: true });
+    const donde = celdaDeLaFechaComprometida(filas, ot_number, iso);
+    if (!donde.ok) return donde.error;
+
+    await escribirCeldas(planilla, [{
+      pestana: HOJA_DE_ALTAS, fila: donde.fila, columna: donde.columna, valor: donde.valor,
+    }]);
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
+/** Lo que se puede corregir de una orden que ya está en «Altas del sistema». */
+export interface CorreccionDeLaAlta {
+  descripcion?: string;
+  repuesto?: string;
+  /** "YYYY-MM-DD". */
+  fecha_ejecucion?: string;
+}
+
+/**
+ * Qué celdas hay que reescribir en «Altas del sistema» para corregir una orden
+ * que ya está ahí. Pura: recibe las filas ya leídas.
+ *
+ * Es la hermana de `celdaDeLaFechaComprometida`, y existe por lo mismo: la
+ * descripción (H), el repuesto (I) y la fecha de inicio (J) del master son
+ * **derrame** de los `QUERY(IMPORTRANGE())`, así que escribirlas ahí no queda y
+ * la próxima sincronización las lee como estaban. La de verdad está en esta
+ * pestaña. Se necesita cuando la generación del cuaderno **le suma** un
+ * renglón a una orden que ya existe: sin esto, el costo nuevo queda en la base
+ * y la planilla sigue diciendo el viejo.
+ *
+ * Sólo devuelve lo que se pidió, la fila se busca por N° de OT, la prosa pasa
+ * por `textoParaLaCelda` y la fecha va como serial. Si falta **alguna** de las
+ * columnas pedidas no escribe ninguna: una corrección a medias deja la fila
+ * diciendo dos cosas que no son de la misma versión.
+ */
+export function celdasParaCorregirLaAlta(
+  filas: readonly (readonly unknown[])[],
+  ot_number: number,
+  cambios: CorreccionDeLaAlta
+): { ok: true; celdas: { fila: number; columna: number; valor: string | number }[] } | { ok: false; error: string } {
+  const idx = indiceDeColumnas((filas[0] ?? []).map((c) => String(c ?? "")));
+
+  const pedidas: [Clave, string | number][] = [];
+  if (cambios.descripcion !== undefined) {
+    pedidas.push(["descripcion", textoParaLaCelda(cambios.descripcion.trim())]);
+  }
+  if (cambios.repuesto !== undefined) {
+    pedidas.push(["repuesto", textoParaLaCelda(cambios.repuesto.trim())]);
+  }
+  if (cambios.fecha_ejecucion !== undefined) {
+    const serial = serialDelDia(cambios.fecha_ejecucion);
+    if (serial === null) return { ok: false, error: `La fecha ${cambios.fecha_ejecucion} no existe.` };
+    pedidas.push(["fecha", serial]);
+  }
+
+  const faltan = pedidas.filter(([clave]) => idx[clave] < 0).map(([clave]) => ALIAS[clave].join(" ni "));
+  if (faltan.length > 0) {
+    return { ok: false, error: `El encabezado de «${HOJA_DE_ALTAS}» no tiene ${faltan.join(" ni ")}.` };
+  }
+
+  for (let i = 1; i < filas.length; i++) {
+    if (Number(String(filas[i]?.[0] ?? "").trim()) === ot_number) {
+      // La planilla cuenta desde 1 y la fila 0 es el encabezado.
+      return {
+        ok: true,
+        celdas: pedidas.map(([clave, valor]) => ({ fila: i + 1, columna: idx[clave], valor })),
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    error:
+      `La OT ${ot_number} no está en «${HOJA_DE_ALTAS}». Sólo se corrige lo de las ` +
+      `órdenes que creó el sistema: las del formulario viven en otra pestaña, que ` +
+      `maneja Forms, y escribir ahí corre las filas de los demás.`,
+  };
+}
+
+/**
+ * Corrige en «Altas del sistema» lo que cambió de una orden. Devuelve el motivo
+ * si no se pudo, **sin traducir**: un diagnóstico que no se distingue de otro
+ * no es un diagnóstico.
+ */
+export async function corregirLaAlta(
+  ot_number: number,
+  cambios: CorreccionDeLaAlta
+): Promise<string | null> {
+  if (Object.keys(cambios).length === 0) return null;
+
+  const planilla = PLANILLA();
+  if (!planilla) {
+    return "Falta configurar GOOGLE_SHEETS_MANTENIMIENTO_FORMULARIO_ID, así que no hay dónde escribir.";
+  }
+
+  try {
+    const filas = await leerValores(planilla, HOJA_DE_ALTAS, { sinFormato: true });
+    const donde = celdasParaCorregirLaAlta(filas, ot_number, cambios);
+    if (!donde.ok) return donde.error;
+
+    await escribirCeldas(
+      planilla,
+      donde.celdas.map((c) => ({ pestana: HOJA_DE_ALTAS, fila: c.fila, columna: c.columna, valor: c.valor }))
+    );
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
   }
 }

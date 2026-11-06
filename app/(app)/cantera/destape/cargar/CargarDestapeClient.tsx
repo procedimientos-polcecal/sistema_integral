@@ -9,6 +9,7 @@ import {
 } from "@/lib/cantera/destape";
 import type { DestapeDB, Fletero, Yacimiento } from "@/lib/cantera/types";
 import type { EmpleadoLiviano } from "@/lib/cantera/consultas";
+import { numeroDeCampo } from "@/lib/cantera/numero";
 
 const INPUT_CLS = "mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm";
 const num = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -151,8 +152,10 @@ export default function CargarDestapeClient({
       const operario = operarios.find((o) => o.id === form.operarioId);
       const equipo = equipos.find((e) => e.id === form.equipoId);
       if (!operario || !equipo) { setError("Elegí operario y equipo"); return; }
-      const horas = Number(form.horas);
-      if (!isFinite(horas) || horas <= 0) { setError("Las horas tienen que ser un número mayor a cero"); return; }
+      // `Number("7,5")` daba NaN y el cartel decía que las horas no eran un
+      // número sobre un campo que tenía 7,5 escrito (ver `lib/cantera/numero.ts`).
+      const horas = numeroDeCampo(form.horas);
+      if (horas === null || horas <= 0) { setError("Las horas tienen que ser un número mayor a cero"); return; }
       cuerpo = {
         ...cuerpo,
         operario_id: operario.id,
@@ -164,8 +167,10 @@ export default function CargarDestapeClient({
     } else if (editandoLegacySinAcarreo) {
       const fletero = fleteros.find((f) => f.id === form.fleteroId);
       if (!fletero) { setError("Elegí el fletero"); return; }
-      const horas = Number(form.horas);
-      if (!isFinite(horas) || horas <= 0) { setError("Las horas tienen que ser un número mayor a cero"); return; }
+      // `Number("7,5")` daba NaN y el cartel decía que las horas no eran un
+      // número sobre un campo que tenía 7,5 escrito (ver `lib/cantera/numero.ts`).
+      const horas = numeroDeCampo(form.horas);
+      if (horas === null || horas <= 0) { setError("Las horas tienen que ser un número mayor a cero"); return; }
       cuerpo = {
         ...cuerpo,
         fletero_id: fletero.id,
@@ -283,7 +288,7 @@ export default function CargarDestapeClient({
             </label>
           </div>
         ) : editandoLegacySinAcarreo ? (
-          <div className="mt-3 grid grid-cols-3 gap-3">
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <label className="text-xs text-slate-600">
               Fletero
               <select className={INPUT_CLS} value={form.fleteroId} onChange={(e) => set("fleteroId", e.target.value)}>

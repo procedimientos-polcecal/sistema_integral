@@ -59,8 +59,11 @@ funcionando y se puede importar a mano.
 |---|---|---|
 | `GOOGLE_SHEETS_COMPRAS_ID` | Qué planilla sincronizar | El tramo entre `/d/` y `/edit` de la URL. Para PEDIDOS DE COMPRA es `1hnfYHaWBprT9UGOETSoQ9GQCl3B1ZezPr5FPbCrUO80` |
 | `GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID` | Dónde se escribe el **alta** de un pedido cargado en el sistema. Es `FORM PEDIDO DE COMPRA POLCECAL - POLYSAN`, la planilla de respuestas del formulario de Google: `1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM`. Va ahí y no en el master porque las columnas del alta del master son la salida de un `QUERY(IMPORTRANGE())` de esta planilla. Dentro de ella se escribe en la pestaña **`Altas del sistema`** y **no** en `Respuestas de formulario 1`: Forms empuja hacia abajo cualquier fila ajena y eso desalineaba las columnas a mano del master — ver [COMPRAS-SINCRONIZACION.md](COMPRAS-SINCRONIZACION.md) | La cuenta de servicio necesita **Editor**. Si falta, el alta no se exporta y el pedido **queda en la cola de pendientes** con el nombre de la variable en el motivo: no se omite en silencio, porque el pedido no llegó a ninguna parte |
-| `GOOGLE_SHEETS_MANTENIMIENTO_FORMULARIO_ID` | Dónde se escribe el **alta** de una OT cargada en el sistema. Es `Respuestas ORDEN DE TRABAJO`, la planilla de respuestas del formulario de Google: `1BBudbUAGid1Ies-w6L60Di-VYpDFh5JljXsmFGmklPM`. Va ahí y no en la pestaña `OT` del master porque **las columnas A a J y S de esa pestaña son el derrame de cuatro `QUERY(IMPORTRANGE())` de esta planilla**: medido el 14/10/2026, de sus 2.161 celdas de la columna A no hay una sola que sea un literal, así que escribir ahí o bloquea el derrame (`#REF!`) o lo pisa el derrame al recalcular. Dentro de ella se escribe en `Respuestas de formulario`, **la misma pestaña que el formulario**: acá sí conviven, porque el master ordena por N° de OT y entonces da igual en qué fila física quede cada uno — ver [mantenimiento-formulario-apps-script.gs](mantenimiento-formulario-apps-script.gs) | La cuenta de servicio necesita **Editor**. Si falta, el alta no se exporta y quien creó la OT lo ve en pantalla con el nombre de la variable en el motivo. **Y aunque esté, no se escribe nada si la columna A todavía numera con una fórmula por fila**: el código lo comprueba, porque con la fórmula viva una OT del sistema y una respuesta del formulario pueden quedar con el mismo número |
+| `GOOGLE_SHEETS_MANTENIMIENTO_FORMULARIO_ID` | Dónde se escribe el **alta** de una OT cargada en el sistema. Es `Respuestas ORDEN DE TRABAJO`, la planilla de respuestas del formulario de Google: `1BBudbUAGid1Ies-w6L60Di-VYpDFh5JljXsmFGmklPM`. Va ahí y no en la pestaña `OT` del master porque **las columnas A a J y S de esa pestaña son el derrame de cuatro `QUERY(IMPORTRANGE())` de esta planilla**: medido el 14/10/2026, de sus 2.161 celdas de la columna A no hay una sola que sea un literal, así que escribir ahí o bloquea el derrame (`#REF!`) o lo pisa el derrame al recalcular. Dentro de ella se escribe en **`Altas del sistema`**, una pestaña propia donde no inserta nadie. Convivir con el formulario en la misma pestaña se probó y falló el 16/10/2026: Forms empuja hacia abajo cualquier fila ajena, y el registro de la OT 2796 terminó pegado a la 2798. **La serie queda repartida entre las dos hojas, así que el SdG y el Apps Script cuentan las dos** — ver [mantenimiento-formulario-apps-script.gs](mantenimiento-formulario-apps-script.gs) y el [spec](superpowers/specs/2026-10-16-mantenimiento-altas-del-sistema-design.md) | La cuenta de servicio necesita **Editor**. Si falta, el alta no se exporta y quien creó la OT lo ve en pantalla con el nombre de la variable en el motivo. **Y aunque esté, no se escribe nada si la columna A todavía numera con una fórmula por fila**: el código lo comprueba, porque con la fórmula viva una OT del sistema y una respuesta del formulario pueden quedar con el mismo número |
 | `GOOGLE_SHEETS_SEGUIMIENTO_ID` | El libro `SEGUIMIENTO DE COMPRA`, donde se anota qué llegó de cada compra: `1TS3JYzTF2M_XTlaqaACphSdSXc5K5rh6b6UsAXBSYx8`. Es de **una sola vía** —manda el sistema, como en Producción— y el SdG sólo escribe la pestaña `COMPRAS CON RI`: las nueve por área son `FILTER` de ésa y se recalculan solas | La cuenta de servicio necesita **Editor**. Sin la variable el seguimiento no se exporta y **no es un error**: se omite, igual que `GOOGLE_SHEETS_COMPRAS_ID`. Lo que quede sin escribir se anota en `seguimiento_pendiente` — que es una cola **aparte** de `sheets_pendiente`, porque son dos libros distintos y mezclarlos deja sin saber a cuál ir |
+| `GOOGLE_SHEETS_OT_ID` | La planilla de órdenes de trabajo, `ORDEN DE TRABAJO`: `1BBudbUAGid1Ies-w6L60Di-VYpDFh5JljXsmFGmklPM`. Su pestaña es `OT` (`GOOGLE_SHEETS_OT_TAB`) | Es la misma planilla que `GOOGLE_SHEETS_MANTENIMIENTO_FORMULARIO_ID`: el master y las respuestas del formulario viven en el mismo libro, en pestañas distintas |
+| `GOOGLE_SHEETS_AVISOS_ID` | La planilla de avisos, `AVISOS`: `1Iyfy3AzEASPpYU3zNBKr3rg5BkAM_DC1X9E8RJo6ZX4`. Su pestaña también se llama `AVISOS` (`GOOGLE_SHEETS_AVISOS_TAB`) | Sin ella la sincronización de avisos devuelve 503. Desde el 18/10/2026 **la sincronización también borra** lo que la planilla dejó de traer, así que el id apuntando al libro equivocado dejó de ser inofensivo: ver [MANTENIMIENTO-INTEGRACION.md](MANTENIMIENTO-INTEGRACION.md) |
+| `GOOGLE_SHEETS_OS_ID` | El libro de órdenes de servicio: `1KHrN3ImFWRKU14snQxvYfWoIw7K6M5W2MQOPKeVh_Dw`. Tiene **una pestaña por área** —`SERVICIOS`, `MANTENIMIENTO`, `TALLER VIAL`…— y las lee todas | Igual que el anterior. Si alguna pestaña no se puede leer, el borrado **no borra nada de ninguna**: sus filas faltarían en bloque y vaciaría un área por un error de red |
 | `GOOGLE_SHEETS_INVENTARIO_ID` | La planilla del almacén, `GESTIÓN DE ALMACÉN POLCECAL POLYSAN`: `1ObB2NBUpEFcEEoF2RqWpj6PPofR1X9CyCwubAyYPYHI` | La usan **dos** módulos: Mantenimiento consulta si hay stock de un repuesto, e Inventario espeja el catálogo y el kardex |
 | `GOOGLE_SHEETS_INVENTARIO_TAB` | La pestaña del catálogo | `Listado articulos GRAL`. Su columna de stock es una fórmula: por eso es el stock consolidado y el SdG lo lee en vez de calcularlo |
 | `GOOGLE_SHEETS_INVENTARIO_TAB_MOV` | La pestaña del kardex | `Entradas  Salidas` — **con doble espacio**, que es como está en la planilla |
@@ -84,8 +87,11 @@ funcionando y se puede importar a mano.
 | `GOOGLE_SHEETS_CANTERA_TAB_VOL` | Pestaña de voladuras | Por defecto `VOLADURAS` |
 | `GOOGLE_SHEETS_CANTERA_TAB_BOCH` | Pestaña de bochones | Por defecto `BOCHONES` |
 | `GOOGLE_SHEETS_TRITURACION_ID` | La planilla de las 3 plantas de trituración (pestañas `PLANTA 1`/`PLANTA 2`/`PLANTA 3`): `1QU1iDgcsTSwTe_RMzUs9DOJwfDV0H6ylR7ublMwcMdI`. Espejo de una sola vía: manda el SdG, y sin esta variable un parte se guarda igual pero queda con `sheets_pendiente`. **La cuenta de servicio necesita EDITOR**, no sólo lectora — se compartió como lectora el 18/09/2026 para relevar, hay que subirle el permiso antes de que el espejo pueda escribir | El tramo entre `/d/` y `/edit` de la URL |
+| `GOOGLE_SHEETS_RESPALDO_ID` | El libro de **respaldo legible**, que tiene que ser uno **nuevo y vacío** creado a mano. Lo escribe el cron `respaldo-sheets` todas las noches a las 00:00 de Argentina, con una pestaña por módulo **que no tiene planilla**: RRHH (padrón, asistencia y marcaciones), Remises, los ensayos de Calidad y el buzón de Facturación. Los módulos donde **manda la planilla** no entran, y no es un olvido: ésos ya tienen este respaldo por construcción, y escribirles encima el estado del sistema sería darle de comer al importador su propia salida — desde el 18/10/2026 su sincronización **borra** lo que la planilla dejó de tener. Ver [RESPALDO.md](RESPALDO.md) | La cuenta de servicio necesita **Editor**. **No puede ser ninguna de las planillas de arriba**: cada pestaña se borra entera y se reescribe. Sin la variable el cron devuelve 500 con el nombre de la variable en el mensaje — a propósito: un respaldo que se omite en silencio es peor que no tenerlo |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Credencial para leer y escribir la planilla | Ver abajo: conviene reutilizar la que ya existe |
 | `GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID` | Carpeta de Drive con las planillas de comparativa | El tramo después de `/folders/` en la URL de la carpeta |
+| `GOOGLE_DRIVE_SYH_FOTOS_FOLDER_ID` | La carpeta de Drive donde el cron `syh-respaldo-de-fotos` (04:30 UTC, la 01:30 de Argentina) deja **una copia de las fotos de Seguridad e Higiene**. Es respaldo y no la fuente: la app lee siempre del bucket `syh-fotos` y a nadie se le muestra un link de Drive. **TIENE QUE ESTAR EN UNA UNIDAD COMPARTIDA, no en «Mi unidad» de alguien**: una cuenta de servicio no tiene cuota de Drive, y subir a «Mi unidad» falla con *"Service Accounts do not have storage quota"* aunque la carpeta esté compartida como editor (es la misma trampa del backup de la base, ver `scripts/backup/subir-a-drive.mts`). **La cuenta de servicio necesita ser Colaborador o Administrador de contenido** de esa unidad: sube y no borra nunca. Sin la variable el cron contesta 200 diciendo qué falta, lo anota como fallido en `sincronizaciones` (`seguridad_higiene` / `respaldo_fotos`) y no rompe nada: `respaldada_en_drive_el` queda en null, que es un estado válido. Hasta 40 fotos por corrida, las más viejas primero. **Hay que crear la carpeta a mano** | El id de la carpeta: el tramo después de `/folders/` en la URL |
+| `GOOGLE_DRIVE_PCROBOT_FOLDER_ID` | La unidad compartida de Drive `PC Robot`, donde una tarea programada sube todos los días a las 09:30 un zip por molino (`Filler 1 2026-10-29.zip`, `Filler 2 ...`). Lo lee el cron `produccion-molinos-sync` (13:00 UTC, las 10 de Argentina) y el botón de importar: `0AH83x2YPTJdbUk9PVA`. **La cuenta de servicio sólo necesita ser Lector** y el SdG nunca escribe ahí. Al ser una unidad compartida, toda llamada a Drive va con `supportsAllDrives=true`; sin eso Drive contesta 404 sin explicar por qué. Sin la variable la importación falla con su nombre en el mensaje, y queda anotada en `sincronizaciones` | El id de la unidad: el tramo después de `/folders/` en la URL |
 
 Para la carpeta de comparativas hace falta además **habilitar la Google Drive
 API** en el proyecto de Google Cloud: es un servicio aparte del de Sheets. Sin
@@ -148,6 +154,27 @@ Las tres salen del mismo comando y **van juntas o no van**: si falta una,
 `lib/remises/webpush.ts` tira `Faltan variables de entorno de Web Push (VAPID)`
 al intentar notificar. Si Remises no usa push todavía, se pueden omitir las tres.
 
+## El correo de la carga que no entró
+
+| Variable | Qué es | De dónde sale |
+|---|---|---|
+| `SDG_CORREO_URL` | La url de la aplicación web de Apps Script que manda el correo | La da Google al **implementar** el script de [docs/sdg-correo-apps-script.gs](sdg-correo-apps-script.gs) |
+| `SDG_CORREO_SECRET` | Lo único que separa esa url de cualquiera que la encuentre | Lo inventás vos, y el mismo valor va en las propiedades del script |
+
+**Sin las dos, el SdG no intenta mandar ningún correo y no se queja.** Eso es a
+propósito: entre el deploy y el día que alguien publique el script va a pasar
+tiempo, y un error por cada carga rechazada sería ruido diario sobre algo que
+nadie pidió todavía. Lo fija un test en `lib/core/correo.test.ts`.
+
+El script **se publica desde la cuenta de quien administra el SdG**: el dueño del
+proyecto es el remitente que la gente va a ver y a donde van a ir las
+respuestas. Renombrar esa cuenta no rompe nada —es la misma cuenta y el mismo
+Drive, así que la URL sigue sirviendo—; lo que sí obliga a transferir el
+proyecto y volver a publicar es **mover esto a otra cuenta**. Sus
+instrucciones de instalación están en el encabezado del propio archivo, y
+también la propiedad `DOMINIOS`, que es la que impide que una url filtrada se
+convierta en un relay para mandar correo desde la empresa.
+
 ## Odoo (Contabilidad, Tesorería y la orden de compra)
 
 Si faltan, las rutas de Odoo contestan **503 diciendo cuáles faltan** y el resto
@@ -205,12 +232,52 @@ cliente no traduce nada: lo que conteste Lenox queda anotado tal cual en la
 última sincronización (`Lenox respondió <status>: …`), que es lo primero que hay
 que mirar si el cartel de "actualizado hace…" se queda viejo.
 
+## Agenda (los avisos de Google Calendar)
+
+La Agenda espeja sus eventos en Google Calendar, y para enterarse **al instante**
+de que alguien borró o movió uno desde Google abre un *canal de observación* por
+cada usuario activo. Google avisa por `POST` a una dirección pública del SdG, así
+que **no hay variable nueva: usa `NEXT_PUBLIC_APP_URL`**, la misma de los links de
+los correos, y le pega `/api/agenda/google`.
+
+| Variable | Para qué |
+|---|---|
+| `NEXT_PUBLIC_APP_URL` | **El dominio completo y público, con `https`, sin barra final**: `https://www.polcecalpolysan.app`. La URL que se le registra a Google es `https://www.polcecalpolysan.app/api/agenda/google` |
+
+Tres cosas que no se deducen del código:
+
+**Con otra cosa no hay canal, y el cron lo dice.** Google exige `https` y valida
+que el dominio sea uno **verificado en el proyecto de Google Cloud** antes de abrir
+el canal (por eso no se puede probar desde `localhost`: se verifica recién en
+producción). El SdG **no cae en `VERCEL_URL` ni en el host del pedido**: un host de
+preview se rechazaría con un error de Google que no nombra la variable. Si falta o
+no es una `https` pública, el cron `/api/cron/agenda` lo anota como fallido en
+`sincronizaciones` (módulo `agenda`, recurso `canales`) diciendo qué casillas
+quedaron sin abrir. Si el dominio no está verificado en Google, el mensaje de Google
+queda anotado tal cual, con la casilla.
+
+**El aviso se verifica por un secreto por canal, no por una variable.** Cada canal
+lleva su propio `secreto` en `agenda_canales`, que Google devuelve en el header
+`X-Goog-Channel-Token`; un token que no coincide es `401`. El endpoint tiene que
+estar en la lista de endpoints de máquina de `lib/supabase/middleware.ts`: sin eso
+el login lo intercepta y la Agenda deja de enterarse sin ningún error.
+
+**Un canal muerto se ve igual que un calendario sin movimiento.** El cron corre a
+las 5 UTC, renueva los canales que vencen en menos de 48 horas y registra cada fallo
+con el nombre de la casilla. Si el cartel de la última sincronización de
+`agenda / canales` está en rojo, esa casilla dejó de avisar o está por dejarlo.
+Además, el mismo cron **barre todas las casillas** (`agenda / barrido`): un canal
+recién abierto o vencido no vio lo que pasó mientras no estaba, y sin el barrido
+ese cambio no se detectaría nunca más. El aviso de Google es el movimiento y el
+barrido es la red.
+
 ## Asistente de IA
 
 | Variable | Para qué | De dónde sale |
 |---|---|---|
 | `AI_GATEWAY_API_KEY` | La llave del Vercel AI Gateway, que es por donde el asistente habla con el modelo | En Vercel, si el proyecto tiene el Gateway habilitado, se inyecta sola vía OIDC y no hace falta cargarla. En local sí hace falta: se saca del panel de Vercel, **AI Gateway → API keys**. Sin ella, la ruta `/api/asistente` devuelve el error del proveedor tal cual, que es lo que corresponde. **Desde el 05/10/2026 también está cargada explícitamente** en Production y Preview: no porque el OIDC no alcance, sino porque una variable que está es más fácil de mirar que una que se inyecta sola |
 | `ASISTENTE_MODELO` | Con qué modelo contesta el asistente. **Opcional**: sin ella usa `anthropic/claude-sonnet-5`, que es el que corresponde | Sólo se carga para probar sin créditos (ver abajo). Borrarla vuelve al modelo bueno |
+| `CUADERNO_MODELO` | Con qué modelo lee el cuaderno de Piparo (`/mantenimiento/partes-contratista`). **Opcional**: sin ella usa `anthropic/claude-sonnet-5`, que es el que corresponde. Usa la misma `AI_GATEWAY_API_KEY` | Sólo se carga para probar la cañería sin créditos: con una llave del tier gratuito la lectura falla con el 403 de arriba. `google/gemini-2.5-flash` anduvo (02/11/2026) y **su lectura no sirve para juzgar la calidad**: se equivoca de año, de día y pega un «Hs» al número. Borrarla vuelve al modelo bueno |
 
 ### Probar el asistente sin comprar créditos
 
@@ -273,11 +340,16 @@ SHEETS_WEBHOOK_SECRET=
 GOOGLE_SHEETS_COMPRAS_ID=1hnfYHaWBprT9UGOETSoQ9GQCl3B1ZezPr5FPbCrUO80
 GOOGLE_SHEETS_COMPRAS_FORMULARIO_ID=1T551q99JfhbXeYzGRbkhcZd6wwc4oh4v83UxPIGFLVM
 GOOGLE_SHEETS_SEGUIMIENTO_ID=1TS3JYzTF2M_XTlaqaACphSdSXc5K5rh6b6UsAXBSYx8
+GOOGLE_SHEETS_RESPALDO_ID=
 GOOGLE_SERVICE_ACCOUNT_JSON=
 GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID=
+GOOGLE_DRIVE_PCROBOT_FOLDER_ID=
+GOOGLE_DRIVE_SYH_FOTOS_FOLDER_ID=
 NEXT_PUBLIC_WEBPUSH_VAPID_PUBLIC_KEY=
 WEBPUSH_VAPID_PRIVATE_KEY=
 WEBPUSH_CONTACT_EMAIL=
+SDG_CORREO_URL=
+SDG_CORREO_SECRET=
 ```
 
 `GOOGLE_SERVICE_ACCOUNT_JSON` es la única incómoda: el JSON va **entero y en una

@@ -194,3 +194,36 @@ describe("los lugares de descarga", () => {
     expect(LUGARES_DE_DESCARGA).toEqual(["ARRIBA", "ABAJO"]);
   });
 });
+
+/*
+ * `USER_ENTERED` interpreta lo que arranca con `=`, `+`, `-` o `@`. El
+ * precedente es del 19/10/2026: un lazo de IMPORTRANGE dejo las once pestanas
+ * de Compras en blanco todo el dia, sin que nadie escribiera una formula.
+ */
+describe("la recepcion no deja entrar una formula", () => {
+  it("escapa las notas y el lugar de descarga", () => {
+    const celdas = celdasDeLaRecepcion({
+      fecha: "2026-09-11",
+      proveedor: "Bruzzone",
+      toneladas: 19.79,
+      notas: '=IMPORTRANGE("https://x";"A1")',
+      odooNombre: "P01615",
+      lugarDescarga: "-ARRIBA",
+    });
+
+    expect(celdas.find((c) => c.columna === 3)?.valor)
+      .toBe("'=IMPORTRANGE(\"https://x\";\"A1\")");
+    expect(celdas.find((c) => c.columna === 6)?.valor).toBe("'-ARRIBA");
+  });
+
+  /* Las toneladas alimentan la formula del total: no se tocan. */
+  it("las toneladas y la fecha no se escapan", () => {
+    const celdas = celdasDeLaRecepcion({
+      fecha: "2026-09-11", proveedor: "Bruzzone", toneladas: 19.79,
+      notas: "Carbon de Coke", odooNombre: "P01615", lugarDescarga: "ARRIBA",
+    });
+    expect(celdas.find((c) => c.columna === 2)?.valor).toBe("19,79");
+    expect(celdas.find((c) => c.columna === 0)?.valor).toBe("11/9/2026");
+  });
+});
+
