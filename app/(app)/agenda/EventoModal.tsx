@@ -6,7 +6,7 @@ import { esCorreo } from "@/lib/agenda/evento";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import {
   cruzaLaMedianoche, diaYHoraDe, horarioDelEvento, horarioParaGuardar, leerRespuestaDeEscritura,
-  type EventoVista, type HorarioOriginal,
+  unaHoraDespues, type EventoVista, type HorarioOriginal,
 } from "@/lib/agenda/vista";
 
 export interface UsuarioInvitable {
@@ -35,10 +35,16 @@ export interface UsuarioInvitable {
  * se le pasa la advertencia a la pantalla, que no la puede perder.
  */
 export default function EventoModal({
-  evento, usuarios, onCerrar, onGuardado, onFallo,
+  evento, arranque, usuarios, onCerrar, onGuardado, onFallo,
 }: {
   /** Sin evento es un alta. */
   evento: EventoVista | null;
+  /**
+   * Con qué día y hora arranca un **alta**, cuando la persona hizo clic en un
+   * hueco de la grilla: reemplaza al hoy y las 09:00 de siempre. El «hasta» sale
+   * de sumarle una hora. En una edición no se mira: manda el evento.
+   */
+  arranque?: { dia: string; desde: string };
   usuarios: UsuarioInvitable[];
   onCerrar: () => void;
   /** Guardó. `advertencia` es lo que Google dijo, si algo; la pantalla recarga sola. */
@@ -58,9 +64,9 @@ export default function EventoModal({
   const cruza = evento ? cruzaLaMedianoche(evento.inicio, evento.fin) : false;
 
   const [titulo, setTitulo] = useState(evento?.titulo ?? "");
-  const [dia, setDia] = useState(inicial?.i.dia ?? hoyEnArgentina());
-  const [desde, setDesde] = useState(inicial?.i.hora ?? "09:00");
-  const [hasta, setHasta] = useState(inicial?.f.hora ?? "10:00");
+  const [dia, setDia] = useState(inicial?.i.dia ?? arranque?.dia ?? hoyEnArgentina());
+  const [desde, setDesde] = useState(inicial?.i.hora ?? arranque?.desde ?? "09:00");
+  const [hasta, setHasta] = useState(inicial?.f.hora ?? (arranque ? unaHoraDespues(arranque.desde) : "10:00"));
   const [lugar, setLugar] = useState(evento?.lugar ?? "");
   const [descripcion, setDescripcion] = useState(evento?.descripcion ?? "");
   const [invitados, setInvitados] = useState<string[]>(evento?.invitados ?? []);

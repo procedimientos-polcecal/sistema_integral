@@ -124,8 +124,8 @@ export const DIAS_DE_HISTORIAL = 30;
  * Una agenda crece sin techo, así que la pantalla no pide todo lo que la
  * persona ve desde siempre sino lo que importa: lo que viene y el último mes.
  * Quedan afuera los eventos
- * viejos; **no los divergidos**, que se piden siempre (ver `traerEventos`):
- * una alerta no puede esconderse por antigua.
+ * viejos; **no los divergidos ni los pendientes de Google**, que se piden
+ * siempre (ver `traerEventos`): una alerta no puede esconderse por antigua.
  */
 export function corteDelHistorial(ahora: Date = new Date()): string {
   return new Date(ahora.getTime() - DIAS_DE_HISTORIAL * 24 * 60 * 60_000).toISOString();
@@ -406,4 +406,16 @@ export function horarioDelEvento(inicioIso: string, finIso: string): string {
   const f = diaYHoraDe(finIso);
   if (i.dia === f.dia) return `${etiquetaDelDia(i.dia)} · ${i.hora} a ${f.hora}`;
   return `${etiquetaDelDia(i.dia)} ${i.hora} a ${etiquetaDelDia(f.dia)} ${f.hora}`;
+}
+
+/**
+ * La hora de fin que se propone al hacer clic en un hueco: una hora después de
+ * `desde` (`HH:mm`). A las 23 no hay «24:00» —un `<input type="time">` no lo
+ * acepta— y se queda en 23:59, que sigue dentro del mismo día: el formulario es
+ * de un solo día.
+ */
+export function unaHoraDespues(desde: string): string {
+  const [h, m] = desde.split(":").map(Number);
+  if (h >= 23) return "23:59";
+  return `${String(h + 1).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }

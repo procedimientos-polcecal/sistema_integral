@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
 import { divergenciaVista } from "./pedido";
-import { aEventoVista, corteDelHistorial, type EventoVista, type FilaCruda } from "./vista";
+import { aEventoVista, type EventoVista, type FilaCruda } from "./vista";
 
 /**
  * Los eventos que muestra la pantalla de la Agenda.
@@ -12,9 +12,18 @@ import { aEventoVista, corteDelHistorial, type EventoVista, type FilaCruda } fro
  * que corran las policies: cada uno ve lo que creó y aquello a lo que lo
  * invitaron. Una agenda no tiene techo, de ahí la ventana.
  *
- * La ventana pide **lo que no terminó, el último mes y todo lo divergido**, sea
- * de cuando sea: una alerta no puede esconderse por antigua. `historial: true`
- * saca la ventana y trae todo.
+ * **La ventana la fija quien llama**, con `desde`: lo que termina desde ese
+ * instante, y además **todo lo divergido y todo lo pendiente**, sea de cuando
+ * sea. Antes la función calculaba su propio corte (el último mes), y eso no
+ * sobrevive a un calendario por el que se navega: mirar una semana de hace dos
+ * meses habría vuelto vacío, sin avisar. Ahora la semana que se mira y el corte
+ * del historial los combina `desdeParaLeer`, y esta función no decide nada.
+ *
+ * Los pendientes (`google_pendiente`: se guardó en el SdG y nunca llegó a
+ * Google) se traen igual que los divergidos, y no por simetría: la banda de
+ * alertas de arriba de la grilla los nombra, y una promesa sobre una fila que la
+ * consulta no leyó es una promesa falsa. Una alerta no puede esconderse por
+ * antigua. `historial: true` saca la ventana y trae todo.
  *
  * `usuarios!dueno_id` y no `usuarios`: `agenda_divergencias_vistas` es una tabla
  * puente entre `agenda_eventos` y `usuarios`, así que el embed pelado contesta
@@ -23,22 +32,22 @@ import { aEventoVista, corteDelHistorial, type EventoVista, type FilaCruda } fro
  */
 export async function traerEventos(
   supabase: SupabaseClient,
-  opciones: { historial: boolean; directorio: ReadonlyMap<string, string>; ahora?: Date }
+  opciones: { historial: boolean; desde: string; directorio: ReadonlyMap<string, string> }
 ): Promise<EventoVista[]> {
-  const corte = corteDelHistorial(opciones.ahora);
-
   const filas = await traerTodo<FilaCruda & { divergencia_el: string | null; agenda_divergencias_vistas?: { divergencia_el: string }[] }>(
-    (desde, hasta) => {
+    (primera, ultima) => {
       const consulta = supabase
         .from("agenda_eventos")
         .select(
           "*, agenda_invitados(email, usuario_id), usuarios!dueno_id(nombre, apellido), agenda_divergencias_vistas(divergencia_el)"
         );
-      return (opciones.historial ? consulta : consulta.or(`fin.gte.${corte},divergencia.not.is.null`))
+      return (opciones.historial
+        ? consulta
+        : consulta.or(`fin.gte.${opciones.desde},divergencia.not.is.null,google_pendiente.not.is.null`))
         // El id desempata: sin un orden total, la paginación puede repetir o saltear filas.
         .order("inicio", { ascending: true })
         .order("id", { ascending: true })
-        .range(desde, hasta);
+        .range(primera, ultima);
     }
   );
 
