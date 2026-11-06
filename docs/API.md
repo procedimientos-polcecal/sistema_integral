@@ -136,23 +136,35 @@ de Google» de [CLAUDE.md](../CLAUDE.md). Lo que hay que saber para leer una:
 con `revisarElSecreto()`, que **falla cerrado** —sin la variable configurada
 devuelve 503 en vez de quedar abierto—.
 
-**Y acá hay algo que conviene saber antes de tocar un cron: hay dos relojes.**
+**Desde el 05/11/2026 hay un solo reloj, y es `vercel.json`.** Hasta ese día
+había dos y seis endpoints se disparaban desde los dos lados, así que el número
+de veces que corría una sincronización no salía de un solo archivo.
 
-| | Cuántos | Cuáles |
+| | Cuántos | Cadencia |
 |---|---|---|
-| Sólo Vercel (`vercel.json`) | 7 | agenda, avisos-diarios, calidad-sync, produccion-molinos-sync, remises-notificaciones, rrhh-lenox-sync, syh-respaldo-de-fotos |
-| Sólo GitHub Actions | 5 | calidad-envases-bajada, calidad-envases-sync, respaldo-sheets, rrhh-recalculo, taller-vial-partes-sync |
-| **Los dos a la vez** | 6 | cantera-acarreo-sync, compras-sync, facturacion-sync, inventario-sync, mantenimiento-sync, taller-vial-sync |
+| Sincronizaciones | 11 | **cada 10 minutos**, escalonadas un minuto cada una |
+| `rrhh-recalculo` | 1 | cada 6 horas |
+| Diarios, y no se aceleran | 4 | avisos-diarios, remises-notificaciones, rrhh-lenox-sync, syh-respaldo-de-fotos |
+| En GitHub Actions | 2 | sólo los respaldos: `backup.yml` y `respaldo-sheets.yml` |
 
-Las seis de la última fila **se disparan desde dos lados**. Las
-sincronizaciones son idempotentes, así que correr de más no rompe nada, pero
-el número de veces que corre una no sale de un solo archivo — y buscarlo en
-`vercel.json` solo da una respuesta incompleta.
+Tres cosas de ese cambio que no se deducen del archivo:
 
-Y una medida que ya está anotada: **los crons de Actions no corren cuando
-dicen.** Declaran cada 15 minutos y en los hechos corren cada 3 a 5 horas;
-GitHub no garantiza la puntualidad de `schedule`. Para algo que tiene que pasar
-a una hora, el reloj de Vercel es el que cumple.
+- **El motivo de la arquitectura anterior era falso.** Decía, en siete
+  workflows y seis documentos, que el plan Hobby de Vercel sólo admite crons
+  diarios. El plan es Pro. Se descubrió midiendo: `vercel.json` tenía trece
+  crons y cinco disparaban todos los días a la hora exacta, y Hobby admite dos.
+- **Los crons de Actions no corren cuando dicen.** Declaraban cada 15 o 20
+  minutos y corrían **cada 4 a 8 horas** (medido con `gh run list` el
+  05/11/2026). GitHub no garantiza la puntualidad de `schedule`. Para algo que
+  tiene que pasar a una hora, el reloj de Vercel es el que cumple.
+- **El escalonado por minuto no es prolijidad.** Las once sincronizaciones usan
+  la misma cuenta de servicio de Google, y el límite de lectura de Sheets es de
+  60 pedidos por minuto **y por usuario**: dispararlas juntas las hace chocar
+  entre ellas.
+
+Los workflows conservan su `workflow_dispatch` y perdieron sólo el `schedule`:
+siguen sirviendo para disparar una sincronización a mano. Si alguno recupera un
+`schedule`, ese endpoint vuelve a tener dos relojes y nada lo avisa.
 
 ### Webhooks
 
