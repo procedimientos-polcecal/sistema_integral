@@ -104,7 +104,7 @@ async function leerJson(res: Response): Promise<CuerpoDeLaRuta> {
 }
 
 export default function HiloDeMensajes({
-  tipo, id, aclaracion,
+  tipo, id, aclaracion, alCambiarElBorrador,
 }: {
   tipo: TipoDeEntidad;
   id: string;
@@ -114,6 +114,13 @@ export default function HiloDeMensajes({
    * componente porque sólo él sabe qué tiene al lado.
    */
   aclaracion?: string;
+  /**
+   * Avisa cuando hay algo escrito sin enviar —texto o menciones elegidas— y
+   * cuando deja de haberlo. Lo usa quien monta el hilo dentro de algo que se
+   * puede cerrar (un diálogo), para no tirar el borrador sin avisar: el estado
+   * del campo vive acá y desde afuera no se ve. Debe ser una función estable.
+   */
+  alCambiarElBorrador?: (hayBorrador: boolean) => void;
 }) {
   // ── El hilo ────────────────────────────────────────────────────────────────
   const [mensajes, setMensajes] = useState<MensajeParaLaPantalla[]>([]);
@@ -195,6 +202,11 @@ export default function HiloDeMensajes({
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
   const [resumen, setResumen] = useState<ResumenDelEnvio | null>(null);
+
+  const hayBorrador = texto.trim() !== "" || mencionados.length > 0;
+  useEffect(() => {
+    alCambiarElBorrador?.(hayBorrador);
+  }, [hayBorrador, alCambiarElBorrador]);
 
   // Los correos salen después de la respuesta: al enviar no se sabe si llegaron.
   // Se vuelve a leer el hilo un rato después para que `pendiente` se resuelva.

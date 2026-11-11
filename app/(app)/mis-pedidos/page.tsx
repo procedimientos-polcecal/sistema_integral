@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import MisPedidosClient from "./MisPedidosClient";
+import MisPedidosClient, { type ProblemaDelEnlace } from "./MisPedidosClient";
 
 /**
  * Fuera del módulo Compras a propósito: cualquier usuario del sistema puede
@@ -53,32 +53,37 @@ export default async function MisPedidosPage({
   // enlace. Lo lee con la sesión: la lectura de `compras_requerimientos` es de
   // todo autenticado, a propósito (migración 018).
   let conversacionInicial: { id: string; nroRi: number; descripcion: string } | null = null;
-  let pedidoNoEncontrado = false;
+  // Tres cosas que pueden salir mal y que **no son lo mismo**: el enlace está
+  // mal escrito, el pedido no existe, o la base no contestó. Decir «ya no
+  // existe» de las tres le haría buscar un pedido que está ahí a quien sólo tuvo
+  // una caída, y es lo que se evita acá.
+  let problemaDelEnlace: ProblemaDelEnlace | null = null;
   if (typeof pedidoDelEnlace === "string" && pedidoDelEnlace !== "") {
-    // Un id que no tiene forma de uuid no se manda a la base: daría un error de
-    // tipo que no distingue «no existe» de «se cayó».
-    const esUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pedidoDelEnlace);
-    const { data: pedido } = esUuid
-      ? await supabase
-          .from("compras_requerimientos")
-          .select("id, nro_ri, descripcion")
-          .eq("id", pedidoDelEnlace)
-          .maybeSingle()
-      : { data: null };
-    if (pedido) {
-      conversacionInicial = { id: pedido.id, nroRi: pedido.nro_ri, descripcion: pedido.descripcion };
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pedidoDelEnlace)) {
+      // Un id sin forma de uuid no se manda a la base: daría un error de tipo
+      // que ya no se distinguiría de una caída.
+      problemaDelEnlace = { tipo: "no-valido" };
     } else {
-      pedidoNoEncontrado = true;
+      const { data: pedido, error } = await supabase
+        .from("compras_requerimientos")
+        .select("id, nro_ri, descripcion")
+        .eq("id", pedidoDelEnlace)
+        .maybeSingle();
+      if (error) {
+        // Lo que dijo la base, sin traducir.
+        problemaDelEnlace = { tipo: "error", detalle: error.message };
+      } else if (pedido) {
+        conversacionInicial = { id: pedido.id, nroRi: pedido.nro_ri, descripcion: pedido.descripcion };
+      } else {
+        problemaDelEnlace = { tipo: "no-existe" };
+      }
     }
   }
 
   return (
     <MisPedidosClient
-      // Un montaje por enlace: si ya se está en Mis pedidos y llega otro
-      // `?pedido=`, el estado inicial del cliente no se recalcularía solo.
-      key={typeof pedidoDelEnlace === "string" ? pedidoDelEnlace : ""}
       conversacionInicial={conversacionInicial}
-      pedidoNoEncontrado={pedidoNoEncontrado}
+      problemaDelEnlace={problemaDelEnlace}
       usuarioId={user.id}
       misAreas={(mias ?? []).map((a) => a.area_id as string)}
       areas={areas ?? []}

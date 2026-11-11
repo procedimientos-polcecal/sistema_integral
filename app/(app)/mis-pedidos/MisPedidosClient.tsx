@@ -42,13 +42,30 @@ const POR_PAGINA = 50;
  * y mandarlos todos al navegador para mostrar cincuenta es lo que hace que una
  * pantalla tarde tres segundos en abrir.
  */
+/** Por qué no se pudo abrir el pedido de un `?pedido=`: tres causas que se dicen distinto. */
+export type ProblemaDelEnlace =
+  | { tipo: "no-valido" }
+  | { tipo: "no-existe" }
+  | { tipo: "error"; detalle: string };
+
+function textoDelProblema(p: ProblemaDelEnlace): string {
+  switch (p.tipo) {
+    case "no-valido":
+      return "El enlace no es válido: el identificador del pedido está mal escrito. Podés buscarlo por su N° de RI acá abajo.";
+    case "no-existe":
+      return "El pedido al que llevaba ese enlace ya no existe. Podés buscarlo por su N° de RI acá abajo.";
+    case "error":
+      return `No se pudo abrir el pedido del enlace (${p.detalle}). Probá de nuevo en un rato, o buscalo por su N° de RI acá abajo.`;
+  }
+}
+
 export default function MisPedidosClient({
-  usuarioId, misAreas, areas, empresas, ubicaciones, conversacionInicial = null, pedidoNoEncontrado = false,
+  usuarioId, misAreas, areas, empresas, ubicaciones, conversacionInicial = null, problemaDelEnlace = null,
 }: {
   /** El pedido cuya conversación hay que abrir al cargar: el del enlace de un correo. */
   conversacionInicial?: { id: string; nroRi: number; descripcion: string } | null;
-  /** Vino un `?pedido=` y no existe: se dice, en vez de mostrar la lista como si nada. */
-  pedidoNoEncontrado?: boolean;
+  /** Vino un `?pedido=` y no se pudo abrir: se dice por qué, en vez de mostrar la lista como si nada. */
+  problemaDelEnlace?: ProblemaDelEnlace | null;
   usuarioId: string;
   /** Los ids de las áreas de esta persona. Vacío = todavía no se le asignó. */
   misAreas: string[];
@@ -63,6 +80,17 @@ export default function MisPedidosClient({
   // la lista se recarga al cambiar de página y el pedido puede ya no estar.
   const [conversacion, setConversacion] =
     useState<{ id: string; nroRi: number; descripcion: string } | null>(conversacionInicial);
+  // Si ya se está en Mis pedidos y llega otro `?pedido=` (la página se vuelve a
+  // pedir al servidor sin remontar esto), el estado de arriba no se recalcula
+  // solo. Se ajusta durante el render comparando contra el valor previo, y no
+  // con un `key` en la página: un `key` que sale de la URL cambia cuando se
+  // cierra el diálogo y se limpia `?pedido=`, y remontaría la pantalla
+  // llevándose el filtro, la página y la búsqueda de quien ya estaba mirando.
+  const [inicialPrevia, setInicialPrevia] = useState(conversacionInicial?.id ?? null);
+  if ((conversacionInicial?.id ?? null) !== inicialPrevia) {
+    setInicialPrevia(conversacionInicial?.id ?? null);
+    if (conversacionInicial) setConversacion(conversacionInicial);
+  }
 
   // Arranca en el área propia, que es a lo que se entra. Salvo que no tenga
   // ninguna asignada: ahí mostrar una lista vacía sería un callejón, así que
@@ -206,9 +234,9 @@ export default function MisPedidosClient({
         )}
       </div>
 
-      {pedidoNoEncontrado && (
+      {problemaDelEnlace && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          El pedido al que llevaba ese enlace ya no existe. Podés buscarlo por su N° de RI acá abajo.
+          {textoDelProblema(problemaDelEnlace)}
         </div>
       )}
 

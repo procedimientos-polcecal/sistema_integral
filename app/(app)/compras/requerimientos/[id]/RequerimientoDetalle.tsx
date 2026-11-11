@@ -352,7 +352,7 @@ export default function RequerimientoDetalle({
               id={r.id}
               aclaracion={
                 "Es una conversación con otras personas: no cambia el estado del pedido, no queda en " +
-                "el historial de al lado y no llega a la planilla de Compras. Un requerimiento lo ve " +
+                "el historial de este pedido y no llega a la planilla de Compras. Un requerimiento lo ve " +
                 "toda persona con acceso al sistema, y este hilo también."
               }
             />
