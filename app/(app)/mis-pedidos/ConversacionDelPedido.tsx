@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import HiloDeMensajes from "@/components/HiloDeMensajes";
 
 /**
@@ -33,13 +33,24 @@ export default function ConversacionDelPedido({
   descripcion: string;
   onCerrar: () => void;
 }) {
+  // Lo escrito y no enviado vive adentro del hilo; avisa acá para no tirarlo
+  // sin que se note. Mismo criterio que la ficha de la condición: con cambios
+  // sin guardar, el botón dice «Descartar y cerrar».
+  const [hayBorrador, setHayBorrador] = useState(false);
+
   useEffect(() => {
     function alTeclear(e: KeyboardEvent) {
-      if (e.key === "Escape") onCerrar();
+      // Escape **no** cierra el diálogo si ya lo atendió otro, ni si hay un
+      // borrador. El desplegable de menciones cierra su panel con Escape y hace
+      // `preventDefault` sin frenar la propagación: sin esta guarda, cerrar el
+      // panel cerraba también el diálogo y se perdía lo escrito. Y apretarlo
+      // desde el campo de texto con algo escrito haría lo mismo, sin avisar.
+      if (e.key !== "Escape" || e.defaultPrevented || hayBorrador) return;
+      onCerrar();
     }
     window.addEventListener("keydown", alTeclear);
     return () => window.removeEventListener("keydown", alTeclear);
-  }, [onCerrar]);
+  }, [onCerrar, hayBorrador]);
 
   return (
     <div
@@ -55,7 +66,7 @@ export default function ConversacionDelPedido({
             <p className="break-words text-sm text-slate-500">{descripcion}</p>
           </div>
           <button type="button" onClick={onCerrar} className="btn-secondary shrink-0">
-            Cerrar
+            {hayBorrador ? "Descartar y cerrar" : "Cerrar"}
           </button>
         </div>
 
@@ -63,6 +74,7 @@ export default function ConversacionDelPedido({
           <HiloDeMensajes
             tipo="requerimiento"
             id={id}
+            alCambiarElBorrador={setHayBorrador}
             aclaracion={
               "Es una conversación con otras personas: no cambia el estado del pedido ni llega a " +
               "la planilla de Compras. Un requerimiento lo ve toda persona con acceso al sistema, " +
