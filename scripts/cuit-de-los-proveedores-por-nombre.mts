@@ -43,9 +43,20 @@ async function traerTodas<T>(consulta: string): Promise<T[]> {
     const r = await fetch(`${URL_BASE}/rest/v1/${consulta}`, {
       headers: { ...CABECERA, Range: `${desde}-${desde + 999}` },
     });
-    const lote = (await r.json()) as T[];
-    if (!Array.isArray(lote) || !lote.length) break;
-    todas.push(...lote);
+    const lote = await r.json();
+    /*
+     * PostgREST contesta un objeto con `message` cuando algo falla —una
+     * columna que no existe, por ejemplo—, y tratarlo como lista vacía hacía
+     * que el script dijera «0 proveedores», que es indistinguible de un padrón
+     * vacío. Un error se dice.
+     */
+    if (!Array.isArray(lote)) {
+      throw new Error(
+        `La base contestó: ${(lote as { message?: string })?.message ?? JSON.stringify(lote).slice(0, 200)}`
+      );
+    }
+    if (!lote.length) break;
+    todas.push(...(lote as T[]));
     if (lote.length < 1000) break;
   }
   return todas;
