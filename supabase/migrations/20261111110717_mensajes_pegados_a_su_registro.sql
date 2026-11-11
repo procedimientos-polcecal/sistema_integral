@@ -21,6 +21,13 @@
 -- huérfano es posible; quien lo lea tiene que tolerar un `entidad_id` que ya no
 -- existe.
 --
+-- Los mensajes no se editan ni se borran, y no es descuido: un mensaje con
+-- menciones ya mandó un correo que no se desmanda, así que borrarlo deja a la
+-- otra persona con un texto que en el sistema no existe, y editarlo hace que el
+-- correo y el hilo digan cosas distintas. Un error se corrige con otro mensaje.
+-- (Esto no copia a `ordenes_trabajo_notas`, que sí deja borrar la propia nota:
+-- allí nadie recibió nada por correo.)
+--
 -- No es un chat. Quien manda un mensaje y menciona a alguien cree que le avisó,
 -- y ese «cree» es lo único que esta feature no puede permitir que sea falso:
 -- por eso la mención lleva anotado si el aviso salió (ver más abajo).
@@ -92,22 +99,52 @@ alter table mensajes_menciones enable row level security;
 
 -- ---------- mensajes ----------
 --
--- La lectura es para cualquier autenticado y nada más, y **no es un olvido**:
--- quien decide si alguien puede ver un hilo es la ruta, porque el permiso
--- depende del registro al que apunta —una OT la ve quien ve Mantenimiento, un
--- requerimiento quien ve Compras— y eso RLS no lo sabe: `entidad_id` no tiene
--- foreign key, así que no hay a qué tabla mirar desde la policy. Las rutas leen
--- con el cliente que corresponda y aplican el permiso del módulo antes.
--- Las llamadas a función van envueltas en un `select`: pelada, Postgres evalúa
--- el `USING` una vez por fila (ver 20261014090512).
+-- RLS acota por **tipo**, y el permiso fino del registro lo pone la ruta.
+-- Dos de los tres permisos dependen del usuario y no del registro —una OT la
+-- ve quien tiene `mant_puede_ver()`, una condición insegura quien tiene
+-- `tiene_acceso_syh()`—, así que una policy los puede aplicar mirando
+-- `entidad_tipo`, y se aplican: sin esto, cualquiera con sesión que le hablara
+-- a PostgREST con su propio token leería todos los hilos, también los de
+-- Seguridad e Higiene y Mantenimiento que su rol no ve. Lo que RLS no puede es
+-- lo de más adentro: `entidad_id` no tiene foreign key, así que desde acá no
+-- hay a qué tabla mirar para saber si *ese* registro en particular se puede
+-- ver. Eso lo decide la ruta, leyendo el registro, antes de devolver el hilo.
+--
+-- El `else true` es el requerimiento, y es la regla de ese módulo y no un
+-- hueco: `compras_requerimientos` tiene el SELECT abierto a propósito desde la
+-- 018, porque el circuito de compras es transversal a toda la empresa. Un hilo
+-- de requerimiento lo ven todos los que entran al sistema, igual que el
+-- requerimiento. (El `check` de `entidad_tipo` impide que llegue otro tipo.)
+--
+-- Cada llamada va envuelta en un `select`: pelada, Postgres evalúa el `USING`
+-- una vez por fila (ver 20261014090512). El `case` depende de la fila
+-- (`entidad_tipo`) y eso está bien; lo que no puede evaluarse por fila es la
+-- función.
 drop policy if exists mensajes_leer on mensajes;
 create policy mensajes_leer on mensajes
-  for select to authenticated using (true);
+  for select to authenticated using (
+    case entidad_tipo
+      when 'orden_trabajo' then (select public.mant_puede_ver())
+      when 'condicion_insegura' then (select public.tiene_acceso_syh())
+      else true
+    end
+  );
 
--- Escribir, sólo a nombre propio: nadie manda un mensaje firmado por otro.
+-- Escribir, sólo a nombre propio —nadie manda un mensaje firmado por otro— y
+-- sólo en un hilo que el permiso del tipo deja ver. Escribir en una OT sin
+-- poder verla no tiene sentido, y tampoco se le puede dejar abierto al que le
+-- hable directo a PostgREST. (Ver más arriba por qué el requerimiento es
+-- `true`.)
 drop policy if exists mensajes_insertar on mensajes;
 create policy mensajes_insertar on mensajes
-  for insert to authenticated with check (creado_por = (select auth.uid()));
+  for insert to authenticated with check (
+    creado_por = (select auth.uid())
+    and case entidad_tipo
+          when 'orden_trabajo' then (select public.mant_puede_ver())
+          when 'condicion_insegura' then (select public.tiene_acceso_syh())
+          else true
+        end
+  );
 
 -- **No hay policy de update ni de delete**, y es la decisión. Un mensaje con
 -- menciones ya mandó un correo, y un correo no se desmanda: borrar el mensaje
@@ -120,10 +157,16 @@ create policy mensajes_insertar on mensajes
 -- y borrarla no deja a nadie con un texto que ya no está. Acá sí.
 
 -- ---------- mensajes_menciones ----------
--- Leer: igual que arriba, la ruta decide quién ve qué hilo.
+-- Leer: una mención se ve si se ve su mensaje. El `exists` consulta `mensajes`
+-- con el usuario que pregunta, así que le aplica la policy de arriba y las
+-- menciones heredan el mismo recorte por tipo —también `aviso_fallo`, que
+-- guarda lo que dijo el servicio de correo y puede traer direcciones—. Depende
+-- de la fila (`mensaje_id`), así que no se envuelve.
 drop policy if exists mensajes_menciones_leer on mensajes_menciones;
 create policy mensajes_menciones_leer on mensajes_menciones
-  for select to authenticated using (true);
+  for select to authenticated using (
+    exists (select 1 from mensajes m where m.id = mensaje_id)
+  );
 
 -- Insertar una mención: sólo sobre un mensaje propio. Depende de la fila
 -- (`mensaje_id`), así que esta subconsulta **no se envuelve**: es el caso
