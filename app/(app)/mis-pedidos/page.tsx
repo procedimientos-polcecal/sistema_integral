@@ -23,8 +23,14 @@ import MisPedidosClient from "./MisPedidosClient";
  * abrir. Acá quedan sólo los catálogos del formulario, que son chicos y se
  * necesitan enseguida para poder pedir.
  */
-export default async function MisPedidosPage() {
+export default async function MisPedidosPage({
+  searchParams,
+}: {
+  /** `pedido`: el id del requerimiento al que lleva el enlace de un correo de mensajería. */
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const supabase = await createClient();
+  const pedidoDelEnlace = (await searchParams).pedido;
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -40,8 +46,39 @@ export default async function MisPedidosPage() {
       supabase.from("usuario_areas_compras").select("area_id").eq("usuario_id", user.id),
     ]);
 
+  // El pedido del enlace se resuelve **acá y por su id**, no buscándolo entre los
+  // que trae el cliente: ése trae una página de 50 filtrada por área o búsqueda,
+  // y el pedido por el que avisaron puede ser de otra área o estar en la página
+  // 30. Llegar del correo a una lista que no lo contiene sería peor que no tener
+  // enlace. Lo lee con la sesión: la lectura de `compras_requerimientos` es de
+  // todo autenticado, a propósito (migración 018).
+  let conversacionInicial: { id: string; nroRi: number; descripcion: string } | null = null;
+  let pedidoNoEncontrado = false;
+  if (typeof pedidoDelEnlace === "string" && pedidoDelEnlace !== "") {
+    // Un id que no tiene forma de uuid no se manda a la base: daría un error de
+    // tipo que no distingue «no existe» de «se cayó».
+    const esUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pedidoDelEnlace);
+    const { data: pedido } = esUuid
+      ? await supabase
+          .from("compras_requerimientos")
+          .select("id, nro_ri, descripcion")
+          .eq("id", pedidoDelEnlace)
+          .maybeSingle()
+      : { data: null };
+    if (pedido) {
+      conversacionInicial = { id: pedido.id, nroRi: pedido.nro_ri, descripcion: pedido.descripcion };
+    } else {
+      pedidoNoEncontrado = true;
+    }
+  }
+
   return (
     <MisPedidosClient
+      // Un montaje por enlace: si ya se está en Mis pedidos y llega otro
+      // `?pedido=`, el estado inicial del cliente no se recalcularía solo.
+      key={typeof pedidoDelEnlace === "string" ? pedidoDelEnlace : ""}
+      conversacionInicial={conversacionInicial}
+      pedidoNoEncontrado={pedidoNoEncontrado}
       usuarioId={user.id}
       misAreas={(mias ?? []).map((a) => a.area_id as string)}
       areas={areas ?? []}
