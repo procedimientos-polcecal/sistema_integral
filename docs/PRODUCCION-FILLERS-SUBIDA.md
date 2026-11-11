@@ -466,7 +466,7 @@ dependencias: es un archivo suelto, no hace falta el repo ni `npm install`.
 
 # Cómo se comprueba que sigue andando
 
-Tres lugares, de más barato a más caro:
+Cuatro lugares, de más barato a más caro:
 
 - **El log.** `docker compose logs` en la variante con contenedor —ya rota, 10
   MB por 3 archivos— o el archivo `.log` en la variante con tarea programada.
@@ -478,7 +478,36 @@ Tres lugares, de más barato a más caro:
 - **El SdG.** Es el control que de verdad importa, porque es el único que mira
   el resultado y no el intento: si el archivo más nuevo de un molino tiene más
   de un día, la importación lo dice. Una tarea que dejó de correr se nota del
-  lado del sistema aunque nadie abra ningún log.
+  lado del sistema aunque nadie abra ningún log. Pero sólo ve los **dos
+  fillers**: los otros cuatro orígenes no los importa nadie, así que ahí este
+  control no existe.
+- **`node historial.mjs`**, que es el que cubre ese hueco. Compara, día por
+  día, lo que el servidor tiene contra lo que está en Drive, para los seis
+  orígenes. Con `--detalle` lista cada día que falta.
+
+**Y lo que ese informe dice NO es "falta subir eso".** Es la parte que hay que
+entender antes de leerlo, porque confundirla lleva a subir 73 MB sin agregar
+un solo dato. Los seis orígenes **acumulan**, así que el archivo de hoy
+contiene lo de los días que faltan. Medido el 11/11/2026:
+
+| Origen | La prueba |
+|---|---|
+| Filler 1 | el zip del 15/09 (que no está en Drive) y el del 11/11 (que sí) arrancan los dos en `26/2/2026;15:21;1201`, y el segundo tiene **5.390 líneas contra 4.129** |
+| Hornos | su planilla de noviembre pasó de **58.713 a 63.746 bytes** en veinte zips, sin bajar nunca |
+| Portería | `PLANILLA PESAJES.xlsx`, de **130.872 a 130.909**, igual |
+
+Entonces un día faltante no cuesta el dato: cuesta **la foto**. No se puede
+saber cómo se veía una planilla el 07/11, y el subidor nunca prometió eso. Lo
+que sí hay que mirar del informe son dos cosas:
+
+- **`ROMPE`**, que sale sólo cuando el archivo **más nuevo** de un origen no
+  está en Drive. Ése es el único caso en que el dato de verdad no llegó.
+- **La racha de días seguidos**, que no dice nada del dato pero sí de la
+  máquina: tres o cuatro días seguidos es la notebook quedándose sin red o
+  apagada, que es exactamente lo que pasó entre el 07 y el 10/11/2026 —dos
+  días sin correr y dos corriendo con los seis orígenes en
+  `UNKNOWN: unknown error, scandir`— y que el log, solo, no deja ver: **una
+  corrida que no ocurrió no escribe ninguna línea.**
 
 # Qué pasa si un día falla
 
