@@ -137,8 +137,12 @@ describe("esLaCorridaCanonica", () => {
   });
 
   it("sin NEXT_PUBLIC_APP_URL no adivina: dice false", () => {
-    // Si faltara en producción, el canónico se marca false y la vista desempata
-    // como hoy. Prefiere, no filtra: equivocarse deja la pantalla como estaba.
+    // Si faltara en producción, el canónico se marca false. La vista sólo
+    // ordena por este dato y desempata como antes: ahí la pantalla queda como
+    // estaba. Pero no es una garantía general: desde el 11/11/2026 la racha de
+    // fallos (`enSincronizaciones`, en saludDeLasSincronizaciones.ts) sí lo
+    // filtra, y un false del canónico deja la racha de todos los recursos
+    // clavada en 1 a la vez. Este test sólo fija que no se adivina.
     expect(esLaCorridaCanonica({ ...CANONICO, NEXT_PUBLIC_APP_URL: undefined })).toBe(false);
   });
 

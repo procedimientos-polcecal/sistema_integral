@@ -160,6 +160,93 @@ lo único que manda correos es Supabase Auth, y sólo sus plantillas de acceso.
 Hace falta un proveedor (Resend, o el SMTP de la casilla corporativa) y esa
 decisión es del usuario.
 
+## La curva de una muestra, y lo que no dice (05/11/2026)
+
+`/calidad/ensayos/curva` responde la pregunta que ningún otro gráfico de
+Ensayos contesta: **qué forma tiene esta muestra**. Indicadores dibuja cómo
+cambia una determinación en el tiempo y obliga a elegir una malla por vez; acá
+los tamices son el eje X, de un solo vistazo, y hay dos gráficos de la misma
+muestra —retenido y acumulado— que comparten una sola selección de tamices. El
+diseño está en
+[el spec](superpowers/specs/2026-11-05-calidad-curva-granulometrica-design.md) y
+el plan en
+[el plan](superpowers/plans/2026-11-05-calidad-curva-granulometrica.md).
+
+Existe por un tamiz concreto: el de `#20` en 6,0 % de la muestra de `Calcio 0-2`
+del 27/10/2026, cuando las otras dieciocho del mes andan entre 20 y 35. Un
+tamiz puede no ser representativo en una muestra puntual, y quien la mira quiere
+sacarlo y ver qué dice el resto. Para eso los tamices se prenden y se apagan.
+
+**No hay migración ni nada que corra una persona**: la exclusión es cómo está
+mirando el gráfico quien lo tiene abierto, no se guarda, y el enlace que se
+comparte lleva el producto y la muestra pero no los tamices apagados.
+
+Esta pantalla **no compara**: es una muestra por vez, a propósito, para que los
+chips de abajo sean inequívocamente los de esa muestra.
+
+### Dos riesgos asumidos, y los dos son de lectura
+
+Ninguno de los dos es un bug ni se arregla con código sin cambiar lo que se
+decidió. Están acá porque son lo único de la pantalla que puede inducir a error
+y no se ven desde el código.
+
+**1. Apagar un tamiz no hace lo mismo en los dos gráficos.** Apagar filtra filas
+de lo que `granulometria()` ya calculó; **nunca recalcula un acumulado**.
+
+- En **retenido**, apagar `#20` saca su 6,0 % y ningún otro punto se mueve: el
+  dato sospechoso desaparece de verdad.
+- En **acumulado**, no. El 41,6 % de `#50` **ya tiene sumado** ese 6,0, y lo
+  mismo el 56 % de `#100` y el 66,4 % de `#200`. Apagar `#20` esconde su punto,
+  pero lo que no convencía **sigue adentro de los tres de la derecha**.
+
+Unir `#12` con `#50` es correcto —dice que el acumulado pasó de 0,9 a 41,6, que
+es lo que se habría medido sin tamizar en `#20`—, pero se lee fácil como si el
+tamiz sospechoso se hubiera ido de los dos gráficos. **Recalcular daría 35,6 %
+en `#50`: un número que nadie midió**, y por eso no se hace; es la misma regla
+que el resto del módulo, donde el valor no se transforma.
+
+Se evaluó marcar el hueco —el punto en gris, o la curva original en punteado
+detrás— y se decidió que no: el acumulado simplemente saltea el tamiz. La
+punteada habría vuelto evidente el riesgo, y quedó afuera sabiendo eso; no es
+un olvido. Lo único que hay es una línea de texto fija bajo el acumulado —esa línea la
+decidió quien redactó el diseño, no salió de la conversación—. Si
+alguna vez se contesta un reclamo con el acumulado de una muestra que tenía
+tamices apagados, ésta es la explicación.
+
+**2. El eje son las mallas que midió la muestra, y la pantalla no avisa cuando
+falta una que el producto declara.** Una muestra de Filler 1 que no midió `#20`
+dibuja cuatro puntos y cuatro chips y se ve perfecta, justamente porque le falta
+algo.
+
+Esto va **al revés** de `acumuladosDelListado()`, que muestra el hueco a
+propósito (ver *Cuántos tamices muestra el listado*): ahí una muestra de un fino
+sin la `#325` es una muestra incompleta, y se ve. Acá la curva muestra lo que se
+midió y no dice qué no se midió; quien use la pantalla para contestar algo tiene
+que saberlo.
+
+Se decidió así porque el eje declarado no se puede usar, y está medido: de **79
+muestras con granulometría, 19 midieron un juego distinto del que declara su
+producto**, en las dos direcciones —a unas les falta una malla declarada, otras
+midieron una de más—. La **`#325` está medida en 13 muestras y declarada por
+ningún producto**, así que un eje armado con las mallas declaradas no podría
+dibujarla nunca.
+
+### Dos cosas que aparecieron construyéndola
+
+- **`granulometria()` devuelve dos `problema` distintos y la pantalla los trata
+  distinto.** «Falta el peso de la muestra tamizada» viene **sin mallas**: no
+  hay chips que armar, y mostrar una fila vacía con dos gráficos en blanco no
+  diría por qué, así que se muestra sólo el texto. «Lo retenido supera el peso
+  de la muestra» viene **con mallas y con puntos**: se avisa en ámbar y **se
+  dibuja igual**, porque es una muestra que se puede mirar y que hay que
+  corregir —es la misma regla de las tres cosas que se muestran en vez de
+  recortarse—. Por eso el eje del acumulado no se corta en 100.
+- **No se dibujan los límites.** `limiteDe()` los resolvería casi gratis, pero
+  hay **2 límites cargados en todo el sistema** y uno solo es granulométrico
+  (`acumulado #200`, máximo 37, de un único producto): esa línea sería invisible
+  en 19 de los 20 productos. Si se cargan límites de verdad, agregarlos es una
+  tarea chica; la pantalla hoy no trae `traerLimites()`.
+
 ## La lista de productos no es el catálogo del núcleo
 
 `productos` tiene las cosas físicas que se despachan. Acá *Filler 1* y *Filler 2*
@@ -230,12 +317,13 @@ retomarlo.
 | Frente | `app/(app)/calidad/ensayos`, `lib/calidad/ensayos`, `app/api/calidad/ensayos` |
 | Las tres cuentas de una línea | `lib/calidad/ensayos/determinaciones.ts` |
 | Retenidos y acumulados | `lib/calidad/ensayos/granulometria.ts` |
+| La curva de una muestra, con los tamices apagados | `lib/calidad/ensayos/curva.ts` |
 | Límites y la muestra evaluada | `lib/calidad/ensayos/limites.ts` — `evaluarMuestra` |
 | Validación de lo que llega | `lib/calidad/ensayos/cuerpoDeLaMuestra.ts` |
 | El juego de tamices | `lib/calidad/ensayos/mallas.ts` |
 | Las lecturas | `lib/calidad/ensayos/consultas.ts`, todas con `traerTodo()` |
 | El formulario, compartido | `app/(app)/calidad/ensayos/FormularioDeMuestra.tsx` |
-| Pantallas | `/calidad/ensayos` (listado), `/nueva` (carga), `/[id]` (detalle), `/productos` y `/limites` (admin) |
+| Pantallas | `/calidad/ensayos` (listado), `/nueva` (carga), `/[id]` (detalle), `/curva` (curva granulométrica por muestra), `/indicadores`, `/reporte`, `/productos` y `/limites` (admin) |
 | Migración | `20261006110617_calidad_ensayos.sql` |
 
 Las cuatro determinaciones se calculan **con las mismas funciones puras en el

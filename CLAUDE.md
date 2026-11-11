@@ -52,7 +52,7 @@ código.
 | Inventario | los tres specs de `docs/superpowers/specs/2026-09-02-inventario-*` |
 | Producción | [docs/PRODUCCION.md](docs/PRODUCCION.md) · [spec](docs/superpowers/specs/2026-09-07-produccion-design.md) — molinos desde el robot (29/10): la sección `## Los molinos` de ese documento · [spec](docs/superpowers/specs/2026-10-21-produccion-molinos-desde-el-robot-design.md) · [plan](docs/superpowers/plans/2026-10-29-produccion-molinos-desde-el-robot.md). Tres cosas que no se deducen del código: **"turno" ahí son los cuatro cortes del contador del robot** (20→00, 00→04, 04→12, 12→20) y no los dos del parte de fábrica —los mismos números de reloj, otra medición: piedra que entra al molino contra producto terminado, y no se suman—; **un día sin filas es planta cerrada, pero un turno en cero dentro de un día con filas es una parada a explicar** (Filler 1 dice lo primero con la ausencia y Filler 2 con ceros); y **la racha de turnos faltantes se corta en el día no operativo y no lo atraviesa** —atravesarlo baja la utilización de Filler 1 de 85,3 % a 82,0 %—. Y la etiqueta `MATERIAL` del robot no se guarda: está mal en el 11,3 % de las toneladas |
 | Despacho | [docs/DESPACHO.md](docs/DESPACHO.md) · [spec](docs/superpowers/specs/2026-09-08-despacho-ordenes-de-carga-design.md) |
-| Calidad | envases: [docs/CALIDAD-ENVASES.md](docs/CALIDAD-ENVASES.md) · [spec](docs/superpowers/specs/2026-09-15-produccion-envases-design.md) · [plan](docs/superpowers/plans/2026-09-15-produccion-envases.md) — carbonilla: [docs/CALIDAD.md](docs/CALIDAD.md) · [spec](docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) · [plan](docs/superpowers/plans/2026-09-16-calidad-stock-de-carbonilla.md) · la planilla manda (13/10): [spec](docs/superpowers/specs/2026-10-13-calidad-la-planilla-manda-design.md) · [plan](docs/superpowers/plans/2026-10-13-calidad-la-planilla-manda.md) — ensayos: [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md) · [spec](docs/superpowers/specs/2026-10-06-calidad-ensayos-design.md) · [plan](docs/superpowers/plans/2026-10-06-calidad-ensayos.md) — histórico: [docs/CALIDAD-HISTORICO.md](docs/CALIDAD-HISTORICO.md) · [spec](docs/superpowers/specs/2026-10-29-calidad-historico-de-determinaciones-design.md) · [plan](docs/superpowers/plans/2026-10-29-calidad-historico-de-determinaciones.md). Lo que no se deduce del código: **el valor no está transformado** —`escala` es la lectura del sistema y no una propiedad del número—, y la aritmética que parece validarla alcanza a 27 de 362 filas |
+| Calidad | envases: [docs/CALIDAD-ENVASES.md](docs/CALIDAD-ENVASES.md) · [spec](docs/superpowers/specs/2026-09-15-produccion-envases-design.md) · [plan](docs/superpowers/plans/2026-09-15-produccion-envases.md) — carbonilla: [docs/CALIDAD.md](docs/CALIDAD.md) · [spec](docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) · [plan](docs/superpowers/plans/2026-09-16-calidad-stock-de-carbonilla.md) · la planilla manda (13/10): [spec](docs/superpowers/specs/2026-10-13-calidad-la-planilla-manda-design.md) · [plan](docs/superpowers/plans/2026-10-13-calidad-la-planilla-manda.md) — ensayos: [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md) · [spec](docs/superpowers/specs/2026-10-06-calidad-ensayos-design.md) · [plan](docs/superpowers/plans/2026-10-06-calidad-ensayos.md) — histórico: [docs/CALIDAD-HISTORICO.md](docs/CALIDAD-HISTORICO.md) · [spec](docs/superpowers/specs/2026-10-29-calidad-historico-de-determinaciones-design.md) · [plan](docs/superpowers/plans/2026-10-29-calidad-historico-de-determinaciones.md). Lo que no se deduce del código: **el valor no está transformado** —`escala` es la lectura del sistema y no una propiedad del número—, y la aritmética que parece validarla alcanza a 27 de 362 filas — la curva de una muestra (05/11): la sección `## La curva de una muestra, y lo que no dice` de [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md) · [spec](docs/superpowers/specs/2026-11-05-calidad-curva-granulometrica-design.md) · [plan](docs/superpowers/plans/2026-11-05-calidad-curva-granulometrica.md). Dos riesgos asumidos que no se deducen del código: **apagar un tamiz no hace lo mismo en los dos gráficos** —en retenido saca el valor, en acumulado esconde el punto pero lo deja sumado en todos los de su derecha, y recalcular daría un número que nadie midió— y **el eje son las mallas que midió la muestra, sin aviso de las que el producto declara y faltan** (19 de 79 muestras midieron un juego distinto; la #325 está medida en 13 y declarada por ningún producto), al revés de `acumuladosDelListado()`. Tampoco dibuja los límites: hay 2 cargados en todo el sistema |
 | Facturación | [docs/FACTURACION.md](docs/FACTURACION.md) · [spec](docs/superpowers/specs/2026-09-04-facturacion-proveedores-odoo-design.md) |
 | Seguridad e Higiene | [spec](docs/superpowers/specs/2026-10-29-seguridad-e-higiene-design.md) · [plan](docs/superpowers/plans/2026-10-29-seguridad-e-higiene.md) — vive en `app/(app)/seguridad-higiene`, `lib/seguridadHigiene` y `app/api/seguridad-higiene` |
 | Asistente | [docs/ASISTENTE.md](docs/ASISTENTE.md) · [spec](docs/superpowers/specs/2026-09-16-asistente-design.md) |
@@ -685,6 +685,165 @@ no cuenta cosas.** Es cuántos umbrales lleva el módulo sin cargarse, y existe
 sólo para que descartarlo no lo traiga de vuelta mañana. Por eso el resumen los
 imprime sin número — si no diría «9 · Trituración: hace 36 días que no se
 carga». Está fijado con un test en `lib/home/resumenDeAvisos.test.ts`.
+
+**La salud de las sincronizaciones también sale por estos dos lados**, y se
+declara a mano. Desde el 05/11/2026 `avisosDeSalud` (en `lib/home/avisos.ts`)
+emite **un aviso por recurso caído** de `ultima_sincronizacion`, sólo para
+`admin_sistema`. **El aviso siempre lleva a `/administracion/salud`; el push,
+sólo cuando va solo.** Con dos o más avisos, `resumirParaPush` y
+`resumirElMovimiento` mandan `url: "/"`: es el diseño del resumen diario y vale
+para todos los avisos, no una excepción de éste, así que un resumen con la salud
+y otro aviso abre el inicio y desde ahí hay que llegar a la pantalla por la
+campana. Lo que hay que saber antes de tocarlo, porque nada de esto se deduce
+del código:
+
+- **La tolerancia de cada recurso se declara en `REGISTRO`**
+  ([lib/core/saludDeLasSincronizaciones.ts](lib/core/saludDeLasSincronizaciones.ts)),
+  con la medición que la justifica al lado, y **no se deriva ni del cron
+  declarado ni de la historia del recurso**: los crons de Actions declaran una
+  frecuencia y corren otra (`mantenimiento/ordenes` declara cada 15 minutos y
+  corre cada ~3,5 h), y una tolerancia sacada de la propia historia
+  normalizaría la escasez. Un recurso que aparece en la vista sin estar
+  declarado **no queda mudo: sale como el aviso `salud-sin-declarar`**
+  (`recursosSinDeclarar`), así que **agregar una sincronización nueva obliga a
+  declararla**. Es la misma defensa que `revisar-exportaciones`: no decide si
+  algo está bien, hace que nadie agregue uno sin haber dicho qué espera de él.
+- **Exceptuar no es no mirar: las tres familias.** Una entrada con
+  `toleranciaHoras: null` tiene que decir en cuál cae y por qué, porque cada
+  una es un caso donde «una corrida vieja o fallida es un problema» da una
+  alarma falsa: `solo-escribe-si-hay-algo` (`agenda/aviso_de_google`: su fila
+  sólo existe cuando hubo algo que decir, así que su edad no mide nada y un
+  fallo quedaría clavado hasta el próximo aviso), `se-ve-en-otro-lado`
+  (`agenda/pendientes`: un fallo ahí ya se ve en el evento) y
+  **`apagado-a-proposito`**, que además **lleva quién lo levanta**
+  (`quienLoLevanta`). Esa última es la que importa: sin ella lo primero que
+  hace el sistema es **reintroducir el rojo permanente** que el comentario de
+  `.github/workflows/calidad-envases-bajada.yml` ya había evitado al apagar su
+  cron —«un fallo esperado que se ve igual que uno real entrena a no mirar
+  ninguno»—, porque `calidad/envases_bajada` no corre por decisión y de
+  otro modo quedaría en rojo para siempre. **Volver a encenderlo pide descomentar
+  el `schedule:` de ese workflow, y no alcanza con eso**; la entrada del registro
+  lo dice completo: antes hay que correr `scripts/simular-bajada-envases.mts` y
+  que dé **cero diferencias reales**, porque con el SdG atrasado la bajada
+  borra de la planilla lo que
+  cargó la gente y el SdG no vio —el ensayo del 19/10 destapó 18 movimientos— y
+  nadie lo relacionaría con esto; después `EL_SISTEMA_MANDA_EL_KARDEX` en `true`
+  y volver a proteger la pestaña (el «CÓMO SE VUELVE A CORTAR» de
+  `lib/calidad/envases/sincronizar.ts`). **Y al reencenderlo, la entrada deja de
+  ser excepción y pasa a llevar `toleranciaHoras`**: si no, el recurso vuelve a
+  correr y queda sin vigilar.
+- **`agenda-pasos-caidos` y `agenda-salud-sin-comprobar` se retiraron** el
+  05/11/2026: hacían para dos pasos lo que esto hace para todos, y dos avisos
+  de salud con umbrales distintos diciendo cosas parecidas es lo que salir de
+  una sola función evita. Sus ids quedan huérfanos en `notificaciones_descartes`,
+  **lo cual es inofensivo** —nunca más coinciden con nada— y **no se reusan**:
+  hacerlo le entregaría a quien los descartó un aviso ya silenciado que nunca
+  vio. Lo que **no** se retiró es `lineasDeSalud`, que sigue dibujando el
+  detalle de la Agenda en `/agenda`, ni las dos exclusiones razonadas de
+  `PASOS_CON_GOOGLE`.
+- **`cuantoLlevaMal` mide cosas distintas según el estado, y es a propósito.**
+  Es la `cantidad` del aviso y existe para una sola cosa: **crecer mientras el
+  problema siga**, porque `filtrarDescartadas` pide `cantidad > cantidad_vista`.
+  En una `vieja` son las tolerancias enteras de silencio
+  (`cuantasTolerancias`). **En una `nunca` no crece: es el piso fijo de 1**, porque
+  sin ninguna corrida no hay desde cuándo contar, y ahí vale lo mismo que se dice
+  más abajo del fallo con 1 fijo: **un descarte lo calla mientras su cantidad no
+  pase de 1**. Y el descarte es **del recurso y no del episodio** —el id es
+  `salud-${clave}`, no depende del estado y nada lo limpia al recuperarse—, así
+  que si después ese recurso falla una vez o queda `vieja`, su cantidad arranca
+  otra vez en 1 y sigue mudo. Hoy es inalcanzable —la revisión del 11/11/2026
+  midió que el único recurso declarado sin filas, `envases_bajada`, está
+  exceptuado—, pero no es
+  hipotético: un recurso recién declarado, o `canales` y `barrido` el primer día
+  de un despliegue (ver `docs/AGENDA.md`), salen «nunca corrió» hasta que corren.
+  En un `fallo` son las **corridas fallidas seguidas**
+  (`rachaDeFallos`, leída de `sincronizaciones`), y **no se puede medir con el
+  tiempo**: un cron que falla pero sigue corriendo reescribe su fila cada vez,
+  el silencio nunca pasa de unas horas y la cuenta quedaría en 1 para siempre.
+  Medido el 05/11/2026, `calidad/carbonilla-odoo` —el único fallo real de ese
+  día— falla todos los días a las 08:00, contra una tolerancia de 36 h. Con 1
+  fijo, **un solo descarte dejaría un recurso roto y mudo para siempre**:
+  campana, push y el recordatorio de los lunes. Por la misma razón ese número
+  **no se imprime en ninguna superficie, y desde el 11/11/2026 tampoco en la
+  campana**: lo decide `suNumeroSeMuestra`
+  ([lib/home/notificaciones.ts](lib/home/notificaciones.ts)), que calla los
+  relojes y las familias `ritmo-` y `salud-`, y es el mismo criterio que usa el
+  push. Antes el prefijo se miraba sólo del lado del push, así que la campana
+  dibujaba la racha como insignia y la sumaba al total del ícono: con dos
+  recursos caídos el 11/11/2026 eso daba **+17** (8 + 9), diecisiete de nada.
+  Con un aviso por paso de la Agenda ese aporte estaba acotado a 2; con uno por
+  recurso dejó de estarlo. Hoy cada aviso así cuenta **1** —no 0, que apagaría
+  la insignia—, de modo que el número de la campana vuelve a ser cuántas cosas
+  hay para mirar.
+- **`ultima_sincronizacion` es una unión, y `compras/planilla` no sale de
+  `sincronizaciones`**: la sintetiza `compras_sincronizaciones` (migración
+  `20261023104622`), donde «anduvo» es `error is null` porque no hay columna
+  `ok`. Buscarla en la tabla común —que tiene 0 filas de ese recurso, medido— no
+  daba error ni daba cero: **daba una racha de 1 para siempre**, por el camino de
+  éxito y sin una línea en el log, indistinguible de un recurso que acaba de
+  fallar. Compras es el espejo de más tráfico del sistema. La excepción está
+  declarada en `DE_OTRA_TABLA`, y «ninguna fila» ahora devuelve `null` y se va
+  por el camino que **sí** loguea, para que la próxima unión que alguien agregue
+  a la vista sin declararla **grite** en vez de pasar por sana. Si agregás una,
+  la entrada va ahí.
+- **`salud-sin-comprobar` no tiene estado del que sacar una racha**, porque lo
+  que falló es la lectura: su `cantidad` es **el día** (días desde la época, en
+  fecha de Argentina), de modo que el descarte dura una jornada. Es el único
+  aviso cuyo número es un reloj, y por eso vive en `CRECE_CON_EL_DIA`
+  ([lib/home/notificaciones.ts](lib/home/notificaciones.ts)), con dos
+  consecuencias que hay que mantener juntas: **queda afuera del movimiento
+  diario** —sin eso se anunciaría todas las mañanas, que es justo lo que dejó a
+  las dos personas que probaron las notificaciones en serio con los 13 avisos
+  descartados— y **cuenta 1 en el total de la campana, ni su número ni 0**
+  (`totalDeLaCampana`): con 0 la campana no dibuja insignia y el aviso de que
+  **el vigilante quedó ciego** sería invisible salvo que alguien abriera el
+  panel. Por eso la lista no vive en `lib/home/avisos.ts`: la necesitan las tres
+  superficies y la campana, que es un componente de cliente, no puede
+  importarlo.
+- **En el push la salud va primero, y en la campana no.** `avisosDeUsuario` los
+  agrega al final —son de `admin_sistema` y no tienen por qué desplazar a los
+  de los módulos, que son de todos—, pero el push **nombra tres y resume el
+  resto**, así que ahí «al final» quiere decir «en el "y N más"». El resumen
+  diario lleva movimiento y la lista queda corta, pero **el de los lunes lleva
+  totales**: la de un administrador pasa de diez avisos y la salud caía fuera
+  de los tres nombrados **todas las semanas, por construcción**. Y los lunes
+  son la red: un recurso caído hace semanas ya no mueve nada, así que si el
+  lunes tampoco lo nombra, no lo nombra nadie. Lo hace `saludPrimero`, dentro
+  de [lib/home/resumenDeAvisos.ts](lib/home/resumenDeAvisos.ts) y **sólo ahí**
+  — tocarlo en `avisosDeUsuario` le cambiaría también el orden a la campana.
+- **Una trampa documentada y no detectada: RLS.** `sinComprobar` cubre que la
+  lectura falle, **no que una policy la deje vacía**: una policy que tapa la
+  vista no da error, devuelve `data` vacía, y eso entra por el camino bueno como
+  una lista de «nunca corrió» falsos. Hoy no muerde porque
+  `sincronizaciones_select` es `to authenticated using (true)` (migración 037) y
+  la vista es `security_invoker`. **Si alguna vez se angosta esa policy**, la
+  campana y `/administracion/salud` —que leen con la sesión— mienten juntas; el
+  cron del resumen no, porque lee con el cliente admin.
+
+**Todo esto depende de la migración `20261105092248`** (la columna `canonico`,
+ver «Hay un segundo despliegue escribiendo en esta base»), **que ya está
+aplicada** (medido el 11/11/2026). Sin ella, cuando las dos corridas dicen
+`production` la vista desempata por la más reciente, que suele ser la del otro
+despliegue: el aviso sonaría por un recurso que en producción anda bien —o,
+peor, un fallo real quedaría tapado porque el otro lo mostró sano—.
+
+**Y `rachaDeFallos` también filtra por `canonico`**, desde el 11/11/2026: antes
+no lo hacía, con el argumento de que el error sólo podía ser «de más y no de
+menos» porque al otro despliegue le faltan las credenciales de Google y
+siempre falla. **Era falso.** Ese despliegue escribe `ok = true` en
+`agenda/canales` y `agenda/pendientes` todos los días a las 05:30, media hora
+después del canónico; así que el día que fallara la corrida buena de `canales`,
+la fila ajena pasaba a ser «la última que anduvo», no quedaba ninguna fallida
+después y la racha se clavaba en **1 para siempre** — un descarte y ese canal
+no vuelve a sonar nunca, que es justo lo que la racha vino a evitar. Y ya
+mentía al revés: `produccion/molinos` daba **9** contando las ajenas y **4**
+filtrando, y ese número sale impreso en el push. El filtro es
+`not canonico is false` y **no `canonico = true`**, porque las 3.907 filas
+anteriores a la migración la tienen en `null` y exigir `true` tiraría la
+historia entera: es la misma regla de «preferir y no filtrar» de esa migración.
+`contarEnCompras` sigue sin filtrar porque `compras_sincronizaciones` **no
+tiene la columna**, así que de ese lado no hay con qué distinguir un despliegue
+del otro.
 
 El diseño y lo que se verificó están en
 [el spec de la app instalable](docs/superpowers/specs/2026-10-16-app-instalable-design.md),

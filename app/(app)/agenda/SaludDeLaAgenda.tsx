@@ -3,12 +3,15 @@ import type { LineaDeSalud } from "@/lib/agenda/avisosDeLaAgenda";
 /**
  * La línea de estado de la conexión con Google, **sólo para `admin_sistema`**.
  *
- * Existe porque los dos avisos de salud de la Agenda (`agenda-pasos-caidos` y
- * `agenda-salud-sin-comprobar`, en `lib/home/avisos.ts`) llevan a esta pantalla.
- * Un aviso que aterriza donde no hay rastro del problema es el bug de las
- * notificaciones que no llevaban a ningún lado; el precedente que se copia,
- * `syh-fotos-sin-respaldar`, sí aterriza en una pantalla que muestra el respaldo
- * atascado.
+ * Nació porque los dos avisos de salud de la Agenda —`agenda-pasos-caidos` y
+ * `agenda-salud-sin-comprobar`— llevaban acá: un aviso que aterriza donde no hay
+ * rastro del problema es el bug de las notificaciones que no llevaban a ningún
+ * lado. Esos dos se retiraron el 05/11/2026 y ahora `canales` y `barrido` avisan
+ * desde `avisosDeSalud` (`lib/home/avisos.ts`), que lleva a
+ * `/administracion/salud` con los 29 recursos.
+ *
+ * **Esto se queda igual**: es el detalle de la Agenda, en la pantalla de la
+ * Agenda, para `admin_sistema` que ya está acá y no viene de ningún aviso.
  *
  * Es un Server Component sin estado: lo que dibuja es lo que `lineasDeSalud`
  * decidió. Tres casos: la comprobación falló (rojo, y **dice que no se pudo

@@ -100,8 +100,12 @@ Paso 3 "Las carpetas del servidor"
 #   Porteria             tampoco: es el respaldo del escritorio completo de esa
 #                        PC. Son ~10 MB por dia y adentro viajan dos
 #                        OfficeSetup.exe. Lo util son las planillas de pesaje.
+#   Pesadas Balanza      el unico que NO son zips: doce DAT000000NN.CSV, uno
+#                        por camion, cada uno acumulando desde agosto. Por eso
+#                        lleva carpetaEntera = $true: quedarse con el mas nuevo
+#                        subiria un camion y perderia once.
 #
-# Las tres ultimas se guardan y no se leen: ver la nota del mismo tema en
+# Las cuatro ultimas se guardan y no se leen: ver la nota del mismo tema en
 # lib/produccion/molinos/drive.ts, que es lo que evita que el diagnostico
 # diario del SdG se llene de avisos por ellas.
 #
@@ -111,11 +115,12 @@ Paso 3 "Las carpetas del servidor"
 # programada todos los dias por algo que nadie lee. Un rojo permanente es un
 # rojo que se deja de mirar, y el dia que falle un Filler no lo va a ver nadie.
 $origenes = @(
-  @{ nombre = "Filler 1";  carpeta = "\\$Servidor\EXTERIOR\Filler1";   obligatorio = $true  },
-  @{ nombre = "Filler 2";  carpeta = "\\$Servidor\EXTERIOR\Filler2";   obligatorio = $true  },
-  @{ nombre = "Planta 02"; carpeta = "\\$Servidor\EXTERIOR\Planta 02"; obligatorio = $false },
-  @{ nombre = "Hornos";    carpeta = "\\$Servidor\EXTERIOR\Hornos";    obligatorio = $false },
-  @{ nombre = "Porteria";  carpeta = "\\$Servidor\EXTERIOR\Porteria";  obligatorio = $false }
+  @{ nombre = "Filler 1";        carpeta = "\\$Servidor\EXTERIOR\Filler1";         obligatorio = $true  },
+  @{ nombre = "Filler 2";        carpeta = "\\$Servidor\EXTERIOR\Filler2";         obligatorio = $true  },
+  @{ nombre = "Planta 02";       carpeta = "\\$Servidor\EXTERIOR\Planta 02";       obligatorio = $false },
+  @{ nombre = "Hornos";          carpeta = "\\$Servidor\EXTERIOR\Hornos";          obligatorio = $false },
+  @{ nombre = "Porteria";        carpeta = "\\$Servidor\EXTERIOR\Porteria";        obligatorio = $false },
+  @{ nombre = "Pesadas Balanza"; carpeta = "\\$Servidor\EXTERIOR\Pesadas Balanza"; obligatorio = $false; carpetaEntera = $true }
 )
 
 $incluidos = @()
@@ -132,10 +137,15 @@ foreach ($o in $origenes) {
     Write-Host "    llama distinto, corre esto con  -Servidor <nombre>." -ForegroundColor Yellow
     Cortar "Sin acceso a las carpetas de los fillers no hay nada que subir."
   }
-  $zips = @(Get-ChildItem -LiteralPath $o.carpeta -Filter *.zip -ErrorAction SilentlyContinue)
-  $ult = $zips | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-  $cuando = if ($ult) { $ult.LastWriteTime.ToString("yyyy-MM-dd HH:mm") } else { "sin zips" }
-  Bien ("{0,-10} {1,4} zips, el ultimo {2}" -f $o.nombre, $zips.Count, $cuando)
+  # Se cuenta lo que ese origen va a subir de verdad y no siempre los .zip: en
+  # la balanza no hay ninguno, y "0 zips" al lado de un OK parece una carpeta
+  # vacia cuando en realidad tiene los doce archivos que importan.
+  $patron = if ($o.carpetaEntera) { "*" } else { "*.zip" }
+  $hay = @(Get-ChildItem -LiteralPath $o.carpeta -Filter $patron -File -ErrorAction SilentlyContinue)
+  $ult = $hay | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  $cuando = if ($ult) { $ult.LastWriteTime.ToString("yyyy-MM-dd HH:mm") } else { "vacia" }
+  $que = if ($o.carpetaEntera) { "archivos" } else { "zips" }
+  Bien ("{0,-16} {1,4} {2,-9} el ultimo {3}" -f $o.nombre, $hay.Count, $que, $cuando)
   $incluidos += $o
 }
 
@@ -147,7 +157,14 @@ $log    = Join-Path $Aca "subir-zips.log"
 $contenido = [ordered]@{
   credencial   = $credencial
   carpetaDrive = $CARPETA_DRIVE
-  origenes     = @($incluidos | ForEach-Object { [ordered]@{ nombre = $_.nombre; carpeta = $_.carpeta } })
+  # `carpetaEntera` se escribe solo cuando es verdadera: el subidor lo lee como
+  # ausente-es-falso, y un `"carpetaEntera": false` en cinco de seis origenes
+  # invita a creer que es una opcion que hay que decidir cada vez.
+  origenes     = @($incluidos | ForEach-Object {
+    $o = [ordered]@{ nombre = $_.nombre; carpeta = $_.carpeta }
+    if ($_.carpetaEntera) { $o.carpetaEntera = $true }
+    $o
+  })
   log          = $log
 }
 # Se escribe con WriteAllText y un UTF8Encoding($false) y NO con

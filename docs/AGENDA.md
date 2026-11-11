@@ -331,25 +331,43 @@ lo cubren **tres cosas** y conviene saber cuáles son:
    que dejó de moverse no se nombra nunca más. Una divergencia que encuentra el
    barrido va a la campana y a `/agenda`, **pero no manda push**: el cron corre a
    las 2:00 de Argentina, siempre fuera de la ventana 7:00–21:00.
-2. **El aviso de salud en la campana**, sólo para `admin_sistema`:
-   `agenda-pasos-caidos` cuenta los pasos `canales` y `barrido` cuya última corrida
-   fue `ok = false`, **o que no corrieron en 50 horas, o que nunca corrieron**. El
+2. **El aviso de salud en la campana y en el push**, sólo para `admin_sistema`.
+   **Hasta el 05/11/2026 eran dos avisos propios de la Agenda**
+   (`agenda-pasos-caidos` y `agenda-salud-sin-comprobar`); se retiraron, porque
+   hacían para dos pasos lo que `avisosDeSalud` (`lib/home/avisos.ts`) hace para
+   todos los recursos de `ultima_sincronizacion`, y dos avisos de salud con
+   umbrales distintos diciendo cosas parecidas es lo que la campana evita. Ahora
+   `canales` y `barrido` son dos entradas del `REGISTRO` de
+   [lib/core/saludDeLasSincronizaciones.ts](../lib/core/saludDeLasSincronizaciones.ts),
+   con las mismas 50 h de tolerancia, y cada una da su propio aviso
+   (`salud-agenda/canales`, `salud-agenda/barrido`) que lleva a
+   `/administracion/salud`. La regla no cambió: un paso está caído si su última
+   corrida fue `ok = false`, **o si no corrió en 50 horas, o si nunca corrió**. El
    caso «el cron no corrió» es el que lo justifica: no deja ninguna fila de fallo.
    Se calcula leyendo `ultima_sincronizacion` y **no** `agenda_canales`, que no
    tiene policy y desde la sesión de quien mira leería 0 sin error —el fallo
-   silencioso que se quiere evitar—. Y es un aviso aparte,
-   `agenda-salud-sin-comprobar`, cuando la lectura misma falla: **un aviso de salud
-   no devuelve 0 cuando no pudo mirar**, porque apagaría la única luz que avisa que
-   lo demás dejó de funcionar. `aviso_de_google` queda afuera a propósito: sólo
-   escribe cuando hay algo que decir, así que su última fila roja quedaría clavada
-   aunque todo ande.
+   silencioso que se quiere evitar—. Y si la lectura misma falla, el aviso es
+   `salud-sin-comprobar`: **un aviso de salud no devuelve 0 cuando no pudo
+   mirar**, porque apagaría la única luz que avisa que lo demás dejó de
+   funcionar. `aviso_de_google` y `pendientes` quedan afuera a propósito y
+   siguen así, ahora **declaradas como excepciones** del registro: la primera
+   sólo escribe cuando hay algo que decir, así que su última fila roja quedaría
+   clavada aunque todo ande, y la segunda ya se ve en el evento.
 3. **La línea de salud en `/agenda`** (`SaludDeLaAgenda`, sólo `admin_sistema`):
    por cada paso, cuándo corrió por última vez y si está caído, con el error que
-   dejó el cron. Si no pudo leerlo, dice que no pudo comprobarlo. Es adonde llevan
-   los dos avisos.
+   dejó el cron. Si no pudo leerlo, dice que no pudo comprobarlo. **Ya no es
+   adonde llevan los avisos** —ahora el aviso va a `/administracion/salud`, y el
+   push también cuando es el único del resumen; con varios abre el inicio—: es el
+   detalle de la Agenda para quien ya está en `/agenda`, y lo dibuja
+   `lineasDeSalud` sobre `PASOS_CON_GOOGLE`, que no se retiraron.
 
 El umbral de 50 h está elegido con las horas reales del cron: una corrida salteada
-no suena, la segunda seguida sí (a las 07:00 UTC del segundo día).
+no suena, la segunda seguida sí (a las 07:00 UTC del segundo día). **Está
+escrito en dos lugares que nada ata**: `HORAS_SIN_CORRER` en
+`lib/agenda/avisosDeLaAgenda.ts` (lo que decide la línea de `/agenda`) y las
+entradas `canales` y `barrido` del `REGISTRO` (lo que decide el aviso). Si se
+cambia el cron o se revisa el umbral, hay que cambiar los dos, o la pantalla y
+la campana van a discrepar sin avisar.
 
 **Los dos últimos leen `ultima_sincronizacion`, y esa vista tuvo que aprender a
 distinguir dos despliegues.** Hay un segundo despliegue de este repo escribiendo
@@ -369,8 +387,8 @@ porque el otro también dice `production`. Lo arregla la migración
 cosas que conviene saber antes de tocar la línea de salud:
 
 - **El aviso no estaba mal calibrado.** Era el dato de abajo el que mentía, así
-  que subir el umbral de 50 h o sacar `barrido` de `PASOS_CON_GOOGLE` habría
-  tapado el síntoma y apagado la única luz que avisa que los canales dejaron de
+  que subir el umbral de 50 h o sacar `barrido` de `PASOS_CON_GOOGLE` (o de su
+  entrada del `REGISTRO`) habría tapado el síntoma y apagado la única luz que avisa que los canales dejaron de
   funcionar. Antes de ablandar un aviso de salud, mirar de qué `host` salió la
   fila que lo disparó.
 - **Una corrida del otro despliegue también puede salir OK.** El 05/11
@@ -490,7 +508,11 @@ vuelve válido al siguiente.
 - **`agenda-divergencias` no entra en la foto diaria** (`avisos_fotos` es global): un
   aviso por persona se leería como «subió desde cero» todos los días. Por eso
   `loQueSeMovio` lo saltea (`ES_POR_PERSONA`). Queda en la campana y en los totales del
-  lunes. `agenda-salud-sin-comprobar` no imprime el número (`ES_BANDERA`).
+  lunes. (`agenda-salud-sin-comprobar` tenía además su propia excepción para no
+  imprimir el número, `ES_BANDERA`. El aviso se retiró el 05/11/2026 y esa
+  constante se borró con él: el que lo reemplaza, `salud-sin-comprobar`, no
+  imprime su número —es un reloj— y queda afuera de lo que se movió por
+  `CRECE_CON_EL_DIA`, ambas en `lib/home`. Los porqués, en el CLAUDE.md.)
 - El cron de la Agenda **no** engancha el push: corre a las 2:00 de Argentina, siempre
   fuera de la ventana.
 
@@ -766,12 +788,16 @@ son de orden de despliegue y van arriba porque se hacen antes que todo lo demás
    migración que falta: el mensaje es un error de PostgREST sobre una tabla, y se lee como
    un problema de la planilla.
 2. **La campana consulta la Agenda en cada carga de página de todo el sistema**
-   (`contarDivergenciasSinVer` y `leerLaSaludDeLaAgenda`, desde `avisosDeUsuario`), así que
-   antes de la migración tira un error de PostgREST **por cada vista de cada usuario**. Está
-   atrapado y devuelve 0, de modo que nadie ve nada roto, pero el log se llena de
-   `agenda: no se pudieron contar las divergencias sin ver` y `agenda: no se pudo comprobar
-   la salud de la Agenda`. **Eso no es síntoma de otra cosa**: es la migración que falta, y
-   se va solo al aplicarla.
+   (`contarDivergenciasSinVer`, desde `avisosDeUsuario`), así que antes de la migración tira
+   un error de PostgREST **por cada vista de cada usuario**. Está atrapado y devuelve 0, de
+   modo que nadie ve nada roto, pero el log se llena de `agenda: no se pudieron contar las
+   divergencias sin ver`. **Eso no es síntoma de otra cosa**: es la migración que falta, y
+   se va solo al aplicarla. (Hasta el 05/11/2026 este punto nombraba también a
+   `leerLaSaludDeLaAgenda` y su mensaje `agenda: no se pudo comprobar la salud de la
+   Agenda`, y eso ya no vale: la campana dejó de llamarla —la salud la lee ahora
+   `leerLaSalud` para `admin_sistema`— y sólo la llama `/agenda`. Tampoco dependía de esta
+   migración: lee `ultima_sincronizacion`, no una tabla de la Agenda. Si ese mensaje
+   aparece, la causa es otra.)
 3. **La pantalla se abrió en un navegador, pero con eventos de ejemplo y sin sesión**
    (ver «La vista de calendario»): lo que **nadie** abrió es `/agenda` con una sesión real
    y la base de verdad. Lo primero que hay que mirar ahí:
@@ -847,9 +873,11 @@ son de orden de despliegue y van arriba porque se hacen antes que todo lo demás
     y que no suene dos veces por el mismo cambio—. Se probó con el payload plano contra el
     contrato (`lib/core/sw.test.ts` es el que tiene que seguir en verde), no en un
     teléfono.
-13. **La falsa alarma del primer día de `agenda-pasos-caidos`.** Es comportamiento correcto
-    (ver arriba), pero conviene avisarle a quien administra para que no la tome por un
-    fallo.
+13. **La falsa alarma del primer día de `canales` y `barrido`.** Desde el 05/11/2026 ya no la
+    da `agenda-pasos-caidos` —se retiró— sino los avisos `salud-agenda/canales` y
+    `salud-agenda/barrido`, que salen «nunca corrió» hasta la primera corrida del cron y
+    llevan a `/administracion/salud`. Es comportamiento correcto (ver arriba), pero conviene
+    avisarle a quien administra para que no la tome por un fallo.
 14. **La cuota de Calendar con la tormenta de ecos.** El cálculo (~400 lecturas) está
     medido sobre 26 OT, no observado. Si muerde, aparece en `agenda / aviso_de_google`.
 15. **Si el `PATCH` resetea los RSVP** (ver arriba): sólo se ve con un evento de prueba en

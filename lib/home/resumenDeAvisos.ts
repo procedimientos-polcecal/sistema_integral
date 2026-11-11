@@ -1,25 +1,49 @@
-import type { Notificacion } from "./notificaciones";
+import { suNumeroSeMuestra, type Notificacion } from "./notificaciones";
 import type { Aviso } from "@/lib/core/webpush";
-import { ES_BANDERA } from "./avisos";
 
 /** Cuántos avisos se nombran en el cuerpo antes de resumir el resto. */
 const CUANTOS_SE_NOMBRAN = 3;
 
 /**
- * Un aviso de ritmo no cuenta cosas.
+ * Los avisos cuya `cantidad` **no cuenta cosas**, y que por lo tanto van sin
+ * número: los relojes y las familias de ritmo y de salud.
  *
- * Su `cantidad` es cuántos umbrales enteros lleva el módulo sin cargarse, y
- * existe sólo para que descartarlo no lo traiga de vuelta mañana —ver
- * `cantidadDelAviso` en `./ritmo.ts`—. Escribirla al lado del título daría
- * "9 · Trituración: hace 36 días que no se carga", que no significa nada. El
- * título de esos avisos ya es la frase completa, así que va solo.
- *
- * **Tampoco una bandera** (`ES_BANDERA`): `agenda-salud-sin-comprobar` usa
- * `cantidad: 1` como «pasa», no como cuántos. Sale igual de sin número.
+ * **Es exactamente lo que decide la campana**, y por eso acá no queda más que
+ * la negación: el criterio entero vive en `suNumeroSeMuestra`
+ * (`./notificaciones.ts`), que es el único módulo de avisos que puede importar
+ * también un componente de cliente. Los dos prefijos vivían acá, de modo que el
+ * push los callaba y la campana los dibujaba — dos superficies que comen lo
+ * mismo diciendo cosas distintas. Si hace falta una familia más, va allá.
  */
-const esDeRitmo = (n: Notificacion) => n.id.startsWith("ritmo-") || ES_BANDERA.has(n.id);
+const sinNumero = (n: Notificacion) => !suNumeroSeMuestra(n);
 
-const comoLinea = (n: Notificacion) => (esDeRitmo(n) ? n.titulo : `${n.cantidad} · ${n.titulo}`);
+const comoLinea = (n: Notificacion) => (sinNumero(n) ? n.titulo : `${n.cantidad} · ${n.titulo}`);
+
+const esDeSalud = (n: Notificacion) => n.id.startsWith("salud-");
+
+/**
+ * La salud adelante, y **sólo en el push**.
+ *
+ * `avisosDeLosModulos` los agrega al final a propósito: en la campana, que
+ * muestra la lista entera, los de los módulos son de todos y van primero. Pero
+ * el push **nombra tres y resume el resto**, así que «al final» ahí quiere
+ * decir «en el "y N más"».
+ *
+ * Con el resumen diario eso no se notaba —lleva movimiento, los stocks de los
+ * módulos casi no se mueven y la lista queda corta—, pero **el de los lunes
+ * lleva totales**: la de un `admin_sistema` pasa de diez avisos y la salud
+ * quedaba fuera de los tres nombrados **todos los lunes, por construcción**. Y
+ * los lunes son la red, no un extra: es el único mensaje que vuelve a nombrar
+ * lo que dejó de moverse. Un recurso caído hace semanas no mueve nada, así que
+ * si el lunes tampoco lo nombra, no lo nombra nadie.
+ *
+ * El orden se toca acá y no en `avisosDeUsuario`, que es lo que también le
+ * cambiaría el orden a la campana.
+ *
+ * `sort` es estable desde ES2019, así que lo demás conserva su orden.
+ */
+const saludPrimero = (avisos: Notificacion[]): Notificacion[] =>
+  [...avisos].sort((a, b) => Number(esDeSalud(b)) - Number(esDeSalud(a)));
 
 /**
  * Convierte los avisos de una persona en **una** notificación.
@@ -44,12 +68,12 @@ export function resumirParaPush(avisos: Notificacion[]): Aviso | null {
     const unico = avisos[0];
     return {
       title: unico.titulo,
-      body: esDeRitmo(unico) ? "" : String(unico.cantidad),
+      body: sinNumero(unico) ? "" : String(unico.cantidad),
       url: unico.href,
     };
   }
 
-  const nombrados = avisos.slice(0, CUANTOS_SE_NOMBRAN).map(comoLinea);
+  const nombrados = saludPrimero(avisos).slice(0, CUANTOS_SE_NOMBRAN).map(comoLinea);
   const restantes = avisos.length - CUANTOS_SE_NOMBRAN;
   if (restantes > 0) nombrados.push(`y ${restantes} más`);
 
@@ -87,15 +111,15 @@ export function resumirElMovimiento(avisos: Notificacion[]): Aviso | null {
     const unico = avisos[0];
     return {
       title: unico.titulo,
-      body: esDeRitmo(unico) ? "" : `${unico.cantidad} más`,
+      body: sinNumero(unico) ? "" : `${unico.cantidad} más`,
       url: unico.href,
     };
   }
 
   const comoLineaDeMovimiento = (n: Notificacion) =>
-    esDeRitmo(n) ? n.titulo : `${n.cantidad} más · ${n.titulo}`;
+    sinNumero(n) ? n.titulo : `${n.cantidad} más · ${n.titulo}`;
 
-  const nombrados = avisos.slice(0, CUANTOS_SE_NOMBRAN).map(comoLineaDeMovimiento);
+  const nombrados = saludPrimero(avisos).slice(0, CUANTOS_SE_NOMBRAN).map(comoLineaDeMovimiento);
   const restantes = avisos.length - CUANTOS_SE_NOMBRAN;
   if (restantes > 0) nombrados.push(`y ${restantes} más`);
 

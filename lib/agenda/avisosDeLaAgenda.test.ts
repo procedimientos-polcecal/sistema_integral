@@ -2,14 +2,14 @@ import { describe, it, expect, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   lineasDeSalud,
-  haceCuanto,
   divergenciasSinVer,
-  pasosCaidos,
   leerLaSaludDeLaAgenda,
   HORAS_SIN_CORRER,
+  PASOS_CON_GOOGLE,
   type EventoDivergido,
   type CorridaDeLaAgenda,
 } from "./avisosDeLaAgenda";
+import { REGISTRO } from "@/lib/core/saludDeLasSincronizaciones";
 
 const ANA = "u-ana";
 const BETO = "u-beto";
@@ -99,30 +99,38 @@ describe("divergenciasSinVer", () => {
   });
 });
 
-describe("pasosCaidos", () => {
+/*
+ * Esto era `describe("pasosCaidos")`, y los casos son los mismos: lo que se
+ * retiró el 05/11/2026 fue el **aviso**, no la comprobación. `lineasDeSalud`
+ * sigue usándola para la pantalla de `/agenda`, así que se pregunta por los
+ * pasos que no están sanos en vez de por la lista que devolvía `pasosCaidos`.
+ */
+describe("qué pasos están caídos, que es lo que pinta /agenda", () => {
   const AHORA = new Date("2026-11-03T12:00:00Z");
   const haceHoras = (h: number) => new Date(AHORA.getTime() - h * 3_600_000).toISOString();
   const sana: CorridaDeLaAgenda[] = [
     { recurso: "canales", ok: true, created_at: haceHoras(10) },
     { recurso: "barrido", ok: true, created_at: haceHoras(10) },
   ];
+  const caidos = (corridas: CorridaDeLaAgenda[], ahora: Date) =>
+    lineasDeSalud(corridas, ahora).filter((l) => l.estado !== "sana").map((l) => l.paso);
 
   it("con los dos pasos corriendo bien no hay nada caído", () => {
-    expect(pasosCaidos(sana, AHORA)).toEqual([]);
+    expect(caidos(sana, AHORA)).toEqual([]);
   });
 
   it("una última corrida fallida es un paso caído", () => {
     const corridas = [{ ...sana[0], ok: false }, sana[1]];
-    expect(pasosCaidos(corridas, AHORA)).toEqual(["canales"]);
+    expect(caidos(corridas, AHORA)).toEqual(["canales"]);
   });
 
   /*
-   * El que justifica el aviso: si el cron no corre no escribe nada, así que no
+   * El que justifica todo esto: si el cron no corre no escribe nada, así que no
    * hay ninguna fila roja. Mirar sólo `ok` lo vería sano para siempre.
    */
   it("un paso que no corre hace más de un día y medio está caído aunque su última fila diga ok", () => {
     const corridas = [{ ...sana[0], created_at: haceHoras(HORAS_SIN_CORRER + 1) }, sana[1]];
-    expect(pasosCaidos(corridas, AHORA)).toEqual(["canales"]);
+    expect(caidos(corridas, AHORA)).toEqual(["canales"]);
   });
 
   /*
@@ -134,7 +142,7 @@ describe("pasosCaidos", () => {
   describe("un día perdido no suena, el segundo seguido sí", () => {
     const ULTIMA = "2026-11-03T05:00:00Z";
     const corridasDesde = (ultima: string) => sana.map((c) => ({ ...c, created_at: ultima }));
-    const a = (iso: string) => pasosCaidos(corridasDesde(ULTIMA), new Date(iso));
+    const a = (iso: string) => caidos(corridasDesde(ULTIMA), new Date(iso));
 
     // 18:00 UTC son 37 h después de la última corrida: pasada la marca de las 36 h
     // —con la que esto SONABA— y a 13 h del umbral de 50. A las 17:00 en punto
@@ -153,20 +161,20 @@ describe("pasosCaidos", () => {
   });
 
   it("un paso que nunca corrió está caído", () => {
-    expect(pasosCaidos([sana[0]], AHORA)).toEqual(["barrido"]);
-    expect(pasosCaidos([], AHORA)).toEqual(["canales", "barrido"]);
+    expect(caidos([sana[0]], AHORA)).toEqual(["barrido"]);
+    expect(caidos([], AHORA)).toEqual(["canales", "barrido"]);
   });
 
   it("una fecha ilegible no cuenta como una corrida reciente", () => {
-    expect(pasosCaidos([{ ...sana[0], created_at: "nunca" }, sana[1]], AHORA)).toEqual(["canales"]);
+    expect(caidos([{ ...sana[0], created_at: "nunca" }, sana[1]], AHORA)).toEqual(["canales"]);
   });
 
   // `aviso_de_google` sólo escribe cuando hay algo que decir: una fila roja ahí
   // queda clavada hasta el próximo fallo y sería una alarma que no se apaga.
   it("las corridas de otros recursos no cuentan, ni para bien ni para mal", () => {
     const corridas = [...sana, { recurso: "aviso_de_google", ok: false, created_at: haceHoras(1) }];
-    expect(pasosCaidos(corridas, AHORA)).toEqual([]);
-    expect(pasosCaidos([{ recurso: "pendientes", ok: true, created_at: haceHoras(1) }], AHORA)).toEqual(["canales", "barrido"]);
+    expect(caidos(corridas, AHORA)).toEqual([]);
+    expect(caidos([{ recurso: "pendientes", ok: true, created_at: haceHoras(1) }], AHORA)).toEqual(["canales", "barrido"]);
   });
 });
 
@@ -182,33 +190,24 @@ describe("leerLaSaludDeLaAgenda", () => {
     return { from: () => b } as unknown as SupabaseClient;
   }
 
-  it("con los dos pasos sanos: nada caído y comprobado", async () => {
-    const c = clienteQue(async () => ({
-      data: [
-        { recurso: "canales", ok: true, created_at: reciente },
-        { recurso: "barrido", ok: true, created_at: reciente },
-      ],
-      error: null,
-    }));
-    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toMatchObject({ caidos: 0, sinComprobar: false });
-  });
-
-  it("con un paso caído lo cuenta", async () => {
-    const c = clienteQue(async () => ({
-      data: [{ recurso: "canales", ok: false, created_at: reciente }, { recurso: "barrido", ok: true, created_at: reciente }],
-      error: null,
-    }));
-    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toMatchObject({ caidos: 1, sinComprobar: false });
+  it("devuelve las corridas que leyó, y dice que pudo comprobar", async () => {
+    const corridas = [
+      { recurso: "canales", ok: true, created_at: reciente },
+      { recurso: "barrido", ok: true, created_at: reciente },
+    ];
+    const c = clienteQue(async () => ({ data: corridas, error: null }));
+    expect(await leerLaSaludDeLaAgenda(c)).toEqual({ sinComprobar: false, corridas });
   });
 
   /*
-   * El que importa: un aviso de salud que dice «todo bien» cuando no pudo mirar
-   * es el fallo silencioso que existe para cerrar.
+   * El que importa: una salud que dice «todo bien» cuando no pudo mirar es el
+   * fallo silencioso que existe para cerrar. Sin `sinComprobar`, la pantalla
+   * pintaría los dos pasos en «nunca corrió», que es otra afirmación falsa.
    */
-  it("si la lectura devuelve error NO es un cero: es una comprobación que falló", async () => {
+  it("si la lectura devuelve error NO es una vista vacía: es una comprobación que falló", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const c = clienteQue(async () => ({ data: null, error: { message: "relation does not exist" } }));
-    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toEqual({ caidos: 0, sinComprobar: true, corridas: [] });
+    expect(await leerLaSaludDeLaAgenda(c)).toEqual({ sinComprobar: true, corridas: [] });
   });
 
   it("si la lectura tira una excepción tampoco calla, y no tira", async () => {
@@ -216,7 +215,18 @@ describe("leerLaSaludDeLaAgenda", () => {
     const c = clienteQue(async () => {
       throw new Error("fetch failed");
     });
-    expect(await leerLaSaludDeLaAgenda(c, AHORA)).toEqual({ caidos: 0, sinComprobar: true, corridas: [] });
+    expect(await leerLaSaludDeLaAgenda(c)).toEqual({ sinComprobar: true, corridas: [] });
+  });
+
+  /*
+   * Sin error y sin datos tampoco es una lectura: de ella no se afirma nada.
+   * Era el agujero que quedaba acá —`data ?? []` daba una vista vacía y
+   * `sinComprobar: false`— y es justo lo contrario de lo que esto hace.
+   */
+  it("sin error y sin datos tampoco afirma nada", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const c = clienteQue(async () => ({ data: null, error: null }));
+    expect(await leerLaSaludDeLaAgenda(c)).toEqual({ sinComprobar: true, corridas: [] });
   });
 });
 
@@ -244,14 +254,43 @@ describe("lineasDeSalud: lo que ve admin_sistema en /agenda", () => {
     expect(lineas[1].texto).toContain("hace 2 días");
   });
 
-  it("el estado de cada línea coincide con lo que cuenta el aviso", () => {
-    const corridas = [{ recurso: "canales", ok: false, created_at: haceHoras(1) }];
-    const caidas = lineasDeSalud(corridas, AHORA).filter((l) => l.estado !== "sana").map((l) => l.paso);
-    expect(caidas).toEqual(pasosCaidos(corridas, AHORA));
+  it("dice cuánto hace en horas, y pasa a días cuando son muchas", () => {
+    const lineas = lineasDeSalud(
+      [
+        { recurso: "canales", ok: true, created_at: haceHoras(5) },
+        { recurso: "barrido", ok: true, created_at: haceHoras(72) },
+      ],
+      AHORA
+    );
+    expect(lineas[0].texto).toContain("hace 5 h");
+    expect(lineas[1].texto).toContain("hace 3 días");
   });
+});
 
-  it("haceCuanto pasa a días cuando son muchas horas", () => {
-    expect(haceCuanto(haceHoras(5), AHORA)).toBe("hace 5 h");
-    expect(haceCuanto(haceHoras(72), AHORA)).toBe("hace 3 días");
+/*
+ * ── EL 50 VIVE EN DOS LUGARES, Y ESTO LOS ATA ───────────────────────────────
+ *
+ * `HORAS_SIN_CORRER` es la tolerancia con la que `/agenda` dibuja sus dos
+ * líneas de salud, y las entradas `agenda/canales` y `agenda/barrido` del
+ * `REGISTRO` son la tolerancia con la que la campana, el push y
+ * `/administracion/salud` juzgan a esos mismos dos pasos. Es el mismo número
+ * por el mismo motivo —el cron diario de las 05:00 UTC: una corrida salteada no
+ * suena y la segunda sí— y nada los obligaba a seguir siéndolo. Bajar uno solo
+ * dejaría a la pantalla de la Agenda diciendo «no corre» y a la de salud
+ * diciendo «al día» del mismo paso el mismo día, sin que nada falle ni avise.
+ *
+ * Es la misma defensa que el 27 del GUT, «con un test que los ata», y lo que
+ * este archivo ya dice de las dos copias: de dos copias, la que nadie toca es
+ * la que termina mintiendo.
+ */
+describe("la tolerancia de los pasos de la Agenda es una sola", () => {
+  const toleranciaEnElRegistro = (recurso: string) =>
+    REGISTRO.find((e) => e.modulo === "agenda" && e.recursos.includes(recurso))?.toleranciaHoras;
+
+  it("el REGISTRO juzga canales y barrido con las mismas horas que la pantalla de la Agenda", () => {
+    expect([...PASOS_CON_GOOGLE]).toEqual(["canales", "barrido"]);
+    for (const paso of PASOS_CON_GOOGLE) {
+      expect(toleranciaEnElRegistro(paso)).toBe(HORAS_SIN_CORRER);
+    }
   });
 });
