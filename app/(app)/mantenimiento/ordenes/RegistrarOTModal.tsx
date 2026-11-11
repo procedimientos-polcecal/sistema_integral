@@ -139,6 +139,21 @@ export default function RegistrarOTModal({
     if (body.aviso) setAviso(body.aviso);
   }
 
+  /**
+   * Lo que impide cerrar, **calculado en cada render**.
+   *
+   * Se pidió que la alerta salte apenas estén las dos fechas y no recién al
+   * guardar, y por eso vive acá y no adentro de `guardar()`. Es una función
+   * pura de lo que la pantalla ya tiene —la fecha de inicio de la orden y la
+   * que se está eligiendo—, así que no necesita estado propio ni un efecto:
+   * un `useEffect` con `setState` sería un segundo render para guardar algo
+   * que ya se sabe, que es lo que marca `react-hooks/set-state-in-effect`.
+   *
+   * La fecha de inicio no se edita acá, así que de las dos sólo se mueve una:
+   * la alerta aparece y desaparece al cambiar el día, sin apretar nada.
+   */
+  const impideCerrar = loQueImpideCerrar(orden.fecha_ejecucion, cuando);
+
   async function guardar() {
     if (!observaciones.trim() && resultado !== "completado") {
       setError("Contá qué pasó: un trabajo parcial o cancelado sin explicación no sirve después.");
@@ -155,9 +170,8 @@ export default function RegistrarOTModal({
     // el 400 del cierre llegara después, el trabajo quedaría registrado con
     // una fecha imposible y la orden abierta, que es exactamente el estado del
     // que esta pantalla ya avisa («El trabajo quedó registrado, pero...»).
-    const impide = loQueImpideCerrar(orden.fecha_ejecucion, cuando);
-    if (impide.length > 0) {
-      setError(`No se puede guardar porque ${impide.join(", ")}.`);
+    if (impideCerrar.length > 0) {
+      setError(`No se puede guardar porque ${impideCerrar.join(", ")}.`);
       return;
     }
 
@@ -322,6 +336,23 @@ export default function RegistrarOTModal({
             </Select>
           </Campo>
         </div>
+
+        {/* ── LA ALERTA, EN EL MOMENTO Y NO AL GUARDAR ─────────────────────
+            Se pidió que salte apenas estén las dos fechas. Va **debajo de la
+            grilla y no adentro de la celda**: la grilla es de dos columnas, y
+            ahí el mensaje —que nombra las dos fechas enteras— entra partido en
+            pedazos de 150 px.
+
+            El botón de guardar sigue habilitado a propósito. Deshabilitarlo
+            dejaría el porqué acá arriba y el botón mudo abajo, que en un
+            teléfono es media pantalla de distancia; apretarlo repite el mismo
+            texto donde la persona está mirando, y el guardado igual no pasa:
+            lo frena `guardar()` y, si llegara, el servidor. */}
+        {impideCerrar.length > 0 && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+            No se puede guardar porque {impideCerrar.join(", ")}.
+          </div>
+        )}
 
         <Campo etiqueta="Quiénes lo hicieron">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">

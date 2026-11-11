@@ -6,7 +6,7 @@ import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
 import type { PesadaAgrupada } from "./pesadas";
 import type { BochonParaInforme, VoladuraParaInforme } from "./informe";
-import type { AcarreoDB, Bochon, Consumo, CubicacionDB, DestapeDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
+import type { AcarreoDB, Bochon, Consumo, CubicacionDB, CubicacionMaterialDB, DestapeDB, Fletero, Insumo, PesadaDB, TarifaAcarreoDB, Voladura, Yacimiento } from "./types";
 
 /**
  * Las lecturas del módulo Cantera.
@@ -540,6 +540,44 @@ export async function traerCubicaciones(supabase: SupabaseClient): Promise<Cubic
         .range(desde, hasta)
     );
     return filas.map((f) => ({ ...f, existencia_acopio: null }));
+  }
+}
+
+/**
+ * Las pesadas con origen C1 o C3, sumadas por origen + tipo + mes en la base
+ * (`cantera_pesadas_por_origen_tipo_mes()`, migración `20261106091322`): de
+ * ahí sale cuánta chocolata y cuánta caliza acarrearon las dos canteras.
+ * Mientras esa migración no corrió, devuelve `[]` y el balance por material
+ * queda sin acarreo en vez de tirar abajo la página.
+ */
+export async function traerPesadasPorOrigenTipoMes(
+  supabase: SupabaseClient
+): Promise<{ origen: string; tipo: string | null; mes: string; toneladas: number }[]> {
+  const { data, error } = await supabase.rpc("cantera_pesadas_por_origen_tipo_mes");
+  if (error) {
+    console.error("traerPesadasPorOrigenTipoMes: no se pudo calcular, la cubicación por material queda sin acarreo", error);
+    return [];
+  }
+  return ((data ?? []) as { origen: string; tipo: string | null; mes: string; toneladas: number }[]).map((f) => ({
+    ...f,
+    // La función devuelve un `date` ("YYYY-MM-01"); el balance compara "YYYY-MM" con `===`.
+    mes: f.mes.slice(0, 7),
+  }));
+}
+
+/** Los cierres mensuales de C1+C3 por material. Tabla chica; `[]` si la migración no corrió. */
+export async function traerCubicacionesMaterial(supabase: SupabaseClient): Promise<CubicacionMaterialDB[]> {
+  try {
+    return await traerTodo<CubicacionMaterialDB>((desde, hasta) =>
+      supabase
+        .from("cantera_cubicaciones_material")
+        .select("id, mes, material, existencia_final, existencia_acopio, observaciones, cargado_por, cargado_en, actualizado_por, actualizado_en")
+        .order("mes")
+        .range(desde, hasta)
+    );
+  } catch (e) {
+    console.error("traerCubicacionesMaterial: no se pudo traer (¿corrió la migración 20261106091322?)", e);
+    return [];
   }
 }
 

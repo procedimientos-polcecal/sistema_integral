@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { FilaCierreCubicacion, LecturaDeCubicacion } from "@/lib/cantera/cubicacion";
+import { CLAVE_C1C3, MATERIALES_DE_CANTERA, type DesgloseDeMaterial, type ExistenciaDeMaterial } from "@/lib/cantera/cubicacionPorMaterial";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { numeroDeCampo } from "@/lib/cantera/numero";
 
@@ -17,6 +18,7 @@ const COLOR_YACIMIENTO: Record<string, string> = {
   D6: "#0891B2",
   C1: "#E8A020",
   C3: "#7E22CE",
+  "C1+C3": "#B45309",
 };
 
 const ESTILO_LECTURA: Record<LecturaDeCubicacion, string> = {
@@ -56,55 +58,135 @@ interface Yacimiento {
   nombre: string;
 }
 
+/** Una tarjeta del mes: un yacimiento (D1, D6; C1 y C3 antes del corte) o C1+C3 juntas (desde el corte). */
+interface Tarjeta {
+  clave: string;
+  titulo: string;
+  subtitulo: string;
+  fila: FilaCierreCubicacion | null;
+  /** Qué se manda al guardar: a qué ruta y con qué identificador. */
+  destino: { tipo: "yacimiento"; yacimientoId: string } | { tipo: "c1c3" };
+}
+
+/** Lo que se escribe en el formulario de C1+C3: canteras y galpones, de cada material. */
+type FormC1C3 = Record<string, { canteras: string; galpones: string }>;
+const FORM_C1C3_VACIO: FormC1C3 = Object.fromEntries(MATERIALES_DE_CANTERA.map((m) => [m, { canteras: "", galpones: "" }]));
+
 export default function CubicacionClient({
   yacimientos,
   filas,
+  filasC1C3,
+  desglose,
+  existenciasPorMaterial,
+  mesDeCorte,
+  acarreoSinMaterial,
   puedeEditar,
 }: {
   yacimientos: Yacimiento[];
   filas: FilaCierreCubicacion[];
+  filasC1C3: FilaCierreCubicacion[];
+  desglose: DesgloseDeMaterial[];
+  existenciasPorMaterial: ExistenciaDeMaterial[];
+  mesDeCorte: string;
+  acarreoSinMaterial: { mes: string; toneladas: number }[];
   puedeEditar: boolean;
 }) {
   const router = useRouter();
-  const meses = useMemo(() => [...new Set(filas.map((f) => f.mes))].sort(), [filas]);
+  const meses = useMemo(() => [...new Set([...filas, ...filasC1C3].map((f) => f.mes))].sort(), [filas, filasC1C3]);
   const mesActual = hoyEnArgentina().slice(0, 7);
   const [mes, setMes] = useState(() => (meses.includes(mesActual) ? mesActual : meses[meses.length - 1] ?? mesActual));
 
-  const idPorCodigo = new Map(yacimientos.map((y) => [y.codigo, y.id]));
-  const filasDelMes = yacimientos.map((y) => ({
-    yacimiento: y,
-    fila: filas.find((f) => f.mes === mes && f.yacimientoCodigo === y.codigo) ?? null,
-  }));
+  // Desde el mes de corte C1 y C3 se cierran juntas (la chocolata y la caliza
+  // están mezcladas en los galpones); antes, cada una por su cuenta.
+  const juntas = mes >= mesDeCorte;
+  const tarjetas: Tarjeta[] = [
+    ...yacimientos
+      .filter((y) => !juntas || !["C1", "C3"].includes(y.codigo))
+      .map((y): Tarjeta => ({
+        clave: y.codigo,
+        titulo: y.codigo,
+        subtitulo: y.nombre,
+        fila: filas.find((f) => f.mes === mes && f.yacimientoCodigo === y.codigo) ?? null,
+        destino: { tipo: "yacimiento", yacimientoId: y.id },
+      })),
+    ...(juntas
+      ? [{
+          clave: CLAVE_C1C3,
+          titulo: "C1 + C3",
+          subtitulo: "chocolata y caliza",
+          fila: filasC1C3.find((f) => f.mes === mes) ?? null,
+          destino: { tipo: "c1c3" },
+        } as Tarjeta]
+      : []),
+  ];
 
-  const [editando, setEditando] = useState<string | null>(null); // yacimientoCodigo en edición
+  const desgloseDelMes = desglose.filter((d) => d.mes === mes);
+  const sinMaterial = acarreoSinMaterial.find((a) => a.mes === mes);
+
+  const [editando, setEditando] = useState<string | null>(null); // clave de la tarjeta en edición
   const [valor, setValor] = useState(""); // existencia final en el yacimiento
   const [valorAcopio, setValorAcopio] = useState(""); // existencia final en el acopio por triturar
+  const [formC1C3, setFormC1C3] = useState<FormC1C3>(FORM_C1C3_VACIO);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function guardar(yacimientoCodigo: string) {
-    const yacimientoId = idPorCodigo.get(yacimientoCodigo);
-    // Tenía su propio `replace(",", ".")`: entendía la coma y **no** el punto de
-    // miles, así que "2.240" entraba como 2,24. Medido el 05/11/2026: 3 de las
-    // 16 cubicaciones cargadas pasan las mil toneladas y la mayor es 2240.
-    const n = numeroDeCampo(valor);
-    if (!yacimientoId || n === null || n < 0) {
-      setError("La existencia final del yacimiento tiene que ser un número");
-      return;
+  /**
+   * Vacío es "sin medir"; un texto que no es número es un error. Lee con
+   * `numeroDeCampo`: un `replace(",", ".")` propio entendía la coma pero no el
+   * punto de miles, y "2.240" entraba como 2,24 (3 de las 16 cubicaciones
+   * cargadas pasan las mil toneladas, la mayor 2240).
+   */
+  function numeroOpcional(texto: string): number | null | "invalido" {
+    if (texto.trim() === "") return null;
+    const n = numeroDeCampo(texto);
+    return n !== null && n >= 0 ? n : "invalido";
+  }
+
+  async function guardar(tarjeta: Tarjeta) {
+    let url: string;
+    let cuerpo: unknown;
+
+    if (tarjeta.destino.tipo === "c1c3") {
+      // Los dos materiales, juntos: con uno solo la suma parecería completa y
+      // daría un residuo falso. Si no hay caliza, se carga 0.
+      const materiales = [];
+      for (const m of MATERIALES_DE_CANTERA) {
+        const canteras = numeroOpcional(formC1C3[m].canteras);
+        const galpones = numeroOpcional(formC1C3[m].galpones);
+        if (canteras === null || canteras === "invalido") {
+          setError(`${m}: la existencia en las canteras tiene que ser un número (si no hay, 0)`);
+          return;
+        }
+        if (galpones === "invalido") {
+          setError(`${m}: la existencia en galpones y acopios tiene que ser un número`);
+          return;
+        }
+        materiales.push({ material: m, existencia_final: canteras, existencia_acopio: galpones });
+      }
+      url = "/api/cantera/cubicacion/material";
+      cuerpo = { mes, materiales };
+    } else {
+      const n = numeroOpcional(valor);
+      if (n === null || n === "invalido") {
+        setError("La existencia final del yacimiento tiene que ser un número");
+        return;
+      }
+      const acopio = numeroOpcional(valorAcopio);
+      if (acopio === "invalido") {
+        setError("La existencia del acopio por triturar tiene que ser un número");
+        return;
+      }
+      url = "/api/cantera/cubicacion";
+      cuerpo = { yacimiento_id: tarjeta.destino.yacimientoId, mes, existencia_final: n, existencia_acopio: acopio };
     }
-    // Vacío es "sin medir", no un cero.
-    const acopio = valorAcopio.trim() === "" ? null : numeroDeCampo(valorAcopio);
-    if (acopio === null ? valorAcopio.trim() !== "" : acopio < 0) {
-      setError("La existencia del acopio por triturar tiene que ser un número");
-      return;
-    }
+
     setGuardando(true);
     setError(null);
     try {
-      const res = await fetch("/api/cantera/cubicacion", {
+      const res = await fetch(url, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ yacimiento_id: yacimientoId, mes, existencia_final: n, existencia_acopio: acopio }),
+        body: JSON.stringify(cuerpo),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "No se pudo guardar");
@@ -117,9 +199,32 @@ export default function CubicacionClient({
     }
   }
 
+  function empezarAEditar(tarjeta: Tarjeta) {
+    setEditando(tarjeta.clave);
+    setError(null);
+    if (tarjeta.destino.tipo === "c1c3") {
+      const previo = (m: string) => existenciasPorMaterial.find((e) => e.mes === mes && e.material === m);
+      setFormC1C3(
+        Object.fromEntries(
+          MATERIALES_DE_CANTERA.map((m) => [
+            m,
+            {
+              canteras: previo(m) ? String(previo(m)!.existenciaFinal) : "",
+              galpones: previo(m)?.existenciaAcopio != null ? String(previo(m)!.existenciaAcopio) : "",
+            },
+          ])
+        )
+      );
+    } else {
+      setValor(tarjeta.fila?.existenciaYacimiento != null ? String(tarjeta.fila.existenciaYacimiento) : "");
+      setValorAcopio(tarjeta.fila?.existenciaAcopio != null ? String(tarjeta.fila.existenciaAcopio) : "");
+    }
+  }
+
   // Últimos 6 meses cargados, del más reciente al más viejo, para el
   // historial de lecturas de un vistazo.
   const historial = [...meses].reverse().slice(0, 6);
+  const columnasHistorial = [...yacimientos.map((y) => y.codigo), CLAVE_C1C3];
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -131,36 +236,46 @@ export default function CubicacionClient({
 
       {/* ── Navegador de mes ── */}
       <div className="card mt-4 flex items-center justify-between p-3">
-        <button
-          className="btn-ghost"
-          onClick={() => setMes((m) => moverMes(m, -1))}
-        >
+        <button className="btn-ghost" onClick={() => setMes((m) => moverMes(m, -1))}>
           ← Mes anterior
         </button>
         <span className="font-semibold text-slate-800">{nombreDeMes(mes)}</span>
-        <button
-          className="btn-ghost"
-          onClick={() => setMes((m) => moverMes(m, 1))}
-        >
+        <button className="btn-ghost" onClick={() => setMes((m) => moverMes(m, 1))}>
           Mes siguiente →
         </button>
       </div>
 
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
-      {/* ── Cierre del mes, un yacimiento por tarjeta ── */}
+      {juntas && (
+        <p className="mt-3 text-xs text-slate-500">
+          Desde {nombreDeMes(mesDeCorte)} C1 y C3 se cierran juntas: la chocolata y la caliza de las dos canteras están mezcladas
+          en los galpones y al volar no se sabe cuánta es de cada una. El balance usa los totales; el reparto entre chocolata y
+          caliza sale abajo, medido. Los meses anteriores se ven como estaban.
+        </p>
+      )}
+      {juntas && sinMaterial && (
+        <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          {num0.format(sinMaterial.toneladas)} t acarreadas desde C1/C3 este mes tienen un tipo que no es ni chocolata ni caliza:
+          cuentan en el balance pero no en el reparto de abajo.
+        </p>
+      )}
+
+      {/* ── Cierre del mes, una tarjeta por yacimiento (o C1+C3 juntas) ── */}
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {filasDelMes.map(({ yacimiento, fila }) => {
-          const color = COLOR_YACIMIENTO[yacimiento.codigo] ?? "#64748B";
-          const enEdicion = editando === yacimiento.codigo;
+        {tarjetas.map((tarjeta) => {
+          const { fila } = tarjeta;
+          const esC1C3 = tarjeta.destino.tipo === "c1c3";
+          const color = COLOR_YACIMIENTO[tarjeta.clave] ?? "#64748B";
+          const enEdicion = editando === tarjeta.clave;
           return (
-            <div key={yacimiento.id} className="relative overflow-hidden card p-4">
+            <div key={tarjeta.clave} className={`relative overflow-hidden card p-4 ${esC1C3 ? "sm:col-span-2" : ""}`}>
               <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full" style={{ background: color }} />
-                  <span className="font-semibold text-slate-800">{yacimiento.codigo}</span>
-                  <span className="text-xs text-slate-400">{yacimiento.nombre}</span>
+                  <span className="font-semibold text-slate-800">{tarjeta.titulo}</span>
+                  <span className="text-xs text-slate-400">{tarjeta.subtitulo}</span>
                 </div>
                 <BadgeLectura lectura={fila?.lectura ?? null} />
               </div>
@@ -177,34 +292,31 @@ export default function CubicacionClient({
               </dl>
 
               <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Existencia final acopio por triturar</span>
-                  <span className="font-mono tabular-nums text-slate-700">{t(fila?.existenciaAcopio ?? null)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Existencia final yacimiento</span>
-                  <span className="font-mono tabular-nums text-slate-700">{t(fila?.existenciaYacimiento ?? null)}</span>
-                </div>
-                <div className="flex items-center justify-between border-t border-slate-100 pt-1.5 text-sm">
+                {!esC1C3 && (
+                  <>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Existencia final acopio por triturar</span>
+                      <span className="font-mono tabular-nums text-slate-700">{t(fila?.existenciaAcopio ?? null)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">Existencia final yacimiento</span>
+                      <span className="font-mono tabular-nums text-slate-700">{t(fila?.existenciaYacimiento ?? null)}</span>
+                    </div>
+                  </>
+                )}
+                <div className={`flex items-center justify-between text-sm ${esC1C3 ? "" : "border-t border-slate-100 pt-1.5"}`}>
                   <span className="font-medium text-slate-700">Existencia final total</span>
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-semibold tabular-nums text-slate-900">{t(fila?.existenciaFinal ?? null)}</span>
                     {puedeEditar && !enEdicion && (
-                      <button
-                        className="text-xs text-slate-400 underline hover:text-slate-700"
-                        onClick={() => {
-                          setEditando(yacimiento.codigo);
-                          setValor(fila?.existenciaYacimiento != null ? String(fila.existenciaYacimiento) : "");
-                          setValorAcopio(fila?.existenciaAcopio != null ? String(fila.existenciaAcopio) : "");
-                          setError(null);
-                        }}
-                      >
-                        {fila?.existenciaFinal != null ? "Editar" : "Cargar"}
+                      <button className="text-xs text-slate-400 underline hover:text-slate-700" onClick={() => empezarAEditar(tarjeta)}>
+                        {fila?.existenciaFinal != null || (esC1C3 && desgloseDelMes.some((d) => d.existenciaFinal !== null)) ? "Editar" : "Cargar"}
                       </button>
                     )}
                   </div>
                 </div>
-                {enEdicion && (
+
+                {enEdicion && tarjeta.destino.tipo === "yacimiento" && (
                   <div className="mt-2 space-y-2">
                     <label className="block text-xs text-slate-600">
                       Existencia final acopio por triturar (opcional)
@@ -224,12 +336,53 @@ export default function CubicacionClient({
                         inputMode="decimal"
                         value={valor}
                         onChange={(e) => setValor(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && guardar(yacimiento.codigo)}
+                        onKeyDown={(e) => e.key === "Enter" && guardar(tarjeta)}
                         placeholder="Toneladas medidas en el yacimiento"
                       />
                     </label>
                     <div className="flex items-center gap-2">
-                      <button className="btn-primary shrink-0" disabled={guardando} onClick={() => guardar(yacimiento.codigo)}>
+                      <button className="btn-primary shrink-0" disabled={guardando} onClick={() => guardar(tarjeta)}>
+                        Guardar
+                      </button>
+                      <button className="btn-ghost shrink-0" onClick={() => setEditando(null)}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
+
+                {enEdicion && tarjeta.destino.tipo === "c1c3" && (
+                  <div className="mt-2 space-y-3">
+                    <p className="text-xs text-slate-500">
+                      Cargá los dos materiales a la vez: el balance usa la suma. Si no hay caliza en las canteras, 0.
+                    </p>
+                    {MATERIALES_DE_CANTERA.map((m, i) => (
+                      <div key={m} className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:items-end">
+                        <span className="text-sm font-medium text-slate-700">{m}</span>
+                        <label className="block text-xs text-slate-600">
+                          En las canteras
+                          <input
+                            autoFocus={i === 0}
+                            className="input mt-1"
+                            inputMode="decimal"
+                            value={formC1C3[m].canteras}
+                            onChange={(e) => setFormC1C3((f) => ({ ...f, [m]: { ...f[m], canteras: e.target.value } }))}
+                            placeholder="Toneladas"
+                          />
+                        </label>
+                        <label className="block text-xs text-slate-600">
+                          En galpones y acopios (opcional)
+                          <input
+                            className="input mt-1"
+                            inputMode="decimal"
+                            value={formC1C3[m].galpones}
+                            onChange={(e) => setFormC1C3((f) => ({ ...f, [m]: { ...f[m], galpones: e.target.value } }))}
+                            onKeyDown={(e) => e.key === "Enter" && guardar(tarjeta)}
+                            placeholder="Toneladas"
+                          />
+                        </label>
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-2">
+                      <button className="btn-primary shrink-0" disabled={guardando} onClick={() => guardar(tarjeta)}>
                         Guardar
                       </button>
                       <button className="btn-ghost shrink-0" onClick={() => setEditando(null)}>Cancelar</button>
@@ -247,12 +400,52 @@ export default function CubicacionClient({
                   )}
                 </p>
               )}
+
+              {/* El reparto entre chocolata y caliza: medido, no estimado. */}
+              {esC1C3 && (
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reparto por material</h3>
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="table-base">
+                      <thead>
+                        <tr>
+                          <th>Material</th>
+                          <th className="text-right">Exist. inicial</th>
+                          <th className="text-right">Acarreo</th>
+                          <th className="text-right">Exist. final</th>
+                          <th className="text-right">Salió de la cantera</th>
+                          <th className="text-right">Parte</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {MATERIALES_DE_CANTERA.map((m) => {
+                          const d = desgloseDelMes.find((x) => x.material === m);
+                          return (
+                            <tr key={m}>
+                              <td>{m}</td>
+                              <td className="text-right font-mono tabular-nums">{t(d?.existenciaInicial ?? null)}</td>
+                              <td className="text-right font-mono tabular-nums">{t(d?.acarreo ?? 0)}</td>
+                              <td className="text-right font-mono tabular-nums">{t(d?.existenciaFinal ?? null)}</td>
+                              <td className="text-right font-mono font-medium tabular-nums">{t(d?.extraidoImplicito ?? null)}</td>
+                              <td className="text-right font-mono tabular-nums">{d?.parteDelTotal != null ? `${(d.parteDelTotal * 100).toFixed(0)}%` : "—"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-400">
+                    «Salió de la cantera» = existencia final − inicial + acarreo: cuánta piedra de cada tipo se extrajo en el mes, que
+                    al volar no se sabe. Sin existencia inicial (el primer mes) no se puede calcular.
+                  </p>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* ── Historial: la lectura de cada yacimiento, últimos meses ── */}
+      {/* ── Historial: la lectura de cada yacimiento (y de C1+C3 desde el corte), últimos meses ── */}
       {historial.length > 0 && (
         <section className="mt-6">
           <h2 className="section-title">Historial</h2>
@@ -261,8 +454,8 @@ export default function CubicacionClient({
               <thead>
                 <tr>
                   <th>Mes</th>
-                  {yacimientos.map((y) => (
-                    <th key={y.id} className="text-center">{y.codigo}</th>
+                  {columnasHistorial.map((c) => (
+                    <th key={c} className="text-center">{c === CLAVE_C1C3 ? "C1 + C3" : c}</th>
                   ))}
                 </tr>
               </thead>
@@ -274,10 +467,16 @@ export default function CubicacionClient({
                         {nombreDeMes(m)}
                       </button>
                     </td>
-                    {yacimientos.map((y) => {
-                      const fila = filas.find((f) => f.mes === m && f.yacimientoCodigo === y.codigo) ?? null;
+                    {columnasHistorial.map((c) => {
+                      const esJuntas = c === CLAVE_C1C3;
+                      const esC1C3Suelta = c === "C1" || c === "C3";
+                      // Antes del corte C1 y C3 se cierran por separado y después juntas: lo que no aplica a ese mes va vacío.
+                      if ((esJuntas && m < mesDeCorte) || (esC1C3Suelta && m >= mesDeCorte)) {
+                        return <td key={c} className="text-center text-slate-300">—</td>;
+                      }
+                      const fila = (esJuntas ? filasC1C3 : filas).find((f) => f.mes === m && (esJuntas || f.yacimientoCodigo === c)) ?? null;
                       return (
-                        <td key={y.id} className="text-center">
+                        <td key={c} className="text-center">
                           <BadgeLectura lectura={fila?.lectura ?? null} />
                         </td>
                       );
