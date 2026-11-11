@@ -62,10 +62,19 @@ Cuando pasa, mudarse es cambiar dos variables, y las dos salen del subdominio:
 | `ODOO_DB` | `polcecal-staging-<build>` — **en staging el nombre de la base sí es el subdominio**, al revés de lo que dice la sección siguiente para producción |
 
 **La API key no cambia**: la base de staging es una copia, y el mismo usuario de
-integración autentica igual. Verificado el 06/10/2026 al mudarse al build
-`39242521`: `authenticate` devolvió uid 17, las dos empresas con sus CUITs
-(Polcecal 30641068019, Polysan 30707285008) y los catálogos por el camino de la
-app —384 productos, 242 y 240 cuentas, 360 analíticas por empresa—.
+integración autentica igual.
+
+**Y pasa seguido: van tres mudanzas en cinco semanas.** Los builds, con lo que
+dio cada verificación por el camino de la app:
+
+| | Build | Verificado |
+|---|---|---|
+| hasta el 06/10/2026 | `37495859` | — |
+| 06/10/2026 | `39242521` | uid 17 · 384 productos · 242 y 240 cuentas · 360 analíticas |
+| 11/11/2026 | `41401361` | uid 17 · 400 productos · 242 y 240 cuentas · 360 analíticas |
+
+Ninguna de las tres necesitó tocar código ni la API key: las dos variables y
+listo. Si la próxima pide algo más, es que cambió otra cosa.
 
 Y hay que acordarse de **Vercel**: cambiar `.env.local` arregla lo local y deja
 producción rota, que es lo que había pasado. Son las mismas dos variables.
