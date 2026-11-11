@@ -223,7 +223,7 @@ export function avisosDeRitmo(
 
 // ── La salud de las sincronizaciones ────────────────────────────────────────
 
-/** Donde aterriza todo aviso de salud: la pantalla con el estado de los 29. */
+/** Donde aterriza todo aviso de salud: la pantalla con el estado de lo declarado. */
 const HREF_DE_LA_SALUD = "/administracion/salud";
 
 /*
@@ -282,8 +282,10 @@ function tituloDeLaCaida(caida: EntradaCaida): string {
  * Los avisos de la salud de las sincronizaciones: **uno por recurso caído**.
  *
  * Tiene la forma de `avisosDeRitmo` —un productor **dinámico**— y no la de
- * `avisosDeConteos`, que mapea un record fijo: son 29 recursos declarados en el
- * `REGISTRO` y la lista crece sola cuando alguien declara uno nuevo.
+ * `avisosDeConteos`, que mapea un record fijo: el `REGISTRO` declara hoy 30
+ * recursos en 23 entradas, de las cuales **20 se vigilan** —una entrada puede
+ * agrupar varios recursos, como el respaldo con sus ocho pestañas—, y la lista
+ * crece sola cuando alguien declara una nueva.
  *
  * ── POR QUÉ UNO POR RECURSO Y NO UNO CON EL CONTEO ──────────────────────────
  *
@@ -306,10 +308,14 @@ function tituloDeLaCaida(caida: EntradaCaida): string {
  *
  *  - **La `cantidad` no cuenta cosas**, y mide algo distinto según el estado:
  *    corridas fallidas seguidas en un `fallo`, tolerancias enteras de silencio
- *    en una `vieja` o una `nunca` (ver `cuantoLlevaMal`). Las dos tienen el
- *    mismo trabajo: **crecer mientras el problema siga**, para que descartar el
- *    aviso no lo calle para siempre. Por eso el resumen lo imprime sin número:
- *    ver `sinNumero` en `./resumenDeAvisos.ts`.
+ *    en una `vieja` (ver `cuantoLlevaMal`). Las dos tienen el mismo trabajo:
+ *    **crecer mientras el problema siga**, para que descartar el aviso no lo
+ *    calle para siempre. **Una `nunca` es la excepción y no crece: vale 1
+ *    fijo**, así que un descarte ahí dura mientras ese recurso no pase a `fallo`
+ *    con racha de dos. Está así a propósito —el porqué, que es el id compartido
+ *    `salud-${clave}`, está en `cuantoLlevaMal`— y es el borde conocido de este
+ *    aviso. Por eso, además, el número no se imprime en ninguna superficie: ver
+ *    `suNumeroSeMuestra` en `./notificaciones.ts`.
  *  - **Los ids son nuevos y no se reusan.** `agenda-pasos-caidos` y
  *    `agenda-salud-sin-comprobar` quedan huérfanos en `notificaciones_descartes`,
  *    lo cual es inofensivo porque nunca más coinciden con nada; reusar uno le

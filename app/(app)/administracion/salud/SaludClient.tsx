@@ -31,8 +31,9 @@ import {
  *    nuevo que nadie declaró no se vigila.
  *
  * **Cuando la comprobación misma falló no se dibuja ninguna fila vigilada.** Con
- * `corridas` vacío, cada recurso saldría «nunca corrió»: 29 mentiras en rojo en
- * vez de un «no se pudo mirar». Los exceptuados sí salen, porque su porqué no
+ * `corridas` vacío, cada entrada saldría «nunca corrió»: las 20 vigiladas en
+ * rojo mintiendo, en vez de un «no se pudo mirar». Los exceptuados sí salen,
+ * porque su porqué no
  * depende de la lectura. **Y «sin declarar» sale como «no se sabe»**: la lista
  * llega vacía porque no se pudo armar, y una sección que desaparece se lee
  * «no hay ninguno». Ojo: esto sólo cubre una lectura que **falla**; una RLS que
@@ -176,8 +177,9 @@ export default function SaludClient({ salud, ahora: ahoraISO }: { salud: SaludDe
 
       {salud.sinComprobar ? (
         /*
-         * **Es el único cartel que reemplaza a 29 filas que no se dibujan**, así
-         * que no puede pesar lo mismo que el de «N de 29 con problemas»: borde
+         * **Es el único cartel que reemplaza a las 20 filas vigiladas que no se
+         * dibujan**, así que no puede pesar lo mismo que el de «N de 20 con
+         * problemas» —ese número sale de `vigiladas.length`—: borde
          * grueso, ícono y letra más grande. Y tiene que decir que **tampoco se
          * sabe lo que no está declarado**: `leerLaSalud` devuelve `sinDeclarar`
          * vacío cuando no pudo leer, y una lista que no aparece se lee «no hay
