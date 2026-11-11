@@ -210,10 +210,21 @@ export default function HiloDeMensajes({
     }
   }
 
+  // **`elegidos` es lo único que se muestra y lo único que se manda**: los chips,
+  // la línea de a quién le llega, el botón y el cuerpo del POST salen de acá. Si
+  // el POST mandara `mencionados` entero, una persona que ya no está en la lista
+  // (el servidor contestó 400 y se volvió a pedir) viajaría sin que haya un chip
+  // para sacarla, y la pantalla afirmaría a quién se avisa mientras el pedido
+  // lleva a otra persona. Y si el correo no está configurado no hay a quién
+  // avisar, así que las menciones ya elegidas se dejan de contar —el cartel de
+  // arriba dice por qué— en vez de seguir prometiendo un correo que no sale.
   const porId = new Map(destinatarios.map((d) => [d.id, d]));
-  const elegidos = mencionados
-    .map((m) => porId.get(m))
-    .filter((d): d is Destinatario => d !== undefined);
+  const elegidos =
+    correoConfigurado === false
+      ? []
+      : mencionados
+          .map((m) => porId.get(m))
+          .filter((d): d is Destinatario => d !== undefined);
   const sinElegir = destinatarios.filter((d) => !mencionados.includes(d.id));
   const aQuienLeLlega = elegidos.filter((d) => d.tiene_correo);
   const aQuienNo = elegidos.filter((d) => !d.tiene_correo);
@@ -243,7 +254,7 @@ export default function HiloDeMensajes({
       res = await fetch("/api/mensajes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo, id, texto: limpio, menciones: mencionados }),
+        body: JSON.stringify({ tipo, id, texto: limpio, menciones: elegidos.map((d) => d.id) }),
       });
     } catch {
       setEnviando(false);
@@ -301,7 +312,7 @@ export default function HiloDeMensajes({
   }
   const puedeMencionar =
     correoConfigurado === true && !errorDeLaLista && destinatarios.length > 0;
-  const alLimite = mencionados.length >= MAXIMO_DE_MENCIONES;
+  const alLimite = elegidos.length >= MAXIMO_DE_MENCIONES;
 
   return (
     <div className="space-y-3 border-t border-slate-200 pt-3">
@@ -421,7 +432,7 @@ export default function HiloDeMensajes({
               <p className="text-xs text-slate-400">
                 Sólo se puede mencionar a quien pueda ver {dequeHablamos}: el correo lleva el texto
                 del mensaje, y a quien no tiene acceso ni le serviría el enlace. Si no encontrás a
-                alguien en la lista, es porque no tiene acceso.
+                alguien en la lista, puede ser que no tenga acceso o que ya no esté activo.
               </p>
             )}
 
@@ -454,7 +465,7 @@ export default function HiloDeMensajes({
                 <>
                   {aQuienLeLlega.length > 0 && (
                     <>
-                      Se le manda un correo a{" "}
+                      Correo para{" "}
                       <span className="font-medium">
                         {aQuienLeLlega.map((d) => d.nombre).join(", ")}
                       </span>
@@ -463,8 +474,7 @@ export default function HiloDeMensajes({
                   )}
                   {aQuienNo.length > 0 && (
                     <span className="text-amber-700">
-                      A {aQuienNo.map((d) => d.nombre).join(", ")} no se le va a poder mandar el
-                      correo: no tiene correo cargado.
+                      Sin correo cargado, el aviso no sale: {aQuienNo.map((d) => d.nombre).join(", ")}.
                     </span>
                   )}
                 </>
