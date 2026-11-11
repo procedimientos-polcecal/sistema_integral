@@ -17,6 +17,13 @@
  *
  * ## Devuelve qué pasó en vez de lanzar
  *
+ * Devuelve `{ estado, detalle? }`. El `estado` es lo que decide quien llama; el
+ * `detalle` es **lo que contestó el Apps Script, sin traducir ni resumir**, y
+ * existe porque un fallo que sólo dice «fallo» no distingue un dominio
+ * rechazado de un secreto mal puesto de un cupo agotado de un script caído:
+ * quien lo guarda (la mensajería lo anota en la mención) necesita el texto
+ * real. Lo mismo va a los registros del servidor con `console.error`.
+ *
  * Mismo molde que `lib/core/webpush.ts`, que es el hermano de esto. Quien
  * llama son las dos rutas de alta, en el camino de rechazar una carga: lo que
  * la ruta le debe a la persona es la respuesta sobre su carga, y un problema
@@ -63,6 +70,16 @@ export function estaConfigurado(): boolean {
 
 export type ResultadoDelCorreo = "enviado" | "sin-configurar" | "fallo";
 
+export interface RespuestaDelCorreo {
+  estado: ResultadoDelCorreo;
+  /**
+   * Sólo con `estado: "fallo"`: lo que dijo el servicio, tal cual (el cuerpo
+   * que contestó el Apps Script, recortado a 500 caracteres, o el mensaje de
+   * la excepción si ni siquiera contestó).
+   */
+  detalle?: string;
+}
+
 export interface Mensaje {
   /** A quién. El Apps Script sólo acepta direcciones de los dominios de la empresa. */
   para: string;
@@ -70,14 +87,14 @@ export interface Mensaje {
   cuerpo: string;
 }
 
-export async function enviarCorreo(mensaje: Mensaje): Promise<ResultadoDelCorreo> {
+export async function enviarCorreo(mensaje: Mensaje): Promise<RespuestaDelCorreo> {
   const url = process.env.SDG_CORREO_URL;
   const secreto = process.env.SDG_CORREO_SECRET;
 
   // Sin configurar **no se intenta y no se loguea**. Entre el deploy de esto y
   // el día que alguien publique el script va a pasar tiempo, y un error por
   // cada carga rechazada sería ruido diario sobre algo que nadie pidió todavía.
-  if (!url || !secreto) return "sin-configurar";
+  if (!url || !secreto) return { estado: "sin-configurar" };
 
   try {
     const respuesta = await fetch(url, {
@@ -100,15 +117,18 @@ export async function enviarCorreo(mensaje: Mensaje): Promise<ResultadoDelCorreo
       // de inicio de sesión si la implementación quedó restringida.
     }
 
-    if (resuelto?.ok === true) return "enviado";
+    if (resuelto?.ok === true) return { estado: "enviado" };
 
     // Lo que contestó, sin traducir: es lo único que después va a permitir
     // distinguir un secreto mal puesto de un dominio no permitido de un cupo
     // agotado.
-    console.error("correo: lo rechazó el Apps Script", respuesta.status, dijo.slice(0, 500));
-    return "fallo";
+    const loQueDijo = dijo.slice(0, 500);
+    console.error("correo: lo rechazó el Apps Script", respuesta.status, loQueDijo);
+    // Con el cuerpo vacío no hay nada que copiar: queda al menos el status.
+    return { estado: "fallo", detalle: loQueDijo || `HTTP ${respuesta.status}, sin cuerpo` };
   } catch (e) {
-    console.error("correo: no se pudo llamar al Apps Script", (e as Error)?.message ?? e);
-    return "fallo";
+    const detalle = String((e as Error)?.message ?? e);
+    console.error("correo: no se pudo llamar al Apps Script", detalle);
+    return { estado: "fallo", detalle };
   }
 }

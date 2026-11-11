@@ -299,12 +299,15 @@ export async function POST(request: Request) {
               dondeVerlo,
               hiloId: `${tipo}:${id}`,
             });
-            const resultado = await enviarCorreo({ para: d.email as string, ...correo });
+            const { estado, detalle } = await enviarCorreo({ para: d.email as string, ...correo });
             cambio =
-              resultado === "enviado" ? { avisado_en: new Date().toISOString() }
+              estado === "enviado" ? { avisado_en: new Date().toISOString() }
               // Entre la comprobación de arriba y este momento pudo cambiar.
-              : resultado === "sin-configurar" ? { aviso_fallo: MOTIVO_SIN_CONFIGURAR }
-              : { aviso_fallo: MOTIVO_EL_SERVICIO_FALLO };
+              : estado === "sin-configurar" ? { aviso_fallo: MOTIVO_SIN_CONFIGURAR }
+              // Lo que dijo el servicio, sin traducir: es lo que distingue un
+              // dominio rechazado de un cupo agotado. El texto fijo es sólo
+              // para cuando no dijo nada.
+              : { aviso_fallo: detalle?.trim() || MOTIVO_EL_SERVICIO_FALLO };
           } catch (e) {
             // `enviarCorreo` no lanza, pero armar el correo sí podría. Si esto
             // saliera sin anotar nada, la mención quedaría «pendiente» para
