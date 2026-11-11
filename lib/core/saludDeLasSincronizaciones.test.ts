@@ -71,6 +71,15 @@ describe("cuantasTolerancias", () => {
 
   it("una fecha ilegible es 1 y no NaN", () =>
     expect(cuantasTolerancias(corrida({ created_at: "no es una fecha" }), 24, AHORA)).toBe(1));
+
+  /*
+   * Una tolerancia en 0 da `Infinity` al dividir, y `JSON.stringify` lo manda
+   * como `null`: por ahí pasan la campana y el cuerpo del descarte, y una
+   * cantidad nula no se compara con nada. Hoy ninguna entrada declara 0, pero
+   * el tipo lo acepta y nada avisaría.
+   */
+  it("una tolerancia en cero no da Infinity", () =>
+    expect(cuantasTolerancias(corrida({ created_at: hace(73) }), 0, AHORA)).toBe(73));
 });
 
 /**
@@ -145,6 +154,15 @@ describe("el registro y las entradas caídas", () => {
     expect(caidas[0]).toMatchObject({ clave: "respaldo/sheets", estado: "vieja" });
   });
 
+  /*
+   * EL 1 DE UN `nunca` ES FIJO Y ES A PROPÓSITO. No crece como el de una
+   * `vieja`: sin ninguna corrida no hay desde cuándo contar, así que un
+   * descarte ahí calla al recurso hasta que su cantidad pase de 1. Darle el
+   * número del día —el truco de `salud-sin-comprobar`— sería peor: el id es
+   * `salud-${clave}` y no depende del estado, así que un `nunca` descartado en
+   * ~20.771 dejaría mudo a ese recurso **justo cuando empiece a correr y a
+   * fallar**, porque una racha nunca llega a 20.771.
+   */
   it("un recurso vigilado que nunca corrió sale 'nunca' con 1", () => {
     const caidas = entradasCaidas(vistaSana({ "cantera/acarreo": null }), AHORA);
     expect(caidas).toEqual([
@@ -242,19 +260,30 @@ describe("rachaDeFallos", () => {
   type FilaCruda = Record<string, unknown> & { created_at: string };
 
   /**
-   * Las tablas de mentira: aplican los `eq`/`gt`/`is`/`not` que les encadenen.
+   * Las tablas de mentira: aplican los `eq`/`gt`/`is`/`not` que les encadenen,
+   * y **ordenan por lo que diga el `order`**.
    *
    * Los filtros se aplican de verdad —no devuelve siempre lo mismo— justo para
    * que un test pueda comprobar que la racha de un recurso no se come las
    * corridas de otro, que es lo que haría una consulta mal filtrada. Y recibe
    * **varias tablas** porque `ultima_sincronizacion` es una unión: la racha de
    * Compras no se cuenta en la misma tabla que la de los demás.
+   *
+   * **El `order` se obedece y no se ignora**, que es lo que esta copia hacía
+   * antes: `b.order = () => b` y un `sort` descendente fijo adentro de
+   * `maybeSingle`. Con eso, dar vuelta el `ascending` en la consulta de verdad
+   * —la última buena pasaría a ser la **primera** buena de la historia, y toda
+   * racha sería «todo lo que falló alguna vez»— dejaba los tests en verde. Un
+   * doble que decide por su cuenta lo que la consulta le pide confirma lo que
+   * no pasó.
    */
   function clienteCon(porTabla: Record<string, FilaCruda[]>, rompe = false): SupabaseClient {
     const armar = (tabla: string) => {
       const filas = porTabla[tabla] ?? [];
       const filtros: ((f: FilaCruda) => boolean)[] = [];
       const pasa = (f: FilaCruda) => filtros.every((q) => q(f));
+      /** Lo que pidió el `order`, para obedecerlo en `maybeSingle`. */
+      let orden: { columna: string; ascendente: boolean } | undefined;
       const b: Record<string, unknown> = {};
       b.select = () => b;
       b.eq = (col: string, val: unknown) => {
@@ -273,16 +302,22 @@ describe("rachaDeFallos", () => {
         filtros.push((f) => (f[col] ?? null) !== val);
         return b;
       };
-      b.order = () => b;
+      b.order = (columna: string, opciones?: { ascending?: boolean }) => {
+        orden = { columna, ascendente: opciones?.ascending ?? true };
+        return b;
+      };
       b.limit = () => b;
-      b.maybeSingle = async () =>
-        rompe
-          ? { data: null, error: { message: "no existe la tabla" } }
-          : {
-              data:
-                filas.filter(pasa).sort((a, z) => (a.created_at < z.created_at ? 1 : -1))[0] ?? null,
-              error: null,
-            };
+      b.maybeSingle = async () => {
+        if (rompe) return { data: null, error: { message: "no existe la tabla" } };
+        const elegidas = filas.filter(pasa);
+        if (orden) {
+          const { columna, ascendente } = orden;
+          elegidas.sort((a, z) =>
+            String(a[columna]) < String(z[columna]) ? (ascendente ? -1 : 1) : ascendente ? 1 : -1
+          );
+        }
+        return { data: elegidas[0] ?? null, error: null };
+      };
       // El conteo se espera directo sobre el builder: `await supabase.from(…)…`.
       b.then = (resolver: (r: { count: number | null; error: { message: string } | null }) => void) =>
         resolver(
@@ -326,6 +361,73 @@ describe("rachaDeFallos", () => {
     expect(await rachaDeFallos(clienteCon({ sincronizaciones: filas }), "calidad", "carbonilla-odoo")).toBe(1);
     filas.push(fila({ created_at: hace(8) }));
     expect(await rachaDeFallos(clienteCon({ sincronizaciones: filas }), "calidad", "carbonilla-odoo")).toBe(2);
+  });
+
+  /*
+   * EL `order` SE OBEDECE, Y POR ESO ESTE TEST EXISTE.
+   *
+   * Con dos corridas buenas, «la última» y «la primera» no son la misma fila:
+   * si la consulta pidiera `ascending: true`, la buena sería la de hace 20 h y
+   * la racha contaría también el fallo de hace 15 — o sea, todo lo que falló
+   * alguna vez. Mientras la tabla de mentira ordenaba descendente por su cuenta,
+   * dar vuelta ese flag no rompía ni un test.
+   */
+  it("la última buena es la última y no la primera: cuenta desde la más reciente", async () => {
+    const c = sincronizaciones(
+      fila({ ok: true, created_at: hace(20) }),
+      fila({ created_at: hace(15) }),
+      fila({ ok: true, created_at: hace(10) }),
+      fila({ created_at: hace(4) })
+    );
+    expect(await rachaDeFallos(c, "calidad", "carbonilla-odoo")).toBe(1);
+  });
+
+  /*
+   * ── LAS CORRIDAS DEL OTRO DESPLIEGUE NO ENTRAN ──────────────────────────────
+   *
+   * En esta base escriben **dos despliegues** (ver el CLAUDE.md), y el ajeno no
+   * siempre falla: medido el 11/11/2026, escribe `ok = true` en `agenda/canales`
+   * todos los días a las 05:30, media hora después del canónico. Sin filtrar,
+   * esa fila buena se lleva puesta la racha: el día que falle la corrida de
+   * verdad no queda ninguna fallida posterior y el número se clava en 1 para
+   * siempre — un descarte y ese recurso no vuelve a sonar nunca.
+   */
+  it("una corrida buena del otro despliegue no borra la racha del canónico", async () => {
+    const c = sincronizaciones(
+      fila({ ok: true, created_at: hace(10) }),
+      fila({ created_at: hace(8) }),
+      fila({ created_at: hace(4) }),
+      // La ajena, más nueva que todas: sin el filtro sería «la última buena».
+      fila({ ok: true, canonico: false, created_at: hace(3) })
+    );
+    expect(await rachaDeFallos(c, "calidad", "carbonilla-odoo")).toBe(2);
+  });
+
+  it("un fallo del otro despliegue tampoco engorda la racha", async () => {
+    const c = sincronizaciones(
+      fila({ ok: true, canonico: true, created_at: hace(10) }),
+      fila({ canonico: true, created_at: hace(8) }),
+      fila({ canonico: false, created_at: hace(6) })
+    );
+    expect(await rachaDeFallos(c, "calidad", "carbonilla-odoo")).toBe(1);
+  });
+
+  /*
+   * Y EL FILTRO ES `not canonico is false`, NO `canonico = true`.
+   *
+   * La columna la agregó la migración `20261105092248`: las filas anteriores la
+   * tienen en `null` y son la enorme mayoría —3.907 contra 357, medido el
+   * 11/11/2026—. Exigir `true` tiraría la historia entera y toda racha
+   * arrancaría de cero, que es la misma regla de «preferir y no filtrar» del
+   * encabezado de esa migración.
+   */
+  it("las corridas anteriores a la migración, sin canónico, siguen contando", async () => {
+    const c = sincronizaciones(
+      fila({ ok: true, canonico: null, created_at: hace(10) }),
+      fila({ canonico: null, created_at: hace(8) }),
+      fila({ canonico: null, created_at: hace(4) })
+    );
+    expect(await rachaDeFallos(c, "calidad", "carbonilla-odoo")).toBe(2);
   });
 
   it("no se come las corridas de otro recurso ni de otro módulo", async () => {

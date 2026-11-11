@@ -118,7 +118,11 @@ export function cuantasTolerancias(
   const cuando = new Date(corrida.created_at).getTime();
   if (Number.isNaN(cuando)) return 1;
   const horasDeSilencio = (ahora.getTime() - cuando) / 3_600_000;
-  return Math.max(1, Math.floor(horasDeSilencio / toleranciaHoras));
+  // El `max` del divisor es contra una tolerancia en 0 —hoy ninguna, pero el
+  // tipo la acepta—: dividir por cero da `Infinity`, que `JSON.stringify`
+  // convierte en `null`, y ese null viaja en la campana y en el cuerpo del
+  // descarte. Un aviso cuya cantidad llega nula no se compara con nada.
+  return Math.max(1, Math.floor(horasDeSilencio / Math.max(1, toleranciaHoras)));
 }
 
 /**
@@ -233,7 +237,11 @@ export const REGISTRO: readonly EntradaDelRegistro[] = [
   // ── Diarios: 50 h por la misma cuenta que Lenox ──
   { modulo: "produccion", recursos: ["molinos"], titulo: "Molinos desde el robot", toleranciaHoras: 50 },
   { modulo: "seguridad_higiene", recursos: ["respaldo_fotos"], titulo: "Respaldo de fotos de Seguridad e Higiene", toleranciaHoras: 50 },
-  // Diario, 05:00 UTC. 50 h es el valor que ya tenían antes de este registro.
+  // Diario, 05:00 UTC. 50 h es el valor que ya tenían antes de este registro:
+  // es el mismo número que `HORAS_SIN_CORRER` de `lib/agenda/avisosDeLaAgenda.ts`,
+  // con el que `/agenda` dibuja sus propias líneas de salud de estos dos pasos.
+  // Son dos copias del mismo dato y las ata un test en `avisosDeLaAgenda.test.ts`
+  // —bajar una sola haría que las dos pantallas discreparan en silencio—.
   { modulo: "agenda", recursos: ["canales"], titulo: "Canales de Google de la Agenda", toleranciaHoras: 50 },
   { modulo: "agenda", recursos: ["barrido"], titulo: "Barrido de las casillas de la Agenda", toleranciaHoras: 50 },
 
@@ -316,9 +324,20 @@ export interface EntradaCaida {
    * superó a la que tenía al descartarlo. Nunca cuenta cosas, así que el
    * resumen lo imprime sin número.
    *
-   *  - `vieja` y `nunca`: **tolerancias enteras de silencio** (ver
-   *    `cuantasTolerancias`). El recurso no escribe nada, así que el silencio
-   *    crece solo y descartarlo a las 25 h lo calla hasta las 48.
+   *  - `vieja`: **tolerancias enteras de silencio** (ver `cuantasTolerancias`).
+   *    El recurso no escribe nada, así que el silencio crece solo y descartarlo
+   *    a las 25 h lo calla hasta las 48.
+   *  - `nunca`: **no crece — es el piso fijo de 1**, porque sin ninguna corrida
+   *    no hay desde cuándo contar. O sea que un descarte ahí calla al recurso
+   *    mientras su cantidad no pase de 1. **Queda así a propósito**, y lo que no
+   *    hay que hacer es darle el número del día de `salud-sin-comprobar`
+   *    (`CRECE_CON_EL_DIA`): ese truco funciona allá porque ese aviso tiene su
+   *    id propio, y acá el id es `salud-${clave}` y **no depende del estado**.
+   *    Un `nunca` descartado valdría ~20.771, y el día que ese recurso empiece
+   *    a correr y a fallar su racha arrancaría en 1 — nunca pasaría los 20.771
+   *    y quedaría mudo justo cuando por fin hay algo que decir. El piso de 1
+   *    pierde menos: lo que calla es un recurso del que todavía no se sabe
+   *    nada.
    *  - `fallo`: **corridas fallidas seguidas** (ver `rachaDeFallos`). Acá
    *    contar tolerancias da mal, y es el caso más común: un cron que falla
    *    pero sigue corriendo reescribe su fila cada vez, así que el silencio
@@ -435,26 +454,50 @@ function detalleDe(estado: EstadoCaido, corrida: CorridaLeida | undefined, ahora
  * exactamente lo que esto viene a arreglar. Se llama sólo para los recursos que
  * ya están en `fallo` —el 05/11/2026 eran 4 de 29—, así que son pocas.
  *
- * ── LO QUE ESTE NÚMERO NO SEPARA, Y ESTÁ MEDIDO ─────────────────────────────
+ * ── SÓLO LAS CORRIDAS DEL DESPLIEGUE CANÓNICO ───────────────────────────────
  *
  * `sincronizaciones` es un registro global donde escriben **los dos
- * despliegues** (ver el CLAUDE.md), y acá no se filtra por `canonico`: esa
- * columna es de la migración `20261105092248`, y **esto se escribió cuando
- * todavía no estaba aplicada** —nombrarla habría roto la consulta—. Ya lo está
- * (medido el 11/11/2026), así que filtrar se podría; no se hizo, y por eso lo
- * que sigue vale. El desempate lo hace la vista, de su lado, y es la que decide
- * si el recurso está en `fallo`.
+ * despliegues** (ver el CLAUDE.md), así que las dos consultas de
+ * `enSincronizaciones` filtran con `.not("canonico", "is", false)`.
  *
- * Qué implica, medido el 05/11/2026 sobre las últimas 50 corridas de cada
- * recurso: el otro despliegue sólo toca recursos que necesitan Google —no tiene
- * esas credenciales— y por eso **siempre falla** en ellos; en
- * `calidad/carbonilla-odoo`, el único fallo real de hoy, no dejó ni una fila y
- * la racha cruda coincide con la canónica (2 y 2). O sea que el error posible
- * es **de más y no de menos**: sus fallos pueden engordar la racha y hacer que
- * el aviso reaparezca antes, nunca que se calle. Quedaría corta sólo si ese
- * despliegue **anduviera bien** en un recurso que el canónico está fallando, que
- * es la misma confusión que hoy tiene la pantalla y que cierran esa migración y
- * apagar ese despliegue.
+ * **Y no con `.eq("canonico", true)`**, que es el error fácil: esa columna la
+ * agregó la migración `20261105092248` y las filas anteriores la tienen en
+ * `null` —medido el 11/11/2026: 3.907 en null contra 357 en true y 48 en
+ * false—, así que exigirla en true tiraría toda la historia previa y cada racha
+ * arrancaría de cero. Es la misma regla de **preferir y no filtrar** que el
+ * encabezado de esa migración le aplica a la vista.
+ *
+ * ── POR QUÉ NO ALCANZABA CON NO FILTRAR, Y ESTÁ MEDIDO ──────────────────────
+ *
+ * Acá decía que no filtrar sólo podía equivocarse «de más y no de menos»,
+ * porque el otro despliegue no tiene las credenciales de Google y por lo tanto
+ * siempre falla. **Es falso y lo desmiente la producción**: ese despliegue
+ * escribe `ok = true` en `agenda/canales` y en `agenda/pendientes` **todos los
+ * días a las 05:30**, media hora después de la corrida canónica (medido el
+ * 11/11/2026, seis días seguidos).
+ *
+ * Qué pasaba con eso, que es lo que este filtro cierra: el día que la corrida
+ * canónica de `canales` falle, la vista dice `fallo` —desempata por `canonico`—
+ * pero acá la última buena sería la **ajena** de las 05:30, no quedaría ninguna
+ * fallida posterior y la racha daría `Math.max(1, 0)` = **1, todos los días y
+ * para siempre**. Un solo descarte dejaría ese recurso mudo en la campana, en
+ * el push y en el recordatorio de los lunes — que es exactamente el agujero que
+ * `rachaDeFallos` vino a cerrar, reabierto adentro del arreglo. Y `canales` —un
+ * canal que deja de renovarse sin decir nada— es la clase de recurso para la
+ * que se construyó todo esto.
+ *
+ * Y ya mentía en la otra dirección: el mismo día, `produccion/molinos` daba
+ * **9** contando las ajenas y **4** filtrando (`calidad/carbonilla-odoo`, 8 y 8,
+ * porque ahí el otro no escribe ninguna fila). Ese número lo imprime
+ * `tituloDeLaCaida` delante de una persona: el push habría dicho «falló 9
+ * corridas seguidas» de un recurso que falló 4.
+ *
+ * `contarEnCompras` **no filtra, y no es un olvido**: `compras_sincronizaciones`
+ * **no tiene la columna** —sus diez columnas, medidas el 11/11/2026, son `id`,
+ * `direccion`, `origen`, las cuatro de filas, `error`, `duracion_ms` y
+ * `created_at`—, así que de ese lado no hay con qué distinguir un despliegue del
+ * otro y nombrarla rompería la consulta. Decirlo acá es la mitad útil del dato:
+ * si alguna vez hace falta, es una migración y no una línea.
  */
 export async function rachaDeFallos(
   supabase: SupabaseClient,
@@ -519,7 +562,11 @@ const DE_OTRA_TABLA: Record<string, ContarLaRacha> = {
   "compras/planilla": contarEnCompras,
 };
 
-/** El caso normal: las corridas con su `ok` en `sincronizaciones`. */
+/**
+ * El caso normal: las corridas con su `ok` en `sincronizaciones`, **sólo las
+ * del despliegue canónico** — el porqué, y por qué el filtro es
+ * `not canonico is false` y no `canonico = true`, están en `rachaDeFallos`.
+ */
 const enSincronizaciones: ContarLaRacha = async (supabase, modulo, recurso) => {
   const { data: ultimaBuena, error: errorDeLaBuena } = await supabase
     .from("sincronizaciones")
@@ -527,6 +574,7 @@ const enSincronizaciones: ContarLaRacha = async (supabase, modulo, recurso) => {
     .eq("modulo", modulo)
     .eq("recurso", recurso)
     .eq("ok", true)
+    .not("canonico", "is", false)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -537,7 +585,8 @@ const enSincronizaciones: ContarLaRacha = async (supabase, modulo, recurso) => {
     .select("id", { count: "exact", head: true })
     .eq("modulo", modulo)
     .eq("recurso", recurso)
-    .eq("ok", false);
+    .eq("ok", false)
+    .not("canonico", "is", false);
   // Sin ninguna corrida buena, la racha es todo lo que falló: nunca anduvo.
   const { count, error } = await (ultimaBuena
     ? fallidas.gt("created_at", ultimaBuena.created_at)
@@ -641,8 +690,9 @@ async function conLaRachaDeCadaFallo(
  * sistema y no puede caerse por esto. El fallo va al log.
  *
  * **Lo que `sinComprobar` NO cubre: RLS.** Una policy que tapa la vista no da
- * error, devuelve `data` vacía, y eso entra por el camino bueno: 29 «nunca
- * corrió» falsos, sin `sinComprobar`. Hoy no muerde porque
+ * error, devuelve `data` vacía, y eso entra por el camino bueno: un «nunca
+ * corrió» falso por cada entrada vigilada —hoy 20—, sin `sinComprobar`. Hoy no
+ * muerde porque
  * `sincronizaciones_select` es `to authenticated using (true)` (migración 037)
  * y `ultima_sincronizacion` es `security_invoker`; si alguna vez se angosta esa
  * policy, la campana y la pantalla de `/administracion/salud` mienten juntas.
