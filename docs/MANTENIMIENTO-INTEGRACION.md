@@ -2637,6 +2637,66 @@ de mentira creado y limpiado para eso: la cabecera se actualiza, los dos
 renglones viejos se borran y entran los dos nuevos, y con un renglón enlazado a
 una OT la guarda cuenta 1 y las dos rutas se niegan.
 
+## El MTTR: cuánto tarda en volver (11/11/2026)
+
+El indicador que el [spec del MTBF](superpowers/specs/2026-10-16-mantenimiento-mtbf-design.md)
+dejó anotado en «lo que no es» —«los datos están… queda anotado, no se hace
+acá»—. Vive en [lib/mantenimiento/mttr.ts](../lib/mantenimiento/mttr.ts) y se
+lee al lado del MTBF, en la ficha del equipo y como columna del listado
+`/mantenimiento/mtbf`.
+
+**MTTR = horas de reparación / cantidad de reparaciones**, sobre la **misma
+ventana, el mismo tipo de orden y la misma fecha** que el MTBF: los mismos 365
+días, las mismas correctivas, el mismo `fecha_ejecucion`. No es una
+coincidencia sino el punto: los dos números se leen en la misma línea, y si
+cubrieran períodos distintos nada lo avisaría. `fechaDeFalla` es una sola
+función y la usan los dos, y hay un test que lo fija.
+
+Cinco cosas que no se deducen del código:
+
+- **`horas` es cuánto duró el trabajo, no horas-hombre, y eso ya estaba
+  verificado**: lo midió `costoEquipo.ts`, que necesitaba lo contrario
+  —multiplicarlo por la gente—. Las órdenes con tres operarios tienen la misma
+  mediana que las de uno, 3 horas, cuando serían el triple si ya vinieran
+  multiplicadas. Sin ese dato este indicador no se podía calcular.
+- **Las de contratista no entran, y es la mitad del diseño.** Ahí `horas` deja
+  de ser duración y pasa a ser lo que el tercero factura; la prueba es
+  aritmética: la **OT 2064 tiene 415 horas entre el 20 y el 29 de junio**,
+  nueve días de calendario, que son 216 horas de reloj. Medido el 11/11/2026,
+  el precio de mezclarlas: **3,3 h** de MTTR de planta contando sólo las
+  propias contra **5,5 h** mezclado, y las de contratista solas dan **26,9 h**.
+  Y el ranking se da vuelta: con ellas adentro **los dos primeros puestos son
+  «Edificio»** —PO-C1 con 84,8 h y PO-A1 con 49 h—, el equipo comodín al que se
+  imputa lo que no tiene máquina. Sin ellas, los primeros son la Cadena de
+  arrastre 6 y el Molino de bolas. El criterio de «es de un tercero» es **que
+  `contratista` tenga texto**, el mismo que ya usaba `costoEquipo.ts`.
+- **No es tiempo de parada de la máquina**, y eso va en texto visible y no en
+  un tooltip, igual que el aviso de días de calendario del MTBF
+  (`HORAS_DE_TRABAJO` en `mtbfVista.ts`). Tampoco se puede sacar del
+  calendario: `fecha_cierre - fecha_ejecucion` da **0 en 750 de 811**
+  correctivas cerradas de la ventana, porque el cierre se carga el mismo día
+  que se registra el trabajo.
+- **Las cuatro cuentas cierran, y eso es lo que lo hace auditable.** El
+  resultado trae `afuera` con los tres motivos de descarte, y la suma da las
+  correctivas de la ventana: medido con la lectura real, **555 contables + 89
+  de contratista + 330 sin horas + 5 sin equipo = 979**. Hay un test que lo
+  fija. Si una orden se contara en dos motivos, o en ninguno, la suma lo diría.
+- **El promedio se publica desde 3 reparaciones** (`MINIMO_REPARACIONES`): con
+  una, «el promedio» es esa orden. El equipo aparece igual, con su cuenta y sin
+  número, que es lo que hace el MTBF cuando no llega al piso de días
+  observados. De los 119 equipos con alguna reparación propia en la ventana,
+  **47 llegan a tres**.
+
+Dos detalles de la pantalla: la columna de MTTR **se ordena al revés que la de
+MTBF** —acá lo peor es el número más alto— y es el único par del listado donde
+pasa; y la ficha nombra **la reparación más larga con su número de OT**, porque
+un MTTR alto casi siempre es una orden larga y no un equipo lento.
+
+Y una lectura menos: `indicadoresDeLaPlanta()` calcula los dos sobre **una sola
+lectura** de las correctivas. `mtbfDeLaPlanta()` sigue existiendo porque
+`/api/mantenimiento/mtbf` devuelve ese objeto tal cual y el tablero lo consume
+por ahí.
+
 ## Un trabajo no se cierra antes de empezar (05/11/2026)
 
 Se pidió una alerta que impida poner la fecha de cierre antes de la de inicio.

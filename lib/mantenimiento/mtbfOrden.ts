@@ -21,7 +21,8 @@
 import type { FilaDeVista } from "./mtbfVista";
 
 /** `r0`, `r1`… son las confiabilidades, en el orden de PLAZOS. */
-export type Columna = "equipo" | "sector" | "mtbf" | "fallas" | "ultima" | `r${number}`;
+export type Columna =
+  | "equipo" | "sector" | "mtbf" | "mttr" | "fallas" | "ultima" | `r${number}`;
 
 export interface Orden {
   columna: Columna;
@@ -34,6 +35,7 @@ export function valorDe(f: FilaDeVista, columna: Columna): string | number | nul
     case "equipo": return f.equipo.name;
     case "sector": return f.equipo.sectorNombre;
     case "mtbf": return f.mtbf;
+    case "mttr": return f.mttr;
     case "fallas": return f.fallas;
     case "ultima": return f.ultima;
     default: return f.confiabilidades[Number(columna.slice(1))] ?? null;
@@ -62,6 +64,10 @@ export function siguienteOrden(actual: Orden, columna: Columna): Orden {
   // Las de texto arrancan alfabéticas. Las numéricas, por el peor valor: el
   // MTBF y las confiabilidades más bajas arriba, y las fallas y la fecha de la
   // última, las más altas.
-  const arrancaDescendente = columna === "fallas" || columna === "ultima";
+  // El MTTR va con las descendentes: su peor valor es el más ALTO —la máquina
+  // que más tarda en volver—, al revés que el MTBF, donde lo peor es lo más
+  // bajo. Las dos columnas se ven iguales y se ordenan al revés.
+  const arrancaDescendente =
+    columna === "fallas" || columna === "ultima" || columna === "mttr";
   return { columna, ascendente: !arrancaDescendente };
 }

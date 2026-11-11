@@ -22,6 +22,9 @@ import {
   type EquipoDeLaVista,
 } from "@/lib/mantenimiento/mtbfVista";
 import { ordenar, siguienteOrden, type Columna, type Orden } from "@/lib/mantenimiento/mtbfOrden";
+import {
+  horasDeReparacion, MINIMO_REPARACIONES, type Mttr,
+} from "@/lib/mantenimiento/mttr";
 
 /**
  * El listado de MTBF. No hace cuentas: la cuenta viene hecha del servidor y acá
@@ -36,6 +39,7 @@ import { ordenar, siguienteOrden, type Columna, type Orden } from "@/lib/manteni
 
 interface Props {
   mtbf: Mtbf;
+  mttr: Mttr;
   equipos: EquipoDeLaVista[];
   sectores: { id: string; nombre: string; empresa: string | null }[];
 }
@@ -123,6 +127,7 @@ const QUE_ANALIZA = {
   equipo: "El nombre y el código de la máquina. Lleva a su ficha, donde está el detalle mes a mes.",
   sector: "Dónde está la máquina. Sólo sectores de planta: los organizativos no tienen equipos.",
   mtbf: "Tiempo medio entre fallas: los días observados de la ventana divididos por las correctivas de esa máquina. Menos días es peor.",
+  mttr: "Tiempo medio de reparación: el promedio de horas que llevó cada correctiva propia de esa máquina. Más horas es peor. Son horas de trabajo, no de máquina parada, y las que hizo un contratista no entran: ahí las horas son las que factura. Hace falta un mínimo de reparaciones para publicar el promedio.",
   fallas: "Cuántas órdenes correctivas se ejecutaron sobre la máquina en la ventana. Cada orden cuenta una, también cuando dos caen el mismo día.",
   tendencia: "Las fallas mes a mes, los últimos doce. Dice si el ritmo viene bajando o subiendo; el mes en curso va punteado porque está incompleto.",
   ultima: "Cuándo se ejecutó la última correctiva. Es la fecha en que se hizo el trabajo, no la fecha en que se cargó la orden en la planilla.",
@@ -156,7 +161,7 @@ function Encabezado({
   );
 }
 
-export default function MtbfClient({ mtbf, equipos, sectores }: Props) {
+export default function MtbfClient({ mtbf, mttr, equipos, sectores }: Props) {
   const [sectorId, setSectorId] = useState("");
   const [especialidad, setEspecialidad] = useState("");
   const [orden, setOrden] = useState<Orden>({ columna: "mtbf", ascendente: true });
@@ -167,8 +172,8 @@ export default function MtbfClient({ mtbf, equipos, sectores }: Props) {
   );
 
   const filas = useMemo(
-    () => ordenar(filasVisibles(mtbf.filas, equipos, filtros), orden),
-    [mtbf.filas, equipos, filtros, orden]
+    () => ordenar(filasVisibles(mtbf.filas, equipos, filtros, mttr), orden),
+    [mtbf.filas, mttr, equipos, filtros, orden]
   );
   const sinFallas = useMemo(
     () => equiposSinFallas(mtbf.filas, equipos, filtros),
@@ -271,6 +276,7 @@ export default function MtbfClient({ mtbf, equipos, sectores }: Props) {
                   <Encabezado columna="equipo" orden={orden} onOrdenar={cambiarOrden} info={QUE_ANALIZA.equipo}>Equipo</Encabezado>
                   <Encabezado columna="sector" orden={orden} onOrdenar={cambiarOrden} info={QUE_ANALIZA.sector}>Sector</Encabezado>
                   <Encabezado columna="mtbf" orden={orden} onOrdenar={cambiarOrden} alinear="right" info={QUE_ANALIZA.mtbf}>MTBF</Encabezado>
+                  <Encabezado columna="mttr" orden={orden} onOrdenar={cambiarOrden} alinear="right" info={QUE_ANALIZA.mttr}>MTTR</Encabezado>
                   <Encabezado columna="fallas" orden={orden} onOrdenar={cambiarOrden} alinear="right" info={QUE_ANALIZA.fallas}>Fallas</Encabezado>
                   {PLAZOS.map((dias, i) => (
                     <Encabezado key={dias} columna={`r${i}`} orden={orden} onOrdenar={cambiarOrden} alinear="right" info={llegaA(dias)}>
@@ -300,6 +306,24 @@ export default function MtbfClient({ mtbf, equipos, sectores }: Props) {
                     <td className="px-3 py-2 text-right font-medium text-slate-900 whitespace-nowrap">
                       {diasCorridos(f.mtbf)}
                     </td>
+                    {/*
+                      La raya de un MTTR vacío dice dos cosas distintas —ninguna
+                      reparación con horas, o menos de las que hacen falta para
+                      un promedio— y el `title` las separa. No va en la celda
+                      porque la columna tiene que poder leerse de un vistazo.
+                    */}
+                    <td
+                      className="px-3 py-2 text-right font-medium text-slate-900 whitespace-nowrap"
+                      title={
+                        f.mttr !== null
+                          ? `Sobre ${f.reparacionesContables} ${f.reparacionesContables === 1 ? "reparación propia" : "reparaciones propias"} con horas cargadas`
+                          : f.reparacionesContables === 0
+                            ? "Ninguna de sus correctivas propias tiene horas cargadas"
+                            : `Sólo ${f.reparacionesContables} ${f.reparacionesContables === 1 ? "reparación" : "reparaciones"} con horas: hacen falta ${MINIMO_REPARACIONES} para publicar un promedio`
+                      }
+                    >
+                      {horasDeReparacion(f.mttr)}
+                    </td>
                     <td className="px-3 py-2 text-right text-slate-700">{f.fallas}</td>
                     {f.confiabilidades.map((c, i) => (
                       <td key={PLAZOS[i]} className="px-3 py-2 text-right text-slate-700 whitespace-nowrap">
@@ -318,7 +342,7 @@ export default function MtbfClient({ mtbf, equipos, sectores }: Props) {
                 ))}
                 {filas.length === 0 && (
                   <tr>
-                    <td colSpan={6 + PLAZOS.length} className="px-3 py-6 text-center text-slate-500">
+                    <td colSpan={7 + PLAZOS.length} className="px-3 py-6 text-center text-slate-500">
                       Ningún equipo con esos filtros tuvo fallas en la ventana.
                     </td>
                   </tr>
