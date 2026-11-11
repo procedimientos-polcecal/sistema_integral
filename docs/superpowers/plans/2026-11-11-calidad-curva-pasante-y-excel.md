@@ -75,7 +75,7 @@ Lo que el spec implica y ningún test de tarea ejercita solo. Cada línea tiene 
 Sobre el fixture que ya está en ese archivo (`Calcio 0-2` del 27/10, peso 100 g):
 
 - `"el pasante es el complemento del acumulado"` — los pasantes de las ocho mallas son `[100, 100, 99.8, 99.1, 93.1, 58.4, 44, 33.6]`, en ese orden.
-- `"el pasante se redondea a dos decimales como los otros dos"` — ningún valor sale con cola de punto flotante; `100 − 41.6` da `58.4` exacto y no `58.400000000000006`.
+- `"el pasante se redondea a dos decimales como los otros dos"` — ningún valor sale con cola de punto flotante. **El caso real del fixture es la malla 200**: `100 - 66.4` da `33.599999999999994`, no `33.6`. (Este renglón decía `100 − 41.6`, que en JS da `58.4` exacto y no demuestra nada; lo corrigió el implementador de la Tarea 1 y está medido con `node -e`.)
 - `"una muestra cuyos retenidos superan el peso da pasante negativo"` — con `pesoMuestraG: 50` sobre el mismo fixture el acumulado pasa de 100 y el pasante del último punto es **negativo**; se afirma que lo es y que no está recortado a 0. (Ese caso además devuelve `problema`, que ya existe.)
 - Que los casos que ya estaban sigan pasando: apagar una malla no cambia el pasante de las demás.
 
