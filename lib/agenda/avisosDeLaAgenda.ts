@@ -146,8 +146,12 @@ export const PASOS_CON_GOOGLE = ["canales", "barrido"] as const;
  *    registre antes de que alguien mire.
  *
  * Está fijado con el cron real en el test (`lineasDeSalud`), no con una cifra
- * redonda: si el horario del cron en `vercel.json` cambia, esto se revisa. Es
- * el mismo número con el que los dos pasos entraron al `REGISTRO` general.
+ * redonda: si el horario del cron en `vercel.json` cambia, esto se revisa.
+ *
+ * **Es el mismo número con el que los dos pasos entraron al `REGISTRO` general,
+ * y hay un test que los ata** (`avisosDeLaAgenda.test.ts`). Son dos copias del
+ * mismo dato: cambiar sólo ésta dejaría a `/agenda` diciendo «no corre» y a
+ * `/administracion/salud` diciendo «al día» del mismo paso, sin que nada falle.
  */
 export const HORAS_SIN_CORRER = 50;
 

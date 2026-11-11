@@ -5,9 +5,11 @@ import {
   divergenciasSinVer,
   leerLaSaludDeLaAgenda,
   HORAS_SIN_CORRER,
+  PASOS_CON_GOOGLE,
   type EventoDivergido,
   type CorridaDeLaAgenda,
 } from "./avisosDeLaAgenda";
+import { REGISTRO } from "@/lib/core/saludDeLasSincronizaciones";
 
 const ANA = "u-ana";
 const BETO = "u-beto";
@@ -262,5 +264,33 @@ describe("lineasDeSalud: lo que ve admin_sistema en /agenda", () => {
     );
     expect(lineas[0].texto).toContain("hace 5 h");
     expect(lineas[1].texto).toContain("hace 3 días");
+  });
+});
+
+/*
+ * ── EL 50 VIVE EN DOS LUGARES, Y ESTO LOS ATA ───────────────────────────────
+ *
+ * `HORAS_SIN_CORRER` es la tolerancia con la que `/agenda` dibuja sus dos
+ * líneas de salud, y las entradas `agenda/canales` y `agenda/barrido` del
+ * `REGISTRO` son la tolerancia con la que la campana, el push y
+ * `/administracion/salud` juzgan a esos mismos dos pasos. Es el mismo número
+ * por el mismo motivo —el cron diario de las 05:00 UTC: una corrida salteada no
+ * suena y la segunda sí— y nada los obligaba a seguir siéndolo. Bajar uno solo
+ * dejaría a la pantalla de la Agenda diciendo «no corre» y a la de salud
+ * diciendo «al día» del mismo paso el mismo día, sin que nada falle ni avise.
+ *
+ * Es la misma defensa que el 27 del GUT, «con un test que los ata», y lo que
+ * este archivo ya dice de las dos copias: de dos copias, la que nadie toca es
+ * la que termina mintiendo.
+ */
+describe("la tolerancia de los pasos de la Agenda es una sola", () => {
+  const toleranciaEnElRegistro = (recurso: string) =>
+    REGISTRO.find((e) => e.modulo === "agenda" && e.recursos.includes(recurso))?.toleranciaHoras;
+
+  it("el REGISTRO juzga canales y barrido con las mismas horas que la pantalla de la Agenda", () => {
+    expect([...PASOS_CON_GOOGLE]).toEqual(["canales", "barrido"]);
+    for (const paso of PASOS_CON_GOOGLE) {
+      expect(toleranciaEnElRegistro(paso)).toBe(HORAS_SIN_CORRER);
+    }
   });
 });
