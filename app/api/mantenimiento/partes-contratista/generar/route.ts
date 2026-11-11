@@ -11,6 +11,7 @@ import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import { exportarLoPendiente } from "@/lib/mantenimiento/sincronizar";
 import { esperasQueEntran } from "@/lib/mantenimiento/reintentoDePendientes";
+import { alNacerLaOT } from "@/lib/agenda/alNacerLaOT";
 import {
   agruparEnOrdenes, descripcionDeLaOT, inicioDeLaQuincena, finDeLaQuincena,
   type RenglonParaAgrupar, type GrupoDeOT,
@@ -238,6 +239,9 @@ export async function POST(request: Request) {
 
     if (!resultado.ok) { problemas.push(resultado.error); continue; }
     (grupo.ot_existentes.length === 1 ? actualizadas : creadas).push(resultado.resumen);
+    // La orden ya salió: lo del calendario es lo que hay que mirar del espejo
+    // y va al mismo informe, sin tirar la corrida.
+    if (resultado.calendario) problemas.push(resultado.calendario);
   }
 
   // ── Y LAS COLUMNAS DEL MASTER, QUE NO SE ESCRIBEN EN EL MOMENTO ───────────
@@ -362,7 +366,7 @@ type Resumen = {
 // ── Crear una ───────────────────────────────────────────────
 
 type Resultado =
-  | { ok: true; resumen: Resumen }
+  | { ok: true; resumen: Resumen; /** Lo que dijo `alNacerLaOT`, si la orden no entró al calendario. */ calendario?: string }
   | { ok: false; error: string };
 
 /**
@@ -599,6 +603,15 @@ async function crearLaOT(
     };
   }
 
+  // El calendario va **después de marcar los renglones**: marcarlos es lo que
+  // impide que un nuevo «generar» cree la orden otra vez, y hablar con Google es
+  // lo único de acá que puede tardar. Con la OT ya guardada y marcada, un fallo
+  // del espejo no la toca: `alNacerLaOT` no lanza y devuelve una frase o null.
+  // Hoy estas órdenes nacen cerradas —`REALIZADO` con `fecha_cierre`—, así que
+  // casi siempre es null; está porque el criterio de qué entra es de una sola
+  // función y no de cada puerta.
+  const calendario = await alNacerLaOT(admin, creada.id);
+
   return {
     ok: true,
     resumen: {
@@ -607,5 +620,6 @@ async function crearLaOT(
       sector: sectorNombre,
       horas: grupo.horas,
     },
+    ...(calendario ? { calendario } : {}),
   };
 }

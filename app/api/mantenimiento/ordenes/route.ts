@@ -31,6 +31,7 @@ import { hoyEnArgentina } from "@/lib/core/fechas";
 import { esquemaGut } from "@/lib/mantenimiento/gut";
 import { esquemaFalla } from "@/lib/mantenimiento/fallas";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
+import { alNacerLaOT } from "@/lib/agenda/alNacerLaOT";
 
 /**
  * Cinco minutos, que es lo que necesita el reintento del alta.
@@ -309,6 +310,7 @@ export async function POST(request: Request) {
   // único que puede llamar a esta ruta.
   const falta = loQueFaltaParaCrear({
     sector_id, equipment_id, descripcion, especialidad, tipo, quien, fecha_ejecucion,
+    fecha_fin,
     fecha_cierre, horas, contratista, operario_1, operario_2, operario_3,
   });
   if (falta.length > 0) {
@@ -484,9 +486,10 @@ export async function POST(request: Request) {
     descripcion: descripcion.trim(),
     repuesto: losRepuestos.texto,
     fecha_ejecucion: fecha_ejecucion || null,
-    // Va a la planilla y **no** al `record` de abajo: `ordenes_trabajo` no
-    // tiene columna para esto, y mandársela a PostgREST corta el insert
-    // entero —es el mismo 400 que dio `estado_raw` el 29/10/2026—.
+    // Va a los dos lados: acá, a la hoja de respuestas, y abajo, al `record`.
+    // Hasta el 04/11/2026 `ordenes_trabajo` no tenía la columna y mandársela a
+    // PostgREST cortaba el insert entero —el mismo 400 que dio `estado_raw` el
+    // 29/10/2026—; desde la migración `ot_fecha_fin` la tiene.
     fecha_fin: fecha_fin || null,
     prioridad: laPrioridad,
   });
@@ -526,6 +529,8 @@ export async function POST(request: Request) {
     descripcion:     descripcion.trim(),
     repuesto:        losRepuestos.texto,
     fecha_ejecucion: fecha_ejecucion || null,
+    // Vacía quiere decir «dura un día»; no es un dato que falte.
+    fecha_fin:       fecha_fin || null,
     fecha_cierre:    fecha_cierre || null,
     // Una orden con fecha de cierre ya se hizo: la fecha manda sobre el estado
     // que haya venido. La regla está acá y no sólo en el formulario porque el
@@ -679,9 +684,20 @@ export async function POST(request: Request) {
     aviso_error = marca.error ?? marca.planillaError;
   }
 
+  // ── El calendario, lo último y sin poder fallar la orden ───────────────
+  //
+  // Va **después** de todo lo que guarda y fuera de cualquier transacción: la
+  // OT ya existe en la planilla y en la base, y el evento es su espejo. Un
+  // fallo de Google no puede convertirse en un error sobre una orden que sí se
+  // creó, así que `alNacerLaOT` no lanza: devuelve una frase, o null cuando no
+  // hay nada que decir —lo normal, porque sólo entra una orden abierta con
+  // fecha de hoy en adelante—. La frase viaja en la respuesta, como el resto
+  // de lo que salió a medias.
+  const calendario_aviso = await alNacerLaOT(admin, inserted.id);
+
   return NextResponse.json({
     data: inserted, ot_number, aviso_error, planilla_error, planilla_reintentando,
-    clave_error, repuestos_error,
+    clave_error, repuestos_error, calendario_aviso,
   });
 }
 

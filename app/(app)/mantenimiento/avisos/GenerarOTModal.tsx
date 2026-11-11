@@ -321,6 +321,7 @@ export default function GenerarOTModal({
 const CAMPOS_QUE_DIBUJA = [
   "el sector", "el equipo", "la descripción", "la especialidad",
   "el tipo de trabajo", "quién lo realiza", "la fecha de inicio",
+  "la fecha de fin estimada",
 ];
 
 function Campo({ etiqueta, ayuda, children }: {

@@ -17,6 +17,7 @@ const completa = {
   tipo: "CORRECTIVO",
   quien: "INTERNO",
   fecha_ejecucion: "2026-10-20",
+  fecha_fin: "2026-10-25",
   fecha_cierre: "",
   horas: "",
   contratista: "",
@@ -74,6 +75,23 @@ describe("que le falta a una orden nueva", () => {
     expect(loQueFaltaParaCrear({ ...completa, quien: "" })).toEqual(["quién lo realiza"]);
     expect(loQueFaltaParaCrear({ ...completa, fecha_ejecucion: "" }))
       .toEqual(["la fecha de inicio"]);
+    expect(loQueFaltaParaCrear({ ...completa, fecha_fin: "" }))
+      .toEqual(["la fecha de fin estimada"]);
+  });
+
+  /**
+   * La clave AUSENTE cuenta como faltante, igual que la vacia. Es el caso de
+   * una carga sin senal encolada antes de que el campo existiera: vuelve sin
+   * la clave, y tiene que recibir un 400 que la nombre en vez de pasar.
+   *
+   * El `as never` es a proposito: el tipo exige la clave justamente para que
+   * nadie la omita por descuido —el dia que se volvio obligatoria, la ruta del
+   * alta la omitia y habria rechazado todas las ordenes—. Acá se omite a
+   * sabiendas, para probar que en tiempo de ejecucion tambien se defiende.
+   */
+  it("una carga vieja sin la clave tambien la pide", () => {
+    const { fecha_fin: _, ...sinLaClave } = completa;
+    expect(loQueFaltaParaCrear(sinLaClave as never)).toEqual(["la fecha de fin estimada"]);
   });
 
   /** La vara de `validar()` del nucleo: todo junto, no de a uno. */

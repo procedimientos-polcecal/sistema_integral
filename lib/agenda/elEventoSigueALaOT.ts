@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import { traerTodo } from "@/lib/core/paginado";
 import { fechaParaElCalendario, horarioDeLaOT, instanteDe, laOTEstaCerrada, TURNOS_DEL_TALLER } from "./evento";
+import { AVISO_DE_TOPE, claveDelHueco, horarioApilado } from "./apilado";
 import { leerEvento, type EventoParaGoogle } from "@/lib/core/calendar";
 import { aHoraDePared, aInstanteISO, eventoParaGoogle, idDeGoogleDe, invitadosLimpios } from "./pedido";
 import {
@@ -38,9 +39,24 @@ import { anotarEnLaFila } from "./cargar";
  *    la fecha vieja: conservarla sería inventar un horario para un día que
  *    nadie eligió. Si la fecha no cambió, la hora aceptada se respeta (no se
  *    compara la hora, sólo el día).
+ *    **Y el hueco se recalcula en la fecha nueva** (`ocupados`): conservar la
+ *    hora fija del turno hacía que una orden que pasa del 6 al 20 cayera
+ *    exactamente encima de otra de su especialidad, que es lo que el apilado
+ *    existe para evitar —y nada lo habría avisado—.
  * 5. **`escrito` guarda lo que Google devolvió, nunca lo que se mandó**
  *    (`columnasDespuesDeEscribir`): es lo único que distingue el eco de una
  *    escritura propia de un cambio hecho por una persona.
+ * 6. **El apilado agrupa por turno, y dos turnos vecinos se pueden solapar en
+ *    el borde. Está dicho y no resuelto, a propósito.** El grupo es
+ *    `claveDelHueco` —día, especialidad **y** turno—, así que las de 4-12 y
+ *    las de 8-16 se apilan por separado: la cuarta del turno de 4 arranca a
+ *    las 08:30 y se pisa con una de 8-16 que vaya de 08:00 a 09:30. Se deja
+ *    así por tres razones: el usuario ya decidió no resolver el borde de
+ *    amontonamiento; el camino automático usa **un solo turno**, así que para
+ *    que pase hacen falta además eventos puestos a mano en otro turno el mismo
+ *    día y de la misma especialidad; y arreglarlo de verdad sería contar los
+ *    tres turnos juntos, o sea abandonar la partición por turno, que es
+ *    justamente lo que protege el turno que una persona eligió.
  */
 
 /**
@@ -53,7 +69,8 @@ import { anotarEnLaFila } from "./cargar";
 export const AVISO_DE_BORRADO = "No se pudo borrar en Google el evento de una orden que ya no está en la planilla";
 
 export type QueHacer =
-  | { accion: "mover"; inicio: string; fin: string }
+  /** `topeado` sólo está cuando el hueco nuevo cayó contra las 20:00 (`AVISO_DE_TOPE`). */
+  | { accion: "mover"; inicio: string; fin: string; topeado?: true }
   | { accion: "no tocar"; motivo: string }
   | { accion: "avisar"; motivo: string };
 
@@ -67,6 +84,15 @@ function esFechaDelDia(texto: string): boolean {
 }
 
 /**
+ * La hora de pared a la que arranca un turno. Sale de `horarioDeLaOT` y no de
+ * una tabla propia: una segunda tabla de turnos es cómo dos cosas iguales se
+ * separan sin que nada avise. La fecha da lo mismo, sólo se usa la hora.
+ */
+function arranqueDelTurno(turno: Turno): string {
+  return horarioDeLaOT("2000-01-01", turno).inicio.slice(11, 16);
+}
+
+/**
  * Qué hacer con el evento de una OT cuya fecha puede haber cambiado.
  * `fechaNueva` es la que resuelve `fechaParaElCalendario` (la pendiente, si la
  * hay) o `null` si la orden quedó sin fecha.
@@ -74,10 +100,17 @@ function esFechaDelDia(texto: string): boolean {
  * El orden de las preguntas importa: **vaciada** va antes que **divergió**
  * porque en los dos casos el evento no se toca, pero lo que hay que decir es
  * distinto, y sin fecha no hay nada contra qué comparar.
+ *
+ * `ocupados` son los eventos de la misma especialidad que ya hay en la fecha
+ * nueva **en ese mismo turno**, sin contar a éste. Es lo único que esta función
+ * no puede saber sola: lo cuenta `seguirALasOT`, que es la que leyó las filas.
+ * En cero —el valor por defecto— el evento cae en la hora de su turno, que es
+ * lo que hacía antes.
  */
 export function queHacerConElEvento(
   evento: { inicio: string; turno: Turno | null; divergencia: string | null },
-  fechaNueva: string | null
+  fechaNueva: string | null,
+  ocupados: number = 0
 ): QueHacer {
   const actual = fechaDelEvento(evento.inicio);
   const dondeEsta = actual ? `el evento sigue en el ${actual}` : "el evento no se tocó";
@@ -126,8 +159,17 @@ export function queHacerConElEvento(
     };
   }
 
-  // El horario sale del turno y no del que tenía el evento: ver el punto 4 del encabezado.
-  return { accion: "mover", ...horarioDeLaOT(fechaNueva, evento.turno) };
+  // El horario sale del turno y no del que tenía el evento, y apilado sobre lo
+  // que ya hay en el día nuevo: ver el punto 4 del encabezado.
+  const apilado = horarioApilado(fechaNueva, ocupados, arranqueDelTurno(evento.turno));
+  // No debería pasar: la fecha ya se validó arriba y el arranque sale del turno.
+  if (!apilado) return { accion: "mover", ...horarioDeLaOT(fechaNueva, evento.turno) };
+  return {
+    accion: "mover",
+    inicio: apilado.inicio,
+    fin: apilado.fin,
+    ...(apilado.topeado ? { topeado: true as const } : {}),
+  };
 }
 
 /**
@@ -173,7 +215,7 @@ const NADA: Plan = { tipo: "nada", mover: null, aviso: undefined, volverAAlertar
  * El texto lleva las dos fechas, así que una segunda postergación sí es otra
  * novedad y vuelve a alertar.
  */
-export function planDelEvento(fila: FilaDeEventoDeOT): Plan {
+export function planDelEvento(fila: FilaDeEventoDeOT, ocupados: number = 0): Plan {
   // Cerrada: el evento pasado es el registro de lo que se planificó.
   //
   // **El predicado es `laOTEstaCerrada` de `evento.ts` y no se vuelve a escribir
@@ -184,13 +226,13 @@ export function planDelEvento(fila: FilaDeEventoDeOT): Plan {
   // les tocaba la fecha.
   if (laOTEstaCerrada(fila.orden)) return NADA;
 
-  const decision = queHacerConElEvento(fila, fechaParaElCalendario(fila.orden));
+  const decision = queHacerConElEvento(fila, fechaParaElCalendario(fila.orden), ocupados);
 
   if (decision.accion === "mover") {
     return {
       tipo: "mover",
       mover: { inicio: decision.inicio, fin: decision.fin },
-      aviso: limpiable(fila.aviso) ? null : undefined,
+      aviso: avisoDeUnMovimiento(fila.aviso, Boolean(decision.topeado)),
       volverAAlertar: false,
     };
   }
@@ -211,9 +253,58 @@ export function planDelEvento(fila: FilaDeEventoDeOT): Plan {
   return limpiable(fila.aviso) ? { ...NADA, aviso: null } : NADA;
 }
 
-/** ¿Hay un aviso que esta lógica escribió y que ya no corresponde? El de un borrado fallido no es de ella. */
+/**
+ * ¿Hay un aviso que esta lógica escribió y que ya no corresponde?
+ *
+ * **La columna `aviso` de un evento de OT tiene tres escritores y cada uno
+ * limpia sólo lo suyo.** Dos no son de esta lógica y por eso están exceptuados:
+ *
+ * - El de un **borrado que Google rechazó** (`AVISO_DE_BORRADO`, por prefijo:
+ *   el texto le agrega lo que dijo Google). Lo escribe `borrarLosEventosDeLasOT`
+ *   justo antes de que esta pasada corra, así que sin la excepción se limpiaría
+ *   en la misma corrida que lo escribió.
+ * - El de **la orden que quedó contra el tope de las 20:00** (`AVISO_DE_TOPE`,
+ *   por igualdad: se escribe tal cual). Lo escribe `mandarLaOTAlCalendario`, y
+ *   para una OT en estado normal —nada que mover, sin divergencia— esta pasada
+ *   lo borraba en la primera corrida. Eso importa porque **en el camino
+ *   automático la copia en `aviso` es el único canal**: `alNacerLaOT` devuelve
+ *   una advertencia en texto y el importador no tiene a quién mostrársela.
+ *
+ * La excepción del tope vale **mientras el evento no se mueva**: desde que el
+ * barrido recalcula el hueco, al mover esa frase sí la decide esta lógica y la
+ * resuelve `avisoDeUnMovimiento`. Acá, con el evento quieto, sigue sin saber si
+ * el tope es cierto, así que no lo toca.
+ */
 function limpiable(aviso: string | null): boolean {
-  return Boolean(aviso) && !aviso!.startsWith(AVISO_DE_BORRADO);
+  return Boolean(aviso) && !aviso!.startsWith(AVISO_DE_BORRADO) && aviso !== AVISO_DE_TOPE;
+}
+
+/**
+ * El `aviso` que le queda a un evento que se mueve de día, ahora que el hueco
+ * se recalcula: `undefined` no toca la columna, `null` la limpia.
+ *
+ * **Al mover, el tope lo decide esta pasada y por eso también lo limpia.** Es
+ * la mitad que `limpiable` no puede tener: ahí el aviso del tope está exceptuado
+ * porque para un evento que no se toca esta lógica no sabe si sigue siendo
+ * cierto, y lo escribió `mandarLaOTAlCalendario`. Al mover sí lo sabe —acaba de
+ * calcular el hueco del día nuevo—, así que lo escribe si topea y lo saca si no:
+ * dejarlo sería dejar escrita una frase que dejó de ser cierta, que es
+ * exactamente lo que esta columna no puede tener. Es la misma forma que el
+ * `delTope` de `mandarLaOT.ts`.
+ *
+ * **Pero el aviso de un borrado fallido gana siempre, también contra el del
+ * tope.** Escribirle `AVISO_DE_TOPE` encima lo pierde igual que limpiarlo a
+ * ciegas, y los dos no valen lo mismo: el del borrado es el único registro de
+ * que quedó un evento vivo en cinco calendarios que **ya ninguna fila nombra**
+ * y que no se recupera de ningún lado; el del tope dice que la orden comparte
+ * las 20:00, que se vuelve a deducir mirando el horario. Así que con un
+ * borrado fallido guardado esta función no toca la columna, topee o no.
+ */
+function avisoDeUnMovimiento(aviso: string | null, topeado: boolean): string | null | undefined {
+  if (aviso?.startsWith(AVISO_DE_BORRADO)) return undefined;
+  if (topeado) return aviso === AVISO_DE_TOPE ? undefined : AVISO_DE_TOPE;
+  if (aviso === AVISO_DE_TOPE) return null;
+  return limpiable(aviso) ? null : undefined;
 }
 
 // ── La sincronización de OT mueve los eventos ───────────────────────────────
@@ -365,6 +456,15 @@ export function loQueSeAnotaDeLosEventos(
   return partes.length === 0 ? null : { ok: e.fallos.length === 0, error: partes.join(". ") };
 }
 
+interface OrdenLeida {
+  ot_number: number;
+  fecha_ejecucion: string | null;
+  fecha_ejecucion_pendiente: string | null;
+  fecha_cierre: string | null;
+  estado: string | null;
+  especialidad: string | null;
+}
+
 interface FilaLeida {
   id: string;
   titulo: string;
@@ -378,10 +478,58 @@ interface FilaLeida {
   aviso: string | null;
   turno: string | null;
   ot_id: string;
-  ordenes_trabajo:
-    | { ot_number: number; fecha_ejecucion: string | null; fecha_ejecucion_pendiente: string | null; fecha_cierre: string | null; estado: string | null }
-    | { ot_number: number; fecha_ejecucion: string | null; fecha_ejecucion_pendiente: string | null; fecha_cierre: string | null; estado: string | null }[]
-    | null;
+  ordenes_trabajo: OrdenLeida | OrdenLeida[] | null;
+}
+
+/** El embed de Supabase viene como objeto o como lista de uno, según la relación. */
+function laOrdenDe(f: FilaLeida): OrdenLeida | null {
+  return (Array.isArray(f.ordenes_trabajo) ? f.ordenes_trabajo[0] : f.ordenes_trabajo) ?? null;
+}
+
+/** El turno guardado, si es uno de los tres del taller. */
+function turnoDelTaller(turno: string | null): Turno | null {
+  return TURNOS_DEL_TALLER.includes(turno as Turno) ? (turno as Turno) : null;
+}
+
+/**
+ * Qué eventos hay en cada grupo, **armado con las filas que la pasada ya leyó**:
+ * no cuesta ni una lectura más, y por lo tanto nada del presupuesto que
+ * `LIMITE_DE_GOOGLE_MS` reserva. `seguirALasOT` trae todos los eventos con
+ * `ot_id`, que son exactamente los que cuentan para el apilado (los de la
+ * Agenda sin orden no entran, igual que en `mandarLaOTAlCalendario`).
+ *
+ * Guarda los ids y no un número porque lo que se le pregunta es «cuántos hay
+ * **sin contarme a mí**».
+ *
+ * **Un evento sin un turno del taller no ocupa ningún grupo**: no se sabe en
+ * cuál ponerlo, y repartirlo entre los tres sería inventarlo. Es el mismo
+ * evento que `queHacerConElEvento` se niega a mover por no saber a qué hora
+ * ponerlo, así que lo que queda es que otro pueda caerle encima; se prefiere
+ * eso a correr órdenes por una suposición.
+ */
+function cuposDeLasFilas(filas: FilaLeida[]): Map<string, Set<string>> {
+  const cupos = new Map<string, Set<string>>();
+  for (const f of filas) {
+    const fecha = fechaDelEvento(f.inicio);
+    const turno = turnoDelTaller(f.turno);
+    if (!fecha || !turno) continue;
+    tomarElCupo(cupos, claveDelHueco(fecha, laOrdenDe(f)?.especialidad, turno), f.id);
+  }
+  return cupos;
+}
+
+/** Cuántos hay en ese grupo sin contar al evento `propio`. */
+function ocupadosEn(cupos: Map<string, Set<string>>, clave: string, propio: string): number {
+  const grupo = cupos.get(clave);
+  if (!grupo) return 0;
+  return grupo.size - (grupo.has(propio) ? 1 : 0);
+}
+
+/** El evento pasa a ocupar ese grupo, para los que se decidan después que él. */
+function tomarElCupo(cupos: Map<string, Set<string>>, clave: string, evento: string): void {
+  const grupo = cupos.get(clave);
+  if (grupo) grupo.add(evento);
+  else cupos.set(clave, new Set([evento]));
 }
 
 /**
@@ -416,7 +564,9 @@ export async function seguirALasOT(
   try {
     filas = await traerTodo<FilaLeida>((desde, hasta) =>
       cliente.from("agenda_eventos")
-        .select("id, titulo, descripcion, lugar, inicio, fin, casilla, google_event_id, divergencia, aviso, turno, ot_id, ordenes_trabajo!ot_id(ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_cierre, estado)")
+        // La cadena va literal y en una sola pieza: partida con `+` pierde la
+        // inferencia de tipos de Supabase.
+        .select("id, titulo, descripcion, lugar, inicio, fin, casilla, google_event_id, divergencia, aviso, turno, ot_id, ordenes_trabajo!ot_id(ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_cierre, estado, especialidad)")
         .not("ot_id", "is", null)
         .order("id").range(desde, hasta).returns<FilaLeida[]>()
     );
@@ -426,20 +576,24 @@ export async function seguirALasOT(
   }
 
   const marca = ahora.toISOString();
+  const cupos = cuposDeLasFilas(filas);
 
   for (const f of filas) {
-    const orden = Array.isArray(f.ordenes_trabajo) ? f.ordenes_trabajo[0] : f.ordenes_trabajo;
+    const orden = laOrdenDe(f);
     if (!orden) continue;
     const nombre = `OT ${orden.ot_number}`;
 
     try {
-      const plan = planDelEvento({
-        inicio: f.inicio,
-        turno: TURNOS_DEL_TALLER.includes(f.turno as Turno) ? (f.turno as Turno) : null,
-        divergencia: f.divergencia,
-        aviso: f.aviso,
-        orden,
-      });
+      const turno = turnoDelTaller(f.turno);
+      // El hueco del día al que la orden se mudó. Sin esto el evento llegaría
+      // con la hora fija de su turno y caería encima de otro de su especialidad.
+      const fechaNueva = fechaParaElCalendario(orden);
+      const destino = fechaNueva && turno ? claveDelHueco(fechaNueva, orden.especialidad, turno) : null;
+
+      const plan = planDelEvento(
+        { inicio: f.inicio, turno, divergencia: f.divergencia, aviso: f.aviso, orden },
+        destino ? ocupadosEn(cupos, destino, f.id) : 0
+      );
       if (plan.tipo === "nada" && plan.aviso === undefined) continue;
 
       if (plan.mover) {
@@ -450,7 +604,17 @@ export async function seguirALasOT(
           continue;
         }
         const desde = reloj();
+        const movidosAntes = r.movidos;
         await moverElEvento(cliente, f, plan.mover, plan.aviso, marca, nombre, r);
+        // El hueco queda tomado para los que vengan detrás en esta misma corrida:
+        // una planilla que corre tres OT del 6 al 20 las pondría a las tres a la
+        // misma hora. Sólo si la fila de verdad se movió —si el `update` falló, el
+        // evento sigue en su día viejo y el hueco del nuevo no está tomado—.
+        //
+        // No se lo saca del grupo del día viejo: contarlo de más deja un hueco
+        // libre en el medio, que la spec acepta; contarlo de menos encima dos
+        // eventos, que es lo que esto evita.
+        if (destino && r.movidos > movidosAntes) tomarElCupo(cupos, destino, f.id);
         // El primero que deja el presupuesto agotado es quien se lo comió.
         if (r.seComioElTiempo === undefined && presupuesto.agotado()) {
           r.seComioElTiempo = quienSeComioElTiempo(nombre, "movimiento", reloj() - desde);

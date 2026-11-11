@@ -715,10 +715,10 @@ export function convieneReintentar(resultado) {
  * Lo que la ruta contestó que quedó a medias, todo junto, o null si no quedó
  * nada. **Lo que salió a medias se dice, no se calla.**
  *
- * Los cuatro campos conviven y por eso se miran los cuatro en los dos tipos de
- * carga, aunque hoy cada ruta mande los suyos: la de avisos devuelve
- * `advertencia` y `clave_error`, y la de órdenes ésos dos más `planilla_error`
- * y `aviso_error`. El que más importa es `advertencia`: aparece cuando la carga
+ * Los campos conviven y por eso se miran todos en los dos tipos de carga,
+ * aunque hoy cada ruta mande los suyos: la de avisos devuelve `advertencia` y
+ * `clave_error`, y la de órdenes ésos dos más `planilla_error`, `aviso_error`,
+ * `repuestos_error` y `calendario_aviso`. El que más importa es `advertencia`: aparece cuando la carga
  * ya está escrita en la planilla y no se sabe si llegó al sistema, que es
  * exactamente el caso en el que alguien podría cargar dos veces lo mismo.
  *
@@ -746,6 +746,11 @@ export function loQueQuedoPendiente(cuerpoCrudo) {
     // leía por su cuenta, así que la misma OT contaba una cosa cargada con la
     // app abierta y otra cuando salía de la cola.
     texto(cuerpo.repuestos_error),
+    // El evento de calendario que no salió (`alNacerLaOT`). La orden sí se creó,
+    // así que es una advertencia y no un rechazo; y por este camino, que es el
+    // de los dos tipos de carga, lo ve quien cargó la OT tanto con la app abierta
+    // como cuando sale de la cola.
+    texto(cuerpo.calendario_aviso),
   ].filter((parte) => parte !== null);
 
   return partes.length > 0 ? partes.join(" ") : null;

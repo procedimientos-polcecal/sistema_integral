@@ -175,7 +175,14 @@ async function principal() {
 
   let config;
   try {
-    config = JSON.parse(readFileSync(rutaConfig, "utf8"));
+    // Se saca el BOM antes de parsear. `readFileSync(..., "utf8")` no lo
+    // quita y `JSON.parse` lo rechaza con un "Unexpected token" que imprime
+    // un caracter invisible: el mensaje no se puede leer y manda a buscar un
+    // error de sintaxis que no existe. En Windows lo escribe cualquiera —el
+    // Bloc de notas, y `Set-Content -Encoding utf8` de PowerShell 5.1—, así
+    // que la configuración de esta herramienta lo va a tener tarde o
+    // temprano. Lo encontró el instalador probándose a sí mismo.
+    config = JSON.parse(readFileSync(rutaConfig, "utf8").replace(/^﻿/, ""));
   } catch (e) {
     salir(`No se pudo leer la configuración en ${rutaConfig}: ${e.message}`);
   }

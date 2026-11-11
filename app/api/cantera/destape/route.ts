@@ -5,6 +5,7 @@ import { cuerpoJson } from "@/lib/core/cuerpo";
 import { puedeEditarCantera, tieneAccesoCantera } from "@/lib/cantera/auth";
 import { traerDestape } from "@/lib/cantera/consultas";
 import { esTipoDeCamionValido, esTipoDeRecursoValido, ETIQUETA_TIPO_CAMION, type TipoDeCamion } from "@/lib/cantera/destape";
+import { numeroDeCampo } from "@/lib/cantera/numero";
 
 /**
  * Un recurso (máquina propia + operario, o fletero + camión) usado un día
@@ -74,8 +75,8 @@ async function resolverCuerpoDestape(
     if (typeof b.fecha !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(b.fecha)) return { error: "La fecha va como YYYY-MM-DD" };
     if (!b.recurso_raw || typeof b.recurso_raw !== "string") return { error: "Falta el operario" };
     if (!b.equipo_o_vehiculo_raw || typeof b.equipo_o_vehiculo_raw !== "string") return { error: "Falta el equipo" };
-    const horas = Number(b.horas);
-    if (!isFinite(horas) || horas <= 0) return { error: "Las horas tienen que ser un número mayor a cero" };
+    const horas = numeroDeCampo(b.horas);
+    if (horas === null || horas <= 0) return { error: "Las horas tienen que ser un número mayor a cero" };
     return {
       ...comunes,
       fecha: b.fecha,
@@ -94,7 +95,7 @@ async function resolverCuerpoDestape(
 
   // fletero_externo
   const acarreoId = b.acarreo_id ? String(b.acarreo_id) : null;
-  const viajes = b.viajes === "" || b.viajes == null ? null : Number(b.viajes);
+  const viajes = numeroDeCampo(b.viajes);
 
   if (acarreoId) {
     const { data: acarreo, error: errAcarreo } = await supabase
@@ -138,8 +139,8 @@ async function resolverCuerpoDestape(
   if (!b.recurso_raw || typeof b.recurso_raw !== "string") return { error: "Falta el fletero" };
   if (!b.equipo_o_vehiculo_raw || typeof b.equipo_o_vehiculo_raw !== "string") return { error: "Falta el tipo de camión" };
   if (b.tipo_camion && !esTipoDeCamionValido(b.tipo_camion)) return { error: "Tipo de camión inválido" };
-  const horas = Number(b.horas);
-  if (!isFinite(horas) || horas <= 0) return { error: "Las horas tienen que ser un número mayor a cero" };
+  const horas = numeroDeCampo(b.horas);
+  if (horas === null || horas <= 0) return { error: "Las horas tienen que ser un número mayor a cero" };
   return {
     ...comunes,
     fecha: b.fecha,

@@ -237,14 +237,32 @@ describe("lo que hay que preguntar", () => {
    * genera **sin que nadie complete nada**, porque el mantenimiento ya sabía
    * las tres cosas.
    */
-  it("el mantenimiento que hoy existe ya puede generar su OT", () => {
+  it("el mantenimiento que hoy existe ya contesta casi todo solo", () => {
     expect(loQueFaltaDelMantenimiento(MANTENIMIENTO, respuestasIniciales(MANTENIMIENTO)))
-      .toEqual([]);
+      .toEqual(["la fecha de fin estimada"]);
   });
 
-  it("son las tres que el mantenimiento contesta por su cuenta", () => {
-    expect(loQueHayQuePreguntar(MANTENIMIENTO))
-      .toEqual(["la especialidad", "quién lo realiza", "la fecha de inicio"]);
+  /**
+   * Y ESTE ES EL PRECIO DE VOLVERLA OBLIGATORIA, dicho donde se ve: hasta el
+   * 04/11/2026 este boton generaba la OT SIN QUE NADIE COMPLETARA NADA, porque
+   * el mantenimiento ya sabia las tres cosas. Ahora pide una.
+   *
+   * No se puede contestar sola: un programado sabe cuando arranca —`next_date`—
+   * y cuantas horas estima, pero de ahi no sale una fecha de fin. Ponerle la de
+   * inicio seria inventar el dato.
+   */
+  it("la fecha de fin la pone una persona: el programado no la sabe", () => {
+    expect(respuestasIniciales(MANTENIMIENTO).fecha_fin).toBe("");
+    expect(loQueFaltaDelMantenimiento(MANTENIMIENTO, {
+      ...respuestasIniciales(MANTENIMIENTO), fecha_fin: "2026-11-10",
+    })).toEqual([]);
+  });
+
+  it("son las cuatro que el mantenimiento no contesta por su cuenta", () => {
+    expect(loQueHayQuePreguntar(MANTENIMIENTO)).toEqual([
+      "la especialidad", "quién lo realiza",
+      "la fecha de inicio", "la fecha de fin estimada",
+    ]);
   });
 
   /**
@@ -264,21 +282,23 @@ describe("lo que hay que preguntar", () => {
   it("un tipo sin especialidad cierta deja ese campo pendiente", () => {
     const m = { ...MANTENIMIENTO, maintenance_type: "Inspeccion" };
     expect(respuestasIniciales(m).especialidad).toBe("");
-    expect(loQueFaltaDelMantenimiento(m, respuestasIniciales(m))).toEqual(["la especialidad"]);
-    expect(loQueFaltaDelMantenimiento(m, { ...respuestasIniciales(m), especialidad: "MECÁNICO" }))
-      .toEqual([]);
+    expect(loQueFaltaDelMantenimiento(m, respuestasIniciales(m)))
+      .toEqual(["la especialidad", "la fecha de fin estimada"]);
+    expect(loQueFaltaDelMantenimiento(m, {
+      ...respuestasIniciales(m), especialidad: "MECÁNICO", fecha_fin: "2026-11-10",
+    })).toEqual([]);
   });
 
   /** Un mantenimiento sin próxima fecha no se puede atrasar nunca. */
   it("sin próxima fecha queda pendiente la de ejecución", () => {
     const m = { ...MANTENIMIENTO, next_date: null };
     expect(loQueFaltaDelMantenimiento(m, respuestasIniciales(m)))
-      .toEqual(["la fecha de inicio"]);
+      .toEqual(["la fecha de inicio", "la fecha de fin estimada"]);
   });
 
   it("los espacios no cuentan como contestado", () => {
     expect(loQueFaltaDelMantenimiento(MANTENIMIENTO, {
-      ...respuestasIniciales(MANTENIMIENTO), especialidad: "   ",
+      ...respuestasIniciales(MANTENIMIENTO), especialidad: "   ", fecha_fin: "2026-11-10",
     })).toEqual(["la especialidad"]);
   });
 });

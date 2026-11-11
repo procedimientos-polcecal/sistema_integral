@@ -183,6 +183,15 @@ export const REGISTRO = {
       "exportación: es lo que evita que la importación pise la fecha durante las 3 " +
       "a 53 horas que tarda el derrame del master en reflejarla.",
   },
+  "app/api/mantenimiento/planificacion/[id]/calendario/route.ts": {
+    estrategia: "aborta",
+    porque:
+      "Escribe en la planilla sólo a través del `POST` de postergar (que es `aborta`: " +
+      "la planilla primero, y si no contesta no se mueve nada) y, si esa llamada " +
+      "falla, no manda el evento ni toca nada más: el renglón del ítem dice lo que " +
+      "contestó postergar sin traducir. No duplica la escritura: la obligación de " +
+      "anotar `fecha_ejecucion_pendiente` se quedó en postergar, que la cumple.",
+  },
   "lib/mantenimiento/generarPeriodicas.ts": {
     estrategia: "delega",
     porque:
@@ -462,6 +471,29 @@ function loQueImporta(texto) {
   return porModulo;
 }
 
+/** Los verbos que una ruta de Next exporta como handler. */
+const HANDLERS = ["POST", "PATCH", "PUT", "DELETE"];
+
+/**
+ * Qué handlers de ruta importa un archivo, y de qué módulo: módulo → nombres
+ * **locales** (el alias, si lo hay). `import { POST as postergar }` llama a
+ * `postergar(...)`, no a `POST(...)`.
+ */
+function handlersQueImporta(texto) {
+  const porModulo = new Map();
+  const re = /import\s*(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
+  for (const m of texto.matchAll(re)) {
+    const modulo = m[2].replace(/^@\//, "").replace(/\.tsx?$/, "");
+    const locales = [];
+    for (const n of m[1].split(",")) {
+      const [original, alias] = n.trim().replace(/^type\s+/, "").split(/\s+as\s+/).map((x) => x.trim());
+      if (HANDLERS.includes(original)) locales.push(alias || original);
+    }
+    if (locales.length > 0) porModulo.set(modulo, [...(porModulo.get(modulo) ?? []), ...locales]);
+  }
+  return porModulo;
+}
+
 /**
  * Quién escribe en una planilla, contando la indirección.
  *
@@ -472,7 +504,17 @@ function loQueImporta(texto) {
  * ruta nueva que use `escribirEnLaFilaDeLaOT` y no anote nada era invisible
  * para el script — que es exactamente el bug que vino a buscar.
  *
- * La propagación es **sólo desde los `delega`**, a propósito. Desde un `cola`
+ * **Hay una segunda puerta, más angosta: un handler de ruta.** Una ruta que
+ * importa el `POST`, `PATCH`, `PUT` o `DELETE` de **otra ruta ya registrada** y
+ * lo llama, escribe en la planilla a través de ella —el envío del plan al
+ * calendario posterga llamando al `POST` de postergar, que es `aborta` y no
+ * `delega`—. Sin esto era invisible: no llama a ninguna primitiva y la
+ * propagación de abajo no sale de un `aborta`. **No se propaga desde cualquier
+ * módulo registrado**, sólo desde los handlers: es lo que evita convertir en
+ * escritor a todo el que importe cualquier cosa de un archivo que casualmente
+ * escribe.
+ *
+ * La propagación de los módulos es **sólo desde los `delega`**, a propósito. Desde un `cola`
  * no hace falta: ese módulo anota él mismo y por eso su llamador no se puede
  * olvidar. Y desde `otra-direccion` sería un desastre — `lib/core/sheets.ts`
  * exporta también `leerValores`, así que propagar desde ahí convertiría en
@@ -504,6 +546,12 @@ export function quienesEscriben(archivos, registro) {
         if (!deAhi) continue;
         const usadas = nombres.filter((n) => deAhi.includes(n));
         if (usadas.length > 0 && llamaA(a.texto, usadas)) escriben.add(a.ruta);
+      }
+
+      if (escriben.has(a.ruta)) continue;
+      for (const [modulo, locales] of handlersQueImporta(a.texto)) {
+        if (!registro[`${modulo}.ts`]) continue;
+        if (llamaA(a.texto, locales)) escriben.add(a.ruta);
       }
     }
 
