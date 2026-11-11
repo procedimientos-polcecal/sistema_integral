@@ -516,6 +516,80 @@ vuelve válido al siguiente.
 - El cron de la Agenda **no** engancha el push: corre a las 2:00 de Argentina, siempre
   fuera de la ventana.
 
+## La vista de calendario
+
+Desde el 04/11/2026 `/agenda` abre en una **grilla de calendario** —la semana, o un
+día— y la lista de tarjetas pasó a ser la tercera vista. El diseño está en
+[el spec](superpowers/specs/2026-11-04-agenda-vista-de-calendario-design.md) y el
+plan en [el plan](superpowers/plans/2026-11-04-agenda-vista-de-calendario.md). Lo
+que no se deduce del código:
+
+- **En un teléfono la vista `semana` dibuja un solo día, y la razón es una
+  contradicción entre el ancho y la URL.** La URL dice `?vista=semana&dia=…` y de ella
+  depende qué lee el servidor; pero siete columnas en 343 px son 43 px cada una, y ahí no
+  entra ni una palabra. Lo que se dibuja en un teléfono es **el día de `?dia=`**, y el
+  servidor no conoce el ancho. Se resolvió con CSS y no con `window.matchMedia`: con
+  `matchMedia` el servidor adivina un ancho, el navegador lo corrige y hay un salto en la
+  hidratación. En cambio `AgendaClient` dibuja **las dos grillas** (`hidden sm:block` la de
+  siete, `sm:hidden` la de uno) y `BarraDeLaAgenda` **los dos pares de flechas** (siete días
+  y un día): el HTML del servidor ya es el correcto para los dos anchos. Lo que cuesta: una
+  grilla de más en el DOM, y que al cruzar el breakpoint con la pantalla abierta la que
+  aparece arranca con el scroll en cero. La vista `dia` dibuja una sola en cualquier ancho.
+- **Lo que se acomoda en columnas son pedazos de un día y no eventos.**
+  `partirPorDia` parte cada evento en un pedazo por día que toca y `acomodar` reparte
+  columnas entre **pedazos**. Un evento que cruza la medianoche son dos pedazos que viven
+  en racimos distintos, así que puede ir en la columna 0 un día y en la 2 al siguiente: no
+  es un error, es que en cada día compite con otros eventos. De ahí que la clave de un
+  bloque sea `evento.id` **más** el día, y que el scroll inicial no cuente los pedazos que
+  vienen de ayer (arrancan a las 00:00 por construcción y llevaban la grilla a la
+  madrugada).
+- **`MINUTOS_MINIMOS` (20) existe porque un evento de duración cero es posible.** Google
+  lo permite y «aceptar lo de Google» lo puede traer. Un bloque de alto cero es un evento
+  que existe, se puede abrir y borrar, y no se ve en ningún lado: la falla que toda esta
+  pantalla está para evitar. Un fin anterior al inicio —dato roto— se trata igual, como de
+  duración cero.
+- **La banda de arriba de la grilla nombra también los pendientes, y eso obligó a
+  traerlos siempre.** Una celda de calendario no tiene dónde poner un párrafo, así que lo
+  que la tarjeta decía con todas las letras —alguien lo movió o lo borró en Google, no
+  llegó a escribirse allá— se muda a la banda (`entradasDeLaBanda`), que lleva un renglón
+  por evento y la condición más grave. Prometer en la banda un evento que la consulta no
+  leyó sería una promesa falsa: por eso `traerEventos` pide, además de lo que termina desde
+  `desde`, **todo lo divergido y todo lo pendiente (`google_pendiente`) sea de cuando
+  sea**. Una divergencia que alguien dio por vista **se queda** en la banda: «Ya lo vi»
+  apaga la campana de quien lo aprieta y nada más.
+- **El detalle de un evento se guarda por id.** Al terminar una acción la página se
+  recarga y llegan eventos nuevos; el detalle se busca en la lista cada vez, así que
+  muestra lo recargado y se cierra solo si el evento ya no está. Desde el detalle una
+  acción lo cierra al terminar —salvo que se haya cancelado la confirmación—, porque los
+  errores y los avisos de Google viven en la pantalla de atrás y un modal encima los
+  taparía; mientras está en curso no se puede cerrar. «Editar» **lo reemplaza por el
+  editor** en vez de apilarse. Y la confirmación de `ConfirmProvider` no atiende Escape:
+  con un oyente global el detalle de abajo se cerraba, así que `AgendaClient` ignora el
+  cierre mientras `confirmando`. Escuchar Escape sólo en el diálogo **no alcanza** —se
+  probó—: el foco queda en el botón que abrió la confirmación.
+- **Un clic en un hueco** abre el alta con el día y la hora en punto de la fila
+  (`arranque` de `EventoModal`); el «hasta» es una hora después, y a las 23 queda 23:59
+  (`unaHoraDespues`), porque el formulario es de un solo día y `24:00` no existe.
+- **`hrefDeLaAgenda` conserva `historial=1`.** Las flechas, «Hoy» y el selector son
+  enlaces, no estado: lo que no viaja en la URL se pierde al cambiar de vista.
+- **La grilla no lee el reloj del navegador.** «Hoy» y la línea de «ahora» salen de
+  `ahoraIso`, el instante del servidor que ya decide qué evento es pasado y cuál próximo.
+- **Dibuja las 24 horas**, aunque las OT caigan entre las 04:00 y las 20:00: un evento
+  puede estar a cualquier hora y uno fuera de lo dibujado no se ve y nada lo dice.
+
+**Qué se comprobó y qué no.** El 04/11/2026 la pantalla se abrió en un navegador, en
+escritorio y a 375 px, **con eventos de ejemplo y sin sesión**: un arnés temporal fuera
+del `(app)` armaba `AgendaClient` con datos inventados, porque `/agenda` está detrás del
+login y las credenciales de prueba no estaban a mano. Ahí se vio que la semana se
+dibuja, que un clic en un hueco abre el alta con el día y la hora puestos, que un clic en
+un evento abre el detalle con sus botones, que Escape no cierra el detalle por debajo de
+una confirmación, que las tres vistas cambian, que `historial=1` viaja en los enlaces y
+que a 375 px se ve un solo día. **Lo que ese arnés no ejercitó**: las escrituras
+(borrar, destrabar, «ya lo vi»: no había API detrás), la lectura real con RLS y las
+alertas con datos de producción. Y encontró dos defectos que ni `tsc` ni el build ni los
+tests podían ver: el título del rango salía **una letra por renglón** a 375 px, y la
+grilla abría a la madrugada por un evento que cruzaba la medianoche.
+
 ## Las OT que entran solas al calendario
 
 Desde el 04/11/2026 una OT con fecha de ejecución futura **no espera que alguien
@@ -639,8 +713,9 @@ midió contra producción el 04/11/2026.
   cualquier par y un evento que cruza la medianoche se muestra bien si viene de Google,
   pero no se puede crear desde acá. Al editar uno que cruza, el fin se corre los mismos
   días que el inicio y conserva la duración.
-- **No hay eventos de día completo** (todo lleva hora) ni un calendario dibujado adentro
-  del SdG. Un cambio hecho en Google **alerta, no gana**.
+- **No hay eventos de día completo** (todo lleva hora). Un cambio hecho en Google
+  **alerta, no gana**. El calendario dibujado adentro del SdG que esta lista decía que
+  no había **existe desde el 04/11/2026**: ver la sección de abajo.
 - **No se vuelca la programación del taller ni los mantenimientos programados.** No por
   falta de ganas: medido el 29/10/2026, `mant_personal_taller` tenía 0 filas, y las OT con
   fecha futura eran 15. Se revisa cuando el preventivo esté cargado.
@@ -681,10 +756,26 @@ fila recién insertada, así que sola tumbaba todo alta hecha con la sesión de 
 ## Lo que sólo se puede comprobar en la primera corrida real
 
 **Todo lo que sigue se razonó o se probó contra dobles de prueba, y ninguna de estas
-cosas se ejercitó contra la base ni contra Google.** No había base local (la migración
-no está aplicada), Google valida el dominio del endpoint antes de abrir un canal, y
-las rutas y la pantalla no tienen tests en este repo. En cada punto va qué mirar y qué
-se vería si estuviera mal. **Ordenados por lo que más duele si falla en silencio**, salvo los dos primeros, que
+cosas se ejercitó contra la base ni contra Google.** No había base local, Google valida
+el dominio del endpoint antes de abrir un canal, y las rutas y la pantalla no tienen
+tests en este repo. En cada punto va qué mirar y qué se vería si estuviera mal.
+
+**Actualización del 04/11/2026: la migración ya está aplicada.** `agenda_eventos` existe en
+producción y tiene dos filas —una «Prueba» y la de la OT 2970—, así que los puntos 1 y 2
+(el orden de despliegue y el ruido de la campana) **quedaron cumplidos y ya no aplican**.
+**El punto 6 también se midió** y tiene la respuesta escrita adentro: Google da siete días.
+Los demás se escribieron antes y **no se tachan**: esta actualización dice que la tabla
+existe y que los canales abren, no que el resto se haya mirado.
+
+**Y lo que esa primera corrida dejó medido de paso, porque costó una tarde encontrarlo:**
+`NEXT_PUBLIC_APP_URL` estaba cargada en Vercel **sin el `https://`**, y con eso los catorce
+canales fallaron al abrir. El error nombró la variable —que es para lo que está escrito
+así— pero lo que no se nota es el **otro** consumidor de esa misma variable:
+`urlBase()` de [lib/core/auth-links.ts](../lib/core/auth-links.ts) la usa para los links de
+blanqueo de contraseña y **no falla con un error**; Supabase recibe un `redirectTo` que no
+matchea su lista y cae de vuelta a su propio Site URL, callado. O sea que la misma
+variable mal cargada rompe una cosa a los gritos y otra en silencio. Si alguna vez se
+toca, es `https://` completo y sin barra final. **Ordenados por lo que más duele si falla en silencio**, salvo los dos primeros, que
 son de orden de despliegue y van arriba porque se hacen antes que todo lo demás.
 
 1. **El código y la migración van en la misma ventana, y la migración no puede llegar
@@ -707,17 +798,20 @@ son de orden de despliegue y van arriba porque se hacen antes que todo lo demás
    `leerLaSalud` para `admin_sistema`— y sólo la llama `/agenda`. Tampoco dependía de esta
    migración: lee `ultima_sincronizacion`, no una tabla de la Agenda. Si ese mensaje
    aparece, la causa es otra.)
-3. **La pantalla nunca se abrió en un navegador.** Se verificó con `tsc`, el build,
-   `revisar-responsive` y las funciones puras, no con la migración corrida. Lo primero
-   que hay que mirar:
+3. **La pantalla se abrió en un navegador, pero con eventos de ejemplo y sin sesión**
+   (ver «La vista de calendario»): lo que **nadie** abrió es `/agenda` con una sesión real
+   y la base de verdad. Lo primero que hay que mirar ahí:
    - que `/agenda` cargue para alguien **sin Mantenimiento** (ni la lectura del número de
      OT ni la de eventos pueden tumbarla);
    - que un **invitado** vea el nombre del dueño (viene del directorio admin; el embed
      `usuarios!dueno_id` es `null` para él por RLS);
-   - que `.or("fin.gte.corte,divergencia.not.is.null")` combinado con `traerTodo` traiga lo
-     que no terminó, el último mes y **todo lo divergido sin importar la fecha**;
-   - el flujo completo de crear, editar y borrar, y que la pantalla se vea bien en el
-     teléfono (donde la va a abrir la mitad del equipo).
+   - que `.or("fin.gte.desde,divergencia.not.is.null,google_pendiente.not.is.null")`
+     combinado con `traerTodo` traiga lo que no terminó dentro de la ventana y **todo lo
+     divergido y lo pendiente sin importar la fecha**, y que mirar una semana vieja
+     traiga esa semana;
+   - el flujo completo de crear, editar y borrar **desde la grilla y desde el detalle**
+     (el arnés no tenía API detrás), y que se vea bien en el teléfono real (donde la va a
+     abrir la mitad del equipo) y no en un ancho emulado.
 4. **Las tres comprobaciones de RLS, con sesiones reales y no en el editor SQL** (donde
    RLS no corre): crear un evento con la sesión del dueño **con `RETURNING`**; un `select`
    de cada tabla con un usuario ajeno al evento (no debe ver nada); y uno invitado (debe ver
@@ -734,12 +828,23 @@ son de orden de despliegue y van arriba porque se hacen antes que todo lo demás
    último deja la corrida **roja** nombrando el `eq`. Primera cosa a mirar en
    `agenda / barrido`: «N divergencias detectadas, 0 anotadas». Para probarlo, borrar a
    mano un evento en Google y mirar si la fila queda con `divergencia`.
-6. **El plazo real que Google le da a un canal de `events.watch`.** `abrirCanal` devuelve
-   el `vence` real y es el que manda, pero **no se midió** (no se puede desde local). El
-   margen de renovación de 48 h y la frecuencia diaria del cron **descansan en que ese
-   plazo sea bastante mayor que dos días**. Si un día Google devuelve uno más corto, el
-   cron diario ya no alcanza y hay que cambiar la frecuencia. Mirar la columna `vence` de
-   `agenda_canales` después de la primera corrida.
+6. ~~**El plazo real que Google le da a un canal de `events.watch`.**~~ **MEDIDO el
+   04/11/2026: Google da siete días.** Las catorce casillas abrieron a las 12:37:17 UTC y
+   vencen el 11/11/2026 a las 12:37:17 — siete días justos, no un plazo negociado ni
+   proporcional a nada. Era el último supuesto sin comprobar del diseño: el margen de
+   renovación de 48 h y la frecuencia diaria del cron descansaban en que ese plazo fuera
+   «bastante mayor que dos días», sin saber cuánto.
+
+   Lo que eso deja, en concreto: con un canal de 7 días y un margen de 48 h, el cron
+   empieza a renovarlo recién el quinto día, así que tiene **tres corridas diarias** para
+   lograrlo antes de que muera. Tres fallos seguidos del cron matan un canal; uno o dos,
+   no. Y un canal muerto **no se distingue de uno sano** (ver más arriba), que es por lo
+   que el barrido existe.
+
+   Si alguna vez Google devuelve un plazo más corto, `abrirCanal` sigue siendo el que
+   manda —el `vence` sale de su respuesta, no de una constante— pero la aritmética de
+   arriba cambia y hay que subir la frecuencia del cron. Se comprueba mirando la columna
+   `vence` de `agenda_canales`.
 7. **`abrirCanal` y `cerrarCanal` contra Google.** Sus tests fijan la lectura de la API
    (forma del cuerpo, `expiration` en ms), no una medición. Y **Google valida que el
    dominio esté verificado en el proyecto de Google Cloud** antes de abrir el canal: si no
@@ -793,9 +898,9 @@ son de orden de despliegue y van arriba porque se hacen antes que todo lo demás
     `select id, casilla, divergencia, google_pendiente from agenda_eventos where
     google_pendiente is not null and divergencia is not null;`
 
-Antes de todo eso, el orden es: **aplicar `20261102102403_agenda_schema.sql`** (y la
-`20261018134754` si falta) **en la misma ventana que el despliegue del código** (puntos 1
-y 2), hacer las comprobaciones de RLS, correr el cron a mano
+Antes de todo eso, el orden era: **aplicar `20261102102403_agenda_schema.sql`** (y la
+`20261018134754` si faltaba) **en la misma ventana que el despliegue del código** —ya
+hecho, ver arriba—, hacer las comprobaciones de RLS, correr el cron a mano
 (`/api/cron/agenda` con el `CRON_SECRET`) y leer las tres filas de `sincronizaciones`.
 
 ### Lo que dejan sin comprobar las OT automáticas, y lo que tiene que hacer una persona

@@ -150,6 +150,10 @@ describe("desdeParaLeer", () => {
   it("mirando el futuro, el corte del historial sigue mandando", () => {
     expect(desdeParaLeer("semana", "2027-05-10", ahora)).toBe(corteDelHistorial(ahora));
   });
+  // Decisión 11 del spec: la vista Lista ignora el día que se está mirando.
+  it("la vista Lista usa siempre el corte del historial, mire el día que mire", () => {
+    expect(desdeParaLeer("lista", "2026-03-09", ahora)).toBe(corteDelHistorial(ahora));
+  });
 });
 
 describe("tituloDelRango", () => {
@@ -460,7 +464,9 @@ Expected: FAIL — `traerEventos` no acepta `desde` y la condición no nombra `g
 
 En `lib/agenda/listar.ts`: `desde` entra por opciones y reemplaza a `corteDelHistorial(opciones.ahora)`; la condición pasa a `fin.gte.${desde},divergencia.not.is.null,google_pendiente.not.is.null`. El docstring dice que la ventana ahora la fija quien llama, **y por qué los pendientes se traen como los divergidos**: la banda los nombra, y una promesa sobre una fila que la consulta no leyó es una promesa falsa.
 
-En `app/(app)/agenda/page.tsx`: leer `vista` y `dia` de `searchParams` con `leerVista`/`leerDia` (el `hoy` sale de `hoyEnArgentina()`), calcular `desde` con `desdeParaLeer`, pasárselo a `traerEventos`, y pasarle `vista` y `dia` a `AgendaClient`.
+En `app/(app)/agenda/page.tsx`: leer `vista` y `dia` de `searchParams` con `leerVista`/`leerDia` (el `hoy` sale de `hoyEnArgentina()`), calcular `desde` con `desdeParaLeer` y pasárselo a `traerEventos`.
+
+**`vista` y `dia` todavía NO se le pasan a `AgendaClient`**: esa prop entra en la Tarea 7, cuando el componente sabe recibirla. Pasarla acá dejaría el `tsc` del paso 4 en rojo.
 
 - [ ] **Step 4: Run the tests and `tsc`**
 
@@ -539,7 +545,7 @@ Cada pedazo se dibuja absoluto dentro de su columna: `top = desdeMin / 60 * ALTO
 
 Los colores van por `style` y no por utilidades: verde para los de OT, azul para los propios, naranja con borde más oscuro para los divergidos. Un evento pasado va con menos opacidad. **Las columnas de sábado y domingo van con un fondo apenas más gris** —la planta opera con turno de 04:00, así que el fin de semana no se esconde, pero se distingue (decisión 7 del diseño)—.
 
-La línea roja de «ahora» se dibuja a `ahoraMin / 60 * ALTO_DE_LA_HORA`, **sólo si `hoy` está entre los `dias`**. `ahoraMin` llega por props desde el servidor, no se calcula con el reloj del navegador.
+La línea roja de «ahora» se dibuja a `ahoraMin / 60 * ALTO_DE_LA_HORA`, **sólo si `hoy` está entre los `dias`**. `ahoraMin` llega por props desde `AgendaClient`, que lo deriva con `diaYHoraDe` del `ahoraIso` que ya recibe del servidor. **No se calcula con el reloj del navegador**, y tampoco se agrega una prop nueva en `page.tsx`: el «ahora» del servidor ya viaja una vez, y dos formas del mismo dato son dos fuentes de verdad.
 
 Hacer clic en un hueco llama a `onHueco(dia, hora)` con la hora en punto de la fila; hacer clic en un bloque llama a `onEvento` y **no** dispara el hueco de abajo.
 
@@ -573,6 +579,8 @@ git commit -F <mensaje>
 
 **Files:**
 - Modify: `app/(app)/agenda/AgendaClient.tsx`
+- Modify: `app/(app)/agenda/page.tsx` (pasarle `vista` y `dia` a `AgendaClient`, que la Tarea 4 dejó a propósito sin pasar)
+- Modify: `app/(app)/agenda/EventoModal.tsx`
 - Modify: `docs/AGENDA.md`
 - Modify: `CLAUDE.md`
 
@@ -611,6 +619,6 @@ En `CLAUDE.md`, en la fila de la Agenda: **corregir las dos cosas que hoy dice y
 - [ ] **Step 6: Commit**
 
 ```bash
-git add "app/(app)/agenda/AgendaClient.tsx" "app/(app)/agenda/EventoModal.tsx" docs/AGENDA.md CLAUDE.md
+git add "app/(app)/agenda/AgendaClient.tsx" "app/(app)/agenda/page.tsx" "app/(app)/agenda/EventoModal.tsx" docs/AGENDA.md CLAUDE.md
 git commit -F <mensaje>
 ```
