@@ -43,7 +43,14 @@ export interface ValoresIniciales {
 
 /**
  * Alta de un requerimiento. Es el formulario que hoy vive en Google Forms, así
- * que se mantiene igual de corto: sólo descripción y área son obligatorias.
+ * que se mantiene igual de corto: descripción, área y dónde se necesita.
+ *
+ * El lugar se exige desde el 11/11/2026, a pedido. No cuesta nada: medido ese
+ * día, de los 2.270 RI **ninguno** estaba sin ubicación, así que esto no
+ * cambia una costumbre sino que cierra la puerta. Lo que se evitaba es que un
+ * pedido sin lugar no se puede filtrar por ubicación y, sobre todo, que de ahí
+ * salen el sector, el equipo ofrecido y quién paga: sin lugar, los tres
+ * quedan a cargo de quien pide.
  */
 export default function NuevoRequerimientoModal({
   areas, empresas, ubicaciones, inicial, advertencia, onClose, onSaved,
@@ -476,13 +483,19 @@ export default function NuevoRequerimientoModal({
           </div>
 
           {/* Dónde se necesita */}
-          <Campo label="Dónde se necesita">
+          <Campo label="Dónde se necesita" requerido>
             <Select
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={ubicacionId}
               onChange={(e) => elegirUbicacion(e.target.value)}
             >
-              <option value="">Sin especificar</option>
+              {/*
+                «Elegir…» y no «Sin especificar»: lo segundo se lee como una
+                opción válida, y dejar el lugar en blanco es lo que vuelve
+                imposible filtrar por ubicación y deducir el sector —de ahí
+                salen también el equipo y quién paga—.
+              */}
+              <option value="">Elegir…</option>
               {ubicaciones.map((u) => (
                 <option key={u.id} value={u.id}>{u.nombre}</option>
               ))}
@@ -589,7 +602,7 @@ export default function NuevoRequerimientoModal({
             </button>
             <button
               type="submit"
-              disabled={guardando || creado || !descripcion.trim() || !areaId}
+              disabled={guardando || creado || !descripcion.trim() || !areaId || !ubicacionId}
               className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
             >
               {guardando ? "Guardando…" : creado ? "Ya se creó" : "Crear requerimiento"}
