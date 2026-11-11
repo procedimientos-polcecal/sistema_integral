@@ -439,9 +439,11 @@ function detalleDe(estado: EstadoCaido, corrida: CorridaLeida | undefined, ahora
  *
  * `sincronizaciones` es un registro global donde escriben **los dos
  * despliegues** (ver el CLAUDE.md), y acá no se filtra por `canonico`: esa
- * columna es de la migración `20261105092248`, que **todavía no está aplicada**,
- * así que nombrarla rompería la consulta hoy. El desempate lo hace la vista, de
- * su lado, y es la que decide si el recurso está en `fallo`.
+ * columna es de la migración `20261105092248`, y **esto se escribió cuando
+ * todavía no estaba aplicada** —nombrarla habría roto la consulta—. Ya lo está
+ * (medido el 11/11/2026), así que filtrar se podría; no se hizo, y por eso lo
+ * que sigue vale. El desempate lo hace la vista, de su lado, y es la que decide
+ * si el recurso está en `fallo`.
  *
  * Qué implica, medido el 05/11/2026 sobre las últimas 50 corridas de cada
  * recurso: el otro despliegue sólo toca recursos que necesitan Google —no tiene

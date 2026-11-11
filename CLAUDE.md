@@ -721,9 +721,9 @@ del código:
   `.github/workflows/calidad-envases-bajada.yml` ya había evitado al apagar su
   cron —«un fallo esperado que se ve igual que uno real entrena a no mirar
   ninguno»—, porque `calidad/envases_bajada` no corre por decisión y de
-  otro modo quedaría en rojo para siempre. **Volver a encenderlo no es
-  descomentar el `schedule:`**, y la entrada del registro lo dice completo: antes
-  hay que correr `scripts/simular-bajada-envases.mts` y que dé **cero diferencias
+  otro modo quedaría en rojo para siempre. **Volver a encenderlo pide descomentar
+  el `schedule:` de ese workflow, y no alcanza con eso**; la entrada del registro
+  lo dice completo: antes hay que correr `scripts/simular-bajada-envases.mts` y que dé **cero diferencias
   reales**, porque con el SdG atrasado la bajada borra de la planilla lo que
   cargó la gente y el SdG no vio —el ensayo del 19/10 destapó 18 movimientos— y
   nadie lo relacionaría con esto; después `EL_SISTEMA_MANDA_EL_KARDEX` en `true`
@@ -746,8 +746,11 @@ del código:
   En una `vieja` son las tolerancias enteras de silencio
   (`cuantasTolerancias`). **En una `nunca` no crece: es el piso fijo de 1**, porque
   sin ninguna corrida no hay desde cuándo contar, y ahí vale lo mismo que se dice
-  más abajo del fallo con 1 fijo: **un descarte lo calla hasta la primera corrida
-  real**. Hoy es inalcanzable —la revisión del 11/11/2026 midió que el único
+  más abajo del fallo con 1 fijo: **un descarte lo calla mientras su cantidad no
+  pase de 1**. Y el descarte es **del recurso y no del episodio** —el id es
+  `salud-${clave}`, no depende del estado y nada lo limpia al recuperarse—, así
+  que si después ese recurso falla una vez o queda `vieja`, su cantidad arranca
+  otra vez en 1 y sigue mudo. Hoy es inalcanzable —la revisión del 11/11/2026 midió que el único
   recurso declarado sin filas, `envases_bajada`, está exceptuado—, pero no es
   hipotético: un recurso recién declarado, o `canales` y `barrido` el primer día
   de un despliegue (ver `docs/AGENDA.md`), salen «nunca corrió» hasta que corren.
@@ -805,8 +808,7 @@ cuando la columna todavía no existía, y nombrarla habría roto la consulta; co
 migración ya aplicada se podría filtrar y no se hizo, así que su racha cuenta
 también los fallos del otro despliegue. Hoy eso sólo la engorda y el aviso
 reaparece antes; quedaría corta sólo si el otro despliegue anduviera bien en un
-recurso que el canónico falla. (El docstring de esa función todavía dice que la
-migración «no está aplicada»: es del momento en que se escribió.)
+recurso que el canónico falla.
 
 El diseño y lo que se verificó están en
 [el spec de la app instalable](docs/superpowers/specs/2026-10-16-app-instalable-design.md),
