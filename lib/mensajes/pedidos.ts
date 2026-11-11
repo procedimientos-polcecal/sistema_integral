@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { TipoDeEntidad } from "@/lib/core/mensajes";
 import { TIPOS_DE_ENTIDAD } from "./entidades";
+import { MAXIMO_DE_MENCIONES, MAXIMO_DEL_TEXTO } from "./limites";
 
 /**
  * Lo que entra a las rutas de la mensajería, validado con zod y dicho en
@@ -10,25 +11,9 @@ import { TIPOS_DE_ENTIDAD } from "./entidades";
  * este repo y `lib/` sí.
  */
 
-/**
- * Cuántas personas se pueden mencionar en un mensaje.
- *
- * El padrón activo son 14, así que 20 no recorta a nadie hoy. Existe para que
- * un pedido armado a mano no dispare cientos de consultas de permisos ni
- * cientos de correos: cada mención cuesta una consulta y, si le corresponde,
- * un llamado al Apps Script.
- */
-export const MAXIMO_DE_MENCIONES = 20;
-
-/**
- * Cuánto puede medir un mensaje.
- *
- * El texto viaja entero en el cuerpo del correo y en el asunto sólo entra un
- * recorte (`paraUnAsunto`), así que no hay un límite técnico cerca: es el
- * tamaño de una conversación y no el de un informe. Se escribe una vez y vale
- * para la pantalla también.
- */
-export const MAXIMO_DEL_TEXTO = 4000;
+// Los dos topes viven en `limites.ts` para que la pantalla los lea sin llevarse
+// este archivo —y los permisos del servidor que importa— al navegador.
+export { MAXIMO_DE_MENCIONES, MAXIMO_DEL_TEXTO };
 
 /** El `tipo` y el `id` del hilo, de la URL de un GET o de un cuerpo. */
 const hilo = {

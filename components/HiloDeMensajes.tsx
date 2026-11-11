@@ -1,0 +1,560 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import Select from "@/components/Select";
+import type { TipoDeEntidad } from "@/lib/core/mensajes";
+import { haceCuanto } from "@/lib/core/haceCuanto";
+import { useCargar } from "@/lib/core/useCargar";
+import type { MensajeParaLaPantalla } from "@/lib/mensajes/forma";
+import { MAXIMO_DE_MENCIONES, MAXIMO_DEL_TEXTO } from "@/lib/mensajes/limites";
+
+/**
+ * El hilo de mensajes pegado a un registro: lo que se habló sobre una orden de
+ * trabajo, un requerimiento o una condición insegura, y a quién se le avisó por
+ * correo.
+ *
+ * Diseño y motivos: `docs/superpowers/specs/2026-11-11-mensajeria-interna-design.md`.
+ * Se pone en una pantalla con una línea, `<HiloDeMensajes tipo=… id=… />`: lo
+ * demás —quién puede ver, a quién se puede mencionar, si el correo está
+ * configurado— lo contestan las rutas de `app/api/mensajes`.
+ *
+ * ## Lo que esta pantalla no puede permitir
+ *
+ * **Que alguien escriba creyendo que le avisó a otro y no le haya llegado.** Es
+ * el anti-objetivo número uno del diseño, y de ahí salen casi todas las
+ * decisiones de abajo:
+ *
+ * - **Dice a quién le va a llegar antes de enviar**, no después: la línea que
+ *   está arriba del botón se rearma con cada mención que se agrega o se saca.
+ * - **Si el correo no está configurado en el servidor, la mención queda
+ *   deshabilitada con el motivo a la vista.** `enviarCorreo()` contesta
+ *   `sin-configurar` en silencio, así que sin este cartel no sale ni un correo y
+ *   no se entera nadie. Se puede escribir igual: el mensaje se guarda.
+ * - **Después de enviar, lo que se muestra sale de la respuesta** y no de lo que
+ *   se pidió: si el servidor dejó a alguien sin aviso, se dice con su motivo.
+ * - **`pendiente` se escribe «sin confirmar» y no «no se envió».** El correo sale
+ *   en un `after()`, después de la respuesta, así que al enviar todavía no se
+ *   sabe si llegó; y si el `after()` nunca anotó el resultado, tampoco se sabrá.
+ *   Decir «no se envió» sería afirmar lo que el dato no dice.
+ *
+ * ## El hilo no es privado, y la pantalla lo dice
+ *
+ * Lo ve cualquiera que pueda ver el registro. Es una limitación a propósito y el
+ * diseño pide que esté escrita donde se escribe, no sólo en el documento; por eso
+ * es un renglón fijo arriba del campo y no un tooltip. Y la lista de a quién se
+ * puede mencionar es **más corta que el padrón** por lo mismo —el correo lleva el
+ * texto del mensaje— y se explica, para que nadie busque un nombre que no está.
+ *
+ * ## No es una nota de la orden de trabajo
+ *
+ * En la pantalla de la OT conviven con `JustificacionOT`, que dice «por qué esta
+ * orden todavía no se hizo» y alimenta una columna de la planilla de Google. Un
+ * mensaje no va a ninguna planilla. La pantalla que lo monta aclara cuál es cuál
+ * con `aclaracion`.
+ *
+ * ## Orden y lectura
+ *
+ * Se muestran del más viejo al más nuevo, con el campo para escribir debajo: es
+ * como se lee una conversación, y lo que uno acaba de enviar queda pegado al
+ * campo. La ruta los devuelve al revés y acá se dan vuelta.
+ *
+ * Mostrar el hilo marca como leídas las menciones propias (`PATCH
+ * /api/mensajes/mios`). Va acá y no en el GET porque un GET que escribe se dispara
+ * con cualquier precarga y marcaría como visto lo que nadie vio. Si el PATCH falla
+ * no se le avisa a nadie: lo único que pasa es que la mención sigue en la bandeja
+ * de quien la tenía, que es el lado seguro del error.
+ */
+
+interface Destinatario {
+  id: string;
+  nombre: string;
+  tiene_correo: boolean;
+}
+
+/** Lo que dice la respuesta del POST sobre a quién se le va a avisar. */
+interface ResumenDelEnvio {
+  correoConfigurado: boolean;
+  seIntentan: number;
+  sinAviso: { nombre: string | null; motivo: string }[];
+}
+
+/** Cuánto se espera antes de volver a leer el hilo para ver cómo salieron los correos. */
+const ESPERAS_PARA_RELEER = [6000, 20000];
+
+/**
+ * Lo que pueden traer las tres rutas, todo opcional: una respuesta de error trae
+ * sólo `error`, y una caída del servidor puede no traer JSON.
+ */
+interface CuerpoDeLaRuta {
+  error?: string;
+  data?: unknown;
+  titulo?: string;
+  existe_el_registro?: boolean;
+  correo_configurado?: boolean;
+  /** Sólo en el 500 que deja el mensaje escrito y las menciones no. */
+  mensaje_guardado?: boolean;
+  avisos?: {
+    se_intentan?: number;
+    sin_aviso?: { nombre: string | null; motivo: string }[];
+  };
+}
+
+async function leerJson(res: Response): Promise<CuerpoDeLaRuta> {
+  return res.json().catch(() => ({}));
+}
+
+export default function HiloDeMensajes({
+  tipo, id, aclaracion,
+}: {
+  tipo: TipoDeEntidad;
+  id: string;
+  /**
+   * Lo que este hilo **no** es en la pantalla donde se monta: la OT tiene una
+   * justificación que va a la planilla y un mensaje no. Lo escribe quien monta el
+   * componente porque sólo él sabe qué tiene al lado.
+   */
+  aclaracion?: string;
+}) {
+  // ── El hilo ────────────────────────────────────────────────────────────────
+  const [mensajes, setMensajes] = useState<MensajeParaLaPantalla[]>([]);
+  const [titulo, setTitulo] = useState("");
+  const [existe, setExiste] = useState(true);
+  const [cargando, setCargando] = useState(true);
+  const [errorDelHilo, setErrorDelHilo] = useState("");
+  const yaMarque = useRef("");
+
+  const recargarElHilo = useCargar(async (vigente) => {
+    let res: Response;
+    try {
+      res = await fetch(`/api/mensajes?tipo=${tipo}&id=${id}`);
+    } catch {
+      if (!vigente()) return;
+      setErrorDelHilo("No se pudo leer el hilo: no hay conexión con el servidor.");
+      setCargando(false);
+      return;
+    }
+    const cuerpo = await leerJson(res);
+    if (!vigente()) return;
+
+    if (!res.ok) {
+      setErrorDelHilo(`No se pudo leer el hilo. ${cuerpo.error ?? ""}`.trim());
+      setCargando(false);
+      return;
+    }
+
+    const data = (cuerpo.data ?? []) as MensajeParaLaPantalla[];
+    // La ruta los manda del más nuevo al más viejo; acá se leen al derecho.
+    setMensajes([...data].reverse());
+    setTitulo(cuerpo.titulo ?? "");
+    setExiste(cuerpo.existe_el_registro !== false);
+    setErrorDelHilo("");
+    setCargando(false);
+
+    // Se está mostrando el hilo: lo que me mencionaron acá deja de estar sin
+    // leer. Una vez por hilo, y sólo si hay algo que pudiera mencionarme.
+    const clave = `${tipo}:${id}`;
+    if (data.length > 0 && yaMarque.current !== clave) {
+      yaMarque.current = clave;
+      void fetch("/api/mensajes/mios", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo, id }),
+      }).catch(() => {});
+    }
+  }, [tipo, id]);
+
+  // ── A quién se puede mencionar ─────────────────────────────────────────────
+  const [destinatarios, setDestinatarios] = useState<Destinatario[]>([]);
+  // `null` es «todavía no se sabe»: hasta que conteste, la mención no se ofrece.
+  const [correoConfigurado, setCorreoConfigurado] = useState<boolean | null>(null);
+  const [errorDeLaLista, setErrorDeLaLista] = useState("");
+
+  const recargarLaLista = useCargar(async (vigente) => {
+    let res: Response;
+    try {
+      res = await fetch(`/api/mensajes/destinatarios?tipo=${tipo}`);
+    } catch {
+      if (!vigente()) return;
+      setErrorDeLaLista("no hay conexión con el servidor");
+      return;
+    }
+    const cuerpo = await leerJson(res);
+    if (!vigente()) return;
+    if (!res.ok) {
+      setErrorDeLaLista(cuerpo.error ?? "el servidor no contestó bien");
+      return;
+    }
+    setDestinatarios((cuerpo.data ?? []) as Destinatario[]);
+    setCorreoConfigurado(cuerpo.correo_configurado === true);
+    setErrorDeLaLista("");
+  }, [tipo]);
+
+  // ── Lo que se está escribiendo ─────────────────────────────────────────────
+  const [texto, setTexto] = useState("");
+  const [mencionados, setMencionados] = useState<string[]>([]);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState("");
+  const [resumen, setResumen] = useState<ResumenDelEnvio | null>(null);
+
+  // Los correos salen después de la respuesta: al enviar no se sabe si llegaron.
+  // Se vuelve a leer el hilo un rato después para que `pendiente` se resuelva.
+  const temporizadores = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => {
+    const vivos = temporizadores.current;
+    return () => vivos.forEach(clearTimeout);
+  }, []);
+
+  function releerMasTarde() {
+    for (const espera of ESPERAS_PARA_RELEER) {
+      temporizadores.current.push(setTimeout(recargarElHilo, espera));
+    }
+  }
+
+  const porId = new Map(destinatarios.map((d) => [d.id, d]));
+  const elegidos = mencionados
+    .map((m) => porId.get(m))
+    .filter((d): d is Destinatario => d !== undefined);
+  const sinElegir = destinatarios.filter((d) => !mencionados.includes(d.id));
+  const aQuienLeLlega = elegidos.filter((d) => d.tiene_correo);
+  const aQuienNo = elegidos.filter((d) => !d.tiene_correo);
+
+  function mencionar(idDelUsuario: string) {
+    if (!idDelUsuario) return;
+    setMencionados((actuales) =>
+      actuales.includes(idDelUsuario) || actuales.length >= MAXIMO_DE_MENCIONES
+        ? actuales
+        : [...actuales, idDelUsuario]
+    );
+    setError("");
+  }
+
+  async function enviar() {
+    const limpio = texto.trim();
+    if (!limpio) {
+      setError("Escribí el mensaje.");
+      return;
+    }
+    setEnviando(true);
+    setError("");
+    setResumen(null);
+
+    let res: Response;
+    try {
+      res = await fetch("/api/mensajes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo, id, texto: limpio, menciones: mencionados }),
+      });
+    } catch {
+      setEnviando(false);
+      setError("No se pudo enviar: no hay conexión con el servidor. El mensaje no se guardó.");
+      return;
+    }
+    const cuerpo = await leerJson(res);
+    setEnviando(false);
+
+    if (!res.ok) {
+      setError(cuerpo.error ?? "No se pudo enviar el mensaje.");
+      if (cuerpo.mensaje_guardado) {
+        // El único error que dejó el mensaje escrito: se vacía el campo para no
+        // duplicarlo si lo reintentan, y el hilo se relee para que se vea.
+        setTexto("");
+        setMencionados([]);
+        recargarElHilo();
+      } else if (res.status === 400) {
+        // Lo más probable es que la lista estuviera vieja: se vuelve a pedir.
+        recargarLaLista();
+      }
+      return;
+    }
+
+    // Lo que se muestra sale de la respuesta: el mensaje tal como quedó
+    // guardado y a quiénes el servidor decidió no mandarles el correo.
+    setMensajes((actuales) => [...actuales, cuerpo.data as MensajeParaLaPantalla]);
+    setResumen({
+      correoConfigurado: cuerpo.correo_configurado === true,
+      seIntentan: cuerpo.avisos?.se_intentan ?? 0,
+      sinAviso: (cuerpo.avisos?.sin_aviso ?? []).map(
+        (s: { nombre: string | null; motivo: string }) => ({ nombre: s.nombre, motivo: s.motivo })
+      ),
+    });
+    setTexto("");
+    setMencionados([]);
+    if ((cuerpo.avisos?.se_intentan ?? 0) > 0) releerMasTarde();
+  }
+
+  // ── Qué se puede hacer con la mención ──────────────────────────────────────
+  // Una sola causa por vez, la que importa más: la que quien escribe puede ir a
+  // arreglar. El texto va a la vista y no en un `title`, que en el teléfono no existe.
+  const dequeHablamos = titulo || "este registro";
+  let motivoSinMencion = "";
+  if (errorDeLaLista) {
+    motivoSinMencion =
+      `No se pudo traer la lista de a quién mencionar (${errorDeLaLista}). ` +
+      "Podés escribir igual, pero no se va a avisar a nadie.";
+  } else if (correoConfigurado === false) {
+    motivoSinMencion =
+      "El correo no está configurado en el servidor, así que por ahora no se puede avisar a " +
+      "nadie. Podés escribir igual: el mensaje queda en el hilo, pero a nadie le va a llegar un correo.";
+  } else if (correoConfigurado === true && destinatarios.length === 0) {
+    motivoSinMencion = `No hay a quién mencionar: nadie más puede ver ${dequeHablamos}.`;
+  }
+  const puedeMencionar =
+    correoConfigurado === true && !errorDeLaLista && destinatarios.length > 0;
+  const alLimite = mencionados.length >= MAXIMO_DE_MENCIONES;
+
+  return (
+    <div className="space-y-3 border-t border-slate-200 pt-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p className="text-xs font-medium text-slate-500">
+          Mensajes{titulo ? ` · ${titulo}` : ""}
+        </p>
+        <button
+          type="button"
+          onClick={recargarElHilo}
+          className="text-xs text-slate-400 underline hover:text-slate-700"
+        >
+          Volver a leer
+        </button>
+      </div>
+
+      {aclaracion && <p className="text-xs text-slate-500">{aclaracion}</p>}
+
+      {cargando && <p className="text-xs text-slate-400">Buscando…</p>}
+      {errorDelHilo && <p className="text-sm text-red-600">{errorDelHilo}</p>}
+
+      {!cargando && !errorDelHilo && !existe && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          Este registro ya no está. Lo que se habló queda acá, pero no se puede escribir más.
+        </p>
+      )}
+
+      {!cargando && !errorDelHilo && mensajes.length === 0 && (
+        <p className="text-xs text-slate-400">Todavía nadie escribió nada acá.</p>
+      )}
+
+      {mensajes.length > 0 && (
+        <ul className="space-y-1.5">
+          {mensajes.map((m) => (
+            <li key={m.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <p className="text-sm text-slate-800 whitespace-pre-wrap break-words">{m.texto}</p>
+              <p className="mt-0.5 text-xs text-slate-400">
+                {m.autor ?? "—"} ·{" "}
+                <span title={new Date(m.creado_en).toLocaleString("es-AR")}>
+                  {haceCuanto(m.creado_en)}
+                </span>
+              </p>
+              {m.menciones.length > 0 && (
+                <ul className="mt-1.5 space-y-0.5">
+                  {m.menciones.map((x) => (
+                    <li key={x.usuario_id} className="text-xs text-slate-500">
+                      Para <span className="font-medium text-slate-700">{x.nombre ?? "—"}</span>
+                      {" · "}
+                      <EstadoDelCorreo aviso={x.aviso} motivo={x.aviso_fallo} />
+                      {" · "}
+                      <span className={x.leido ? "text-slate-500" : "text-slate-400"}>
+                        {x.leido ? "ya lo vio" : "todavía no lo vio"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Lo que dice el servidor del mensaje que se acaba de enviar. */}
+      {resumen && <ResumenDeAvisos resumen={resumen} />}
+
+      {existe && (
+        <div className="space-y-2">
+          <p className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
+            <span className="font-medium">Esto no es privado.</span> El hilo lo ve cualquiera que
+            pueda ver {dequeHablamos}, y no se edita ni se borra. Si la conversación no tiene que
+            verla todo ese grupo, no va acá. Los correos no se contestan: se responde acá.
+          </p>
+
+          <textarea
+            value={texto}
+            onChange={(e) => { setTexto(e.target.value); setError(""); setResumen(null); }}
+            maxLength={MAXIMO_DEL_TEXTO}
+            rows={3}
+            placeholder="Escribí un mensaje…"
+            aria-label="Mensaje"
+            className="input"
+          />
+
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-slate-500">Avisar por correo a</p>
+
+            <div className="w-full sm:w-72">
+              <Select
+                className="input"
+                aria-label="Mencionar a alguien"
+                value=""
+                disabled={!puedeMencionar || alLimite}
+                onChange={(e) => mencionar(e.target.value)}
+              >
+                <option value="" disabled>
+                  {correoConfigurado === null && !errorDeLaLista
+                    ? "Cargando…"
+                    : alLimite
+                      ? `Ya son ${MAXIMO_DE_MENCIONES}, el máximo`
+                      : "Mencionar a alguien…"}
+                </option>
+                {sinElegir.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.nombre}{d.tiene_correo ? "" : " (sin correo)"}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            {motivoSinMencion && (
+              <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                {motivoSinMencion}
+              </p>
+            )}
+
+            {puedeMencionar && (
+              <p className="text-xs text-slate-400">
+                Sólo se puede mencionar a quien pueda ver {dequeHablamos}: el correo lleva el texto
+                del mensaje, y a quien no tiene acceso ni le serviría el enlace. Si no encontrás a
+                alguien en la lista, es porque no tiene acceso.
+              </p>
+            )}
+
+            {elegidos.length > 0 && (
+              <ul className="flex flex-wrap gap-1.5">
+                {elegidos.map((d) => (
+                  <li
+                    key={d.id}
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white py-0.5 pl-2.5 pr-1 text-xs text-slate-700"
+                  >
+                    {d.nombre}
+                    <button
+                      type="button"
+                      aria-label={`Sacar a ${d.nombre}`}
+                      onClick={() => setMencionados((a) => a.filter((m) => m !== d.id))}
+                      className="rounded-full px-1.5 text-slate-400 hover:text-red-600"
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* A quién le va a llegar, antes de enviar y no después. */}
+            <p className="text-xs text-slate-600">
+              {elegidos.length === 0 ? (
+                <>No vas a avisar a nadie: el mensaje queda en el hilo y lo ve quien lo abra.</>
+              ) : (
+                <>
+                  {aQuienLeLlega.length > 0 && (
+                    <>
+                      Se le manda un correo a{" "}
+                      <span className="font-medium">
+                        {aQuienLeLlega.map((d) => d.nombre).join(", ")}
+                      </span>
+                      . Que llegue se confirma recién después de enviar.{" "}
+                    </>
+                  )}
+                  {aQuienNo.length > 0 && (
+                    <span className="text-amber-700">
+                      A {aQuienNo.map((d) => d.nombre).join(", ")} no se le va a poder mandar el
+                      correo: no tiene correo cargado.
+                    </span>
+                  )}
+                </>
+              )}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={enviar}
+              disabled={enviando}
+              className="btn-primary"
+            >
+              {enviando
+                ? "Enviando…"
+                : elegidos.length > 0
+                  ? `Enviar y avisar a ${elegidos.length}`
+                  : "Enviar"}
+            </button>
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Cómo salió el correo de una mención.
+ *
+ * Los tres textos dicen **lo que el dato dice y nada más**: `enviado` es que el
+ * servicio de correo lo aceptó (no que la persona lo abrió), `fallo` es que se
+ * sabe que no salió, y `pendiente` es «no se sabe» —puede estar saliendo todavía
+ * o el servidor nunca llegó a anotar el resultado—.
+ *
+ * `motivo` sólo llega para quien escribió el mensaje: lo que dijo el servicio de
+ * correo, sin traducir, que es lo que distingue un dominio rechazado de un cupo
+ * agotado. Para el resto queda en null y se dice sólo que no salió.
+ */
+function EstadoDelCorreo({
+  aviso, motivo,
+}: {
+  aviso: MensajeParaLaPantalla["menciones"][number]["aviso"];
+  motivo: string | null;
+}) {
+  if (aviso === "enviado") {
+    return <span className="text-emerald-700">correo enviado</span>;
+  }
+  if (aviso === "fallo") {
+    return (
+      <span className="text-red-600">
+        el correo no salió{motivo ? `: ${motivo}` : ""}
+      </span>
+    );
+  }
+  return (
+    <span className="text-amber-700">
+      correo sin confirmar (puede estar saliendo todavía, o no haber salido)
+    </span>
+  );
+}
+
+/** Lo que dijo el servidor, justo después de enviar, sobre a quiénes se les avisa. */
+function ResumenDeAvisos({ resumen }: { resumen: ResumenDelEnvio }) {
+  const { correoConfigurado, seIntentan, sinAviso } = resumen;
+
+  // Sin correo configurado todos quedan con el mismo motivo: se dice una vez.
+  const lineasSinAviso = correoConfigurado
+    ? sinAviso.map((s) => `A ${s.nombre ?? "alguien"} no se le mandó el correo: ${s.motivo}`)
+    : sinAviso.length > 0
+      ? [sinAviso[0].motivo]
+      : [];
+
+  const hayAlgoQueDecir = seIntentan > 0 || lineasSinAviso.length > 0;
+
+  return (
+    <div role="status" className="space-y-1 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-700">
+      <p className="font-medium">El mensaje quedó guardado.</p>
+      {!hayAlgoQueDecir && <p>No mencionaste a nadie, así que no se mandó ningún correo.</p>}
+      {seIntentan > 0 && (
+        <p>
+          Se está mandando el correo a {seIntentan} {seIntentan === 1 ? "persona" : "personas"}.
+          Todavía no se sabe si llegó: junto a cada nombre, en el mensaje, va a aparecer cómo salió.
+        </p>
+      )}
+      {lineasSinAviso.map((l, i) => (
+        <p key={i} className="text-amber-700">{l}</p>
+      ))}
+    </div>
+  );
+}

@@ -111,6 +111,12 @@ export default function JustificacionOT({
   return (
     <div className="space-y-2">
       <p className="text-xs font-medium text-slate-500">Por qué no se hizo</p>
+      {/* El rótulo solo no alcanza desde que la orden tiene también un hilo de
+          mensajes: esto es lo que llega a la planilla, y el hilo no. */}
+      <p className="text-xs text-slate-400">
+        Queda en la planilla de órdenes (la última, en la columna X). Para hablar con alguien,
+        usá los mensajes de más abajo.
+      </p>
 
       {cargando && <p className="text-xs text-slate-400">Buscando…</p>}
 
