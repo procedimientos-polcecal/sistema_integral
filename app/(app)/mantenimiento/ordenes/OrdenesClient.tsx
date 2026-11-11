@@ -20,6 +20,7 @@ import IniciarOTModal from "./IniciarOTModal";
 import RegistrarOTModal from "./RegistrarOTModal";
 import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
 import RepuestosOTModal from "./RepuestosOTModal";
+import HiloDeMensajes from "@/components/HiloDeMensajes";
 import JustificacionOT from "./JustificacionOT";
 import PostergarOTModal from "./PostergarOTModal";
 import MandarAlCalendarioModal from "./MandarAlCalendarioModal";
@@ -1156,6 +1157,25 @@ function OTDetail({
       {pideJustificacion(o.estado) && (
         <JustificacionOT ordenId={o.id} puedeEditar={canEdit} onCambio={onJustificacion} />
       )}
+
+      {/* Los mensajes de la orden, aparte de la justificación de arriba y fuera
+          del `pideJustificacion`: se puede hablar de una orden ya realizada, y
+          la justificación no. Una nota dice por qué no se hizo y llega a la
+          columna X de la planilla; un mensaje queda en el sistema, lo ve quien
+          pueda ver la orden y puede avisar por correo. No se mezclan ni una
+          reemplaza a la otra. Quien puede abrir esta pantalla puede leer y
+          escribir el hilo —ver y escribir son lo mismo—, así que no depende
+          de `canEdit`. */}
+      <HiloDeMensajes
+        tipo="orden_trabajo"
+        id={o.id}
+        aclaracion={
+          pideJustificacion(o.estado)
+            ? "Es una conversación con otras personas, no la justificación de arriba: " +
+              "«Por qué no se hizo» llega a la planilla de órdenes y los mensajes no."
+            : "Es una conversación con otras personas y no llega a ninguna planilla."
+        }
+      />
 
       {canEdit && (
         <div className="flex items-center gap-2 pt-1 flex-wrap">
