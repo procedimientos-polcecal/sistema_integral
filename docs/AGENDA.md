@@ -356,7 +356,8 @@ lo cubren **tres cosas** y conviene saber cuáles son:
 3. **La línea de salud en `/agenda`** (`SaludDeLaAgenda`, sólo `admin_sistema`):
    por cada paso, cuándo corrió por última vez y si está caído, con el error que
    dejó el cron. Si no pudo leerlo, dice que no pudo comprobarlo. **Ya no es
-   adonde llevan los avisos** —ahora van a `/administracion/salud`—: es el
+   adonde llevan los avisos** —ahora el aviso va a `/administracion/salud`, y el
+   push también cuando es el único del resumen; con varios abre el inicio—: es el
    detalle de la Agenda para quien ya está en `/agenda`, y lo dibuja
    `lineasDeSalud` sobre `PASOS_CON_GOOGLE`, que no se retiraron.
 

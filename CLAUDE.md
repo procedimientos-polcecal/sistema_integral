@@ -689,8 +689,13 @@ carga». Está fijado con un test en `lib/home/resumenDeAvisos.test.ts`.
 **La salud de las sincronizaciones también sale por estos dos lados**, y se
 declara a mano. Desde el 05/11/2026 `avisosDeSalud` (en `lib/home/avisos.ts`)
 emite **un aviso por recurso caído** de `ultima_sincronizacion`, sólo para
-`admin_sistema`, y lo lleva a `/administracion/salud`: ahí aterriza el push. Lo
-que hay que saber antes de tocarlo, porque nada de esto se deduce del código:
+`admin_sistema`. **El aviso siempre lleva a `/administracion/salud`; el push,
+sólo cuando va solo.** Con dos o más avisos, `resumirParaPush` y
+`resumirElMovimiento` mandan `url: "/"`: es el diseño del resumen diario y vale
+para todos los avisos, no una excepción de éste, así que un resumen con la salud
+y otro aviso abre el inicio y desde ahí hay que llegar a la pantalla por la
+campana. Lo que hay que saber antes de tocarlo, porque nada de esto se deduce
+del código:
 
 - **La tolerancia de cada recurso se declara en `REGISTRO`**
   ([lib/core/saludDeLasSincronizaciones.ts](lib/core/saludDeLasSincronizaciones.ts)),
@@ -716,8 +721,16 @@ que hay que saber antes de tocarlo, porque nada de esto se deduce del código:
   `.github/workflows/calidad-envases-bajada.yml` ya había evitado al apagar su
   cron —«un fallo esperado que se ve igual que uno real entrena a no mirar
   ninguno»—, porque `calidad/envases_bajada` no corre por decisión y de
-  otro modo quedaría en rojo para siempre. Volver a encenderlo es descomentar el
-  `schedule:` de ese workflow, y la entrada del registro lo dice.
+  otro modo quedaría en rojo para siempre. **Volver a encenderlo no es
+  descomentar el `schedule:`**, y la entrada del registro lo dice completo: antes
+  hay que correr `scripts/simular-bajada-envases.mts` y que dé **cero diferencias
+  reales**, porque con el SdG atrasado la bajada borra de la planilla lo que
+  cargó la gente y el SdG no vio —el ensayo del 19/10 destapó 18 movimientos— y
+  nadie lo relacionaría con esto; después `EL_SISTEMA_MANDA_EL_KARDEX` en `true`
+  y volver a proteger la pestaña (el «CÓMO SE VUELVE A CORTAR» de
+  `lib/calidad/envases/sincronizar.ts`). **Y al reencenderlo, la entrada deja de
+  ser excepción y pasa a llevar `toleranciaHoras`**: si no, el recurso vuelve a
+  correr y queda sin vigilar.
 - **`agenda-pasos-caidos` y `agenda-salud-sin-comprobar` se retiraron** el
   05/11/2026: hacían para dos pasos lo que esto hace para todos, y dos avisos
   de salud con umbrales distintos diciendo cosas parecidas es lo que salir de
@@ -730,8 +743,15 @@ que hay que saber antes de tocarlo, porque nada de esto se deduce del código:
 - **`cuantoLlevaMal` mide cosas distintas según el estado, y es a propósito.**
   Es la `cantidad` del aviso y existe para una sola cosa: **crecer mientras el
   problema siga**, porque `filtrarDescartadas` pide `cantidad > cantidad_vista`.
-  En una `vieja` o una `nunca` son las tolerancias enteras de silencio
-  (`cuantasTolerancias`). En un `fallo` son las **corridas fallidas seguidas**
+  En una `vieja` son las tolerancias enteras de silencio
+  (`cuantasTolerancias`). **En una `nunca` no crece: es el piso fijo de 1**, porque
+  sin ninguna corrida no hay desde cuándo contar, y ahí vale lo mismo que se dice
+  más abajo del fallo con 1 fijo: **un descarte lo calla hasta la primera corrida
+  real**. Hoy es inalcanzable —la revisión del 11/11/2026 midió que el único
+  recurso declarado sin filas, `envases_bajada`, está exceptuado—, pero no es
+  hipotético: un recurso recién declarado, o `canales` y `barrido` el primer día
+  de un despliegue (ver `docs/AGENDA.md`), salen «nunca corrió» hasta que corren.
+  En un `fallo` son las **corridas fallidas seguidas**
   (`rachaDeFallos`, leída de `sincronizaciones`), y **no se puede medir con el
   tiempo**: un cron que falla pero sigue corriendo reescribe su fila cada vez,
   el silencio nunca pasa de unas horas y la cuenta quedaría en 1 para siempre.
@@ -775,15 +795,18 @@ que hay que saber antes de tocarlo, porque nada de esto se deduce del código:
   cron del resumen no, porque lee con el cliente admin.
 
 **Todo esto depende de la migración `20261105092248`** (la columna `canonico`,
-ver «Hay un segundo despliegue escribiendo en esta base»). Sin ella, cuando
-las dos corridas dicen `production` la vista desempata por la más reciente, que
-suele ser la del otro despliegue: el aviso suena por un recurso que en producción
-anda bien —o, peor, un fallo real queda tapado porque el otro lo mostró sano—.
-El mismo hueco tiene un costo anotado en `rachaDeFallos`: **no filtra por
-`canonico`**, porque nombrarla antes de que la migración corra rompería la
-consulta, así que su racha cuenta también los fallos del otro despliegue. Hoy
-eso sólo la engorda y el aviso reaparece antes; quedaría corta sólo si el otro
-despliegue anduviera bien en un recurso que el canónico falla.
+ver «Hay un segundo despliegue escribiendo en esta base»), **que ya está
+aplicada** (medido el 11/11/2026). Sin ella, cuando las dos corridas dicen
+`production` la vista desempata por la más reciente, que suele ser la del otro
+despliegue: el aviso sonaría por un recurso que en producción anda bien —o,
+peor, un fallo real quedaría tapado porque el otro lo mostró sano—. Un costo
+sigue en pie y es de `rachaDeFallos`: **no filtra por `canonico`**. Se escribió
+cuando la columna todavía no existía, y nombrarla habría roto la consulta; con la
+migración ya aplicada se podría filtrar y no se hizo, así que su racha cuenta
+también los fallos del otro despliegue. Hoy eso sólo la engorda y el aviso
+reaparece antes; quedaría corta sólo si el otro despliegue anduviera bien en un
+recurso que el canónico falla. (El docstring de esa función todavía dice que la
+migración «no está aplicada»: es del momento en que se escribió.)
 
 El diseño y lo que se verificó están en
 [el spec de la app instalable](docs/superpowers/specs/2026-10-16-app-instalable-design.md),

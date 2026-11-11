@@ -297,7 +297,7 @@ export const REGISTRO: readonly EntradaDelRegistro[] = [
       porque:
         "El cron está apagado para no dejar una corrida en rojo todos los lunes: un fallo esperado que se ve igual que uno real entrena a no mirar ninguno.",
       quienLoLevanta:
-        "admin_sistema, descomentando el `schedule:` de `.github/workflows/calidad-envases-bajada.yml`",
+        "admin_sistema, y no alcanza con descomentar el `schedule:` de `.github/workflows/calidad-envases-bajada.yml`: antes hay que correr `scripts/simular-bajada-envases.mts` y que dé cero diferencias reales, porque con el SdG atrasado la bajada borra de la planilla lo que cargó la gente y el SdG no vio. Después, `EL_SISTEMA_MANDA_EL_KARDEX` en `true` y volver a proteger la pestaña (ver «CÓMO SE VUELVE A CORTAR» en `lib/calidad/envases/sincronizar.ts`). Y al reencenderla, esta entrada deja de ser excepción y pasa a llevar `toleranciaHoras`, o el recurso vuelve a correr sin que nadie lo vigile.",
     },
   },
 ];
