@@ -165,12 +165,13 @@ decisión es del usuario.
 `/calidad/ensayos/curva` responde la pregunta que ningún otro gráfico de
 Ensayos contesta: **qué forma tiene esta muestra**. Indicadores dibuja cómo
 cambia una determinación en el tiempo y obliga a elegir una malla por vez; acá
-los tamices son el eje X, de un solo vistazo, y hay dos gráficos de la misma
-muestra —retenido y acumulado— que comparten una sola selección de tamices. El
-diseño está en
+los tamices son el eje X, de un solo vistazo, y hay tres gráficos de la misma
+muestra —retenido, acumulado y, desde el 11/11, pasante— que comparten una sola
+selección de tamices. El diseño está en
 [el spec](superpowers/specs/2026-11-05-calidad-curva-granulometrica-design.md) y
 el plan en
-[el plan](superpowers/plans/2026-11-05-calidad-curva-granulometrica.md).
+[el plan](superpowers/plans/2026-11-05-calidad-curva-granulometrica.md); el
+pasante y la descarga en Excel, más abajo, tienen los suyos.
 
 Existe por un tamiz concreto: el de `#20` en 6,0 % de la muestra de `Calcio 0-2`
 del 27/10/2026, cuando las otras dieciocho del mes andan entre 20 y 35. Un
@@ -247,6 +248,101 @@ dibujarla nunca.
   en 19 de los 20 productos. Si se cargan límites de verdad, agregarlos es una
   tarea chica; la pantalla hoy no trae `traerLimites()`.
 
+### El pasante y el Excel de la curva (11/11/2026)
+
+Dos agregados a la misma pantalla: un tercer gráfico y un botón que baja un
+`.xlsx` con la tabla de la muestra y una foto de los tres gráficos, para pegar en
+un informe. El diseño está en
+[el spec](superpowers/specs/2026-11-11-calidad-curva-pasante-y-excel-design.md) y
+el plan en
+[el plan](superpowers/plans/2026-11-11-calidad-curva-pasante-y-excel.md). No hay
+migración. Lo que sigue es lo que el código no dice.
+
+**El pasante es el espejo exacto del acumulado, y por eso va en su propio panel.**
+`granulometria()` calcula el acumulado como `corrido / peso × 100`, así que el
+pasante es `100 − acumulado` punto por punto (se calcula en `curva.ts`, redondeado
+a dos decimales). Como línea más sobre el mismo gráfico serían la misma curva
+dada vuelta —donde una sube, la otra baja lo mismo—; en paneles separados son las
+dos lecturas habituales del ensayo. El redondeo no es cosmético: con `Calcio 0-2`
+del 27/10, `100 - 66.4` da `33.599999999999994` en JavaScript y no `33.6`.
+
+- **Puede dar negativo y no se recorta.** Con 50 g de peso sobre esa misma muestra
+  (66,4 g retenidos) el acumulado llega a 132,8 y el pasante a −32,8. Es la
+  muestra cuyos retenidos superan su propio peso, el caso que `granulometria()`
+  ya se niega a recortar porque verlo es la única forma de corregirlo; por eso el
+  eje Y del pasante lleva 0 como piso **mínimo** y no como valor fijo (si hay un
+  negativo, el eje baja), igual que el del acumulado lleva 100 de techo mínimo.
+- **El riesgo 1 de arriba vale también para el pasante, y para el archivo.**
+  Apagar `#20` no cambia el pasante de `#50` (58,4 %, que ya descuenta el 6,0 de
+  `#20`): el pasante tampoco se recalcula. Por eso la nota del acumulado **viaja
+  en la hoja del Excel** cuando hay algún tamiz apagado, y no sólo en la pantalla:
+  el archivo se va lejos de quien podía explicarlo.
+
+**El Excel lleva una foto y no un gráfico vivo, y se eligió sabiendo lo que
+cuesta.** La alternativa natural era un gráfico nativo atado a las celdas, y no
+existe: `exceljs` **no tiene API de gráficos** —medido sobre el 4.4 del repo, la
+palabra `chart` no aparece ni una vez en `index.d.ts`—, así que habría que
+escribir el XML a mano o cambiar de librería. Sí sabe insertar imágenes
+(`addImage`). Se eligió la imagen porque el archivo va a un informe ya escrito y
+no a seguir trabajando los números. **El precio es que la foto y la tabla se
+separan**: si alguien corrige un número de la tabla, el dibujo sigue mostrando el
+anterior y nada avisa.
+
+**Se abre con Excel de escritorio, y de eso depende todo el diseño.** Se
+preguntó y se contestó así. **Google Sheets puede descartar las imágenes
+flotantes al importar un `.xlsx`**, sin avisar, y entonces el archivo llegaría
+sin el gráfico, que es el único motivo por el que se hace de esta manera. No se
+verificó contra Sheets porque hoy no hace falta. **El día que alguien lo abra
+ahí, hay que comprobar que el gráfico llega antes de prometerlo.**
+
+**El servidor no puede saber si el PNG que recibe es el de esa muestra, y está
+asumido.** La ruta valida lo que puede —que empiece con la firma PNG leyendo los
+bytes, porque el `type` lo escribe quien manda el archivo, y que no pase de 1 MB
+por imagen— pero no que el dibujo corresponda a los números: alguien con acceso a
+Calidad puede mandar una imagen ajena y recibir un archivo con mediciones reales
+y un gráfico que no les corresponde. Se asume porque el margen es chico: quien
+tiene acceso a esos datos puede armar el mismo informe falso a mano en Excel en
+treinta segundos, y este archivo no es un documento firmado ni una fuente de
+autoridad, es una comodidad para no copiar números a mano. Lo que sí está
+cubierto: **los números de la tabla no vienen del navegador**, la ruta los lee de
+la base con `traerMuestra()`; del cliente llegan sólo los tamices apagados y las
+imágenes, así que lo único falseable es el dibujo.
+
+**La foto se saca en el navegador porque recharts no dibuja sin DOM.** Se probó
+la vía que ahorraría la subida entera —dibujar el gráfico en el servidor con
+`renderToStaticMarkup` y convertirlo con `sharp`— contra el recharts del repo
+(3.10): sale **un `<div class="recharts-wrapper">` vacío de 127 caracteres, sin
+una sola línea de SVG**, porque recharts dibuja en un efecto del lado del
+cliente. Además `sharp` está en `devDependencies`, así que tampoco estaría
+garantizado en producción. Lo que queda es rasterizar en el navegador con
+`html2canvas` y subir los PNG a una ruta aparte; armar el archivo entero en el
+navegador se descartó porque metería `exceljs`, cerca de un mega, en el bundle de
+una sola pantalla.
+
+**`html2canvas` no siempre levanta los fondos puestos con utilidades de
+Tailwind, y acá se paga caro.** Un PNG con el fondo transparente, metido en una
+celda de Excel, se ve negro o cuadriculado. Por eso el nodo que se fotografía
+lleva su fondo y el color del título **en `style`**, y el blanco además se le pasa
+a `html2canvas` como `backgroundColor`. La misma trampa ya estaba escrita en
+`reporte/ReporteClient.tsx`; que esté en los dos lados es a propósito. Nada la
+atrapa: las pantallas no tienen tests y el build pasa igual, así que sólo se ve
+bajando un archivo y abriéndolo.
+
+**Lo que la hoja decide, y que conviene no «arreglar» de buena fe:**
+
+- **No avisa de las mallas que el producto declara y la muestra no midió**, igual
+  que la pantalla (riesgo 2 de arriba). Se volvió a preguntar el 11/11, porque el
+  argumento que hace viajar la nota del acumulado —el dato se va lejos de la
+  pantalla que lo explicaba— vale igual acá, y pasa en 19 de 79 muestras. La
+  respuesta fue dejarlo como está.
+- **La fila del tamiz apagado va, marcada** —una columna que dice `Fuera` con
+  todas las letras, para poder filtrar—. Sacarla dejaría un Excel sin rastro de
+  que esa malla se midió, y dejarla sin marcar, un informe con una fila que el
+  dibujo no tiene.
+- **El problema de la muestra viaja y no bloquea la descarga.** «Lo retenido
+  supera el peso de la muestra» queda escrito en la hoja y el archivo se baja:
+  bloquearlo escondería justo la muestra que después genera un reclamo.
+
 ## La lista de productos no es el catálogo del núcleo
 
 `productos` tiene las cosas físicas que se despachan. Acá *Filler 1* y *Filler 2*
@@ -318,6 +414,7 @@ retomarlo.
 | Las tres cuentas de una línea | `lib/calidad/ensayos/determinaciones.ts` |
 | Retenidos y acumulados | `lib/calidad/ensayos/granulometria.ts` |
 | La curva de una muestra, con los tamices apagados | `lib/calidad/ensayos/curva.ts` |
+| Las filas del Excel de la curva | `lib/calidad/ensayos/hojaDeLaCurva.ts`, y la ruta `app/api/calidad/ensayos/curva/export/route.ts` |
 | Límites y la muestra evaluada | `lib/calidad/ensayos/limites.ts` — `evaluarMuestra` |
 | Validación de lo que llega | `lib/calidad/ensayos/cuerpoDeLaMuestra.ts` |
 | El juego de tamices | `lib/calidad/ensayos/mallas.ts` |
