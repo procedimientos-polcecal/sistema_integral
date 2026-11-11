@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
@@ -14,6 +14,10 @@ const CurvaDeRetenido = dynamic(
 );
 const CurvaDeAcumulado = dynamic(
   () => import("./GraficosDeLaCurva").then((m) => m.CurvaDeAcumulado),
+  { ssr: false, loading: esqueleto }
+);
+const CurvaDePasante = dynamic(
+  () => import("./GraficosDeLaCurva").then((m) => m.CurvaDePasante),
   { ssr: false, loading: esqueleto }
 );
 
@@ -61,6 +65,51 @@ function etiquetasDe(muestras: MuestraParaLaLista[]): string[] {
   });
 }
 
+/**
+ * Un gráfico con su título, listo para sacarle la foto.
+ *
+ * **El fondo y el color del título van en `style`, no en clases.** El botón del
+ * Excel rasteriza este nodo con `html2canvas`, y los fondos puestos con
+ * utilidades de Tailwind a veces no llegan al rasterizado —está escrito en el
+ * encabezado de `reporte/ReporteClient.tsx`—. Acá pesa más que allá: un PNG con
+ * el fondo transparente, metido en una celda de Excel, se ve negro o
+ * cuadriculado. El blanco también se le pasa a `html2canvas` como
+ * `backgroundColor`, para que el lienzo no dependa sólo de este nodo.
+ */
+function PanelDelGrafico({
+  titulo,
+  nodo,
+  children,
+}: {
+  titulo: string;
+  nodo: React.Ref<HTMLDivElement>;
+  children: React.ReactNode;
+}) {
+  return (
+    <div ref={nodo} style={{ background: "#FFFFFF", padding: 4 }}>
+      <h2 style={{ color: "#334155", fontSize: 14, fontWeight: 600, margin: "0 0 8px" }}>{titulo}</h2>
+      <div className="h-64">{children}</div>
+    </div>
+  );
+}
+
+/** El fondo del lienzo de la foto; el mismo blanco que lleva cada panel en su `style`. */
+const FONDO_DE_LA_FOTO = "#FFFFFF";
+
+/** El nombre que la ruta le puso al archivo, si lo dice; si no, uno que sirve igual. */
+function nombreDelArchivo(res: Response, porDefecto: string): string {
+  const cabecera = res.headers.get("Content-Disposition") ?? "";
+  const codificado = /filename\*=UTF-8''([^;]+)/i.exec(cabecera)?.[1];
+  if (codificado) {
+    try {
+      return decodeURIComponent(codificado);
+    } catch {
+      /* cae al nombre por defecto */
+    }
+  }
+  return porDefecto;
+}
+
 function Aviso({ children }: { children: React.ReactNode }) {
   return (
     <p className="rounded border border-slate-200 bg-white px-3 py-8 text-center text-sm text-slate-500">
@@ -78,6 +127,11 @@ function Aviso({ children }: { children: React.ReactNode }) {
  */
 function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
   const [apagadas, setApagadas] = useState<number[]>([]);
+  const [bajando, setBajando] = useState(false);
+  const [falloLaDescarga, setFalloLaDescarga] = useState<string | null>(null);
+  const panelRetenido = useRef<HTMLDivElement>(null);
+  const panelAcumulado = useRef<HTMLDivElement>(null);
+  const panelPasante = useRef<HTMLDivElement>(null);
 
   const curva = useMemo(
     () =>
@@ -99,6 +153,64 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
     setApagadas((previas) =>
       previas.includes(malla) ? previas.filter((m) => m !== malla) : [...previas, malla]
     );
+
+  /**
+   * Baja el Excel de la muestra: la tabla sale de la base y de acá viajan sólo
+   * los tamices apagados y la foto de cada gráfico.
+   *
+   * Cada foto sale a `scale: 2`, como el reporte: un gráfico de ~340 a ~700 px de
+   * ancho da un PNG de decenas de kilobytes, muy por debajo del megabyte por
+   * imagen que acepta la ruta. Si la ruta contesta con un 400, **se muestra el
+   * mensaje que mandó**: es el que dice qué pasó.
+   */
+  async function bajarElExcel() {
+    const paneles = [
+      { campo: "retenido", nodo: panelRetenido.current },
+      { campo: "acumulado", nodo: panelAcumulado.current },
+      { campo: "pasante", nodo: panelPasante.current },
+    ];
+    if (paneles.some((p) => p.nodo === null)) {
+      setFalloLaDescarga("Los gráficos todavía se están dibujando: probá de nuevo en un momento.");
+      return;
+    }
+
+    setBajando(true);
+    setFalloLaDescarga(null);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const formulario = new FormData();
+      formulario.append("muestra_id", ensayo.id);
+      formulario.append("apagadas", JSON.stringify(apagadas));
+      for (const { campo, nodo } of paneles) {
+        const lienzo = await html2canvas(nodo!, {
+          scale: 2,
+          backgroundColor: FONDO_DE_LA_FOTO,
+          useCORS: true,
+          logging: false,
+        });
+        const png = await new Promise<Blob | null>((resolver) => lienzo.toBlob(resolver, "image/png"));
+        if (!png) throw new Error("No se pudo sacar la foto de uno de los gráficos.");
+        formulario.append(campo, png, `${campo}.png`);
+      }
+
+      const res = await fetch("/api/calidad/ensayos/curva/export", { method: "POST", body: formulario });
+      if (!res.ok) {
+        const cuerpo = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(cuerpo?.error ?? `El servidor devolvió ${res.status}.`);
+      }
+
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nombreDelArchivo(res, "Curva granulométrica.xlsx");
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setFalloLaDescarga(`No se pudo bajar el Excel: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setBajando(false);
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -142,24 +254,43 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
       {curva.puntos.length === 0 ? (
         <Aviso>Apagaste todos los tamices: prendé alguno para ver la curva.</Aviso>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <h2 className="text-sm font-semibold text-slate-700">Retenido por tamiz</h2>
-            <div className="h-64">
-              <CurvaDeRetenido puntos={curva.puntos} />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <h2 className="text-sm font-semibold text-slate-700">Acumulado</h2>
-            <div className="h-64">
-              <CurvaDeAcumulado puntos={curva.puntos} />
-            </div>
+        <>
+          {/*
+            El botón sólo existe cuando hay gráficos que fotografiar: sin
+            granulometría o sin peso no hay mallas (y se avisó arriba), y con
+            todos los tamices apagados no hay puntos (y se avisó acá).
+          */}
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={bajarElExcel} disabled={bajando} className="btn-secondary">
+              {bajando ? "Armando el Excel…" : "Bajar Excel"}
+            </button>
             <p className="text-xs text-slate-500">
-              El acumulado de una malla ya incluye lo que retuvieron las apagadas antes que
-              ella: apagar un tamiz no recalcula nada, sólo saca su punto de la curva.
+              La tabla y los tres gráficos, con los tamices que dejaste prendidos.
             </p>
           </div>
-        </div>
+          {falloLaDescarga !== null && (
+            <p role="alert" className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {falloLaDescarga}
+            </p>
+          )}
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <PanelDelGrafico titulo="Retenido por tamiz" nodo={panelRetenido}>
+              <CurvaDeRetenido puntos={curva.puntos} />
+            </PanelDelGrafico>
+            <div className="space-y-2">
+              <PanelDelGrafico titulo="Acumulado" nodo={panelAcumulado}>
+                <CurvaDeAcumulado puntos={curva.puntos} />
+              </PanelDelGrafico>
+              <p className="text-xs text-slate-500">
+                El acumulado de una malla ya incluye lo que retuvieron las apagadas antes que
+                ella: apagar un tamiz no recalcula nada, sólo saca su punto de la curva.
+              </p>
+            </div>
+            <PanelDelGrafico titulo="Pasante" nodo={panelPasante}>
+              <CurvaDePasante puntos={curva.puntos} />
+            </PanelDelGrafico>
+          </div>
+        </>
       )}
     </div>
   );
@@ -196,7 +327,7 @@ export default function CurvaClient({
       <div>
         <h1 className="text-xl font-bold text-slate-900">Curva granulométrica</h1>
         <p className="text-sm text-slate-500">
-          Elegí un producto y una de sus muestras para ver lo retenido y el acumulado de cada tamiz.
+          Elegí un producto y una de sus muestras para ver lo retenido, el acumulado y el pasante de cada tamiz.
         </p>
       </div>
 

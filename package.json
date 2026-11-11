@@ -25,6 +25,7 @@
     "@types/leaflet": "^1.9.21",
     "ai": "^7.0.102",
     "exceljs": "^4.4.0",
+    "html2canvas": "^1.4.1",
     "html2pdf.js": "^0.14.0",
     "jsqr": "^1.4.0",
     "jszip": "^3.10.1",
