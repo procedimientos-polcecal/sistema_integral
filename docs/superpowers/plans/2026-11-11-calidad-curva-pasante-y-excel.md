@@ -134,7 +134,7 @@ Con el mismo fixture de `Calcio 0-2`. Los casos:
 
 - `"lleva todas las mallas que midio la muestra, tambien las apagadas"` — con `apagadas: [20]`, hay **ocho** filas de datos y una de ellas es la de la malla 20.
 - `"la fila apagada se marca en su propia columna"` — la fila de la 20 dice que está fuera del gráfico, con una palabra, y las otras siete dicen que están dentro. El test afirma el texto exacto que se use, porque es lo que va a leer una persona.
-- `"los numeros de la fila apagada son los que se midieron"` — apagar no cambia su retenido ni su acumulado: siguen siendo 6 y 41.6.
+- `"los numeros de la fila apagada son los que se midieron"` — apagar no cambia su retenido ni su acumulado: la malla 20 sigue en 6 de retenido, **6,9** de acumulado y 93,1 de pasante. (Este renglón decía 41,6, que es el acumulado de la **#50** — justamente el que contiene a ese 6,0, que es el riesgo entero de esta pantalla. Lo corrigió el implementador de la Tarea 2 contra el fixture.)
 - `"la nota del acumulado viaja en la hoja"` — alguna fila contiene el aviso de que las mallas que siguen a una apagada ya incluyen lo que ésa retuvo. Se afirma que **sólo aparece cuando hay alguna apagada**: sin apagadas no tiene sentido.
 - `"el problema de la muestra viaja en la hoja"` — con `pesoMuestraG: 50`, alguna fila lleva el texto que devuelve `granulometria()` («Lo retenido supera el peso de la muestra.»), sin reescribirlo.
 - `"una muestra sin peso no tiene filas de datos"` — con `pesoMuestraG: null`, no hay ninguna fila de malla, y está el problema escrito.
