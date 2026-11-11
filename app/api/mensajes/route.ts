@@ -122,11 +122,17 @@ export async function GET(request: Request) {
  * llegó, así que el `after()` anota en cada una `avisado_en` o `aviso_fallo`, y
  * la pantalla lo lee al releer el hilo.
  *
- * **Cada mención termina con una de las dos anotadas, o con ninguna sólo si el
- * `after()` no llegó a correr.** A las que se sabe de antemano que no se van a
- * intentar —no hay correo configurado, la persona no tiene correo— se les
- * escribe el motivo al guardarlas y no en el `after()`: así no hay una ventana
- * en la que «no correspondía» se parezca a «todavía no salió».
+ * **Cada mención debería terminar con una de las dos anotadas, y hay dos casos
+ * en que no.** Uno: el `after()` no llegó a correr. Otro: corrió, mandó el
+ * correo y el `update` que lo anota falló dos veces seguidas (se reintenta
+ * una); entonces la mención queda «pendiente» aunque el correo haya salido o
+ * fallado, y lo único que queda es un `console.error` del servidor con el
+ * `mensaje_id`, la persona y lo que había que anotar. Es un agujero chico y
+ * conocido, no cerrado: `pendiente` quiere decir «no se sabe», no «no salió».
+ * A las que se sabe de antemano que no se van a intentar —no hay correo
+ * configurado, la persona no tiene correo— se les escribe el motivo al
+ * guardarlas y no en el `after()`: así no hay una ventana en la que «no
+ * correspondía» se parezca a «todavía no salió».
  *
  * **El autor no se menciona a sí mismo**: si viene en la lista se descarta sin
  * guardarlo, y no es un error. Su bandeja se llenaría con todo lo que escribe.
@@ -197,11 +203,23 @@ export async function POST(request: Request) {
       for (const [uid, u] of activos) nombres.set(uid, nombreCompleto(u));
       const ausentes = idsMencionados.filter((m) => !activos.has(m));
       if (ausentes.length > 0) {
+        // Ya no están entre los activos, así que `activos` no trae su nombre:
+        // se lo busca aparte, sin el filtro. Si ni así aparece, se dice cuántas.
+        const { data: conocidos } = await admin
+          .from("usuarios")
+          .select("id, nombre, apellido")
+          .in("id", ausentes);
+        const porId = new Map((conocidos ?? []).map((c) => [c.id as string, nombreCompleto(c)]));
+        const quienes = ausentes.map((m) => porId.get(m)).filter((n): n is string => Boolean(n));
+        const aQuien =
+          quienes.length === ausentes.length
+            ? `${quienes.join(", ")} ya no figura entre los usuarios activos`
+            : `${ausentes.length} de las personas mencionadas ya no figura entre los usuarios activos`;
         return NextResponse.json(
           {
             error:
-              "Alguna de las personas mencionadas ya no está activa. " +
-              "Actualizá la lista y volvé a probar: el mensaje no se guardó.",
+              `${aQuien}, así que no se le puede mencionar. ` +
+              "Sacalo de la lista y volvé a probar: el mensaje no se guardó.",
           },
           { status: 400 }
         );
@@ -246,9 +264,19 @@ export async function POST(request: Request) {
     .select("id, texto, creado_en, creado_por")
     .single();
   if (errorDelMensaje || !guardado) {
+    // 503 y no 400: para cuando se llega acá ya pasaron el esquema, el permiso
+    // y la existencia del registro, así que lo único que puede fallar es la
+    // base, y eso es pasajero. Un 400 es de los que `clasificarFallo` de
+    // `public/cola/colaOffline.js` trata como definitivos —«no reintentes»— y
+    // sería decirle a quien escribió que su mensaje está mal cuando no lo está
+    // (la misma familia del 403 contra 503 de `lib/seguridadHigiene/auth.ts`).
     return NextResponse.json(
-      { error: errorDelMensaje?.message ?? "No se pudo guardar el mensaje" },
-      { status: 400 }
+      {
+        error:
+          "No se pudo guardar el mensaje: la base no contestó bien. Probá de nuevo en un momento. " +
+          (errorDelMensaje?.message ?? ""),
+      },
+      { status: 503 }
     );
   }
 
@@ -315,12 +343,29 @@ export async function POST(request: Request) {
             cambio = { aviso_fallo: `No se pudo armar el correo: ${(e as Error).message}` };
           }
 
-          const { error } = await admin
-            .from("mensajes_menciones")
-            .update(cambio)
-            .eq("mensaje_id", mensajeId)
-            .eq("usuario_id", d.usuarioId);
-          if (error) console.error("mensajes: no se pudo anotar el aviso", error.message);
+          // Anotar es lo que le da sentido a la columna, así que se reintenta
+          // una vez: si el correo ya salió y este `update` falla, la mención
+          // queda «pendiente» y quien escribió no se entera de nada.
+          let ultimoError = "";
+          for (let intento = 0; intento < 2; intento++) {
+            try {
+              const { error } = await admin
+                .from("mensajes_menciones")
+                .update(cambio)
+                .eq("mensaje_id", mensajeId)
+                .eq("usuario_id", d.usuarioId);
+              if (!error) return;
+              ultimoError = error.message;
+            } catch (e) {
+              ultimoError = (e as Error).message;
+            }
+          }
+          // Sin salida: después de los dos intentos sólo queda el registro del
+          // servidor. Está dicho en el docstring del POST.
+          console.error(
+            "mensajes: no se pudo anotar el aviso (la mención queda pendiente)",
+            mensajeId, d.usuarioId, JSON.stringify(cambio), ultimoError
+          );
         })
       );
     });
