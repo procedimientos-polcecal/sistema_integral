@@ -159,8 +159,14 @@ async function avisosDeLosModulos(
     agendaDivergencias,
   };
 
-  // La salud va al final: es de `admin_sistema` y no desplaza del resumen a los
-  // avisos de los módulos, que son de todos y los primeros que se nombran.
+  // La salud va al final: es de `admin_sistema` y no desplaza en la campana a
+  // los avisos de los módulos, que son de todos y se leen primero.
+  //
+  // **El push la reordena, y es a propósito**: ahí se nombran tres y el resto
+  // se resume, así que «al final» quiere decir «en el "y N más"» — los lunes,
+  // con la lista larga de totales, eso dejaba a la salud fuera del mensaje
+  // todas las semanas. Lo hace `saludPrimero` en `./resumenDeAvisos.ts`, que es
+  // la superficie que recorta; acá el orden es el de la lista entera.
   return [
     ...avisosDeConteos(conteos),
     ...avisosDeRitmo(ritmoPorModulo(filasRitmo), modulos),

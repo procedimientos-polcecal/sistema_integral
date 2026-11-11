@@ -196,10 +196,58 @@ describe("un aviso de salud no imprime el número", () => {
     expect(resumirElMovimiento([bandera])).toEqual({ title: bandera.titulo, body: "", url: bandera.href });
   });
 
+  // Los de salud van primero en el push (ver `saludPrimero` más abajo), así que
+  // la bandera encabeza y el otro conserva su número.
   it("con otros, va sólo el título y los demás conservan su número", () => {
-    expect(resumirParaPush([otro, bandera])?.body).toBe(`4 · ${otro.titulo}
-${bandera.titulo}`);
-    expect(resumirElMovimiento([otro, bandera])?.body).toBe(`4 más · ${otro.titulo}
-${bandera.titulo}`);
+    expect(resumirParaPush([otro, bandera])?.body).toBe(`${bandera.titulo}
+4 · ${otro.titulo}`);
+    expect(resumirElMovimiento([otro, bandera])?.body).toBe(`${bandera.titulo}
+4 más · ${otro.titulo}`);
+  });
+});
+
+/*
+ * ── LA SALUD SE NOMBRA, NO SE RESUME ────────────────────────────────────────
+ *
+ * El push nombra tres avisos y manda el resto a «y N más». `avisosDeUsuario`
+ * agrega los de salud **al final** —son de `admin_sistema` y en la campana no
+ * tienen por qué desplazar a los de los módulos—, y con el resumen diario eso
+ * no se nota, porque lleva movimiento y la lista queda corta.
+ *
+ * **El de los lunes lleva totales**, y ahí la lista de un `admin_sistema` pasa
+ * de diez: la salud caía en «y N más» todas las semanas, por construcción y no
+ * por casualidad. Los lunes son la red —el único mensaje que vuelve a nombrar
+ * lo que dejó de moverse—, así que un recurso caído hace semanas, que ya no
+ * mueve nada, no lo nombraba nadie.
+ */
+describe("saludPrimero: en el push, la salud encabeza", () => {
+  const modulo = (n: number) => conteo(`modulo-${n}`, `Cosa ${n}`, n, `/m${n}`);
+  const caida = conteo(
+    "salud-calidad/carbonilla-odoo",
+    "Carbonilla contra Odoo: falló 8 corridas seguidas — fetch failed",
+    8,
+    "/administracion/salud"
+  );
+
+  it("un lunes con diez avisos de módulos igual nombra la sincronización caída", () => {
+    const r = resumirParaPush([...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(modulo), caida]);
+    expect(r?.title).toBe("11 cosas para mirar");
+    expect(r?.body.split("\n")[0]).toBe(caida.titulo);
+    expect(r?.body).toContain("y 8 más");
+  });
+
+  it("lo mismo en el resumen diario de movimiento", () => {
+    const r = resumirElMovimiento([modulo(1), modulo(2), modulo(3), caida]);
+    expect(r?.body.split("\n")[0]).toBe(caida.titulo);
+  });
+
+  /*
+   * Y **no reordena nada más**: entre los de los módulos manda el orden con el
+   * que llegaron, que es el de `avisosDeConteos`. `sort` es estable, así que
+   * esto no es una casualidad del motor.
+   */
+  it("los demás conservan el orden con el que llegaron", () => {
+    const r = resumirParaPush([modulo(1), modulo(2), caida]);
+    expect(r?.body.split("\n")).toEqual([caida.titulo, "1 · Cosa 1", "2 · Cosa 2"]);
   });
 });

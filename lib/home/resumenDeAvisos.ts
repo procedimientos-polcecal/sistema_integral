@@ -6,35 +6,44 @@ const CUANTOS_SE_NOMBRAN = 3;
 
 /**
  * Los avisos cuya `cantidad` **no cuenta cosas**, y que por lo tanto van sin
- * número. Son dos familias y la regla es la misma:
+ * número: los relojes y las familias de ritmo y de salud.
  *
- *  - **Ritmo** (`ritmo-`): su cantidad es cuántos umbrales enteros lleva el
- *    módulo sin cargarse —ver `cantidadDelAviso` en `./ritmo.ts`—. Escribirla
- *    daría «9 · Trituración: hace 36 días que no se carga», que no significa
- *    nada.
- *  - **Salud** (`salud-`): su cantidad es cuánto hace que ese recurso viene mal
- *    —corridas fallidas seguidas, o tolerancias de silencio si dejó de correr;
- *    ver `cuantoLlevaMal` en `@/lib/core/saludDeLasSincronizaciones`—, o un 1
- *    que quiere decir «pasa» en `salud-sin-comprobar`. Un «1» que parece un
- *    total es peor que ningún número.
- *
- * En las dos, la cantidad existe sólo para que el movimiento y el descarte las
- * traten como a las demás, y el título ya es la frase completa.
- *
- * **Va por prefijo y no por una lista de ids** porque los de salud son
- * dinámicos: hay uno por recurso del registro y la lista crece sola.
- *
- * **La primera condición es la que también aplica la campana**
- * (`suNumeroSeMuestra`, en `./notificaciones.ts`): un número que es un reloj no
- * se muestra en ninguna superficie, y ese criterio se escribe una sola vez. Los
- * dos prefijos son el escalón extra que hoy da sólo el push — la campana sigue
- * mostrando las insignias de ritmo y de salud, y equipararlas es otra decisión,
- * que se toma acá cambiando esta línea.
+ * **Es exactamente lo que decide la campana**, y por eso acá no queda más que
+ * la negación: el criterio entero vive en `suNumeroSeMuestra`
+ * (`./notificaciones.ts`), que es el único módulo de avisos que puede importar
+ * también un componente de cliente. Los dos prefijos vivían acá, de modo que el
+ * push los callaba y la campana los dibujaba — dos superficies que comen lo
+ * mismo diciendo cosas distintas. Si hace falta una familia más, va allá.
  */
-const sinNumero = (n: Notificacion) =>
-  !suNumeroSeMuestra(n) || n.id.startsWith("ritmo-") || n.id.startsWith("salud-");
+const sinNumero = (n: Notificacion) => !suNumeroSeMuestra(n);
 
 const comoLinea = (n: Notificacion) => (sinNumero(n) ? n.titulo : `${n.cantidad} · ${n.titulo}`);
+
+const esDeSalud = (n: Notificacion) => n.id.startsWith("salud-");
+
+/**
+ * La salud adelante, y **sólo en el push**.
+ *
+ * `avisosDeLosModulos` los agrega al final a propósito: en la campana, que
+ * muestra la lista entera, los de los módulos son de todos y van primero. Pero
+ * el push **nombra tres y resume el resto**, así que «al final» ahí quiere
+ * decir «en el "y N más"».
+ *
+ * Con el resumen diario eso no se notaba —lleva movimiento, los stocks de los
+ * módulos casi no se mueven y la lista queda corta—, pero **el de los lunes
+ * lleva totales**: la de un `admin_sistema` pasa de diez avisos y la salud
+ * quedaba fuera de los tres nombrados **todos los lunes, por construcción**. Y
+ * los lunes son la red, no un extra: es el único mensaje que vuelve a nombrar
+ * lo que dejó de moverse. Un recurso caído hace semanas no mueve nada, así que
+ * si el lunes tampoco lo nombra, no lo nombra nadie.
+ *
+ * El orden se toca acá y no en `avisosDeUsuario`, que es lo que también le
+ * cambiaría el orden a la campana.
+ *
+ * `sort` es estable desde ES2019, así que lo demás conserva su orden.
+ */
+const saludPrimero = (avisos: Notificacion[]): Notificacion[] =>
+  [...avisos].sort((a, b) => Number(esDeSalud(b)) - Number(esDeSalud(a)));
 
 /**
  * Convierte los avisos de una persona en **una** notificación.
@@ -64,7 +73,7 @@ export function resumirParaPush(avisos: Notificacion[]): Aviso | null {
     };
   }
 
-  const nombrados = avisos.slice(0, CUANTOS_SE_NOMBRAN).map(comoLinea);
+  const nombrados = saludPrimero(avisos).slice(0, CUANTOS_SE_NOMBRAN).map(comoLinea);
   const restantes = avisos.length - CUANTOS_SE_NOMBRAN;
   if (restantes > 0) nombrados.push(`y ${restantes} más`);
 
@@ -110,7 +119,7 @@ export function resumirElMovimiento(avisos: Notificacion[]): Aviso | null {
   const comoLineaDeMovimiento = (n: Notificacion) =>
     sinNumero(n) ? n.titulo : `${n.cantidad} más · ${n.titulo}`;
 
-  const nombrados = avisos.slice(0, CUANTOS_SE_NOMBRAN).map(comoLineaDeMovimiento);
+  const nombrados = saludPrimero(avisos).slice(0, CUANTOS_SE_NOMBRAN).map(comoLineaDeMovimiento);
   const restantes = avisos.length - CUANTOS_SE_NOMBRAN;
   if (restantes > 0) nombrados.push(`y ${restantes} más`);
 

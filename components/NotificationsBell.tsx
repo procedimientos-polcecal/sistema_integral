@@ -93,9 +93,11 @@ export function NotificationsBell() {
                     {/*
                       Sin insignia cuando el número no cuenta cosas: el de «no
                       se pudo comprobar la salud» lleva el día de la época
-                      (20.763) y ahí decía eso al lado del título. El título ya
-                      es la frase completa. Lo decide `suNumeroSeMuestra`, que
-                      es el mismo criterio que usa el push.
+                      (20.763), y los de ritmo y de salud llevan umbrales o
+                      rachas —un «8» y un «9» al lado de dos recursos caídos el
+                      11/11/2026—. El título ya es la frase completa. Lo decide
+                      `suNumeroSeMuestra`, que es el mismo criterio que usa el
+                      push.
                     */}
                     {suNumeroSeMuestra(n) && (
                       <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--accent-light)", color: "var(--accent-dark)" }}>
