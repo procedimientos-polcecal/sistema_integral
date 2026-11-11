@@ -111,10 +111,26 @@ function soloElDominio(valor: string | undefined): string | null {
  * `VERCEL_PROJECT_PRODUCTION_URL`, así que un script corrido a mano da `false`,
  * que es lo correcto: no es el despliegue canónico.
  *
- * Y si faltara `NEXT_PUBLIC_APP_URL` en producción, el canónico se marcaría
- * `false` y la vista quedaría desempatando como hoy. Es a propósito: este dato
- * **prefiere**, no filtra, así que equivocarse deja la pantalla como estaba y
- * nunca peor.
+ * **Este dato prefiere en la vista y filtra en la racha, y las dos cosas no
+ * fallan igual.** La vista `ultima_sincronizacion` lo usa sólo para ordenar y
+ * conserva todas las filas: si faltara `NEXT_PUBLIC_APP_URL` (o
+ * `VERCEL_PROJECT_PRODUCTION_URL`) en producción, el canónico se marcaría
+ * `false` y la vista quedaría desempatando por `entorno` y `created_at`, como
+ * antes de la columna. Ahí, equivocarse deja la pantalla como estaba.
+ *
+ * Pero desde el 11/11/2026 `enSincronizaciones`
+ * (`lib/core/saludDeLasSincronizaciones.ts`) lo **filtra** con
+ * `.not("canonico", "is", false)` para contar la racha de fallos, y ahí un
+ * `false` del despliegue canónico sí es peor que antes: sus corridas dejan de
+ * contar, las dos consultas no ven ninguna fila de ningún recurso, `null` pasa a
+ * `rachaDeFallos` y ésta devuelve 1. **La racha de todo recurso que se cuenta
+ * en `sincronizaciones` —todos menos `compras/planilla`, que no filtra— queda
+ * clavada en 1 a la vez**, y como un aviso descartado sólo vuelve con
+ * `cantidad > cantidad_vista`, un descarte por recurso los calla en la campana,
+ * en el push y en el recordatorio de los lunes. Es el agujero que
+ * `rachaDeFallos` cerró para un recurso, reabierto para todos juntos. Hoy no
+ * pasa —357 filas con `canonico = true`, medido el 11/11/2026—, pero la única
+ * huella sería una línea en el log, que apunta a las dos causas posibles.
  */
 export function esLaCorridaCanonica(env: Record<string, string | undefined>): boolean {
   const laDeVercel = soloElDominio(env.VERCEL_PROJECT_PRODUCTION_URL);

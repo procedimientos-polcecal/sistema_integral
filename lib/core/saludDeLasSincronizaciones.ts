@@ -454,18 +454,45 @@ function detalleDe(estado: EstadoCaido, corrida: CorridaLeida | undefined, ahora
  * exactamente lo que esto viene a arreglar. Se llama sólo para los recursos que
  * ya están en `fallo` —el 05/11/2026 eran 4 de 29—, así que son pocas.
  *
- * ── SÓLO LAS CORRIDAS DEL DESPLIEGUE CANÓNICO ───────────────────────────────
+ * ── LAS CORRIDAS DEL DESPLIEGUE CANÓNICO, Y NO LAS DEL OTRO ─────────────────
  *
  * `sincronizaciones` es un registro global donde escriben **los dos
  * despliegues** (ver el CLAUDE.md), así que las dos consultas de
  * `enSincronizaciones` filtran con `.not("canonico", "is", false)`.
  *
+ * **No es «sólo las del canónico» a secas.** Lo que se saca es lo marcado
+ * `canonico = false`; entran las `true` y las `null` (historia previa a la
+ * columna). Y como no se filtra `entorno`, entran también los **previews del
+ * proyecto canónico**, que escriben `canonico = true`
+ * (`lib/core/sincronizaciones.test.ts`, «un preview del proyecto bueno»). Es
+ * lo que pasaba antes de este filtro —los previews ya contaban— y no se tocó:
+ * el filtro cierra al despliegue ajeno, no al entorno.
+ *
  * **Y no con `.eq("canonico", true)`**, que es el error fácil: esa columna la
  * agregó la migración `20261105092248` y las filas anteriores la tienen en
  * `null` —medido el 11/11/2026: 3.907 en null contra 357 en true y 48 en
  * false—, así que exigirla en true tiraría toda la historia previa y cada racha
- * arrancaría de cero. Es la misma regla de **preferir y no filtrar** que el
- * encabezado de esa migración le aplica a la vista.
+ * arrancaría de cero. Dejar pasar el null es lo que acerca esto a la regla de
+ * **preferir y no filtrar** que el encabezado de esa migración le aplica a la
+ * vista, pero **no la cumple**: acá la columna sí filtra, y el costo de eso
+ * está en el apartado siguiente.
+ *
+ * ── LO QUE COSTARÍA QUE EL CANÓNICO SE MARCARA `false` ──────────────────────
+ *
+ * `esLaCorridaCanonica` devuelve `false` —nunca null— si falta
+ * `VERCEL_PROJECT_PRODUCTION_URL` o `NEXT_PUBLIC_APP_URL`. Si el canónico se
+ * marcara así (la variable sacada del panel, mal escrita, o el interruptor de
+ * variables de sistema apagado), la **vista** seguiría degradando bien: cae a
+ * `entorno` y `created_at` y la pantalla queda como estaba. Pero acá
+ * `enSincronizaciones` no vería **ninguna fila de ningún recurso**,
+ * `sinNingunaFila` daría `null`, `rachaDeFallos` lo trataría como error y
+ * devolvería 1: la racha de todos los recursos que se cuentan en
+ * `sincronizaciones` (todos menos `compras/planilla`) clavada en 1 **a la vez**.
+ * Y como un descarte sólo caduca con `cantidad > cantidad_vista`, uno por
+ * recurso los callaría en la campana, el push y el recordatorio de los lunes:
+ * el agujero de arriba, reabierto para todos juntos. Medido el 11/11/2026 hay
+ * 357 filas con `canonico = true`, así que hoy no pasa. Su única huella es la
+ * línea de log de `rachaDeFallos`, que por eso nombra las dos causas.
  *
  * ── POR QUÉ NO ALCANZABA CON NO FILTRAR, Y ESTÁ MEDIDO ──────────────────────
  *
@@ -515,8 +542,19 @@ export async function rachaDeFallos(
      * `compras/planilla` cuando se lo buscaba en la tabla equivocada, así que
      * esto es la defensa de la familia y no el parche de ese recurso: si mañana
      * la vista suma otra unión y nadie la declara arriba, se entera alguien.
+     *
+     * **«Ninguna fila» tiene dos causas y este mensaje no las distingue sin
+     * nombrarlas**: una unión de la vista que falta en `DE_OTRA_TABLA`, o el
+     * filtro `canonico` de `enSincronizaciones` que no deja pasar nada porque el
+     * despliegue canónico se marcó `false` (ver `rachaDeFallos`). Si el log
+     * sale para **un** recurso, es casi seguro lo primero; si sale para
+     * **muchos a la vez**, lo segundo.
      */
-    if (racha === null) throw new Error("no tiene ninguna fila en la tabla donde se la buscó");
+    if (racha === null) {
+      throw new Error(
+        "no tiene ninguna fila en la tabla donde se la buscó: o es una unión de la vista sin declarar en DE_OTRA_TABLA, o el filtro `canonico` no dejó pasar ninguna (¿el despliegue canónico se marcó false?)"
+      );
+    }
     return Math.max(1, racha);
   } catch (e) {
     // No tumba la salud: la vista sí se leyó y el aviso tiene que salir igual.
@@ -556,16 +594,21 @@ type ContarLaRacha = (
  * sistema, con un día entero caído el 19/10/2026 en el historial.
  *
  * **Si alguien agrega otra unión a la vista, la entrada va acá.** Y si se
- * olvida, `rachaDeFallos` lo grita en el log en vez de dejarlo pasar por bueno.
+ * olvida, `rachaDeFallos` lo grita en el log en vez de dejarlo pasar por bueno
+ * —pero ese grito **no prueba por sí solo que falte una entrada**: «ninguna
+ * fila» también es lo que ve `enSincronizaciones` si el filtro `canonico` lo
+ * deja sin nada, y entonces el log sale para muchos recursos a la vez—.
  */
 const DE_OTRA_TABLA: Record<string, ContarLaRacha> = {
   "compras/planilla": contarEnCompras,
 };
 
 /**
- * El caso normal: las corridas con su `ok` en `sincronizaciones`, **sólo las
- * del despliegue canónico** — el porqué, y por qué el filtro es
- * `not canonico is false` y no `canonico = true`, están en `rachaDeFallos`.
+ * El caso normal: las corridas con su `ok` en `sincronizaciones`, **menos las
+ * marcadas como de otro despliegue** (`canonico = false`; los previews del
+ * canónico entran) — el porqué, por qué el filtro es `not canonico is false` y
+ * no `canonico = true`, y qué pasa si el canónico se marcara `false`, están en
+ * `rachaDeFallos`.
  */
 const enSincronizaciones: ContarLaRacha = async (supabase, modulo, recurso) => {
   const { data: ultimaBuena, error: errorDeLaBuena } = await supabase
