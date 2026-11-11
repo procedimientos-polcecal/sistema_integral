@@ -43,8 +43,12 @@ const POR_PAGINA = 50;
  * pantalla tarde tres segundos en abrir.
  */
 export default function MisPedidosClient({
-  usuarioId, misAreas, areas, empresas, ubicaciones,
+  usuarioId, misAreas, areas, empresas, ubicaciones, conversacionInicial = null, pedidoNoEncontrado = false,
 }: {
+  /** El pedido cuya conversación hay que abrir al cargar: el del enlace de un correo. */
+  conversacionInicial?: { id: string; nroRi: number; descripcion: string } | null;
+  /** Vino un `?pedido=` y no existe: se dice, en vez de mostrar la lista como si nada. */
+  pedidoNoEncontrado?: boolean;
   usuarioId: string;
   /** Los ids de las áreas de esta persona. Vacío = todavía no se le asignó. */
   misAreas: string[];
@@ -58,7 +62,7 @@ export default function MisPedidosClient({
   // en el encabezado, y no sólo el id, para no buscarlo de nuevo en `pedidos`:
   // la lista se recarga al cambiar de página y el pedido puede ya no estar.
   const [conversacion, setConversacion] =
-    useState<{ id: string; nroRi: number; descripcion: string } | null>(null);
+    useState<{ id: string; nroRi: number; descripcion: string } | null>(conversacionInicial);
 
   // Arranca en el área propia, que es a lo que se entra. Salvo que no tenga
   // ninguna asignada: ahí mostrar una lista vacía sería un callejón, así que
@@ -201,6 +205,12 @@ export default function MisPedidosClient({
           </span>
         )}
       </div>
+
+      {pedidoNoEncontrado && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          El pedido al que llevaba ese enlace ya no existe. Podés buscarlo por su N° de RI acá abajo.
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
@@ -356,7 +366,14 @@ export default function MisPedidosClient({
           id={conversacion.id}
           nroRi={conversacion.nroRi}
           descripcion={conversacion.descripcion}
-          onCerrar={() => setConversacion(null)}
+          onCerrar={() => {
+            setConversacion(null);
+            // Sacar `?pedido=` de la barra: si no, recargar la página vuelve a
+            // abrir una conversación que ya se cerró.
+            if (window.location.search.includes("pedido=")) {
+              window.history.replaceState(null, "", window.location.pathname);
+            }
+          }}
         />
       )}
 

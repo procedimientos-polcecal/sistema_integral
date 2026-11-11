@@ -120,7 +120,19 @@ export const ENTIDADES: Record<TipoDeEntidad, Entidad> = {
     // La sesión ya la comprobó la ruta; lo que no se puede es llegar acá sin
     // ella.
     puedeVerlo: async () => true,
-    ruta: (id) => `/compras/requerimientos/${id}`,
+    // **A Mis pedidos y no al detalle de Compras, y no es un descuido.** Un
+    // requerimiento lo ven los catorce pero el módulo Compras lo tienen ocho, y
+    // `compras/layout.tsx` manda a `/mis-pedidos` a quien no lo tiene: con el
+    // enlace al detalle, seis de los catorce hacían clic en el correo y caían en
+    // una lista, sin una palabra sobre el pedido del que les avisaron. Mis
+    // pedidos sí es de los catorce y abre el hilo de `?pedido=` al cargar.
+    //
+    // Lo que se pierde, a propósito: quien SÍ tiene Compras y hace clic cae en
+    // Mis pedidos y no en el detalle del módulo. El hilo es el mismo en los dos
+    // lados, y desde Compras se abre el detalle completo cuando se quiera. Un
+    // enlace que funciona para los catorce vale más que uno que funciona para
+    // ocho: no lo «arregles» de vuelta al detalle.
+    ruta: (id) => `/mis-pedidos?pedido=${id}`,
     numeros: (sb, ids) =>
       numerosDe(ids, "nro_ri", (lote) =>
         sb.from("compras_requerimientos").select("id, nro_ri").in("id", lote)

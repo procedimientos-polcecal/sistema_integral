@@ -171,7 +171,7 @@ describe("queEs y las rutas", () => {
     expect(ENTIDADES.orden_trabajo.ruta("x", null)).toBe("/mantenimiento/ordenes");
   });
 
-  it("el enlace de un requerimiento lleva a su ficha", () => {
-    expect(ENTIDADES.requerimiento.ruta("abc")).toBe("/compras/requerimientos/abc");
+  it("el enlace de un requerimiento lleva a Mis pedidos, que es de los catorce y no sólo de los ocho con Compras", () => {
+    expect(ENTIDADES.requerimiento.ruta("abc")).toBe("/mis-pedidos?pedido=abc");
   });
 });

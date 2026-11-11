@@ -11,9 +11,10 @@ import HiloDeMensajes from "@/components/HiloDeMensajes";
  * (el circuito de compras es transversal a la empresa), y el hilo sigue al
  * registro y no al módulo: si viviera sólo en `compras/requerimientos/[id]`,
  * los que piden desde «Mis pedidos» pero no están en Compras podrían ser
- * mencionados y no tendrían dónde leer ni contestar. Quien sin acceso a Compras
- * abre el enlace de un correo cae justo acá: el layout del módulo lo manda a
- * esta pantalla.
+ * mencionados y no tendrían dónde leer ni contestar. Por lo mismo el enlace del
+ * correo de un requerimiento apunta acá y no al detalle del módulo
+ * (`?pedido=`, ver `ENTIDADES.requerimiento.ruta`): el layout de Compras manda a
+ * esta pantalla a quien no lo tiene, y a los seis los dejaba en una lista.
  *
  * **Es un diálogo y no un renglón que se despliega**, por dos razones de
  * tamaño. La tabla de escritorio está dentro de un `overflow-hidden` con otro
