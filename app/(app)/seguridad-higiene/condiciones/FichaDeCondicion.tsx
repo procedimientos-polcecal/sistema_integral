@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import Select from "@/components/Select";
+import HiloDeMensajes from "@/components/HiloDeMensajes";
 import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { comoSeLee } from "@/lib/core/fechas";
 import { CRITERIOS, clasificar, type Criterio } from "@/lib/seguridadHigiene/riesgo";
@@ -558,6 +559,26 @@ export default function FichaDeCondicion({
               </button>
             </div>
           )}
+
+          {/* La conversación sobre esta condición, fuera del formulario: lo que
+              se escribe acá no es un campo de la ficha y no espera al «Guardar
+              cambios» —se envía solo—, así que no depende de `puedeEditar` ni
+              de `esAdmin`: quien puede abrir la ficha puede leer y escribir.
+
+              La ficha es un panel fijo con scroll propio y ningún contenedor
+              entre ésta y el overlay recorta (`overflow-y-auto` sólo en el
+              overlay de arriba, que crece), así que el panel flotante del
+              desplegable de menciones no se corta. */}
+          <HiloDeMensajes
+            tipo="condicion_insegura"
+            id={fila.id}
+            aclaracion={
+              "Es una conversación con otras personas, aparte de las «Observaciones» de arriba: " +
+              "las observaciones son parte de la condición y los mensajes no la modifican. " +
+              "El enlace del correo lleva a la lista de condiciones y no a esta ficha: " +
+              `quien lo reciba tiene que abrir la N° ${fila.numero}.`
+            }
+          />
         </div>
       </div>
     </div>

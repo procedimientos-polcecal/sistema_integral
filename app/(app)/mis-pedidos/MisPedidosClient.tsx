@@ -5,6 +5,7 @@ import { useCargar } from "@/lib/core/useCargar";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
+import ConversacionDelPedido from "./ConversacionDelPedido";
 import {
   APROBACION_LABELS, COMPRA_LABELS, etiquetaPrioridad, fecha,
 } from "@/lib/compras/constants";
@@ -53,6 +54,11 @@ export default function MisPedidosClient({
 }) {
   const router = useRouter();
   const [modalAbierto, setModalAbierto] = useState(false);
+  // El pedido cuya conversación está abierta. Guarda lo que el diálogo muestra
+  // en el encabezado, y no sólo el id, para no buscarlo de nuevo en `pedidos`:
+  // la lista se recarga al cambiar de página y el pedido puede ya no estar.
+  const [conversacion, setConversacion] =
+    useState<{ id: string; nroRi: number; descripcion: string } | null>(null);
 
   // Arranca en el área propia, que es a lo que se entra. Salvo que no tenga
   // ninguna asignada: ahí mostrar una lista vacía sería un callejón, así que
@@ -250,6 +256,8 @@ export default function MisPedidosClient({
                 <Solicitante pedido={p} mostrar={alcance === "todos"} />
                 <Chip {...etiquetaPrioridad(p.prioridad)} />
               </div>
+
+              <BotonDeMensajes pedido={p} onAbrir={setConversacion} />
             </article>
           ))}
         </div>
@@ -298,6 +306,9 @@ export default function MisPedidosClient({
                       {p.estado_compra === "RECIBIDO" && p.fecha_recepcion && (
                         <div className="text-xs text-green-700">Recibido el {fecha(p.fecha_recepcion)}</div>
                       )}
+                      <div className="mt-0.5">
+                        <BotonDeMensajes pedido={p} onAbrir={setConversacion} />
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-right text-slate-600">{p.cantidad ?? "—"}</td>
                     <td className="px-3 py-2 text-slate-600">{p.compras_areas?.nombre ?? "—"}</td>
@@ -338,6 +349,17 @@ export default function MisPedidosClient({
         </>
       )}
 
+      {conversacion && (
+        <ConversacionDelPedido
+          // Un hilo por pedido: al abrir otro, el texto y las menciones arrancan limpios.
+          key={conversacion.id}
+          id={conversacion.id}
+          nroRi={conversacion.nroRi}
+          descripcion={conversacion.descripcion}
+          onCerrar={() => setConversacion(null)}
+        />
+      )}
+
       {modalAbierto && (
         <NuevoRequerimientoModal
           areas={areas}
@@ -348,6 +370,27 @@ export default function MisPedidosClient({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * La puerta a la conversación de un pedido. Un botón de texto y no un `.btn-*`:
+ * va en cada tarjeta y en cada renglón, y tiene que ser lo más chico de ahí.
+ */
+function BotonDeMensajes({
+  pedido, onAbrir,
+}: {
+  pedido: RequerimientoConRelaciones;
+  onAbrir: (p: { id: string; nroRi: number; descripcion: string }) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onAbrir({ id: pedido.id, nroRi: pedido.nro_ri, descripcion: pedido.descripcion })}
+      className="mt-1.5 text-xs font-medium text-slate-600 underline hover:text-slate-900"
+    >
+      Mensajes
+    </button>
   );
 }
 
