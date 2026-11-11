@@ -21,6 +21,7 @@ import type { EntradaAlPanol } from "@/lib/inventario/types";
 import { justificacionQueExplica } from "@/lib/core/justificacion";
 import { linkDeLaComparativa } from "@/lib/compras/vincular";
 import Select from "@/components/Select";
+import HiloDeMensajes from "@/components/HiloDeMensajes";
 import MontoAlto from "./MontoAlto";
 import type { HistoricoDelArticulo } from "@/lib/compras/historicoDelArticulo";
 import MarcaMontoAlto from "../../MarcaMontoAlto";
@@ -334,6 +335,28 @@ export default function RequerimientoDetalle({
             puedeEditar={puedeEditar}
             esAsignado={esAsignado}
           />
+
+          {/* La conversación sobre este pedido. Va en su propia tarjeta y no
+              adentro de «Historial»: el historial lo escribe el sistema —quién
+              aprobó, quién pasó a pedido— y esto lo escriben las personas, y
+              mezclarlos haría parecer un registro lo que es una charla.
+
+              Sin `overflow-hidden` en ningún contenedor de arriba, a propósito:
+              un requerimiento lo ven los catorce usuarios, así que la lista de
+              a quién mencionar tiene más de diez opciones y el desplegable abre
+              un panel flotante (`absolute`). Un ancestro que recorte lo deja con
+              opciones que el mouse no alcanza. */}
+          <section className="rounded-xl border border-slate-200 bg-white p-5">
+            <HiloDeMensajes
+              tipo="requerimiento"
+              id={r.id}
+              aclaracion={
+                "Es una conversación con otras personas: no cambia el estado del pedido, no queda en " +
+                "el historial de al lado y no llega a la planilla de Compras. Un requerimiento lo ve " +
+                "toda persona con acceso al sistema, y este hilo también."
+              }
+            />
+          </section>
         </div>
 
         {/* Columna lateral */}
