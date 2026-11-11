@@ -208,7 +208,8 @@ que el resto del módulo, donde el valor no se transforma.
 Se evaluó marcar el hueco —el punto en gris, o la curva original en punteado
 detrás— y se decidió que no: el acumulado simplemente saltea el tamiz. La
 punteada habría vuelto evidente el riesgo, y quedó afuera sabiendo eso; no es
-un olvido. Lo único que hay es una línea de texto fija bajo el acumulado. Si
+un olvido. Lo único que hay es una línea de texto fija bajo el acumulado —esa línea la
+decidió quien redactó el diseño, no salió de la conversación—. Si
 alguna vez se contesta un reclamo con el acumulado de una muestra que tenía
 tamices apagados, ésta es la explicación.
 
@@ -316,12 +317,13 @@ retomarlo.
 | Frente | `app/(app)/calidad/ensayos`, `lib/calidad/ensayos`, `app/api/calidad/ensayos` |
 | Las tres cuentas de una línea | `lib/calidad/ensayos/determinaciones.ts` |
 | Retenidos y acumulados | `lib/calidad/ensayos/granulometria.ts` |
+| La curva de una muestra, con los tamices apagados | `lib/calidad/ensayos/curva.ts` |
 | Límites y la muestra evaluada | `lib/calidad/ensayos/limites.ts` — `evaluarMuestra` |
 | Validación de lo que llega | `lib/calidad/ensayos/cuerpoDeLaMuestra.ts` |
 | El juego de tamices | `lib/calidad/ensayos/mallas.ts` |
 | Las lecturas | `lib/calidad/ensayos/consultas.ts`, todas con `traerTodo()` |
 | El formulario, compartido | `app/(app)/calidad/ensayos/FormularioDeMuestra.tsx` |
-| Pantallas | `/calidad/ensayos` (listado), `/nueva` (carga), `/[id]` (detalle), `/productos` y `/limites` (admin) |
+| Pantallas | `/calidad/ensayos` (listado), `/nueva` (carga), `/[id]` (detalle), `/curva` (curva granulométrica por muestra), `/indicadores`, `/reporte`, `/productos` y `/limites` (admin) |
 | Migración | `20261006110617_calidad_ensayos.sql` |
 
 Las cuatro determinaciones se calculan **con las mismas funciones puras en el

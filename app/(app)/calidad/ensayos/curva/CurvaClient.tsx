@@ -30,11 +30,35 @@ export interface EnsayoDeLaCurva {
   retenidos: { malla: number; retenido_g: number }[];
 }
 
-/** Dos muestras del mismo día son un caso real: la observación las distingue. */
-function etiquetaDe(m: MuestraParaLaLista): string {
-  const obs = m.observaciones?.trim();
-  if (!obs) return comoSeLee(m.fecha);
-  return `${comoSeLee(m.fecha)} · ${obs.length > 40 ? `${obs.slice(0, 40)}…` : obs}`;
+/**
+ * La etiqueta de cada muestra en el desplegable, en el orden en que llegan.
+ *
+ * Dos muestras del mismo día son un caso real, y **la observación no alcanza
+ * para distinguirlas**: medido contra la base, hay 91 muestras y sólo 13 tienen
+ * observaciones, y en 2 de los 6 grupos de (producto, fecha) con más de una
+ * muestra el texto salía idéntico. Por eso los empates se numeran —«(1 de 2)»,
+ * «(2 de 2)»—, en el orden que ya trae la consulta (fecha y, a igual fecha, hora
+ * de carga), que es determinista. No se muestra la hora de carga: es cuándo se
+ * tipeó la muestra y no cuándo se midió, y ponerla invita a leerla como lo
+ * segundo.
+ */
+function etiquetasDe(muestras: MuestraParaLaLista[]): string[] {
+  const base = muestras.map((m) => {
+    const obs = m.observaciones?.trim();
+    if (!obs) return comoSeLee(m.fecha);
+    return `${comoSeLee(m.fecha)} · ${obs.length > 40 ? `${obs.slice(0, 40)}…` : obs}`;
+  });
+  const total = new Map<string, number>();
+  for (const e of base) total.set(e, (total.get(e) ?? 0) + 1);
+
+  const visto = new Map<string, number>();
+  return base.map((e) => {
+    const n = total.get(e) ?? 1;
+    if (n === 1) return e;
+    const orden = (visto.get(e) ?? 0) + 1;
+    visto.set(e, orden);
+    return `${e} (${orden} de ${n})`;
+  });
 }
 
 function Aviso({ children }: { children: React.ReactNode }) {
@@ -165,6 +189,7 @@ export default function CurvaClient({
   };
 
   const producto = productos.find((p) => p.id === productoId);
+  const etiquetas = useMemo(() => etiquetasDe(muestras), [muestras]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 md:p-6">
@@ -197,9 +222,9 @@ export default function CurvaClient({
               className="max-w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
             >
               <option value="">Elegí una muestra</option>
-              {muestras.map((m) => (
+              {muestras.map((m, i) => (
                 <option key={m.id} value={m.id}>
-                  {etiquetaDe(m)}
+                  {etiquetas[i]}
                 </option>
               ))}
             </Select>

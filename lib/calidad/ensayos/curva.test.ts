@@ -59,6 +59,9 @@ describe("curvaDeLaMuestra", () => {
 
     expect(curva.problema).toBe("Falta el peso de la muestra tamizada.");
     expect(curva.puntos).toEqual([]);
+    // La pantalla ramifica sobre esto: sin mallas muestra el problema, y con
+    // mallas dibujaría chips y dos gráficos vacíos sin explicar por qué.
+    expect(curva.mallas).toEqual([]);
   });
 
   it("los retenidos en cero son dato y se dibujan", () => {
