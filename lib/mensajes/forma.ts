@@ -12,9 +12,16 @@ import { estadoDelAviso, nombreCompleto } from "./avisos";
  * La ruta lee con el cliente admin, donde RLS no corre: lo que sale lo decide
  * esta función, campo por campo. Dos decisiones:
  *
- * **`aviso_fallo` sólo se le muestra a quien escribió el mensaje.** Guarda lo
- * que dijo el servicio de correo y puede traer direcciones. A los demás les
- * llega el estado (`enviado`, `fallo`, `pendiente`) sin el texto.
+ * **`aviso_fallo` sólo se le muestra a quien escribió el mensaje, y eso es una
+ * cortesía de la pantalla, no una frontera.** Guarda lo que dijo el servicio de
+ * correo y puede traer direcciones. Esta función se lo tapa a los demás —les
+ * llega el estado (`enviado`, `fallo`, `pendiente`) sin el texto—, pero
+ * `mensajes_menciones_leer` deja leer la fila entera a cualquiera que pueda ver
+ * el mensaje, y PostgREST entrega la columna a quien le hable con su propio
+ * token. Cerrarlo de verdad pide cambiar los `grant` de columna, y no se hizo
+ * porque el dato es el correo de un compañero —los catorce usuarios son del
+ * mismo dominio y trabajan juntos— y eso lo decide el usuario. **No apoyarse en
+ * esto como si protegiera el dato.**
  *
  * **De la lectura ajena sólo sale un sí o un no.** Alcanza para que la pantalla
  * diga «no lo leyó todavía»; la hora en que cada uno abrió el hilo es

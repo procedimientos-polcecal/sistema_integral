@@ -129,6 +129,13 @@ const LOTE = 200;
  * hilo, y a propósito: marcar las propias menciones como leídas no muestra nada
  * de nadie, y comprobarlo dejaría para siempre en la bandeja la mención de
  * quien perdió el acceso. Lo acota el filtro por `usuario_id`.
+ *
+ * **Por qué el cliente admin y no el de la sesión.** Con el de la sesión, la
+ * policy de lectura de `mensajes` filtraría por tipo: el `mensajes!inner` no
+ * traería los hilos de un tipo que la persona ya no puede ver, y justo esas
+ * menciones son las que este PATCH tiene que poder marcar para que no queden
+ * para siempre en la bandeja. El permiso lo pone el filtro `usuario_id = quien
+ * pregunta`, que acota cada lectura y cada `update`.
  */
 export async function PATCH(request: Request) {
   const supabase = await createClient();
@@ -171,6 +178,14 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ marcadas });
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    console.error("mensajes: no se pudieron marcar las menciones como leídas", (e as Error).message);
+    return NextResponse.json(
+      {
+        error:
+          "No se pudieron marcar tus menciones como leídas. Probá de nuevo en un momento. " +
+          (e as Error).message,
+      },
+      { status: 500 }
+    );
   }
 }
