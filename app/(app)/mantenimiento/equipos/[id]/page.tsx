@@ -5,7 +5,7 @@ import EquipoDetalle from "./EquipoDetalle";
 import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
 import { traerTodo } from "@/lib/core/paginado";
 import { hoyEnArgentina } from "@/lib/core/fechas";
-import { mtbfDeLaPlanta } from "@/lib/mantenimiento/mtbfDatos";
+import { indicadoresDeLaPlanta } from "@/lib/mantenimiento/mtbfDatos";
 import { confiabilidadDeLaFicha } from "@/lib/mantenimiento/mtbfVista";
 import { rankingDeFallas, type OtConFalla } from "@/lib/mantenimiento/fallas";
 import {
@@ -25,7 +25,7 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: equipo }, sectores, { data: historial }, mtbf, fallas] = await Promise.all([
+  const [{ data: equipo }, sectores, { data: historial }, indicadores, fallas] = await Promise.all([
     supabase
       .from("equipos")
       .select("*, sectores(id, nombre, empresas(id, nombre))")
@@ -44,8 +44,8 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
     // ve igual. Pero el fallo se devuelve como `null` y no como "sin fallas":
     // `confiabilidadDeLaFicha` lo convierte en "no se pudo calcular", que es lo
     // único verdadero.
-    mtbfDeLaPlanta(supabase, hoyEnArgentina()).catch((error: unknown) => {
-      console.error("No se pudo calcular el MTBF de la ficha del equipo", error);
+    indicadoresDeLaPlanta(supabase, hoyEnArgentina()).catch((error: unknown) => {
+      console.error("No se pudieron calcular los indicadores de la ficha del equipo", error);
       return null;
     }),
     // Las OT de este equipo donde alguien anoto una falla. `traerTodo` y no un
@@ -84,7 +84,7 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
       historial={historial ?? []}
       canEdit={canEdit}
       costo={costo}
-      confiabilidad={confiabilidadDeLaFicha(mtbf, id)}
+      confiabilidad={confiabilidadDeLaFicha(indicadores, id)}
       fallas={rankingDeFallas(fallas)}
     />
   );

@@ -11,8 +11,14 @@ import {
   type RitmoCambiado,
 } from "@/lib/mantenimiento/mtbf";
 import {
+  horasDeReparacion,
+  MINIMO_REPARACIONES,
+  type FilaMttr,
+} from "@/lib/mantenimiento/mttr";
+import {
   conComa,
   DIAS_DE_CALENDARIO,
+  HORAS_DE_TRABAJO,
   diasCorridos,
   fallasAntesDelGrafico,
   fechaCorta,
@@ -55,7 +61,7 @@ export default function ConfiabilidadDelEquipo(props: ConfiabilidadProps) {
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
           Confiabilidad de este equipo
-          <InfoTip text="Tiempo medio entre fallas: los días observados divididos por la cantidad de fallas correctivas del equipo. 'Llega a N d' es la probabilidad de aguantar N días sin una correctiva, suponiendo que la tasa de falla es constante." />
+          <InfoTip text="MTBF, tiempo medio entre fallas: los días observados divididos por la cantidad de fallas correctivas del equipo. MTTR, tiempo medio de reparación: el promedio de horas que llevó cada correctiva propia. 'Llega a N d' es la probabilidad de aguantar N días sin una correctiva, suponiendo que la tasa de falla es constante." />
         </h2>
         <Link href="/mantenimiento/mtbf" className="text-xs text-blue-500 hover:underline">
           Ver todos los equipos →
@@ -69,6 +75,9 @@ export default function ConfiabilidadDelEquipo(props: ConfiabilidadProps) {
           <p>
             <strong>{DIAS_DE_CALENDARIO.titulo}</strong> {DIAS_DE_CALENDARIO.detalle}
           </p>
+          <p>
+            <strong>{HORAS_DE_TRABAJO.titulo}</strong> {HORAS_DE_TRABAJO.detalle}
+          </p>
           <p>Las probabilidades suponen una tasa de falla constante.</p>
         </div>
       </div>
@@ -78,10 +87,12 @@ export default function ConfiabilidadDelEquipo(props: ConfiabilidadProps) {
 
 function Cuerpo(props: ConfiabilidadProps) {
   if (!props.disponible) return <NoDisponible />;
-  const { fila, diasObservados, mesEnCurso } = props;
+  const { fila, mttr, diasObservados, mesEnCurso } = props;
   if (fila === null) return <SinFallas diasObservados={diasObservados} />;
   if (fila.mtbf === null) return <SinHistoria fila={fila} diasObservados={diasObservados} />;
-  return <ConNumero fila={fila} mesEnCurso={mesEnCurso} diasObservados={diasObservados} />;
+  return (
+    <ConNumero fila={fila} mttr={mttr} mesEnCurso={mesEnCurso} diasObservados={diasObservados} />
+  );
 }
 
 /**
@@ -134,8 +145,8 @@ function SinHistoria({ fila, diasObservados }: { fila: FilaMtbf; diasObservados:
 }
 
 function ConNumero({
-  fila, mesEnCurso, diasObservados,
-}: { fila: FilaMtbf; mesEnCurso: string; diasObservados: number }) {
+  fila, mttr, mesEnCurso, diasObservados,
+}: { fila: FilaMtbf; mttr: FilaMttr | null; mesEnCurso: string; diasObservados: number }) {
   // Hoy da 0 y alrededor del 1/12/2026 empieza a dar hasta un mes de fallas.
   const antesDelGrafico = fallasAntesDelGrafico(fila);
 
@@ -147,6 +158,18 @@ function ConNumero({
         <div>
           <p className="text-xs text-slate-500">MTBF</p>
           <p className="text-3xl font-bold text-slate-900">{diasCorridos(fila.mtbf)}</p>
+        </div>
+        {/*
+          Pegado al MTBF y del mismo tamaño: son la pregunta y la respuesta
+          —cada cuánto se rompe y cuánto cuesta levantarla— y se leen de
+          corrido. Lo que va abajo no es un detalle: un MTTR sin la cantidad de
+          reparaciones que lo forman no se puede juzgar.
+        */}
+        <div>
+          <p className="text-xs text-slate-500">MTTR</p>
+          <p className="text-3xl font-bold text-slate-900">
+            {horasDeReparacion(mttr?.mttr ?? null)}
+          </p>
         </div>
         {PLAZOS.map((dias, i) => (
           <div key={dias}>
@@ -182,6 +205,8 @@ function ConNumero({
         {" · "}
         {fila.porEspecialidad.map((e) => `${e.especialidad} ${e.cantidad}`).join(", ")}
       </p>
+
+      <DeDondeSaleElMttr mttr={mttr} />
     </div>
   );
 }
@@ -210,5 +235,47 @@ function AvisoDeRitmo({ ritmo, mtbf }: { ritmo: RitmoCambiado; mtbf: number | nu
       <p className="font-semibold">{mejoro ? "Mejoró su ritmo" : "Empeoró su ritmo"}</p>
       <p>{detalle}</p>
     </div>
+  );
+}
+
+/**
+ * Qué hay detrás del MTTR, que sin esto no se puede juzgar.
+ *
+ * Tres estados y dicen cosas distintas, por eso no se juntan: el equipo sin
+ * ninguna reparación con horas cargadas —no es que se repare rápido, es que no
+ * se sabe—, el que tiene una o dos —hay dato, todavía no hay promedio— y el
+ * que llegó al piso.
+ *
+ * La reparación más larga se nombra siempre que haya promedio: un MTTR alto
+ * casi siempre es una orden larga y no un equipo lento, y sin el número de OT
+ * hay que salir a buscarla a mano por el listado.
+ */
+function DeDondeSaleElMttr({ mttr }: { mttr: FilaMttr | null }) {
+  if (mttr === null) {
+    return (
+      <p className="text-sm text-slate-600">
+        <strong>Sin MTTR.</strong> Ninguna de sus correctivas propias tiene horas cargadas,
+        así que no se sabe cuánto llevó repararlo. Las que hizo un contratista no cuentan acá.
+      </p>
+    );
+  }
+
+  const n = mttr.reparaciones;
+  const cuantas = `${n} ${n === 1 ? "reparación" : "reparaciones"}`;
+
+  if (mttr.mttr === null) {
+    return (
+      <p className="text-sm text-slate-600">
+        <strong>{cuantas}</strong> con horas cargadas, {conComa(mttr.horasTotales, 1)} h en total.
+        El promedio se publica desde {MINIMO_REPARACIONES}: con menos lo decide una sola orden.
+      </p>
+    );
+  }
+
+  return (
+    <p className="text-sm text-slate-600">
+      MTTR sobre <strong>{cuantas}</strong> propias, {conComa(mttr.horasTotales, 1)} h en total
+      {" · "}la más larga fue la OT {mttr.masLarga.otNumber}, de {conComa(mttr.masLarga.horas, 1)} h
+    </p>
   );
 }

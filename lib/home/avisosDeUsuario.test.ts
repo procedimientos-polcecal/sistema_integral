@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseDeMentira } from "@/lib/core/supabaseDeMentira";
-import { avisosDeConteos, type ConteosParaAvisos } from "./avisos";
+import { avisosDeConteos, avisosDeSalud, type ConteosParaAvisos } from "./avisos";
 import type { Notificacion } from "./notificaciones";
 import type { UsuarioModulo } from "@/lib/core/types";
 
@@ -256,22 +256,40 @@ describe("sinLoQueNoPuedeAtender — Seguridad e Higiene", () => {
 });
 
 describe("los avisos de la Agenda", () => {
-  it("el de salud va sólo a admin_sistema: nadie más puede arreglar un canal de Google", () => {
-    const salud = [avisoDe("agendaPasosCaidos")];
-    expect(sinLoQueNoPuedeAtender(salud, { ...NADA, evaluaSyh: true, apruebaCompras: true })).toEqual([]);
-    expect(sinLoQueNoPuedeAtender(salud, { ...NADA, administraElSistema: true })).toEqual(salud);
-  });
-
-  it("el de «no se pudo comprobar» también va sólo a admin_sistema", () => {
-    const sin = [avisoDe("agendaSaludSinComprobar")];
-    expect(sinLoQueNoPuedeAtender(sin, NADA)).toEqual([]);
-    expect(sinLoQueNoPuedeAtender(sin, { ...NADA, administraElSistema: true })).toEqual(sin);
-  });
-
   // El de divergencias es de cada uno y lo decide su propio conteo: filtrarlo
   // por rol le sacaría el aviso al dueño de un evento que sólo usa la Agenda.
   it("el de divergencias le llega a cualquiera que tenga alguna", () => {
     const propias = [avisoDe("agendaDivergencias")];
     expect(sinLoQueNoPuedeAtender(propias, NADA)).toEqual(propias);
+  });
+});
+
+/*
+ * Acá estaban los dos de la Agenda —`agenda-pasos-caidos` y
+ * `agenda-salud-sin-comprobar`—, que se retiraron el 05/11/2026. Lo que los
+ * reemplaza se filtra igual y por lo mismo, pero **por prefijo**: sus ids
+ * llevan el recurso adentro y no se pueden teclear en un mapa.
+ *
+ * Los avisos se le piden a `avisosDeSalud` por la misma razón que los otros se
+ * le piden a `avisosDeConteos`: con un id literal escrito acá, cambiar el
+ * prefijo en `avisos.ts` dejaría estos tests en verde mientras el aviso empieza
+ * a llegarle por push a los catorce.
+ */
+describe("sinLoQueNoPuedeAtender — la salud de las sincronizaciones", () => {
+  const deSalud = avisosDeSalud({
+    caidas: [{ clave: "agenda/canales", titulo: "Canales de Google de la Agenda", estado: "fallo", cuantoLlevaMal: 1, detalle: "403" }],
+    sinDeclarar: ["nuevo/cosa"],
+    sinComprobar: true,
+    corridas: [],
+  });
+
+  it("los tres van sólo a admin_sistema: nadie más toca Vercel ni las credenciales", () => {
+    expect(deSalud).toHaveLength(3);
+    expect(sinLoQueNoPuedeAtender(deSalud, { ...NADA, evaluaSyh: true, apruebaCompras: true })).toEqual([]);
+    expect(sinLoQueNoPuedeAtender(deSalud, { ...NADA, administraElSistema: true })).toEqual(deSalud);
+  });
+
+  it("el filtro por prefijo no se come ningún otro aviso", () => {
+    expect(sinLoQueNoPuedeAtender([ATRASADAS, ...deSalud], NADA)).toEqual([ATRASADAS]);
   });
 });

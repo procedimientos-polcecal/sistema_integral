@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { usuarioActual } from "@/lib/core/sesion";
 import { traerTodo } from "@/lib/core/paginado";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 import { traerEventos } from "@/lib/agenda/listar";
+import { desdeParaLeer, leerDia, leerVista } from "@/lib/agenda/rango";
 import { leerLaSaludDeLaAgenda, lineasDeSalud } from "@/lib/agenda/avisosDeLaAgenda";
 import AgendaClient from "./AgendaClient";
 import SaludDeLaAgenda from "./SaludDeLaAgenda";
@@ -19,7 +21,8 @@ import SaludDeLaAgenda from "./SaludDeLaAgenda";
  * ── LOS EVENTOS SE LEEN ACÁ, Y NO HAY UN GET ────────────────────────────────
  *
  * Con el cliente del usuario y pidiendo lo que importa (ver `traerEventos`):
- * una agenda crece sin techo. `?historial=1` saca la ventana. Las rutas de
+ * una agenda crece sin techo. La ventana la fijan `?vista=` y `?dia=`, y
+ * `?historial=1` la saca. Las rutas de
  * `/api/agenda` son sólo las de las escrituras; el GET de lectura se borró
  * porque nadie lo llamaba.
  *
@@ -41,6 +44,11 @@ export default async function AgendaPage({
 }) {
   const crudos = await searchParams;
   const historial = crudos.historial === "1";
+  // El día que se mira viaja en la URL, y de él depende qué se lee: mirar una
+  // semana vieja tiene que traer esa semana. Lo que no se entiende cae al
+  // default en vez de tumbar la pantalla (ver `lib/agenda/rango.ts`).
+  const vista = leerVista(crudos.vista);
+  const dia = leerDia(crudos.dia, hoyEnArgentina());
 
   const user = await usuarioActual();
   if (!user) redirect("/login");
@@ -77,6 +85,7 @@ export default async function AgendaPage({
   try {
     eventos = await traerEventos(supabase, {
       historial,
+      desde: desdeParaLeer(vista, dia),
       directorio: new Map([...porId].filter(([, n]) => n !== "")),
     });
   } catch (e) {
@@ -97,10 +106,12 @@ export default async function AgendaPage({
     for (const o of data ?? []) numerosDeOT[o.id as string] = o.ot_number as number;
   }
 
-  // La salud de la conexión con Google, **sólo para admin_sistema**: es adonde
-  // llevan los dos avisos de salud de la campana. Se lee con el cliente de la
-  // persona (`ultima_sincronizacion` la leen todos los autenticados) y no tumba
-  // la pantalla: si la lectura falla, `sinComprobar` lo dice en vez de callar.
+  // La salud de la conexión con Google, **sólo para admin_sistema**. Se lee con
+  // el cliente de la persona (`ultima_sincronizacion` la leen todos los
+  // autenticados) y no tumba la pantalla: si la lectura falla, `sinComprobar` lo
+  // dice en vez de callar. El aviso de que `canales` o `barrido` se cayeron sale
+  // ahora de `avisosDeSalud` y lleva a `/administracion/salud`; esto es el
+  // detalle de la Agenda para quien ya está acá.
   const { data: yoMismo } = await supabase.from("usuarios").select("rol").eq("id", user.id).maybeSingle();
   const salud = yoMismo?.rol === "admin_sistema" ? await leerLaSaludDeLaAgenda(supabase) : null;
 
@@ -131,6 +142,8 @@ export default async function AgendaPage({
         usuarios={invitables}
         numerosDeOT={numerosDeOT}
         historial={historial}
+        vista={vista}
+        dia={dia}
         lecturaFallo={errorDeEventos !== ""}
       />
     </div>

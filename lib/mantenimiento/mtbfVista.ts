@@ -14,6 +14,7 @@
  * ese filtro puesto no figura entre los "sin fallas".
  */
 import type { FilaMtbf, Mtbf } from "./mtbf";
+import { mttrDelEquipo, type FilaMttr, type Mttr } from "./mttr";
 
 export interface EquipoDeLaVista {
   id: string;
@@ -25,6 +26,17 @@ export interface EquipoDeLaVista {
 
 export interface FilaDeVista extends FilaMtbf {
   equipo: EquipoDeLaVista;
+  /**
+   * Lo que tarda en volver. null cuando no tiene reparaciones contables o no
+   * llegó al piso para publicar un promedio — son dos cosas distintas, y la
+   * que las distingue es `reparacionesContables`.
+   *
+   * Un equipo puede tener MTBF y no tener MTTR: falló, pero ninguna de sus
+   * correctivas trae horas. Al revés no pasa, porque una reparación contable
+   * es una falla.
+   */
+  mttr: number | null;
+  reparacionesContables: number;
 }
 
 export interface Filtros {
@@ -32,11 +44,19 @@ export interface Filtros {
   especialidad: string | null;
 }
 
-/** Las filas con su equipo resuelto, ya filtradas. El filtro NO recalcula el MTBF. */
+/**
+ * Las filas con su equipo resuelto, ya filtradas. El filtro NO recalcula nada.
+ *
+ * `mttr` entra como un dato más de la fila y **no cambia qué filas se ven**:
+ * el listado sigue siendo el de los equipos que fallaron. Uno que falló y no
+ * tiene horas cargadas aparece igual, con una raya en esa columna, que es lo
+ * único cierto sobre él.
+ */
 export function filasVisibles(
   filas: FilaMtbf[],
   equipos: EquipoDeLaVista[],
-  filtros: Filtros
+  filtros: Filtros,
+  mttr: Mttr | null = null
 ): FilaDeVista[] {
   const porId = new Map(equipos.map((e) => [e.id, e]));
   const visibles: FilaDeVista[] = [];
@@ -53,7 +73,13 @@ export function filasVisibles(
     ) {
       continue;
     }
-    visibles.push({ ...fila, equipo });
+    const suMttr = mttrDelEquipo(mttr, fila.equipmentId);
+    visibles.push({
+      ...fila,
+      equipo,
+      mttr: suMttr?.mttr ?? null,
+      reparacionesContables: suMttr?.reparaciones ?? 0,
+    });
   }
 
   return visibles;
@@ -95,6 +121,23 @@ export const DIAS_DE_CALENDARIO = {
 } as const;
 
 /**
+ * Lo mismo para el MTTR, y por el mismo motivo: va **en texto visible y no en
+ * un tooltip**.
+ *
+ * El spec del MTBF lo dejó escrito como la forma de hacer fracasar la
+ * pantalla aunque funcione —que el número se lea como una medida que no es—.
+ * Acá el malentendido disponible es creer que son las horas que la máquina
+ * estuvo parada. No lo son: son las horas que llevó el trabajo. La espera del
+ * repuesto, el turno que no estaba, el permiso de trabajo, no están adentro.
+ */
+export const HORAS_DE_TRABAJO = {
+  titulo: "Son horas de trabajo, no de máquina parada.",
+  detalle:
+    "Es cuánto llevó la reparación, no cuánto estuvo detenido el equipo: la espera de un repuesto o de un turno no está adentro. Las reparaciones que hizo un contratista no cuentan, porque ahí las horas son las que factura y no las que duró el trabajo.",
+  corto: "Horas de trabajo, no de máquina parada.",
+} as const;
+
+/**
  * Lo que la ficha del equipo sabe de su confiabilidad. Son dos estados y no uno
  * con `fila: null` a propósito: `fila: null` quiere decir "no falló en la
  * ventana" y la tarjeta lo pinta como una buena noticia. Si la lectura falló,
@@ -106,23 +149,40 @@ export type ConfiabilidadDeLaFicha =
       disponible: true;
       /** null cuando el equipo no falló en la ventana. */
       fila: FilaMtbf | null;
+      /**
+       * Cuánto tarda en volver. null cuando no tuvo reparaciones contables.
+       *
+       * Va en la **misma** rama de la unión que el MTBF a propósito: los dos
+       * salen de la misma lectura y se leen en la misma línea —cada cuánto se
+       * rompe y cuánto cuesta levantarla—, así que si la lectura falla tienen
+       * que desaparecer los dos juntos. Con dos props sueltas, un MTBF
+       * presente al lado de un MTTR vacío se lee como "no tarda nada en
+       * repararse", que es lo contrario de no saber.
+       */
+      mttr: FilaMttr | null;
       diasObservados: number;
       /** La etiqueta del mes en curso, para dibujarlo incompleto. */
       mesEnCurso: string;
     }
   | { disponible: false };
 
-/** `mtbf` es null cuando la lectura de la planta falló: no hay cuenta, no hay "sin fallas". */
+/**
+ * Lo que la ficha muestra de un equipo.
+ *
+ * `indicadores` es null cuando la lectura de la planta falló: no hay cuenta, y
+ * eso **no** es "sin fallas".
+ */
 export function confiabilidadDeLaFicha(
-  mtbf: Mtbf | null,
+  indicadores: { mtbf: Mtbf; mttr: Mttr } | null,
   equipmentId: string
 ): ConfiabilidadDeLaFicha {
-  if (mtbf === null) return { disponible: false };
+  if (indicadores === null) return { disponible: false };
   return {
     disponible: true,
-    fila: mtbf.filas.find((f) => f.equipmentId === equipmentId) ?? null,
-    diasObservados: mtbf.diasObservados,
-    mesEnCurso: mtbf.mesEnCurso,
+    fila: indicadores.mtbf.filas.find((f) => f.equipmentId === equipmentId) ?? null,
+    mttr: mttrDelEquipo(indicadores.mttr, equipmentId),
+    diasObservados: indicadores.mtbf.diasObservados,
+    mesEnCurso: indicadores.mtbf.mesEnCurso,
   };
 }
 

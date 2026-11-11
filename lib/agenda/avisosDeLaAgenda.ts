@@ -1,15 +1,36 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "@/lib/core/paginado";
+import {
+  estadoDeRecurso,
+  haceCuantoCorto,
+  type EstadoDeRecurso,
+} from "@/lib/core/saludDeLasSincronizaciones";
 import { divergenciaVista } from "./pedido";
 
 /**
- * Los dos conteos que la Agenda le da a la campana y al resumen diario.
+ * Lo que la Agenda le da a la campana, y el detalle de salud que muestra
+ * `/agenda`. Son de naturaleza distinta y no comparten nada más que el archivo:
  *
- * Son de naturaleza distinta y por eso no comparten nada más que el archivo:
+ *  - `contarDivergenciasSinVer` es **de una persona**: cuenta lo suyo, y es lo
+ *    único de acá que llega a la campana.
+ *  - `lineasDeSalud` es **del sistema**: dice si la Agenda sigue mirando
+ *    Google, es lo mismo para todos y hoy **no genera ningún aviso**.
  *
- *  - `contarDivergenciasSinVer` es **de una persona**: cuenta lo suyo.
- *  - `contarPasosCaidos` es **del sistema**: dice si la Agenda sigue mirando
- *    Google, y es lo mismo para todos.
+ * ── LOS DOS AVISOS DE SALUD DE LA AGENDA SE RETIRARON (05/11/2026) ───────────
+ *
+ * `agenda-pasos-caidos` y `agenda-salud-sin-comprobar` ya no existen: los
+ * reemplaza `avisosDeSalud` de `lib/home/avisos.ts`, que hace lo mismo para los
+ * 29 recursos de `ultima_sincronizacion` —`canales` y `barrido` entre ellos— con
+ * la tolerancia declarada en el `REGISTRO` de
+ * [lib/core/saludDeLasSincronizaciones.ts](../core/saludDeLasSincronizaciones.ts).
+ * Dos avisos de salud con umbrales distintos diciendo cosas parecidas es
+ * exactamente lo que la campana evita al salir de una sola función.
+ *
+ * Lo que **no** se retiró es `lineasDeSalud`: sigue siendo el detalle de la
+ * Agenda en `/agenda`, y las dos exclusiones razonadas de `PASOS_CON_GOOGLE`
+ * —`pendientes` y `aviso_de_google`— se conservan tal cual, ahora también en el
+ * registro general como excepciones declaradas. Generalizar no es un permiso
+ * para deshacerlas.
  */
 
 // ── Divergencias sin ver (de quien mira) ────────────────────────────────────
@@ -90,7 +111,7 @@ export async function contarDivergenciasSinVer(
   }
 }
 
-// ── Pasos de la Agenda con Google que se cayeron (del sistema) ──────────────
+// ── La salud de los pasos con Google (del sistema) ──────────────────────────
 
 /**
  * Los pasos del cron de la Agenda que hablan con Google y de los que depende
@@ -124,8 +145,13 @@ export const PASOS_CON_GOOGLE = ["canales", "barrido"] as const;
  *    margen tienen la hora de sobra para que una corrida lenta termine y se
  *    registre antes de que alguien mire.
  *
- * Está fijado con el cron real en el test (`pasosCaidos`), no con una cifra
+ * Está fijado con el cron real en el test (`lineasDeSalud`), no con una cifra
  * redonda: si el horario del cron en `vercel.json` cambia, esto se revisa.
+ *
+ * **Es el mismo número con el que los dos pasos entraron al `REGISTRO` general,
+ * y hay un test que los ata** (`avisosDeLaAgenda.test.ts`). Son dos copias del
+ * mismo dato: cambiar sólo ésta dejaría a `/agenda` diciendo «no corre» y a
+ * `/administracion/salud` diciendo «al día» del mismo paso, sin que nada falle.
  */
 export const HORAS_SIN_CORRER = 50;
 
@@ -139,46 +165,21 @@ export interface CorridaDeLaAgenda {
 }
 
 /** Cómo está un paso. `sana` es la única que no es un problema. */
-export type EstadoDelPaso = "nunca" | "fallo" | "vieja" | "sana";
+export type EstadoDelPaso = EstadoDeRecurso;
 
 /**
- * **Tres cosas dejan caído a un paso**, y la tercera es la que justifica que
- * esto exista:
+ * Cómo está un paso: la regla general del sistema, con la tolerancia de la
+ * Agenda.
  *
- *  1. La última corrida **falló** (`ok = false`): el cron ya lo anotó, con la
- *     casilla y lo que dijo Google.
- *  2. La última corrida es **vieja**: el cron no corrió. **No deja ninguna fila
- *     de fallo** —si no corre, no escribe—, así que mirar sólo `ok` lo vería
- *     verde para siempre. Es el canal muerto que no se distingue de uno sano,
- *     pero un nivel más arriba: el cron mismo.
- *  3. **Nunca corrió**: no hay fila. Suena el primer día —hasta que corra el
- *     cron— y es correcto: una Agenda que nunca miró Google no está sana.
+ * **Las tres cosas que dejan caído a un paso** —falló, no corrió en
+ * `HORAS_SIN_CORRER`, nunca corrió— y el porqué de cada una están en
+ * `estadoDeRecurso`, que nació de esta misma función. Acá queda sólo lo que es
+ * de la Agenda: cuántas horas de silencio tolera. No se deja una segunda copia
+ * de la decisión porque de dos copias la que nadie toca es la que termina
+ * mintiendo.
  */
 export function estadoDelPaso(corrida: CorridaDeLaAgenda | undefined, ahora: Date): EstadoDelPaso {
-  if (!corrida) return "nunca";
-  if (!corrida.ok) return "fallo";
-  const cuando = new Date(corrida.created_at).getTime();
-  const corte = ahora.getTime() - HORAS_SIN_CORRER * 3_600_000;
-  // Una fecha ilegible no puede contar como «corrió hace un rato».
-  return Number.isNaN(cuando) || cuando < corte ? "vieja" : "sana";
-}
-
-/**
- * Qué pasos están caídos.
- *
- * **Qué cuenta:** la cantidad de pasos caídos, de 0 a 2. No es un conteo de cosas
- * —no cuenta casillas, porque la fila sólo trae el texto del error— y por eso su
- * número sólo sirve para que el movimiento diario avise cuando pasa de 0 a algo.
- * Está escrito así en `avisos.ts` y el título lo dice como «pasos», no como
- * «eventos» ni «canales».
- */
-export function pasosCaidos(
-  corridas: CorridaDeLaAgenda[],
-  ahora: Date = new Date()
-): (typeof PASOS_CON_GOOGLE)[number][] {
-  return PASOS_CON_GOOGLE.filter(
-    (paso) => estadoDelPaso(corridas.find((c) => c.recurso === paso), ahora) !== "sana"
-  );
+  return estadoDeRecurso(corrida, HORAS_SIN_CORRER, ahora);
 }
 
 // ── La línea de estado que ve admin_sistema en /agenda ──────────────────────
@@ -187,15 +188,6 @@ const ETIQUETA_DEL_PASO: Record<(typeof PASOS_CON_GOOGLE)[number], string> = {
   canales: "Canales de Google",
   barrido: "Barrido de las casillas",
 };
-
-/** «hace 5 h», «hace 2 días»: lo justo para saber si un paso está al día. */
-export function haceCuanto(desde: string, ahora: Date): string {
-  const ms = ahora.getTime() - new Date(desde).getTime();
-  if (Number.isNaN(ms)) return "en una fecha ilegible";
-  const horas = Math.max(0, Math.round(ms / 3_600_000));
-  if (horas < 48) return `hace ${horas} h`;
-  return `hace ${Math.floor(horas / 24)} días`;
-}
 
 export interface LineaDeSalud {
   paso: (typeof PASOS_CON_GOOGLE)[number];
@@ -207,15 +199,20 @@ export interface LineaDeSalud {
 
 /**
  * Una línea por paso: cuándo corrió por última vez y cuál está caído. Es lo que
- * muestra `/agenda` a `admin_sistema`, y existe porque **los dos avisos de salud
- * llevan ahí**: un push que aterriza en una pantalla donde no hay rastro del
- * problema es el bug de las notificaciones que no llevaban a ningún lado.
+ * muestra `/agenda` a `admin_sistema`.
+ *
+ * Nació porque los dos avisos de salud de la Agenda llevaban ahí —un push que
+ * aterriza en una pantalla donde no hay rastro del problema es el bug de las
+ * notificaciones que no llevaban a ningún lado—. Esos avisos se retiraron y
+ * ahora el aviso de `canales` o `barrido` lleva a `/administracion/salud`, pero
+ * esto se queda: es el detalle de la Agenda, en la pantalla de la Agenda, para
+ * quien está ahí y no viene de ningún aviso.
  */
 export function lineasDeSalud(corridas: CorridaDeLaAgenda[], ahora: Date = new Date()): LineaDeSalud[] {
   return PASOS_CON_GOOGLE.map((paso) => {
     const corrida = corridas.find((c) => c.recurso === paso);
     const estado = estadoDelPaso(corrida, ahora);
-    const cuando = corrida ? haceCuanto(corrida.created_at, ahora) : "";
+    const cuando = corrida ? haceCuantoCorto(corrida.created_at, ahora) : "";
     const texto =
       estado === "nunca"
         ? "Nunca corrió."
@@ -230,11 +227,9 @@ export function lineasDeSalud(corridas: CorridaDeLaAgenda[], ahora: Date = new D
 
 /** Lo que se pudo saber de la salud de la Agenda. */
 export interface SaludDeLaAgenda {
-  /** Pasos caídos, de 0 a 2. Es 0 también cuando no se pudo mirar: ver `sinComprobar`. */
-  caidos: number;
   /**
    * **La comprobación misma falló.** No es «todo bien» ni es «algo cayó»: es que
-   * no se sabe. Es un estado aparte, con su propio aviso, y no un 0.
+   * no se sabe. Es un estado aparte y no una lista vacía de corridas.
    */
   sinComprobar: boolean;
   /** Lo leído, para dibujar la línea de estado de `/agenda`. Vacío si no se pudo leer. */
@@ -242,21 +237,23 @@ export interface SaludDeLaAgenda {
 }
 
 /**
- * Los pasos caídos, leídos de `ultima_sincronizacion`. Esa vista la leen todos
- * los autenticados, así que da lo mismo con la sesión que con el cliente admin.
+ * Las corridas de los dos pasos, leídas de `ultima_sincronizacion`. Esa vista la
+ * leen todos los autenticados, así que da lo mismo con la sesión que con el
+ * cliente admin.
  *
- * **Si la lectura falla NO devuelve 0**: devuelve `sinComprobar`. Es el único
- * aviso del sistema cuyo trabajo es detectar que algo dejó de funcionar en
- * silencio, y uno que dice «todo bien» cuando no pudo mirar cierra el fallo un
+ * **Si la lectura falla NO devuelve una lectura sana**: devuelve `sinComprobar`,
+ * y la pantalla dice que no se pudo mirar en vez de pintar los dos pasos en
+ * «nunca corrió». Decir «todo bien» cuando no se pudo mirar cierra el fallo un
  * piso más abajo y lo abre un piso más arriba. Tampoco tira —ni por un error de
- * PostgREST ni por una excepción de red—: la campana corre en cada página y no
- * puede caerse por esto. Va al log y sale como su propio aviso
- * (`agenda-salud-sin-comprobar`), con un texto que dice que **la comprobación**
- * falló y no que los canales lo hayan hecho.
+ * PostgREST ni por una excepción de red—: esto corre al dibujar `/agenda` y no
+ * puede tumbar la pantalla. El motivo va al log.
+ *
+ * **Un `data` nulo sin error también es `sinComprobar`**, y no una vista vacía:
+ * de una lectura que no dijo nada no se afirma nada. Es la misma regla de
+ * `leerLaSalud` en `lib/core/saludDeLasSincronizaciones.ts`.
  */
 export async function leerLaSaludDeLaAgenda(
-  supabase: SupabaseClient,
-  ahora: Date = new Date()
+  supabase: SupabaseClient
 ): Promise<SaludDeLaAgenda> {
   try {
     const { data, error } = await supabase
@@ -266,9 +263,10 @@ export async function leerLaSaludDeLaAgenda(
       .in("recurso", [...PASOS_CON_GOOGLE])
       .returns<CorridaDeLaAgenda[]>();
     if (error) throw new Error(error.message);
-    return { caidos: pasosCaidos(data ?? [], ahora).length, sinComprobar: false, corridas: data ?? [] };
+    if (!data) throw new Error("la vista no devolvió datos ni error");
+    return { sinComprobar: false, corridas: data };
   } catch (e) {
     console.error("agenda: no se pudo comprobar la salud de la Agenda:", e instanceof Error ? e.message : e);
-    return { caidos: 0, sinComprobar: true, corridas: [] };
+    return { sinComprobar: true, corridas: [] };
   }
 }

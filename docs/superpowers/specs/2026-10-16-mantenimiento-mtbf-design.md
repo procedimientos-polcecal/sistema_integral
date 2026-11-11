@@ -321,6 +321,14 @@ perder el recuadro.
   1.534 OT y `fecha_cierre` en 744 de las correctivas— y es el indicador que
   naturalmente sigue a éste, pero tiene sus propias trampas: una OT cerrada
   tarde no es una reparación larga. Queda anotado, no se hace acá.
+  **Se hizo el 11/11/2026**, y esa trampa resultó ser peor de lo que dice acá:
+  el calendario no sirve por las dos puntas, porque 750 de 811 correctivas
+  cerradas de la ventana cierran el **mismo día**. El MTTR se calcula sobre
+  `horas` y no sobre fechas. Está en `lib/mantenimiento/mttr.ts` y en la
+  sección «El MTTR: cuánto tarda en volver» de
+  [MANTENIMIENTO-INTEGRACION.md](../../MANTENIMIENTO-INTEGRACION.md). Este
+  párrafo queda como estaba: dice lo que se decidió el 16/10, no lo que hay
+  hoy.
 - **No escribe en ninguna planilla.** Es una cuenta derivada de datos que ya
   viajan por la sincronización de OT. No hay campo exportable que se toque, así
   que la regla de "toda ruta que toque un campo que se exporta tiene que

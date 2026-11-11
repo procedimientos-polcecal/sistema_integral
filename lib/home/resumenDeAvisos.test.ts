@@ -167,25 +167,87 @@ describe("resumirElMovimiento", () => {
   });
 });
 
-describe("un aviso que es una bandera no imprime el número", () => {
-  // `agenda-salud-sin-comprobar` usa `cantidad: 1` como «pasa», no como cuántos.
+describe("un aviso de salud no imprime el número", () => {
+  /*
+   * La cantidad de un aviso de salud **no cuenta cosas**: es cuánto hace que
+   * ese recurso viene mal —corridas fallidas seguidas, o tolerancias de
+   * silencio si dejó de correr— y existe para que descartarlo no lo calle para
+   * siempre (ver `cuantoLlevaMal`). Imprimirla daría «2 · Agenda: los canales
+   * de Google no se renuevan», que no significa nada.
+   */
+  it("un aviso de salud sale sin número: su cantidad no cuenta cosas", () => {
+    const push = resumirParaPush([
+      { id: "salud-agenda/canales", titulo: "Agenda: los canales de Google no se renuevan", cantidad: 2, href: "/administracion/salud" },
+    ]);
+    expect(push?.body ?? "").not.toContain("2");
+  });
+
+  // «No sé» tampoco: su `cantidad: 1` es «pasa», no cuántos.
   const bandera: Notificacion = {
-    id: "agenda-salud-sin-comprobar",
-    titulo: "No se pudo comprobar si la Agenda sigue mirando Google",
+    id: "salud-sin-comprobar",
+    titulo: "No se pudo comprobar la salud de las sincronizaciones",
     cantidad: 1,
-    href: "/agenda",
+    href: "/administracion/salud",
   };
   const otro: Notificacion = { id: "mant-atrasadas", titulo: "Órdenes de trabajo atrasadas", cantidad: 4, href: "/m" };
 
   it("solo, el cuerpo queda vacío en el total y en el movimiento", () => {
-    expect(resumirParaPush([bandera])).toEqual({ title: bandera.titulo, body: "", url: "/agenda" });
-    expect(resumirElMovimiento([bandera])).toEqual({ title: bandera.titulo, body: "", url: "/agenda" });
+    expect(resumirParaPush([bandera])).toEqual({ title: bandera.titulo, body: "", url: bandera.href });
+    expect(resumirElMovimiento([bandera])).toEqual({ title: bandera.titulo, body: "", url: bandera.href });
   });
 
+  // Los de salud van primero en el push (ver `saludPrimero` más abajo), así que
+  // la bandera encabeza y el otro conserva su número.
   it("con otros, va sólo el título y los demás conservan su número", () => {
-    expect(resumirParaPush([otro, bandera])?.body).toBe(`4 · ${otro.titulo}
-${bandera.titulo}`);
-    expect(resumirElMovimiento([otro, bandera])?.body).toBe(`4 más · ${otro.titulo}
-${bandera.titulo}`);
+    expect(resumirParaPush([otro, bandera])?.body).toBe(`${bandera.titulo}
+4 · ${otro.titulo}`);
+    expect(resumirElMovimiento([otro, bandera])?.body).toBe(`${bandera.titulo}
+4 más · ${otro.titulo}`);
+  });
+});
+
+/*
+ * ── LA SALUD SE NOMBRA, NO SE RESUME ────────────────────────────────────────
+ *
+ * El push nombra tres avisos y manda el resto a «y N más». `avisosDeUsuario`
+ * agrega los de salud **al final** —son de `admin_sistema` y en la campana no
+ * tienen por qué desplazar a los de los módulos—, y con el resumen diario eso
+ * no se nota, porque lleva movimiento y la lista queda corta.
+ *
+ * **El de los lunes lleva totales**, y ahí la lista de un `admin_sistema` pasa
+ * de diez: la salud caía en «y N más» todas las semanas, por construcción y no
+ * por casualidad. Los lunes son la red —el único mensaje que vuelve a nombrar
+ * lo que dejó de moverse—, así que un recurso caído hace semanas, que ya no
+ * mueve nada, no lo nombraba nadie.
+ */
+describe("saludPrimero: en el push, la salud encabeza", () => {
+  const modulo = (n: number) => conteo(`modulo-${n}`, `Cosa ${n}`, n, `/m${n}`);
+  const caida = conteo(
+    "salud-calidad/carbonilla-odoo",
+    "Carbonilla contra Odoo: falló 8 corridas seguidas — fetch failed",
+    8,
+    "/administracion/salud"
+  );
+
+  it("un lunes con diez avisos de módulos igual nombra la sincronización caída", () => {
+    const r = resumirParaPush([...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(modulo), caida]);
+    expect(r?.title).toBe("11 cosas para mirar");
+    expect(r?.body.split("\n")[0]).toBe(caida.titulo);
+    expect(r?.body).toContain("y 8 más");
+  });
+
+  it("lo mismo en el resumen diario de movimiento", () => {
+    const r = resumirElMovimiento([modulo(1), modulo(2), modulo(3), caida]);
+    expect(r?.body.split("\n")[0]).toBe(caida.titulo);
+  });
+
+  /*
+   * Y **no reordena nada más**: entre los de los módulos manda el orden con el
+   * que llegaron, que es el de `avisosDeConteos`. `sort` es estable, así que
+   * esto no es una casualidad del motor.
+   */
+  it("los demás conservan el orden con el que llegaron", () => {
+    const r = resumirParaPush([modulo(1), modulo(2), caida]);
+    expect(r?.body.split("\n")).toEqual([caida.titulo, "1 · Cosa 1", "2 · Cosa 2"]);
   });
 });
