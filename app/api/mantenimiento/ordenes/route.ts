@@ -14,7 +14,9 @@ import {
   reservarClave, anotarLaClave, respuestaDeLaReserva,
 } from "@/lib/mantenimiento/claveDeCarga";
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
-import { estadoSegunElCierre, loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
+import {
+  estadoSegunElCierre, loQueHayQueExportar, loQueImpideCerrar,
+} from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
 import { elPendienteDelIntento } from "@/lib/mantenimiento/pendienteDeLaOT";
 import {
@@ -757,6 +759,47 @@ export async function PATCH(request: Request) {
   }
 
   const admin = createAdminClient();
+
+  // ── UN TRABAJO NO SE CIERRA ANTES DE EMPEZAR ───────────────────────────────
+  //
+  // La misma regla que el alta, por la misma función (`loQueImpideCerrar`),
+  // porque es el mismo hecho: una orden que nace cerrada y una que se cierra
+  // dos meses después no pueden contestar distinto. Dos copias de una regla es
+  // como el botón de los avisos se quedó dos días atrás en silencio.
+  //
+  // **La fecha de inicio sale de la base y no del cuerpo**, y eso no es una
+  // comodidad: `repartirRegistroDeOT` es lista blanca y `fecha_ejecucion` no
+  // está en ninguna de sus dos listas, así que este PATCH no la puede cambiar.
+  // El inicio contra el que se compara es el que tiene la orden, siempre.
+  //
+  // Se lee **sólo cuando hay cierre**: un PATCH que cambia el estado o las
+  // observaciones no paga esta consulta.
+  //
+  // Medido el 05/11/2026 sobre las 2.417 órdenes, que es lo que dice si esto
+  // sirve: 63 de las 2.143 cerradas tienen el cierre antes del inicio. No son
+  // todas por un día —la 2568 arranca el 16/11 y cierra el 07/10— y nada las
+  // detectaba, porque cada fecha por separado es válida. Esas 63 **quedan como
+  // están**: son dato de la planilla, que es la que manda en este módulo, y
+  // corregirlas de este lado las pisa en la próxima sincronización.
+  if (update.fecha_cierre) {
+    const { data: laOrden, error: noSePudoLeer } = await admin
+      .from("ordenes_trabajo").select("fecha_ejecucion").eq("id", id).maybeSingle();
+
+    if (noSePudoLeer) {
+      return NextResponse.json({ error: noSePudoLeer.message }, { status: 500 });
+    }
+    if (!laOrden) {
+      return NextResponse.json({ error: "No se encontró la orden" }, { status: 404 });
+    }
+
+    const impide = loQueImpideCerrar(laOrden.fecha_ejecucion, update.fecha_cierre as string);
+    if (impide.length > 0) {
+      return NextResponse.json(
+        { error: `No se puede guardar porque ${impide.join(", ")}.` },
+        { status: 400 }
+      );
+    }
+  }
 
   const { data: updated, error } = await admin
     .from("ordenes_trabajo").update(update).eq("id", id).select().single();

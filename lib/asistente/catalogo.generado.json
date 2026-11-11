@@ -1,5 +1,178 @@
 {
   "tablas": {
+    "agenda_canales": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "casilla",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "canal_id",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "recurso_id",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "secreto",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "vence",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "agenda_divergencias_vistas": [
+      {
+        "columna": "evento_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "divergencia_el",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "agenda_eventos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "titulo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "descripcion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "lugar",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "inicio",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "fin",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "dueno_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "casilla",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "google_event_id",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "inicio_escrito",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "fin_escrito",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "divergencia",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "divergencia_el",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "google_pendiente",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "google_pendiente_el",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "aviso",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "ot_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "turno",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "agenda_invitados": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "evento_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "email",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": true
+      }
+    ],
     "asientos": [
       {
         "columna": "id",
@@ -5140,6 +5313,11 @@
         "columna": "created_at",
         "tipo": "timestamptz",
         "nuleable": false
+      },
+      {
+        "columna": "fecha_hasta",
+        "tipo": "date",
+        "nuleable": true
       }
     ],
     "mant_partes_contratista": [
@@ -6072,6 +6250,11 @@
       {
         "columna": "costo",
         "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_fin",
+        "tipo": "date",
         "nuleable": true
       }
     ],
@@ -7505,6 +7688,11 @@
       {
         "columna": "host",
         "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "canonico",
+        "tipo": "bool",
         "nuleable": true
       }
     ],

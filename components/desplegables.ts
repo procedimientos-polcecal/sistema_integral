@@ -1,5 +1,19 @@
 import { Children, Fragment, isValidElement, type ReactNode } from "react";
-import { norm } from "@/lib/core/texto";
+import { coincide } from "@/lib/core/texto";
+
+/**
+ * El comparador del buscador, que ahora vive en `lib/core/texto.ts`.
+ *
+ * Se reexporta para no tocar los imports que ya existían —el `Select`, el
+ * `MultiSelect` y el test de este archivo—. Se mudó cuando lo necesitó el
+ * buscador del listado de órdenes de servicio, que es `lib/`: el porqué está
+ * en su docstring.
+ *
+ * Lo que no cambió al mudarse, y es la decisión de los desplegables: se compara
+ * sólo contra la **etiqueta visible**. Hacer que un uuid que no está en
+ * pantalla decida qué aparece da un resultado que después no se puede explicar.
+ */
+export { coincide };
 
 /**
  * Lo que comparten el desplegable de un valor y el de varios.
@@ -25,27 +39,6 @@ export type Opcion = {
   etiqueta: string;
   deshabilitada: boolean;
 };
-
-/**
- * Si una etiqueta responde a lo que se escribió.
- *
- * Dos cosas que un `includes` pelado no hace:
- *
- * - **Ignora los acentos**, porque nadie los escribe al buscar: `olavarria`
- *   tiene que encontrar `Bolsas Olavarría`.
- * - **Acepta las palabras en cualquier orden.** Quien busca un equipo se acuerda
- *   de dos pedazos del nombre, no de cómo estaban ordenados: `olav bolsas`
- *   encuentra `Bolsas Olavarría` igual que `bolsas olav`.
- *
- * Se compara sólo contra la etiqueta visible. Hacer que un uuid que no está en
- * pantalla decida qué aparece da un resultado que después no se puede explicar.
- */
-export function coincide(etiqueta: string, consulta: string): boolean {
-  const q = norm(consulta);
-  if (!q) return true;
-  const texto = norm(etiqueta);
-  return q.split(" ").every((pedazo) => texto.includes(pedazo));
-}
 
 /**
  * Las opciones que hay adentro de un desplegable, leídas de sus `<option>`.

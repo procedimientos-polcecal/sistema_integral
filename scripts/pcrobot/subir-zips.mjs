@@ -40,6 +40,14 @@
  *    nada: el del día siguiente trae todo igual. No le agregues memoria; es la
  *    propiedad que lo hace confiable.
  *
+ *    Lo que importa es la ACUMULATIVIDAD, no que sea un zip ni que sea uno
+ *    solo. La balanza (05/11/2026) tiene doce CSV, uno por camión, y cada uno
+ *    también arranca en agosto y llega a hoy: entra por la misma puerta con
+ *    `carpetaEntera: true` y conserva la misma propiedad. Lo que NO se puede
+ *    agregar acá es una carpeta donde cada archivo sea el dato de un día y
+ *    nunca se reescriba — ahí un día perdido se pierde para siempre, y eso
+ *    pide una cola, que es justamente lo que este script no tiene.
+ *
  * 3. Todo lo ejecutable vive adentro de `principal()` y nada corre al cargar
  *    el módulo. No es estilo: `salir()` se usa mientras se lee la
  *    configuración, y si el `class Corte` o el `let archivoLog` que necesita
@@ -100,6 +108,11 @@ function b64url(x) {
  * El zip más nuevo de una carpeta, por fecha de modificación y no por nombre:
  * el robot a veces exporta fuera de horario y el nombre lleva la hora con
  * punto y coma, que no ordena como uno espera.
+ *
+ * Devuelve una lista de un elemento, y no el elemento, para que la parte que
+ * sube sea una sola: es la misma que recorre los doce CSV de la balanza. Un
+ * `if` arriba que elige qué archivos son el dato, y un camino abajo que los
+ * sube; dos caminos de subida se habrían separado a la primera corrección.
  */
 function zipMasNuevo(carpeta) {
   let archivos;
@@ -117,7 +130,40 @@ function zipMasNuevo(carpeta) {
     })
     .sort((a, b) => b.mtime - a.mtime);
   if (zips.length === 0) return { error: `no hay ningún .zip en ${carpeta}` };
-  return { zip: zips[0] };
+  return { archivos: [zips[0]] };
+}
+
+/**
+ * Todos los archivos de una carpeta, para el origen que se sube entero.
+ *
+ * Existe porque hay una carpeta —la de la balanza— donde el dato NO es un
+ * archivo: son doce. Cada `DAT000000NN.CSV` es **un camión** (la segunda
+ * columna numérica es su tara y es constante dentro del archivo), y cada uno
+ * arranca en agosto o septiembre y llega a hoy. O sea que son acumulativos
+ * igual que un zip del robot, pero **uno por vehículo**: quedarse con el más
+ * nuevo subiría un camión y perdería once.
+ *
+ * Se ignoran las subcarpetas a propósito: hoy no hay ninguna, y bajar por el
+ * árbol haría que un día alguien deje una carpeta de respaldo adentro y
+ * empiece a subirse sola.
+ */
+function todosLosArchivos(carpeta) {
+  let nombres;
+  try {
+    nombres = readdirSync(carpeta);
+  } catch (e) {
+    return { error: `no se pudo leer ${carpeta}: ${e.message}` };
+  }
+  const archivos = nombres
+    .map((n) => {
+      const ruta = join(carpeta, n);
+      const s = statSync(ruta);
+      return s.isFile() ? { ruta, nombre: n, mtime: s.mtime, tamano: s.size } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  if (archivos.length === 0) return { error: `no hay ningún archivo en ${carpeta}` };
+  return { archivos };
 }
 
 /**
@@ -136,6 +182,29 @@ function nombreDestino(molino, mtime) {
     `${String(f.getMonth() + 1).padStart(2, "0")}-` +
     `${String(f.getDate()).padStart(2, "0")}`;
   return `${molino} ${dia}.zip`;
+}
+
+/**
+ * `DAT00000010.CSV` → `Pesadas Balanza DAT00000010.CSV`.
+ *
+ * El nombre del archivo se conserva entero y la fecha **no** entra, al revés
+ * que en `nombreDestino`. Es deliberado y es lo que mantiene tonto al script:
+ * como cada archivo es acumulativo, el de mañana se llama igual y reemplaza al
+ * de hoy (PATCH), así que la carpeta de Drive tiene siempre un archivo por
+ * camión y no uno por camión por día. Poniéndole la fecha, en un año habría
+ * 4.380 archivos diciendo casi lo mismo.
+ */
+function nombreDestinoDeArchivo(origen, nombreArchivo) {
+  return `${origen} ${nombreArchivo}`;
+}
+
+/** El `Content-Type` por la extensión; lo que no se reconoce viaja opaco. */
+function tipoDe(nombre) {
+  const n = nombre.toLowerCase();
+  if (n.endsWith(".zip")) return "application/zip";
+  if (n.endsWith(".csv")) return "text/csv";
+  if (n.endsWith(".xlsx")) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  return "application/octet-stream";
 }
 
 /**
@@ -291,7 +360,7 @@ async function principal() {
     const cuerpo = Buffer.concat([
       Buffer.from(
         `--${LIMITE}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadatos}\r\n` +
-          `--${LIMITE}\r\nContent-Type: application/zip\r\n\r\n`
+          `--${LIMITE}\r\nContent-Type: ${tipoDe(nombre)}\r\n\r\n`
       ),
       readFileSync(ruta),
       Buffer.from(`\r\n--${LIMITE}--\r\n`),
@@ -324,32 +393,48 @@ async function principal() {
       continue;
     }
 
-    const { zip, error } = zipMasNuevo(origen.carpeta);
+    // Dos formas de origen, y la diferencia es cuántos archivos son el dato.
+    // En un PC Robot el dato es UN zip acumulativo y los de días anteriores
+    // sobran. En la balanza son doce CSV, uno por camión, y hacen falta los
+    // doce. `carpetaEntera: true` lo dice en la configuración.
+    const { archivos, error } = origen.carpetaEntera
+      ? todosLosArchivos(origen.carpeta)
+      : zipMasNuevo(origen.carpeta);
     if (error) {
       decir(`ERROR ${etiqueta}: ${error}`);
       fallaron++;
       continue;
     }
 
-    const dias = Math.floor((Date.now() - zip.mtime.getTime()) / 86_400_000);
+    // El aviso de "dejó de exportar" mira el archivo MÁS NUEVO de la carpeta.
+    // En la balanza eso es correcto y no es lo mismo que mirarlos uno por uno:
+    // un camión que no viaja hace una semana no tiene nada de raro, pero que
+    // ninguno de los doce se haya movido sí.
+    const masNuevo = Math.max(...archivos.map((a) => a.mtime.getTime()));
+    const dias = Math.floor((Date.now() - masNuevo) / 86_400_000);
     const aviso = dias >= 2 ? `  (OJO: el robot no exporta hace ${dias} días)` : "";
-    const destino = nombreDestino(etiqueta, zip.mtime);
 
-    const yaEsta = await buscar(destino);
-    if (yaEsta && Number(yaEsta.size) === zip.tamano) {
-      decir(`= ${etiqueta}: ${destino} ya está en Drive con el mismo tamaño, no se sube${aviso}`);
-      continue;
+    for (const archivo of archivos) {
+      const destino = origen.carpetaEntera
+        ? nombreDestinoDeArchivo(etiqueta, archivo.nombre)
+        : nombreDestino(etiqueta, archivo.mtime);
+
+      const yaEsta = await buscar(destino);
+      if (yaEsta && Number(yaEsta.size) === archivo.tamano) {
+        decir(`= ${etiqueta}: ${destino} ya está en Drive con el mismo tamaño, no se sube${aviso}`);
+        continue;
+      }
+
+      if (seco) {
+        const que = yaEsta ? "reemplazaría" : "subiría";
+        decir(`~ ${etiqueta}: ${que} ${archivo.nombre} (${archivo.tamano} bytes) como ${destino}${aviso}`);
+        continue;
+      }
+
+      const subido = await subir(destino, archivo.ruta, yaEsta?.id);
+      const que = yaEsta ? "reemplazado" : "subido";
+      decir(`+ ${etiqueta}: ${destino} ${que}, ${subido.size} bytes, id ${subido.id}${aviso}`);
     }
-
-    if (seco) {
-      const que = yaEsta ? "reemplazaría" : "subiría";
-      decir(`~ ${etiqueta}: ${que} ${zip.nombre} (${zip.tamano} bytes) como ${destino}${aviso}`);
-      continue;
-    }
-
-    const subido = await subir(destino, zip.ruta, yaEsta?.id);
-    const que = yaEsta ? "reemplazado" : "subido";
-    decir(`+ ${etiqueta}: ${destino} ${que}, ${subido.size} bytes, id ${subido.id}${aviso}`);
   }
 
   if (fallaron) decir(`Terminó con ${fallaron} origen(es) con problemas.`);

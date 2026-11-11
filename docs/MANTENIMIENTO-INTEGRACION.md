@@ -2695,6 +2695,75 @@ de mentira creado y limpiado para eso: la cabecera se actualiza, los dos
 renglones viejos se borran y entran los dos nuevos, y con un renglón enlazado a
 una OT la guarda cuenta 1 y las dos rutas se niegan.
 
+## Un trabajo no se cierra antes de empezar (05/11/2026)
+
+Se pidió una alerta que impida poner la fecha de cierre antes de la de inicio.
+La regla es `loQueImpideCerrar` en
+[lib/mantenimiento/cierreDeOT.ts](../lib/mantenimiento/cierreDeOT.ts), y dice
+dos cosas: **sin fecha de inicio no se puede cerrar**, y **el cierre no puede
+ser anterior al inicio**.
+
+Corre en cinco lugares y es **una sola función** en los cinco: el alta a mano,
+el alta sin señal, el POST —por `loQueSeContradice`, que ya hacía lo mismo con
+la fecha de fin—, el modal de registrar el trabajo y el PATCH. Dos copias de
+una regla es como el botón de los avisos se quedó dos días atrás en silencio el
+19/10/2026.
+
+Tres cosas medidas el 05/11/2026 sobre las 2.417 órdenes, que son las que no se
+deducen del código:
+
+- **Esto pasa, y bastante**: **63 de las 2.143 cerradas** tienen el cierre antes
+  del inicio. 31 por exactamente un día —el dedo que erra—, 23 por entre dos y
+  siete, y 9 por más de una semana: la 2568 arranca el 16/11 y cierra el 07/10,
+  la 1671 arranca el 03/05 y cierra el 03/02, que tiene toda la cara de un d/m
+  leído al revés. **Nada las detectaba**, porque cada fecha por separado es
+  perfectamente válida. **Las 63 quedan como están**: son dato de la planilla,
+  que es la que manda en este módulo, y corregirlas de este lado las pisa en la
+  próxima sincronización.
+- **La otra mitad de la regla no traba nada de lo que hay**: hay **una sola**
+  orden en todo el sistema sin fecha de inicio, y está abierta. Cierra el
+  agujero antes de que entre la primera.
+- **Y no frena lo normal**: de las cerradas, 2.080 pasan sin que diga nada, y
+  **1.747 de ésas empiezan y cierran el mismo día**, que es el caso más común
+  del módulo. El `<=` no es un detalle.
+
+**EL PRECIO, Y HOY NO TIENE SALIDA DESDE EL SISTEMA.** Hay **18 órdenes
+abiertas con fecha de inicio futura** —preventivos programados: la 3038 arranca
+mañana, las 1683 y 1684 en marzo de 2027—. Si una de ésas se hace antes y se
+registra, la regla la frena con razón: el cierre queda antes del inicio. Lo que
+habría que corregir ahí es la **fecha de inicio**, y **eso no se puede hacer
+desde la app**: no está en la lista blanca de `repartirRegistroDeOT`, así que
+ningún PATCH la toca, y postergar sólo la mueve hacia adelante
+(`loQueFaltaParaPostergar` rechaza `dias <= 0`). O sea que esa persona queda
+parada hasta que alguien corrija la fecha en la planilla. Está dicho acá y no
+resuelto porque resolverlo es decidir que la fecha de inicio se edita, y esa
+fecha es de la que viven el atraso, el MTBF y la programación del taller.
+
+El `min` de los `<input type="date">` —en los dos formularios de alta y en el
+modal de registrar— es la primera defensa y **no** la regla: deja en gris los
+días anteriores, pero se saltea tipeando y en el teléfono depende del
+navegador. Quien decide es la función, en la pantalla y en el servidor.
+
+**Y la alerta salta en el momento, no al guardar** (05/11/2026, a pedido). Las
+tres pantallas calculan la regla **durante el render** —no en un efecto con
+`setState`, que sería un segundo render para guardar algo que ya se sabe— y
+muestran el cartel rojo **pegado a las fechas**, que es donde está mirando
+quien las acaba de completar: en los dos modales el cartel de error vive abajo
+de todo, al lado de los botones, y en un teléfono eso son dos pantallas.
+
+Tres cosas de esa decisión que no se deducen del código:
+
+- **No grita mientras se completa.** `loQueSeContradice` se calla si falta la
+  fecha de inicio, así que la alerta aparece recién cuando las dos están y no
+  cierran. De eso depende que sea una alerta y no un cartel que está siempre.
+- **El botón de guardar sigue habilitado.** Deshabilitarlo dejaría el porqué
+  arriba y el botón mudo abajo; apretarlo repite la misma frase donde la
+  persona está mirando, y el guardado igual no pasa —lo frena el submit y, si
+  llegara, el servidor—. Los dos textos son el mismo a propósito.
+- **Va debajo de la grilla y no adentro de la celda** en el modal de registrar:
+  esa grilla es de dos columnas y el mensaje, que nombra las dos fechas
+  enteras, entraba partido en pedazos de 150 px.
+
 ## Los datos: qué está y qué no
 
 **Todo lo que viene de las planillas está.** Avisos 138, órdenes de trabajo

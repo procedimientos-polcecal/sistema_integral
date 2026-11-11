@@ -59,6 +59,34 @@ describe("lo que se contradice en una orden nueva", () => {
     expect(loQueSeContradice({ ...completa, fecha_ejecucion: "", fecha_fin: "2026-10-19" }))
       .toEqual([]);
   });
+
+  /**
+   * Y tambien mira la de cierre, que es la otra fecha que no puede ir antes
+   * del inicio. Es `loQueImpideCerrar`, la misma funcion que corre el PATCH:
+   * una orden que nace cerrada y una que se cierra despues dicen lo mismo.
+   */
+  it("una orden que nace cerrada antes de empezar no pasa", () => {
+    expect(loQueSeContradice({ ...completa, fecha_cierre: "2026-10-19" }))
+      .toEqual(["la fecha de cierre (2026-10-19) es anterior a la de inicio (2026-10-20)"]);
+  });
+
+  it("cerrar el mismo dia que empieza esta bien", () => {
+    expect(loQueSeContradice({ ...completa, fecha_cierre: "2026-10-20" })).toEqual([]);
+  });
+
+  it("sin fecha de cierre no se mira nada del cierre", () => {
+    expect(loQueSeContradice({ ...completa, fecha_cierre: "" })).toEqual([]);
+  });
+
+  /** Las dos juntas salen juntas, que es la vara de `validar()` del nucleo. */
+  it("las dos fechas dadas vuelta se dicen de una sola vez", () => {
+    expect(loQueSeContradice({
+      ...completa, fecha_fin: "2026-10-18", fecha_cierre: "2026-10-19",
+    })).toEqual([
+      "la fecha de fin (2026-10-18) es anterior a la de inicio (2026-10-20)",
+      "la fecha de cierre (2026-10-19) es anterior a la de inicio (2026-10-20)",
+    ]);
+  });
 });
 
 describe("que le falta a una orden nueva", () => {

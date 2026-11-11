@@ -7,6 +7,7 @@ import RouteCard from "./RouteCard";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { repartirPorTurno } from "@/lib/remises/empleadosDelTurno";
 
 const RoutesMap = dynamic(() => import("@/components/remises/RoutesMap"), { ssr: false });
 
@@ -66,6 +67,15 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
 
   const empleadosActivos = empleados ?? [];
   const presentSet = useMemo(() => new Set(presentIds ?? []), [presentIds]);
+
+  // La lista de Asistencia es la única que se recorta por turno. Lo que
+  // alimenta las rutas —`empleadosPresentesConCoords`— sigue saliendo de la
+  // lista completa a propósito: alguien marcado presente fuera de su turno
+  // habitual tiene que viajar igual, y son el 30% de los registros.
+  const delTurno = useMemo(
+    () => repartirPorTurno(empleados ?? [], turnoId, presentSet),
+    [empleados, turnoId, presentSet]
+  );
 
   async function toggleAsistencia(empleadoId: string) {
     const res = await fetch("/api/remises/asistencia", {
@@ -186,9 +196,12 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
                 <p className="text-sm text-slate-500">Todavía no hay empleados con datos de Remises cargados.</p>
               ) : (
                 <>
-                  <p className="text-xs text-slate-400 mb-2">{presentSet.size} / {empleadosActivos.length} presentes</p>
+                  <p className="text-xs text-slate-400 mb-2">{presentSet.size} / {delTurno.visibles.length} presentes</p>
+                  {delTurno.visibles.length === 0 && (
+                    <p className="text-sm text-slate-500">Nadie tiene este turno asignado todavía.</p>
+                  )}
                   <div className="space-y-1 max-h-[560px] overflow-y-auto">
-                    {empleadosActivos.map((e) => {
+                    {delTurno.visibles.map((e) => {
                       const on = presentSet.has(e.id);
                       const tieneCoords = e.remises_empleados_datos?.lat != null;
                       return (
@@ -206,6 +219,14 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
                       );
                     })}
                   </div>
+                  {(delTurno.deOtroTurno > 0 || delTurno.sinDatos > 0) && (
+                    <p className="text-xs text-slate-400 mt-2">
+                      No se muestran: {[
+                        delTurno.deOtroTurno > 0 ? `${delTurno.deOtroTurno} de otro turno` : null,
+                        delTurno.sinDatos > 0 ? `${delTurno.sinDatos} sin datos de Remises` : null,
+                      ].filter(Boolean).join(" · ")}.
+                    </p>
+                  )}
                 </>
               )}
             </div>

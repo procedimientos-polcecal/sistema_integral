@@ -30,8 +30,8 @@ tocarla y probablemente no tenga salida a internet.
 ## Qué se sube, y qué de eso se lee
 
 **No son lo mismo, y confundirlos es la trampa de esta parte.** Desde el
-04/11/2026 la tarea sube **cinco** carpetas de `\\server\EXTERIOR`, y el SdG
-lee **dos**. Las otras tres se suben para dejar de perder el dato, no porque
+05/11/2026 la tarea sube **seis** carpetas de `\\server\EXTERIOR`, y el SdG
+lee **dos**. Las otras cuatro se suben para dejar de perder el dato, no porque
 haya algo que importar:
 
 | Carpeta del servidor | Sube como | ¿El SdG la lee? | Qué trae |
@@ -41,6 +41,7 @@ haya algo que importar:
 | `Planta 02` | `Planta 02 AAAA-MM-DD.zip` | no | un PC Robot, pero su CSV es otra cosa |
 | `Hornos` | `Hornos AAAA-MM-DD.zip` | no | 18 planillas mensuales respaldadas a diario |
 | `Porteria` | `Porteria AAAA-MM-DD.zip` | no | el escritorio completo de esa PC |
+| `Pesadas Balanza` | **doce** `Pesadas Balanza DAT000000NN.CSV` | no | la balanza, un CSV por camión |
 
 Lo que hay que saber de cada una de las tres que no se leen, medido el
 04/11/2026:
@@ -71,6 +72,29 @@ Lo que hay que saber de cada una de las tres que no se leen, medido el
   subidor sube una por día, son ~10,5 MB diarios a la unidad compartida —unos
   3,8 GB al año—: si eso llega a importar, lo que corresponde es subir esas
   cinco planillas y no el escritorio.
+
+- **`Pesadas Balanza` es la única que no son zips, y la única que se sube
+  entera.** Son doce `DAT000000NN.CSV` sueltos. Cada uno es **un camión**: la
+  segunda columna numérica es su tara y no cambia dentro del archivo (11300,
+  7580, 8640, 6660…), y cada uno arranca en agosto o septiembre y llega a hoy.
+  O sea que **son acumulativos igual que un zip, pero uno por vehículo**, y por
+  eso el subidor los sube los doce: quedarse con el más nuevo subiría un camión
+  y perdería once. Eso es lo que hace `"carpetaEntera": true` en la
+  configuración. El destino conserva el nombre del archivo y **no** lleva fecha
+  —`Pesadas Balanza DAT00000010.CSV`—, así que el de mañana reemplaza al de
+  hoy y la carpeta de Drive tiene un archivo por camión y no uno por camión por
+  día; con fecha, en un año habría 4.380 archivos diciendo casi lo mismo.
+
+  Lo que hay que saber antes de usar `carpetaEntera` para otra cosa: **vale
+  sólo si cada archivo acumula lo suyo.** Una carpeta donde cada archivo sea el
+  dato de un día y nunca se reescriba no entra acá — ahí un día que falle se
+  pierde para siempre, y la defensa sería una cola, que es justamente lo que
+  este script no tiene y no conviene que tenga.
+
+  Y el dato en sí **no es nuevo para el SdG**: las pesadas ya entran a
+  `cantera_pesadas` desde la pestaña «Datos» de la planilla de balanza
+  (`app/api/cantera/acarreo/sync`). Esto es el export crudo del equipo, que se
+  guarda por si esa planilla se rompe, no una segunda fuente para leer.
 
 **Lo que está muerto y por qué no está en la lista.** `Datos Cal viva` tiene
 cuatro zips del 30/07/2026 que pesan **22 bytes cada uno**, que es el tamaño

@@ -473,14 +473,17 @@ contesta 404 sin explicar).
 
 **En esa carpeta hay más de lo que se lee, y conviene saberlo antes de buscar
 por qué algo "no se importó".** Desde el 04/11/2026 la misma tarea sube
-`Planta 02`, `Hornos` y `Porteria`, que se guardan para dejar de perder el dato
-y que el SdG **no** importa: Planta 02 es un PC Robot pero su CSV es un
-horímetro por hora y **sin kilos**, y las otras dos no son robots. Los tres
-están filtrados en `SE_GUARDAN_SIN_LEER` de `drive.ts` **a propósito**: sin
-eso, el aviso de «no es de ningún molino» se escribiría en el campo `error` de
-`sincronizaciones` —con `ok: true`, que es donde alguien mira si esto está al
-día— tres veces por día para siempre, y un aviso que se repite deja de ser un
-aviso. Un nombre raro que no esté en esa lista sigue saltando. Qué trae cada
+`Planta 02`, `Hornos` y `Porteria`, y desde el 05/11/2026 los **doce**
+`Pesadas Balanza DAT000000NN.CSV` —uno por camión—, que se guardan para dejar
+de perder el dato y que el SdG **no** importa: Planta 02 es un PC Robot pero su
+CSV es un horímetro por hora y **sin kilos**, las otras dos no son robots, y la
+balanza ya entra por otro lado (`cantera_pesadas`, desde la planilla de
+Cantera). Los cuatro prefijos están filtrados en `SE_GUARDAN_SIN_LEER` de
+`drive.ts` **a propósito**: sin eso, el aviso de «no es de ningún molino» se
+escribiría en el campo `error` de `sincronizaciones` —con `ok: true`, que es
+donde alguien mira si esto está al día— **quince veces por día** y en un solo
+renglón separado por puntos, para siempre; un aviso que se repite deja de ser
+un aviso. Un nombre raro que no esté en esa lista sigue saltando. Qué trae cada
 una y qué carpetas del servidor están muertas está en
 [PRODUCCION-FILLERS-SUBIDA.md](PRODUCCION-FILLERS-SUBIDA.md), sección «Qué se
 sube, y qué de eso se lee».

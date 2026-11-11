@@ -351,6 +351,33 @@ lo cubren **tres cosas** y conviene saber cuáles son:
 El umbral de 50 h está elegido con las horas reales del cron: una corrida salteada
 no suena, la segunda seguida sí (a las 07:00 UTC del segundo día).
 
+**Los dos últimos leen `ultima_sincronizacion`, y esa vista tuvo que aprender a
+distinguir dos despliegues.** Hay un segundo despliegue de este repo escribiendo
+en la base de producción desde el 24/10/2026 —otra cuenta de Vercel, con las
+credenciales de Supabase y sin las de Google: ver la sección «Hay un segundo
+despliegue escribiendo en esta base» del [CLAUDE.md](../CLAUDE.md)—. El 05/11/2026
+corrió el barrido **media hora después** del cron de verdad:
+
+```
+agenda/barrido  05:00:11  OK     producción
+agenda/barrido  05:30:55  FALLO  el otro despliegue   ← es la que mostró /agenda
+```
+
+El desempate que tenía la vista —preferir `entorno = 'production'`— no alcanzaba,
+porque el otro también dice `production`. Lo arregla la migración
+`20261105092248`, que prefiere primero la corrida del despliegue canónico. Dos
+cosas que conviene saber antes de tocar la línea de salud:
+
+- **El aviso no estaba mal calibrado.** Era el dato de abajo el que mentía, así
+  que subir el umbral de 50 h o sacar `barrido` de `PASOS_CON_GOOGLE` habría
+  tapado el síntoma y apagado la única luz que avisa que los canales dejaron de
+  funcionar. Antes de ablandar un aviso de salud, mirar de qué `host` salió la
+  fila que lo disparó.
+- **Una corrida del otro despliegue también puede salir OK.** El 05/11
+  `agenda/canales` y `agenda/pendientes` le dieron ok con 0 filas. O sea que el
+  problema no era sólo un rojo de más: el dato ajeno podía ganar **diciendo que
+  todo andaba**, que es el modo de fallar más caro de los dos.
+
 **Falsa alarma el primer día, y es comportamiento correcto:** «nunca corrió»
 cuenta como caído, así que el día del despliegue le suena a `admin_sistema` hasta
 la primera corrida del cron. Un cron mal configurado que nunca arranca es justo lo

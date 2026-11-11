@@ -60,6 +60,7 @@ código.
 | Odoo | [docs/ODOO-INTEGRACION.md](docs/ODOO-INTEGRACION.md) |
 | Login y correos | [docs/AUTENTICACION.md](docs/AUTENTICACION.md) |
 | Respaldo | [docs/RESPALDO.md](docs/RESPALDO.md) |
+| Las APIs | [docs/API.md](docs/API.md) — qué función cumple cada una, cómo está conectada y cómo funciona. El inventario de las 282 rutas lo genera `npm run mapa-de-apis` en [docs/API-MAPA.generado.md](docs/API-MAPA.generado.md) y **no se edita a mano**. Tres cosas de ahí que no se deducen leyendo una ruta: **56 rutas no validan nada en su archivo y no hace falta**, porque las protege el proxy —saberlo pide cruzar su url con la lista de exentos de `lib/supabase/middleware.ts`, y el generador la lee de ahí en vez de copiarla—; **hay dos relojes para los crons** (de 18, siete los programa Vercel, cinco GitHub Actions y **seis los dos a la vez**, así que `vercel.json` solo da una respuesta incompleta); y **105 de 282 usan el cliente admin**, o sea que RLS no corre y el permiso lo pone la ruta, que cambia dónde hay que mirar |
 | Variables de entorno | [docs/VARIABLES-VERCEL.md](docs/VARIABLES-VERCEL.md) |
 | Migraciones | [supabase/migrations/README.md](supabase/migrations/README.md) |
 
@@ -198,6 +199,53 @@ Antes de escribir una, leer las ocho trampas del
     dejó 22 policies de Mantenimiento afuera en la primera pasada.
 - **En un Server Component `cookies().set()` no hace nada.** El canje del
   `?code=` de los correos va en un Route Handler.
+
+## Hay un segundo despliegue escribiendo en esta base
+
+**Dos despliegues de este repo escriben en la base de producción.** El de verdad
+es el proyecto `sistema-integral` de la cuenta `sistemapolcecalpolysan`, que
+sirve `www.polcecalpolysan.app`. El otro es `sistemaintegral`, en la cuenta
+**`soportemantenimiento-4821s-projects`**; el usuario confirmó el 05/11/2026 que
+es suyo o de un colaborador, así que no es una filtración. Tiene las credenciales
+de Supabase y **no las de Google**: medido ese día, **53 corridas y 51 fallidas**
+desde el 24/10/2026 08:21:52.
+
+Ese segundo exacto es el que el encabezado de la migración
+`20261023104622_sincronizaciones_dicen_de_que_entorno_vinieron.sql` marcó como
+«quién llama no se pudo determinar». **Ya está identificado**, y vale anotar por
+qué no se encontró entonces: la búsqueda recorrió los cinco proyectos de Vercel
+**del equipo**, y éste está en otra cuenta.
+
+Tres consecuencias, y la tercera es la que importa para lo que se construya
+encima:
+
+- **Una fila de `sincronizaciones` puede no ser de producción**, así que medir
+  contra esa tabla sin mirar `host` da mal. El host bueno termina en
+  `-sistemapolcecalpolysan.vercel.app`.
+- **El desempate por `entorno` no desempata.** Aquella migración hizo que la
+  vista `ultima_sincronizacion` prefiera `entorno = 'production'`, pero el otro
+  despliegue es la producción de su propio proyecto y también lo dice: quedan
+  empatados y gana el más reciente, que suele ser el suyo porque corre media hora
+  después. El 05/11/2026 el barrido de la Agenda anduvo a las 05:00:11 y falló a
+  las 05:30:55 en el otro, y la pantalla mostró el fallo; a
+  `calidad/carbonilla-planilla` le venía pasando **doce días seguidos**. Lo
+  arregla `20261105092248_sincronizaciones_dicen_si_vienen_del_despliegue_canonico.sql`,
+  con una columna `canonico` que la fila calcula con `esLaCorridaCanonica()` de
+  [lib/core/sincronizaciones.ts](lib/core/sincronizaciones.ts): que
+  `VERCEL_PROJECT_PRODUCTION_URL` —que Vercel define **por proyecto**— coincida
+  con el dominio de `NEXT_PUBLIC_APP_URL`, que una copia hereda con el resto de
+  las variables. **`host` no sirve** para esto: es `VERCEL_URL` y cambia con cada
+  despliegue —31 hosts distintos del canónico en las últimas 1000 filas—, así que
+  no hay valor fijo contra el cual compararlo.
+- **No hay ningún candado contra dos corridas simultáneas en todo el sistema.**
+  Verificado el 05/11/2026: ni `pg_advisory_lock` ni `for update skip locked` en
+  ninguna parte. Hoy lo único que separa a los dos despliegues es que al otro le
+  faltan las credenciales de Google. **El día que las tenga, los dos escribirían
+  las mismas planillas y los mismos calendarios sin coordinarse**, que es el
+  fallo del 13/10/2026 —«la primera fila libre» calculada sobre una planilla que
+  estaba recalculando— multiplicado por dos escritores que no se ven. La
+  migración arregla **la pantalla, no la concurrencia**: la defensa de verdad es
+  apagar ese despliegue, y eso se hace desde esa cuenta de Vercel.
 
 ## Las planillas de Google
 
