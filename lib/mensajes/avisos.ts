@@ -31,14 +31,15 @@ export const MOTIVO_NO_PUEDE_VERLO =
 export const MOTIVO_SIN_CORREO = "No tiene correo cargado: no se le pudo mandar el aviso.";
 
 /**
- * Lo que se anota cuando el servicio de correo contesta que falló.
+ * Lo que se anota cuando el servicio de correo falló **y no dijo nada**.
  *
- * `enviarCorreo()` devuelve `"fallo"` y no lo que dijo el Apps Script —lo
- * loguea en el servidor y de ahí no sale—, así que acá no hay nada que copiar
- * sin traducir. El texto manda a mirar donde sí está.
+ * Es el último recurso: lo normal es anotar el `detalle` que devuelve
+ * `enviarCorreo()`, que es lo que contestó el Apps Script sin traducir. Un texto
+ * fijo no distingue un dominio rechazado de un cupo agotado, así que sólo entra
+ * cuando no hay otra cosa.
  */
 export const MOTIVO_EL_SERVICIO_FALLO =
-  "El servicio de correo no lo pudo enviar. Lo que contestó está en los registros del servidor.";
+  "El servicio de correo no lo pudo enviar y no dijo por qué.";
 
 export interface AvisoOmitido {
   usuarioId: string;

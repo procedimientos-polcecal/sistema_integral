@@ -16,7 +16,7 @@ import { esquemaDelTipo, parametrosDeLaUrl } from "@/lib/mensajes/pedidos";
  *
  * **`correo_configurado` es lo que le permite a la pantalla avisar antes de que
  * alguien escriba creyendo que avisó.** Sin él, `enviarCorreo()` devuelve
- * `"sin-configurar"` en silencio y el único aviso sería el que se descubre
+ * `estado: "sin-configurar"` en silencio y el único aviso sería el que se descubre
  * después.
  *
  * **No devuelve la dirección de correo, sólo si la tiene** (`tiene_correo`). La

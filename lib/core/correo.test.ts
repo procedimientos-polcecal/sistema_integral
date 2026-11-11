@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { enviarCorreo, estaConfigurado } from "./correo";
 
 /**
- * Un solo test, y es el que protege el día del deploy.
+ * El primer test protege el día del deploy.
  *
  * Entre que esto se despliega y el día que alguien publique el Apps Script va
  * a pasar tiempo — igual que con las migraciones, que las aplica una persona.
@@ -10,8 +10,8 @@ import { enviarCorreo, estaConfigurado } from "./correo";
  * cada carga rechazada intente salir a la red o deje un error en los registros
  * todos los días.
  *
- * El resto del archivo no lleva tests: es una llamada HTTP sin decisiones,
- * igual que `enviarPush`.
+ * El segundo bloque fija lo que `detalle` dice de un fallo (ver el encabezado de
+ * `correo.ts`): es lo que la mensajería anota en la mención.
  */
 describe("enviarCorreo", () => {
   afterEach(() => {
@@ -33,9 +33,62 @@ describe("enviarCorreo", () => {
       cuerpo: "y",
     });
 
-    expect(resultado).toBe("sin-configurar");
+    expect(resultado).toEqual({ estado: "sin-configurar" });
     expect(fetchDoble).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
+  });
+});
+
+describe("enviarCorreo, con el script configurado", () => {
+  const correo = { para: "alguien@polcecal.com", asunto: "x", cuerpo: "y" };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  function conScript(respuesta: () => Promise<Response>) {
+    vi.stubEnv("SDG_CORREO_URL", "https://script.google.com/macros/s/x/exec");
+    vi.stubEnv("SDG_CORREO_SECRET", "abc");
+    vi.stubGlobal("fetch", vi.fn(respuesta));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  }
+
+  it("si el script dice ok, está enviado y no hay detalle", async () => {
+    conScript(async () => new Response(JSON.stringify({ ok: true })));
+    expect(await enviarCorreo(correo)).toEqual({ estado: "enviado" });
+  });
+
+  it("si el script lo rechaza, el detalle es lo que contestó, sin traducir", async () => {
+    // Un Apps Script contesta 200 aunque rechace: el motivo está en el cuerpo.
+    const dijo = JSON.stringify({ ok: false, error: "dominio no permitido: gmail.com" });
+    conScript(async () => new Response(dijo, { status: 200 }));
+    expect(await enviarCorreo(correo)).toEqual({ estado: "fallo", detalle: dijo });
+  });
+
+  it("si contesta algo que no es su JSON, el detalle es ese texto", async () => {
+    conScript(async () => new Response("<html>Iniciar sesión</html>"));
+    expect(await enviarCorreo(correo)).toEqual({
+      estado: "fallo",
+      detalle: "<html>Iniciar sesión</html>",
+    });
+  });
+
+  it("si contesta con el cuerpo vacío, el detalle al menos lleva el status", async () => {
+    conScript(async () => new Response("", { status: 502 }));
+    expect(await enviarCorreo(correo)).toEqual({
+      estado: "fallo",
+      detalle: "HTTP 502, sin cuerpo",
+    });
+  });
+
+  it("si ni siquiera contesta, el detalle es el mensaje de la excepción", async () => {
+    conScript(async () => { throw new Error("the operation was aborted due to timeout"); });
+    expect(await enviarCorreo(correo)).toEqual({
+      estado: "fallo",
+      detalle: "the operation was aborted due to timeout",
+    });
   });
 });
 
