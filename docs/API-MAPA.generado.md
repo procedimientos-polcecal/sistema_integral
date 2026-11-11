@@ -4,7 +4,7 @@
 > Lo escrito a mano —para qué sirve cada módulo, cómo está armada una ruta y
 > las trampas— está en [API.md](API.md). Acá sólo hay lo que sale del código.
 
-Al 2026-11-05: **282 rutas** y **436 handlers** en 23 carpetas.
+Al 2026-11-11: **285 rutas** y **441 handlers** en 24 carpetas.
 
 ## Cómo leer la columna «guarda»
 
@@ -42,7 +42,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | secreto del cron | 18 |
 | secreto propio | 3 |
 | token contra la base | 1 |
-| permiso de módulo | 134 |
+| permiso de módulo | 137 |
 | sesión | 70 |
 | el proxy | 56 |
 | **ABIERTA** | 0 |
@@ -205,7 +205,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/facturacion/facturas/[id]/lineas` | GET, PATCH | permiso de módulo · `puedeEditarFacturacion` | `compras_producto_odoo`, `compras_requerimientos`, `compras_ubicaciones`, `equipos`, `facturas_proveedor`, `facturas_proveedor_lineas` | admin |
 | `/api/facturacion/facturas/[id]/odoo/borrador` | GET, POST, PUT | permiso de módulo · `puedeConfirmarEnOdoo` | `facturas_proveedor`, `usuarios` | admin · audita |
 | `/api/facturacion/facturas/[id]/odoo` | GET, POST, PATCH | permiso de módulo · `puedeEditarFacturacion` | `facturas_proveedor` | admin |
-| `/api/facturacion/facturas/[id]` | GET, PATCH | permiso de módulo · `puedeEditarFacturacion` | `compras_requerimientos`, `facturas_proveedor` | admin |
+| `/api/facturacion/facturas/[id]` | GET, PATCH | permiso de módulo · `puedeEditarFacturacion` | `compras_requerimientos`, `facturas_proveedor`, `proveedores` | admin |
 | `/api/facturacion/facturas` | GET, POST | permiso de módulo · `puedeEditarFacturacion` | `compras_producto_odoo`, `compras_requerimientos`, `empresas`, `facturas_proveedor`, `facturas_proveedor_lineas` | admin · 120s |
 | `/api/facturacion/odoo/sincronizar` | POST | permiso de módulo · `puedeEditarFacturacion` | — | admin · 300s |
 
@@ -288,6 +288,14 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/mantenimiento/sheets/webhook` | POST | secreto propio · `SHEETS_WEBHOOK_SECRET` | — | 300s |
 | `/api/mantenimiento/tarifa-hora` | GET, POST, DELETE | sesión | `mantenimiento_tarifas_hora` | admin |
 | `/api/mantenimiento/tipos` | GET, PATCH, POST | sesión | `equipos_tipos` | admin |
+
+## mensajes (3)
+
+| Ruta | Métodos | Guarda | Tablas | Marcas |
+|---|---|---|---|---|
+| `/api/mensajes/destinatarios` | GET | permiso de módulo · `puedeVerlo` | — | admin · zod |
+| `/api/mensajes/mios` | GET, PATCH | permiso de módulo · `puedeVerlo` | `mensajes_menciones` | admin · zod |
+| `/api/mensajes` | GET, POST | permiso de módulo · `puedeVerlo` | `mensajes`, `mensajes_menciones`, `usuarios` | admin · zod · 60s |
 
 ## mi-cuenta (1)
 
@@ -555,7 +563,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/facturacion/facturas/[id]/lineas` | `lib/compras/equipoDelPedido`, `lib/compras/productoOdoo`, `lib/core/cuerpo`, `lib/facturacion/analiticaDelEquipo`, `lib/facturacion/auth`, `lib/facturacion/lineas`, `lib/facturacion/sugerirAnalitica`, `lib/facturacion/sugerirCuenta`, `lib/odoo/catalogo`, `lib/odoo/catalogoContable`, `lib/odoo/client`, `lib/odoo/emisor`, `lib/odoo/historialDeImputacion`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/facturacion/facturas/[id]/odoo/borrador` | `lib/core/auditoria`, `lib/core/cuerpo`, `lib/facturacion/auth`, `lib/odoo/borradorDeOdoo`, `lib/odoo/client`, `lib/odoo/pushFactura`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/facturacion/facturas/[id]/odoo` | `lib/core/cuerpo`, `lib/facturacion/auth`, `lib/odoo/client`, `lib/odoo/pushFactura`, `lib/odoo/sincronizarFacturas`, `lib/supabase/admin`, `lib/supabase/server` |
-| `/api/facturacion/facturas/[id]` | `lib/core/cuerpo`, `lib/facturacion/auth`, `lib/facturacion/types`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/facturacion/facturas/[id]` | `lib/core/cuerpo`, `lib/facturacion/aprenderElCuit`, `lib/facturacion/auth`, `lib/facturacion/types`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/facturacion/facturas` | `lib/compras/productoOdoo`, `lib/core/fechas`, `lib/core/paginado`, `lib/facturacion/altaDeFactura`, `lib/facturacion/auth`, `lib/facturacion/comprobante`, `lib/facturacion/consultas`, `lib/facturacion/laLineaQueSeRepite`, `lib/facturacion/lineaPorElTotal`, `lib/facturacion/lineas`, `lib/odoo/catalogo`, `lib/odoo/client`, `lib/odoo/emisor`, `lib/odoo/historialDeImputacion`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/facturacion/odoo/sincronizar` | `lib/facturacion/auth`, `lib/odoo/client`, `lib/odoo/sincronizarFacturas`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/home/avisos` | `lib/core/types`, `lib/home/avisosDeUsuario`, `lib/supabase/server` |
@@ -623,6 +631,9 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/mantenimiento/sheets/webhook` | `lib/mantenimiento/sincronizar` |
 | `/api/mantenimiento/tarifa-hora` | `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/tipos` | `lib/mantenimiento/auth`, `lib/mantenimiento/ficha`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mensajes/destinatarios` | `lib/core/correo`, `lib/core/validar`, `lib/mensajes/entidades`, `lib/mensajes/pedidos`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mensajes/mios` | `lib/core/mensajes`, `lib/core/paginado`, `lib/core/validar`, `lib/mensajes/avisos`, `lib/mensajes/entidades`, `lib/mensajes/pedidos`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mensajes` | `lib/core/auth-links`, `lib/core/correo`, `lib/core/mensajes`, `lib/core/paginado`, `lib/core/validar`, `lib/mensajes/avisos`, `lib/mensajes/entidades`, `lib/mensajes/forma`, `lib/mensajes/pedidos`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mi-cuenta/password` | `lib/core/cuerpo`, `lib/supabase/server` |
 | `/api/odoo/ping` | `lib/core/route-utils`, `lib/odoo/client`, `lib/supabase/server` |
 | `/api/odoo/proveedores/enlazar` | `lib/core/paginado`, `lib/core/route-utils`, `lib/odoo/client`, `lib/odoo/proveedores`, `lib/supabase/admin`, `lib/supabase/server` |
