@@ -2,14 +2,17 @@
  * Cerrar una orden de trabajo con una fecha anterior a la de su inicio, y qué se
  * le pide a quien lo hace.
  *
- * Por qué existe la regla. Una OT con cierre anterior al inicio dice dos cosas
- * que no pueden ser ciertas a la vez, y hasta ahora el sistema las aceptaba
- * calladas: el tiempo de ejecución sale negativo o cero, y los reportes de
- * MTBF y de costo por equipo se calculan sobre esa duración. A veces es un error
- * de tipeo —un día corrido, o la fecha de otra orden— y a veces es verdad: la
- * rotura ocurrió antes, se intervino, y el parte se cargó después con el inicio
- * de la carga y no el del hecho. Desde el sistema no se distingue una cosa de la
- * otra, y por eso no se bloquea: se pide que la persona diga cuál es.
+ * Por qué existe la regla. Una OT con el cierre anterior al inicio puede ser
+ * perfectamente cierta —una orden programada cuyo equipo se rompió antes de la
+ * fecha de inicio: se intervino y se cerró antes— y por eso NO se bloquea. Lo
+ * que se pierde hoy es el motivo: meses después, Mantenimiento mira una OT así
+ * y no tiene de dónde deducir si fue un adelanto real o un dedo equivocado.
+ * Medido el 12/11/2026: de las 2.176 OT que tienen las dos fechas, 66 ya están
+ * así —44 PROGRAMADO y 22 CORRECTIVO—, la mediana del adelanto es de 2 días y
+ * 57 de las 66 caen dentro de la semana; sólo 3 entraron por la app. Y hoy nada
+ * lo frena: `loQueSeContradice` de `altaDeOT.ts` no mira la fecha de cierre y el
+ * PATCH de `app/api/mantenimiento/ordenes/route.ts` no valida fechas. Así que lo
+ * que se pide es que alguien lo diga, y queda escrito.
  *
  * Por qué se pide SIEMPRE y sin umbral. Un umbral («tolerar hasta dos días»)
  * habría que justificarlo con la distribución de las diferencias, y la mediana de
