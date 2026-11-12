@@ -86,10 +86,17 @@ describe("correoPorMencion", () => {
     expect(asunto).not.toMatch(/[\r\n]/);
   });
 
-  it("el cuerpo dice que no se responde ahí", () => {
-    // Va a pasar igual: la respuesta cae en una casilla personal y se pierde.
+  it("el cuerpo dice que no se responde ahí, y no afirma que la respuesta no llegue", () => {
+    // Va a pasar igual: la respuesta cae en la casilla desde la que manda el
+    // Apps Script, donde nadie la mira. O sea que **sí llega**, y el cuerpo
+    // decía «no llega a nadie»: falso, en el único texto que leen las catorce
+    // personas. El test ata la frase nueva porque buscar «no respondas» pasaba
+    // con las dos.
     const { cuerpo } = correoPorMencion(datos());
-    expect(cuerpo.toLowerCase()).toContain("no respondas");
+    const dice = cuerpo.toLowerCase();
+    expect(dice).toContain("no respondas");
+    expect(dice).toContain("no la lee nadie");
+    expect(dice).not.toContain("no llega a nadie");
   });
 
   it("un texto con HTML o comillas viaja como texto", () => {
