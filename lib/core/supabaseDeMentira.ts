@@ -10,11 +10,20 @@
  *
  * ── POR QUÉ NO ES UN `{ data: [...] }` FIJO ──────────────────────────────────
  *
- * Se porta como el de verdad en seis cosas, y cada una decide si un test sirve:
+ * Se porta como el de verdad en siete cosas, y cada una decide si un test sirve
+ * (decía «seis» y listaba siete desde que se escribió: el número sale de contar
+ * los renglones de abajo, como el de los módulos en CLAUDE.md):
  *
  *  - **Aplica los filtros.** Un fake que devolviera siempre todas las filas no
  *    distinguiría una consulta acotada de una que no lo está —y es justo lo que un
- *    test de ruta viene a mirar: que el repuesto sea de **esta** orden—.
+ *    test de ruta viene a mirar: que el repuesto sea de **esta** orden—. Por lo
+ *    mismo, **un filtro que no sabe simular revienta en vez de ignorarlo**: sabe
+ *    `.eq`, `.in`, `.is(col, null)` y `.not(col, "is", null)`, y cualquier otra
+ *    forma —`.lt`, `.or`, un `.is` contra algo que no sea null— tira un error.
+ *    Lo escribió un caso real el 12/11/2026: `main` sumó tres conteos con `.not`
+ *    y `.is`, uno voló un test y **los otros dos contaron 0 en silencio** porque
+ *    atrapan sus errores. El segundo modo es el que no se nota, y es el que
+ *    tendría un no-op. Sus filtros se prueban en `supabaseDeMentira.test.ts`.
  *  - **Entrega sólo las columnas del `select()`.** Es lo que un fake ingenuo se
  *    saltea, y sin eso una columna de menos en el `select` no rompe nada.
  *  - **Corta en 1.000 filas**, con `.range()` o sin él, igual que PostgREST, que no
@@ -79,6 +88,21 @@ const TOPE = 1000;
 /** De a cuántos ids se pide: más que eso arma una URL que PostgREST rechaza. */
 const TOPE_DEL_IN = 200;
 
+/** `IS NULL` de verdad: la columna que la fila ni siquiera trae también es nula. */
+const esNula = (v: unknown) => v === null || v === undefined;
+
+/**
+ * El error de un filtro que el fake no simula.
+ *
+ * Nombra **las dos puntas** —lo que le pidieron y lo único que sabe— porque
+ * quien lo lee suele estar a mitad de un merge que trajo una consulta nueva, y
+ * con una sola de las dos tiene que ir a buscar la otra.
+ */
+const sóloSabe = (pedido: string, loQueSabe: string) =>
+  `el Supabase de mentira sólo sabe ${loQueSabe}, y le pidieron ${pedido}. ` +
+  `Devolver todo haría pasar el test con el filtro sin aplicar, así que revienta: ` +
+  `si hace falta esa forma, implementala acá.`;
+
 export interface BaseDeMentira {
   estado: EstadoDeLaBase;
   /** Lo que se le pasa a `createAdminClient()` en el `vi.mock`. */
@@ -95,6 +119,8 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
     private accion: "select" | "insert" | "upsert" | "delete" = "select";
     private igualdades: [string, unknown][] = [];
     private enLista: [string, readonly unknown[]] | null = null;
+    private nulas: string[] = [];
+    private noNulas: string[] = [];
     private columnas = "";
     private fila: Fila | null = null;
     private unica: "single" | "maybeSingle" | null = null;
@@ -110,6 +136,33 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
     }
     eq(columna: string, valor: unknown) { this.igualdades.push([columna, valor]); return this; }
     in(columna: string, valores: readonly unknown[]) { this.enLista = [columna, valores]; return this; }
+    /**
+     * El `IS` de PostgREST, que **no es `eq`**. El repo siempre le pasa `null`,
+     * y ahí la diferencia importa: una fila a la que le falta la clave también
+     * es nula, y en un test ése es el caso **normal** —se arman con las columnas
+     * que interesan y el resto se omite—. Con una igualdad pelada esa fila no
+     * entraría y el conteo daría de menos sin decirlo.
+     */
+    is(columna: string, valor: unknown) {
+      if (valor !== null) throw new Error(sóloSabe(`.is("${columna}", ${JSON.stringify(valor)})`, `.is(columna, null)`));
+      this.nulas.push(columna);
+      return this;
+    }
+    /**
+     * Sólo `.not(columna, "is", null)`, que es la única forma que usa el repo
+     * —los tres lugares que hay: las divergencias de la Agenda, los ciclos de
+     * OT y los pendientes de planilla—. Cualquier otro operador **revienta**, y
+     * eso es lo contrario de lo cómodo a propósito: devolver todo sería un test
+     * en verde con el filtro sin aplicar, que es el modo de fallar que este
+     * archivo entero existe para no tener.
+     */
+    not(columna: string, operador: string, valor: unknown) {
+      if (operador !== "is" || valor !== null) {
+        throw new Error(sóloSabe(`.not("${columna}", "${operador}", ${JSON.stringify(valor)})`, `.not(columna, "is", null)`));
+      }
+      this.noNulas.push(columna);
+      return this;
+    }
     range(desde: number, hasta: number) { this.rango = [desde, hasta]; return this; }
     /** El orden no se simula: ninguna ruta depende de él para decidir. */
     order() { return this; }
@@ -185,6 +238,8 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
 
       const coincide = (f: Fila) =>
         this.igualdades.every(([c, v]) => f[c] === v) &&
+        this.nulas.every((c) => esNula(f[c])) &&
+        this.noNulas.every((c) => !esNula(f[c])) &&
         (!this.enLista || this.enLista[1].includes(f[this.enLista[0]]));
 
       if (this.accion === "delete") {
