@@ -132,18 +132,68 @@ ser cualquier cosa— y dos órdenes del mismo día no son dos repeticiones.
 Hoy el ritmo se ve nítido donde hay volumen: rotación de martillos **76 veces**,
 cada ~4 días en PO-C1-04, ~5 en PY-B1-06 y ~5 en PY-A1-05. Eso es un plan.
 
+## El paso 1, hecho el mismo día: los componentes que faltaban
+
+Se agregaron **91 filas a `equipos_componentes`** con
+`scripts/componentes-desde-las-ot.mts`, y la cobertura subió:
+
+| | antes | después |
+|---|---|---|
+| Nombres de componente | 43 | **49** |
+| Órdenes con acción + componente | 156 — 11 % | **278 — 19 %** |
+| Tareas propuestas | 26 | **46** |
+
+**No se inventó ninguna**, y eso es lo que lo hace legítimo: qué equipo tiene
+qué componente sale del historial, porque cada OT que nombra «péndulos» ya
+viene con su `equipment_id`. El script sólo lee esa evidencia. Péndulos fue a
+parar al **molino vertical PY-B1-09** —50 órdenes, 38 preventivas—, las grillas
+a los molinos a martillos (83, 41 y 37 órdenes) y las correas a ventiladores y
+cintas.
+
+Tres reglas lo sostienen, y están en el encabezado del script:
+
+- **Los «Edificio» quedan afuera.** Es el equipo comodín, y sin ese filtro
+  «PO-D1 – Edificio» se llevaba correas y mangas.
+- **Hacen falta dos órdenes, o una preventiva.** Una mención suelta en una
+  correctiva puede estar nombrando la pieza de la máquina de al lado. Quedaron
+  48 descartadas por eso.
+- **No se pisa lo que ya está**: el relevamiento de agosto manda.
+
+Y **se deshace entero** porque la procedencia va en la clave —`COMP-OT-NNNN`
+en vez de seguir la numeración `COMP-NNNN`—, el mismo patrón que las claves
+`excel-21-10-26-NN` de Seguridad e Higiene:
+
+```sql
+delete from public.equipos_componentes where componente_id like 'COMP-OT-%';
+```
+
+**Una para mirar**: `PY-B1-06 – Molino a martillos` quedó con «Péndulos» por
+dos menciones correctivas, y un molino a martillos no tiene péndulos. Entra por
+la regla de las dos órdenes y es el caso en que esa regla afloja. Sacarla es
+una fila.
+
+De las seis candidatas, **«Mangas» no se agregó**: `Membrana / lona porosa` ya
+es eso, y partir en dos un componente que está es lo contrario de lo que se
+busca.
+
 ## Lo que sigue, y en este orden
 
-1. **Que alguien de planta complete los componentes que faltan** (la lista de
-   arriba). Es lo único que no puede hacer el sistema y lo que más mueve la
-   cobertura: hoy el catálogo cubre 156 órdenes de 1.465.
-2. Volver a correr la herramienta y **confirmar el catálogo** — qué tareas son
-   de verdad, con qué nombre y sobre qué equipos.
+1. ~~Completar los componentes que faltan.~~ **Hecho el 12/11/2026**, arriba.
+2. **Confirmar el catálogo** con alguien de planta — qué tareas son de verdad,
+   con qué nombre y sobre qué equipos. Las de arriba ya se leen como un plan:
+   regulación de péndulos 32 veces cada ~6 días en PY-B1-09, cambio de grillas
+   12 veces cada ~3 días en PY-C1-03.
 3. Recién ahí, la tabla de tareas y el enganche con el motor de planes
    periódicos, que ya existe y sabe generar.
 
-Hacer el 3 antes del 1 daría una tabla de 26 tareas que cubren el 11 % del
-preventivo, y la sensación de que el problema está resuelto.
+Hacer el 3 antes del 2 daría una tabla que cubre el 19 % del preventivo y la
+sensación de que el problema está resuelto.
+
+**Y la cobertura no sube mucho más agregando componentes.** Lo que queda sin
+reconocer son, en su mayoría, nombres de equipo —«motor» 22, «balanza» 19,
+«cintas» 6— y palabras que no son piezas: «carga», «giro», «pérdida»,
+«sistema». Componentes de verdad quedan pocos (grampas 9, cojinete 6). El
+techo siguiente no es el catálogo sino el **27 % sin acción reconocible**.
 
 ## Lo que haría fracasar esto aunque funcione
 

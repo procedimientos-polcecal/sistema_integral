@@ -2789,9 +2789,18 @@ acá lo que hay que saber antes de tocarlo:
   como componente**, y son el segundo, tercero y cuarto objeto más frecuente de
   todo el preventivo.
 - Por eso lo más accionable que imprime `npm run catalogo-de-tareas` no es el
-  catálogo sino **qué le falta a `equipos_componentes`**. Esas palabras **no se
-  agregan desde el sistema**: un componente inventado no cuelga de ningún
-  equipo, y la tarea aparecería en el lugar que no es.
+  catálogo sino **qué le falta a `equipos_componentes`**.
+- **Eso se completó el mismo día, y sin inventar nada**: qué equipo tiene qué
+  componente sale del historial, porque cada OT que nombra «péndulos» ya viene
+  con su `equipment_id`. `scripts/componentes-desde-las-ot.mts` agregó **91
+  filas** y la cobertura pasó de **156 órdenes (11 %) a 278 (19 %)**, y las
+  tareas de 26 a 46. Las filas llevan `componente_id` con prefijo
+  **`COMP-OT-`** justamente para poder sacarlas: `delete from
+  public.equipos_componentes where componente_id like 'COMP-OT-%'`. El script
+  **no escribe si no le pasan `--aplicar`**.
+- Lo que NO se puede hacer desde el sistema sigue siendo lo mismo: **inventar
+  un componente que ninguna OT nombra**. Un componente así no cuelga de ningún
+  equipo y la tarea aparecería en el lugar que no es.
 - **El 19 % de las PROGRAMADO no es preventivo**: 281 son reparación, obra o
   soldadura. `ACCIONES_CORRECTIVAS` las reconoce **para contarlas, no para
   reclasificar la OT**. Sin esa distinción, el «54 % con acción reconocida»
