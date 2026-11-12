@@ -21,14 +21,21 @@
 
     Opciones:
       -Probar        hace todo menos registrar la tarea. Para ver si andaria.
-      -Hora 09:30    a que hora corre. Por defecto 09:30, media hora despues
-                     de que el robot exporta. Antes no existe el archivo.
+      -Hora 22:00    a que hora corre. Por defecto 22:00, a pedido y porque es
+                     la hora que menos se pelea con los robots: para entonces
+                     ya exportaron todos (Hornos 04:20, Filler 09:00, Planta 02
+                     09:30, Porteria cada hora). Correr a las 09:30 dejaba la
+                     subida de Planta 02 EMPATADA con su export de las
+                     09:30:37, que es una carrera que a veces se pierde.
+                     OJO si se cambia: el cron del SdG lee Drive a las 13:00
+                     UTC (10:00 de Argentina), asi que con 22:00 lee lo que se
+                     subio la NOCHE ANTERIOR. Ver docs/PRODUCCION-FILLERS-SUBIDA.md.
       -Servidor      el nombre UNC del servidor. Por defecto "server".
 #>
 
 param(
   [switch]$Probar,
-  [string]$Hora = "09:30",
+  [string]$Hora = "22:00",
   [string]$Servidor = "server"
 )
 

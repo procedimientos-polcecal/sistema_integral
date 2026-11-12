@@ -1,4 +1,4 @@
-# Sube a Drive el zip más nuevo de cada molino, todos los días a las 09:30.
+# Sube a Drive el zip más nuevo de cada molino, todos los días a las 22:00.
 #
 # Las credenciales del recurso compartido y la ruta de los datos salen de un
 # archivo `.env` al lado de éste — ver `.env.ejemplo`. Ese `.env` NO se

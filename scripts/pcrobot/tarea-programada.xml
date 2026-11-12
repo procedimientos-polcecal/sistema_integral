@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-16"?>
 <!--
-  La tarea programada que sube los zips del PC Robot, todos los dias a las 09:30.
+  La tarea programada que sube los zips del PC Robot, todos los dias a las 22:00.
 
   Se importa con:
     schtasks /create /tn "SdG - Subir zips del PC Robot" /xml tarea-programada.xml /f
@@ -15,7 +15,7 @@
   - DisallowStartIfOnBatteries=false. Por defecto el Programador NO ejecuta
     nada cuando la maquina esta a bateria. En una notebook eso significa que no
     corre la mitad de los dias, y no avisa.
-  - StartWhenAvailable=true. Si la maquina estaba apagada a las 09:30, corre
+  - StartWhenAvailable=true. Si la maquina estaba apagada a las 22:00, corre
     cuando vuelve en vez de esperar a manana. Sale gratis porque la subida es
     idempotente.
   - RestartOnFailure. Tres reintentos cada 15 minutos, para el caso de que la
@@ -39,7 +39,7 @@
   </RegistrationInfo>
   <Triggers>
     <CalendarTrigger>
-      <StartBoundary>2026-10-29T09:30:00</StartBoundary>
+      <StartBoundary>2026-10-29T22:00:00</StartBoundary>
       <Enabled>true</Enabled>
       <ScheduleByDay>
         <DaysInterval>1</DaysInterval>
