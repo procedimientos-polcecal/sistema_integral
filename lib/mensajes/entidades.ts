@@ -149,9 +149,14 @@ export const ENTIDADES: Record<TipoDeEntidad, Entidad> = {
       }
       return r.nivel !== null;
     },
-    // La pantalla no abre una ficha por URL —la condición abierta es estado
-    // local—, así que el enlace lleva a la lista.
-    ruta: () => "/seguridad-higiene/condiciones",
+    // **A la ficha abierta, con `?condicion=<id>`.** Llevaba a la lista a secas
+    // porque la condición abierta era estado local; se agregó el parámetro
+    // (11/11/2026) por el mismo motivo que `?pedido=` en Mis pedidos: esa
+    // pantalla **no tiene buscador** y las condiciones salen ordenadas por
+    // número descendente, así que «buscá la N° 7» entre 44 y subiendo no es un
+    // enlace, es una tarea. Si el id ya no está, la pantalla lo dice en vez de
+    // mostrar la lista como si nada.
+    ruta: (id) => `/seguridad-higiene/condiciones?condicion=${id}`,
     numeros: (sb, ids) =>
       numerosDe(ids, "numero", (lote) =>
         sb.from("syh_condiciones").select("id, numero").in("id", lote)

@@ -66,10 +66,14 @@ describe("comoSeLlega", () => {
     expect(comoSeLlega("requerimiento", "el requerimiento de compra N° 5").nota).toBeNull();
   });
 
-  it("la condición dice que lleva a la lista y no promete la ficha", () => {
+  it("la condición abre su ficha y no promete un buscador que esa pantalla no tiene", () => {
+    // Decía «buscá y abrí la N° X» sobre una lista sin buscador. Desde que la
+    // ruta lleva `?condicion=`, lo que falta es un clic adentro de la ficha, y
+    // eso es lo que tiene que decir.
     const { boton, nota } = comoSeLlega("condicion_insegura", "la condición insegura N° 12");
-    expect(boton).toMatch(/lista/);
-    expect(nota).toMatch(/no a la ficha/);
+    expect(boton).toMatch(/condición/i);
+    expect(nota).toMatch(/ficha/);
+    expect(nota).not.toMatch(/[Bb]uscá/);
     expect(nota).toMatch(/la condición insegura N° 12/);
   });
 
@@ -81,6 +85,8 @@ describe("comoSeLlega", () => {
     // Lo que se afirma en pantalla se comprueba contra el registro, no contra una copia.
     expect(ENTIDADES.requerimiento.ruta("abc")).toMatch(/^\/mis-pedidos\?pedido=/);
     expect(ENTIDADES.orden_trabajo.ruta("x", 2983)).toBe("/mantenimiento/ordenes?q=2983");
-    expect(ENTIDADES.condicion_insegura.ruta("x", 12)).toBe("/seguridad-higiene/condiciones");
+    expect(ENTIDADES.condicion_insegura.ruta("x", 12)).toBe(
+      "/seguridad-higiene/condiciones?condicion=x"
+    );
   });
 });

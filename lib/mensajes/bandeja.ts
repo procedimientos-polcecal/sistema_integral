@@ -85,10 +85,13 @@ export function agruparPorRegistro(menciones: MencionDeLaBandeja[]): RegistroCon
  *
  * - **El requerimiento** abre la conversación: `/mis-pedidos?pedido=<id>` la
  *   muestra al cargar.
+ * - **La condición insegura** abre su ficha: `?condicion=<id>` desde el
+ *   11/11/2026. Antes llevaba a la lista a secas y el texto decía «buscá y
+ *   abrí la N° X», prometiendo un buscador que esa pantalla **no tiene**; la
+ *   conversación está dentro de la ficha, así que hay un clic más.
  * - **La orden de trabajo** lleva a la lista de órdenes ya filtrada por el
  *   número (`?q=`): la conversación está dentro de la orden y hay que abrirla.
- * - **La condición insegura** lleva a la lista, **sin filtrar**: la pantalla no
- *   abre una ficha por URL. Hay que buscarla y abrirla a mano.
+ *   Es el único de los tres que todavía no llega solo.
  *
  * Los dos últimos dependen de que quien lee abra el registro, y por eso la
  * tarjeta ofrece aparte «Marcar como leído».
@@ -107,8 +110,8 @@ export function comoSeLlega(
       };
     case "condicion_insegura":
       return {
-        boton: "Ir a la lista de condiciones",
-        nota: `Te lleva a la lista, no a la ficha. Buscá y abrí ${titulo} para leer la conversación.`,
+        boton: "Abrir la condición",
+        nota: `Te abre la ficha de ${titulo}; la conversación está adentro.`,
       };
   }
 }

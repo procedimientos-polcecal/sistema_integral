@@ -128,6 +128,7 @@ export default function CondicionesClient({
   puedeEditar,
   esAdmin,
   ordenInicial,
+  condicionInicial = null,
 }: Catalogos & {
   filtrosIniciales: FiltrosDeGestion;
   ordenInicial: OrdenDeColumna;
@@ -135,11 +136,24 @@ export default function CondicionesClient({
   hoy: string;
   puedeEditar: boolean;
   esAdmin: boolean;
+  /**
+   * El `?condicion=<id>` de la URL: la ficha que se abre al cargar. Es adonde
+   * lleva el correo de una mención, y llega como texto sin validar —quién dice
+   * si existe es la lista de acá abajo, que ya las tiene todas—.
+   */
+  condicionInicial?: string | null;
 }) {
   const [filas, setFilas] = useState(condicionesIniciales);
   const [filtros, setFiltros] = useState<FiltrosDeGestion>(filtrosIniciales);
   const [orden, setOrden] = useState<OrdenDeColumna>(ordenInicial);
-  const [abierta, setAbierta] = useState<string | null>(null);
+  // Arranca en el `?condicion=` del enlace. Llegar aquí con la ficha abierta y
+  // no con la lista es lo que hace que el correo de una mención sirva: la
+  // pantalla no tiene buscador y las condiciones se ordenan por número
+  // descendente, así que «buscá la N° 7» era pedirle a alguien que recorriera
+  // 44 filas. Que el parámetro desaparezca de la barra lo hace solo el efecto
+  // de abajo, que reescribe la URL desde los filtros: recargar entonces no
+  // vuelve a abrir una ficha que ya se cerró, igual que en Mis pedidos.
+  const [abierta, setAbierta] = useState<string | null>(condicionInicial);
   /** Si está abierto el alta. */
   const [cargando, setCargando] = useState(false);
 
@@ -210,6 +224,14 @@ export default function CondicionesClient({
   }
   const fichaAbierta = abierta ? (filas.find((c) => c.id === abierta) ?? null) : null;
 
+  // El enlace de un correo puede traer un id que ya no está —la condición se
+  // borró— o uno mal escrito. Sin esto, la pantalla mostraba la lista como si
+  // el enlace no hubiera dicho nada, y quien venía de un aviso se quedaba
+  // buscando. No distingue las dos causas, y es a propósito: desde acá se ven
+  // iguales, y afirmar cuál fue sería inventar.
+  const elEnlaceNoLlego =
+    condicionInicial !== null && !filas.some((c) => c.id === condicionInicial);
+
   function poner<K extends keyof FiltrosDeGestion>(campo: K, valor: FiltrosDeGestion[K]) {
     setFiltros((f) => ({ ...f, [campo]: valor }));
   }
@@ -260,6 +282,13 @@ export default function CondicionesClient({
           </button>
         )}
       </div>
+
+      {elEnlaceNoLlego && (
+        <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          El enlace llevaba a una condición insegura que no está en la lista: puede que la hayan
+          borrado, o que el enlace esté mal. Lo que se habló sigue en su hilo.
+        </p>
+      )}
 
       {/* Lo que hay para hacer, antes que nada. */}
       <div className="flex flex-wrap gap-2">

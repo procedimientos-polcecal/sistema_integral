@@ -20,6 +20,13 @@ import CondicionesClient from "./CondicionesClient";
  * Los filtros arrancan de la URL —es adonde apuntan los avisos del resumen
  * diario— y se validan contra los catálogos, que ya están cargados abajo.
  *
+ * **`?condicion=<id>` abre esa ficha al cargar**, y es adonde lleva el correo de
+ * una mención (`ENTIDADES.condicion_insegura.ruta`). Sin él, el enlace caía en
+ * la lista entera —44 y subiendo, ordenadas por número descendente— y el correo
+ * prometía un buscador que esta pantalla no tiene. No se valida acá contra la
+ * base: las condiciones ya vienen todas, así que quien decide si el id existe es
+ * el cliente, mirando la lista que ya tiene.
+ *
  * Los catálogos —sectores, equipos, peligros, usuarios— se piden enteros porque
  * son chicos y porque la ficha tiene que poder mostrar el valor actual de una
  * condición aunque ese sector o ese usuario ya no esté activo.
@@ -102,6 +109,7 @@ export default async function CondicionesPage({
     // razón de ponerla acá y no de pasar los filtros como prop controlada.
     <CondicionesClient
       key={params.toString()}
+      condicionInicial={params.get("condicion") || null}
       filtrosIniciales={filtrosIniciales}
       ordenInicial={ordenInicial}
       condicionesIniciales={condiciones}
