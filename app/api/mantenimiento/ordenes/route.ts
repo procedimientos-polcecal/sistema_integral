@@ -19,7 +19,7 @@ import {
 } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
 import {
-  elCierreCambio, justificacionParaLaPlanilla, laJustificacionQueSeGuarda,
+  justificacionParaLaPlanilla, laJustificacionQueSeGuarda,
   loQueFaltaPorElCierreAdelantado,
 } from "@/lib/mantenimiento/cierreAnteriorAlInicio";
 import { elPendienteDelIntento } from "@/lib/mantenimiento/pendienteDeLaOT";
@@ -792,10 +792,10 @@ export async function PATCH(request: Request) {
   // Y se traen **tres** columnas y no sólo la fecha de inicio. Las otras dos
   // son el estado guardado del cierre, y hacen falta las dos:
   //
-  // - `fecha_cierre`, para saber si la que llega es **otra**. «Registrar el
-  //   trabajo» manda la fecha en todos los guardados, así que con «vino la
-  //   clave» como criterio quien sólo corrige las horas de una orden ya cerrada
-  //   antes de su inicio tendría que justificarla de nuevo cada vez.
+  // - `fecha_cierre`, porque un pedido puede tocar **sólo la justificación** y
+  //   entonces el cierre contra el que hay que mirarla es el que la orden ya
+  //   tiene. Sin él, un PATCH que manda la justificación sola no sabría si
+  //   sigue habiendo un adelanto que explicar.
   // - `cierre_justificacion`, porque un pedido puede mover la fecha de cierre
   //   **sin mandar justificación**: cualquier PATCH que no venga de «Registrar
   //   el trabajo». Sin el texto guardado, lo que se escribiría es el
@@ -823,20 +823,34 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "No se encontró la orden" }, { status: 404 });
     }
 
+    /**
+     * La fecha del cuerpo como texto, que es lo único que sabe recortar `dia()`.
+     *
+     * No es una formalidad: `update.fecha_cierre` es lo que mandó el cuerpo sin
+     * que nadie le mire el tipo —`repartirRegistroDeOT` hace `body.fecha_cierre
+     * || null` y nada más—. Mientras lo consumía sólo `loQueImpideCerrar`, que
+     * arranca con un `String(...)`, un `fecha_cierre: 5` terminaba en el 400 de
+     * la base; ahora llega también a `.slice()`, y sin esto sería un TypeError y
+     * un 500. Es entrada hostil y no un caso de la pantalla, pero el 500 tapa
+     * el 400 que ya estaba bien.
+     */
+    const comoFecha = (v: unknown): string | null =>
+      v === null || v === undefined ? null : String(v);
+
     // Con qué cierre y con qué texto queda la orden después de este pedido: lo
     // que vino si vino, y lo guardado si no. Las dos puntas se resuelven acá y
     // una sola vez, porque lo que se valida tiene que ser exactamente lo que se
     // guarda — si no, se puede rechazar un texto que igual iba a quedar, o
     // guardar uno que nadie validó.
     const elCierre = body.fecha_cierre !== undefined
-      ? (update.fecha_cierre as string | null)
+      ? comoFecha(update.fecha_cierre)
       : (laOrden.fecha_cierre as string | null);
     const elTexto = body.cierre_justificacion !== undefined
       ? (update.cierre_justificacion as string | null)
       : (laOrden.cierre_justificacion as string | null);
 
     if (update.fecha_cierre) {
-      const impide = loQueImpideCerrar(laOrden.fecha_ejecucion, update.fecha_cierre as string);
+      const impide = loQueImpideCerrar(laOrden.fecha_ejecucion, elCierre);
       if (impide.length > 0) {
         return NextResponse.json(
           { error: `No se puede guardar porque ${impide.join(", ")}.` },
@@ -847,22 +861,38 @@ export async function PATCH(request: Request) {
 
     // ── Y SI SE CIERRA ANTES DE EMPEZAR, QUE DIGA POR QUÉ ────────────────────
     //
-    // Sólo cuando la fecha de cierre **cambia**, por lo de arriba: reenviar la
-    // misma no es cerrar de nuevo. Y el mensaje es el de las altas, letra por
-    // letra, para que quien carga vea siempre la misma frase venga de donde
-    // venga el pedido.
-    if (body.fecha_cierre !== undefined && elCierreCambio(elCierre, laOrden.fecha_cierre)) {
-      const falta = loQueFaltaPorElCierreAdelantado({
-        fecha_cierre: elCierre,
-        fecha_ejecucion: laOrden.fecha_ejecucion,
-        cierre_justificacion: elTexto,
-      });
-      if (falta.length > 0) {
-        return NextResponse.json(
-          { error: `Falta cargar ${falta.join(", ")}.` },
-          { status: 400 }
-        );
-      }
+    // Se pregunta por **el estado en que queda la orden** y no por lo que vino
+    // en el cuerpo: si después de este pedido el cierre es anterior al inicio y
+    // no hay justificación que explique, va el 400 — mande el pedido la fecha,
+    // la justificación o las dos.
+    //
+    // **Mirar sólo la fecha dejaba un agujero**: un PATCH con
+    // `cierre_justificacion: ""` no cambia ninguna fecha, así que pasaba de
+    // largo, y `laJustificacionQueSeGuarda` escribía ese vacío tal cual —esa
+    // función no pregunta si el texto explica, a propósito—. Quedaba una orden
+    // con el cierre antes del inicio y la columna vacía, que es exactamente el
+    // estado que esta regla existe para impedir.
+    //
+    // Y no traba a quien sólo corrige las horas, que es lo que había que
+    // cuidar: ese pedido no manda ninguna de las dos claves, así que
+    // `tocaElCierre` es falso y nada de esto corre. El único que manda la fecha
+    // en todos sus guardados es «Registrar el trabajo», y por eso ese modal
+    // precarga **también la justificación guardada** y no sólo la fecha: sin
+    // eso, reabrir una OT adelantada para corregirle las horas mandaría el
+    // vacío y recibiría este 400.
+    //
+    // El mensaje es el de las altas, letra por letra, para que quien carga vea
+    // siempre la misma frase venga de donde venga el pedido.
+    const falta = loQueFaltaPorElCierreAdelantado({
+      fecha_cierre: elCierre,
+      fecha_ejecucion: laOrden.fecha_ejecucion,
+      cierre_justificacion: elTexto,
+    });
+    if (falta.length > 0) {
+      return NextResponse.json(
+        { error: `Falta cargar ${falta.join(", ")}.` },
+        { status: 400 }
+      );
     }
 
     // La columna sale de la regla y no del cuerpo: si las fechas dejaron de
@@ -892,9 +922,22 @@ export async function PATCH(request: Request) {
   // asignársela igual escribiría la W de todas formas —con la justificación
   // sola— y se llevaría unas observaciones que no tienen columna propia desde
   // la cual rearmarse.
+  //
+  // **El disparador es `tocaElCierre` y no «vino la justificación en el
+  // cuerpo»**, que es lo mismo que decir «la columna se escribió en este
+  // PATCH». Con la otra condición, un pedido que mueve el cierre a **después**
+  // del inicio vaciaba la columna y dejaba la W diciendo «Cerrada antes del
+  // inicio: …» de una orden que ya no lo está: una divergencia que no avisa, y
+  // que `revisar-exportaciones` no puede ver porque mira archivos y no campos.
+  //
+  // Lo que queda y se acepta: un pedido que traiga `fecha_cierre` y **no**
+  // observaciones reescribe la W entera y la deja sólo con la justificación —o
+  // vacía—, llevándose las observaciones que hubiera. Hoy no hay ningún
+  // llamador así: el único que manda `fecha_cierre` es «Registrar el trabajo»,
+  // y manda siempre `observaciones`.
   const paraLaCeldaW = justificacionParaLaPlanilla(
     registro.observaciones !== undefined,
-    body.cierre_justificacion !== undefined,
+    tocaElCierre,
     (updated.cierre_justificacion ?? null) as string | null
   );
   if (paraLaCeldaW !== undefined) registro.cierre_justificacion = paraLaCeldaW;
