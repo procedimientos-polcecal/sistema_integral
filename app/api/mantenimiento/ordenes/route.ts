@@ -19,7 +19,7 @@ import {
 } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
 import {
-  justificacionParaLaPlanilla, laJustificacionQueSeGuarda,
+  elCierreCambio, justificacionParaLaPlanilla, laJustificacionQueSeGuarda,
   loQueFaltaPorElCierreAdelantado,
 } from "@/lib/mantenimiento/cierreAnteriorAlInicio";
 import { elPendienteDelIntento } from "@/lib/mantenimiento/pendienteDeLaOT";
@@ -861,10 +861,11 @@ export async function PATCH(request: Request) {
 
     // ── Y SI SE CIERRA ANTES DE EMPEZAR, QUE DIGA POR QUÉ ────────────────────
     //
-    // Se pregunta por **el estado en que queda la orden** y no por lo que vino
-    // en el cuerpo: si después de este pedido el cierre es anterior al inicio y
-    // no hay justificación que explique, va el 400 — mande el pedido la fecha,
-    // la justificación o las dos.
+    // Lo que se mira es **el estado en que queda la orden** y no lo que vino en
+    // el cuerpo: si después de este pedido el cierre es anterior al inicio y no
+    // hay justificación que explique, va el 400 — mande el pedido la fecha, la
+    // justificación o las dos. Cuándo se hace la pregunta es otra cosa y está
+    // abajo.
     //
     // **Mirar sólo la fecha dejaba un agujero**: un PATCH con
     // `cierre_justificacion: ""` no cambia ninguna fecha, así que pasaba de
@@ -881,18 +882,31 @@ export async function PATCH(request: Request) {
     // eso, reabrir una OT adelantada para corregirle las horas mandaría el
     // vacío y recibiría este 400.
     //
+    // **Y adentro, la pregunta se hace sólo si algo del cierre cambió de
+    // verdad**: la fecha es otra, o el pedido trae la justificación. Reenviar
+    // la misma fecha y nada más no es cerrar de nuevo y no tiene por qué
+    // recibir una pregunta. Con los llamadores de hoy las dos ramas dan lo
+    // mismo —de los cuatro PATCH que hay a esta ruta, uno solo manda
+    // `fecha_cierre`, y va a mandar también la justificación—, así que esto es
+    // la guarda para el próximo llamador y no una diferencia que se vea hoy.
+    //
     // El mensaje es el de las altas, letra por letra, para que quien carga vea
     // siempre la misma frase venga de donde venga el pedido.
-    const falta = loQueFaltaPorElCierreAdelantado({
-      fecha_cierre: elCierre,
-      fecha_ejecucion: laOrden.fecha_ejecucion,
-      cierre_justificacion: elTexto,
-    });
-    if (falta.length > 0) {
-      return NextResponse.json(
-        { error: `Falta cargar ${falta.join(", ")}.` },
-        { status: 400 }
-      );
+    if (
+      elCierreCambio(elCierre, laOrden.fecha_cierre) ||
+      body.cierre_justificacion !== undefined
+    ) {
+      const falta = loQueFaltaPorElCierreAdelantado({
+        fecha_cierre: elCierre,
+        fecha_ejecucion: laOrden.fecha_ejecucion,
+        cierre_justificacion: elTexto,
+      });
+      if (falta.length > 0) {
+        return NextResponse.json(
+          { error: `Falta cargar ${falta.join(", ")}.` },
+          { status: 400 }
+        );
+      }
     }
 
     // La columna sale de la regla y no del cuerpo: si las fechas dejaron de
