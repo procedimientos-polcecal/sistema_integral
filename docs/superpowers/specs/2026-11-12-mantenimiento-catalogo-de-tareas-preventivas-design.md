@@ -195,6 +195,63 @@ reconocer son, en su mayoría, nombres de equipo —«motor» 22, «balanza» 19
 «sistema». Componentes de verdad quedan pocos (grampas 9, cojinete 6). El
 techo siguiente no es el catálogo sino el **27 % sin acción reconocible**.
 
+## El 27 % sin acción, mirado de frente (12/11/2026)
+
+Se leyeron las 391 descripciones que no reconocía ninguna acción. **La mayoría
+no se puede reconocer porque no es una tarea repetible**: «Ayuda a desarmar
+cono», «Juntar bombas en cantera D6», «FALTA TORNILLO EN LA PLACA», «Trabajo
+achique nivel de agua». Son trabajos de una vez, y el texto libre dice la
+verdad sobre ellos.
+
+Pero adentro había vocabulario que faltaba. Se agregaron **cinco acciones
+preventivas** —balanceo, clasificación de carga moledora, repaso, sellado de
+pérdidas y pintura— y **dos correctivas** —reacondicionamiento y desarme—.
+
+El resultado, y conviene leerlo entero porque es modesto:
+
+| | antes | después |
+|---|---|---|
+| Preventivas reconocidas | 793 — 54 % | **835 — 57 %** |
+| Sin acción reconocible | 391 — 27 % | **332 — 23 %** |
+| Órdenes en el catálogo | 278 — 19 % | **291 — 20 %** |
+
+**Reconocer 42 órdenes más sumó 13 al catálogo**, porque casi ninguna nombra
+un componente que exista. O sea que el techo no era el vocabulario: es que el
+resto del preventivo son trabajos distintos entre sí.
+
+Lo que sí apareció vale más que el porcentaje: **«clasificación de Cuerpos
+moledores», 12 órdenes, cada ~24 días en PY-A1-08 y ~55 en PO-D1-14**. Es una
+tarea periódica clásica de un molino de bolas que hasta ese día era invisible
+por las dos puntas —no existía la acción ni el componente—. Se agregó «Cuerpos
+moledores» a los dos molinos (COMP-OT-0092 y 0093); **«bolas» a secas no se
+reconoce**, porque en estas descripciones es también la bola de una válvula.
+
+### Dos errores que los tests destaparon, y son el mismo
+
+Los dos son **el sustantivo en lugar del verbo**, y por eso quedan escritos
+juntos:
+
+- `perdidas?` parecía la forma obvia de reconocer el sellado. Como las
+  preventivas se miran **antes** que las correctivas, «Reparación de pérdida de
+  aceite» se habría contado como un sellado.
+- Y lo mismo ya estaba en el vocabulario desde el principio: `LUBRICACION`
+  reconocía «aceite» y «grasa» sueltos y, siendo la primera de la lista, se
+  llevaba todo lo que los nombrara. «Revisión perdida de aceite en cono» salía
+  como una lubricación.
+
+El sustantivo dice **qué había**; el verbo dice **qué se hizo**, y lo que
+clasifica una tarea es lo segundo. Las dos expresiones piden ahora el verbo, y
+`LUBRICACION` acepta el sustantivo sólo con su verbo al lado («cambio de
+aceite»), que es para lo que estaba primera.
+
+### Y una que no es de dominio sino de herramienta
+
+La primera versión de esas expresiones se escribió con un heredoc y quedaron
+**caracteres de retroceso de verdad** (0x08) adentro de los `RegExp`: `/(...)/`
+salió como `/<BS>(...)/`. Compila, `tsc` pasa y la expresión busca otra cosa.
+Hay un test que lo fija —ninguna expresión del vocabulario puede tener
+caracteres de control— porque es invisible leyendo el archivo.
+
 ## Lo que haría fracasar esto aunque funcione
 
 - **Que se agreguen los componentes faltantes como nombres sueltos**, sin

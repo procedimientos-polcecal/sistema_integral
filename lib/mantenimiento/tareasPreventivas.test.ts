@@ -346,3 +346,78 @@ describe("las palabras que piden un componente nuevo", () => {
     expect(r).toEqual([]);
   });
 });
+
+/**
+ * Las que entraron el 12/11/2026 mirando las 391 descripciones que no
+ * reconocia ninguna accion. Son pocas ordenes —42 preventivas de 1.465— pero
+ * entre ellas hay cuatro tareas periodicas de verdad que hasta ese dia eran
+ * invisibles: balanceo de martillos, clasificacion de cuerpos moledores,
+ * repaso de cinta y sellado de perdidas.
+ */
+describe("el vocabulario que se agrego mirando lo que no se reconocia", () => {
+  it("reconoce las cinco preventivas nuevas", () => {
+    expect(accionDe("Se balancean martillos")?.accion.clave).toBe("BALANCEO");
+    expect(accionDe("Clasificar cuerpos moledores")?.accion.clave).toBe("CLASIFICACION");
+    expect(accionDe("Repasar cinta")?.accion.clave).toBe("REPASO");
+    expect(accionDe("Sellar perdidas del separador")?.accion.clave).toBe("SELLADO");
+    expect(accionDe("Pintar barandas")?.accion.clave).toBe("PINTURA");
+  });
+
+  it("las cinco son preventivas", () => {
+    for (const texto of [
+      "Se balancean martillos", "Clasificar cuerpos moledores", "Repasar cinta",
+      "Sellar perdidas del separador", "Pintar barandas",
+    ]) {
+      expect(accionDe(texto)?.esPreventiva).toBe(true);
+    }
+  });
+
+  it("reconoce las dos correctivas nuevas", () => {
+    expect(accionDe("Reacondicionar puerta del Silo 1")?.accion.clave).toBe("REACONDICIONAR");
+    expect(accionDe("Se desarman péndulos de molino vertical")?.accion.clave).toBe("DESARME");
+    expect(accionDe("Reacondicionar puerta del Silo 1")?.esPreventiva).toBe(false);
+    expect(accionDe("Se desarman péndulos de molino vertical")?.esPreventiva).toBe(false);
+  });
+
+  /**
+   * EL ERROR QUE SE EVITO, Y POR ESO ESTA FIJADO.
+   *
+   * `\bperdidas?\b` a secas parecia la forma obvia de reconocer el sellado. Es
+   * un error: como las preventivas se miran ANTES que las correctivas, una
+   * "Reparación de pérdida de aceite" se habria contado como sellado. Lo que
+   * distingue una cosa de la otra es el verbo —que se hizo— y no el
+   * sustantivo —que habia—.
+   */
+  it("una reparacion de una perdida es una reparacion, no un sellado", () => {
+    const r = accionDe("Reparación de pérdida de aceite en el cono");
+    expect(r?.accion.clave).toBe("REPARACION");
+    expect(r?.esPreventiva).toBe(false);
+  });
+
+  it("revisar una perdida sigue siendo una revision", () => {
+    expect(accionDe("Revisión perdida de aceite en cono")?.accion.clave).toBe("REVISION");
+  });
+
+  /** "Eliminar perdidas de aire en electrovalvulas" si es un sellado. */
+  it("eliminar una perdida es sellar", () => {
+    expect(accionDe("Eliminar perdidas de aire en electroválvulas")?.accion.clave).toBe("SELLADO");
+  });
+
+  /**
+   * El `\b` de las expresiones no es decorativo. Se escribio una version sin
+   * el —y con caracteres de retroceso de verdad adentro del regex, que
+   * compilaban— y asi "pint" enganchaba adentro de cualquier palabra.
+   */
+  it("no engancha adentro de otra palabra", () => {
+    expect(accionDe("Trabajo en el pinturería del sector")?.accion.clave).toBe("PINTURA");
+    expect(accionDe("Se controla el despintado")?.accion.clave).toBe("REVISION");
+    expect(accionDe("Zzz balanceo")?.accion.clave).toBe("BALANCEO");
+    expect(accionDe("Desbalanceo detectado")?.accion.clave).toBeUndefined();
+  });
+
+  it("ninguna expresion del vocabulario tiene caracteres de control", () => {
+    for (const a of [...ACCIONES_PREVENTIVAS, ...ACCIONES_CORRECTIVAS]) {
+      expect(a.reconoce.source).not.toMatch(/[\x00-\x1f]/);
+    }
+  });
+});
