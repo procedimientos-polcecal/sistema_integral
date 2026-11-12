@@ -51,7 +51,12 @@ export async function GET() {
     const filas = await traerTodo<FilaDeMencion>((desde, hasta) =>
       admin
         .from("mensajes_menciones")
-        .select("mensaje_id, mensajes!inner(entidad_tipo, entidad_id, texto, creado_en, autor:usuarios(nombre, apellido))")
+        // La cadena va literal. **El `autor` nombra su foreign key y tiene que
+        // seguir nombrándola**: `mensajes_menciones` abre un segundo camino de
+        // `mensajes` a `usuarios` —el muchos-a-muchos—, así que
+        // `autor:usuarios(...)` a secas es ambiguo y PostgREST contesta 300
+        // PGRST201. Medido contra la base: sin el FK, 300; con él, 200.
+        .select("mensaje_id, mensajes!inner(entidad_tipo, entidad_id, texto, creado_en, autor:usuarios!mensajes_creado_por_fkey(nombre, apellido))")
         .eq("usuario_id", user.id)
         .is("leido_en", null)
         .order("mensaje_id")
