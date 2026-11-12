@@ -102,6 +102,18 @@ export function rangoDeColor(color: ColorDelPedido, hoy: Date): { desde?: string
   }
 }
 
+/**
+ * Cómo se dice la espera en pantalla.
+ *
+ * Cero días es «hoy» y no «0 días», y una fecha adelantada —que las hay— cae
+ * en lo mismo: «−3 días» en un renglón se lee como un error del sistema y no
+ * como un dato cargado con la fecha corrida.
+ */
+export function textoDeEspera(dias: number): string {
+  if (dias <= 0) return "hoy";
+  return `${dias} ${dias === 1 ? "día" : "días"}`;
+}
+
 /** La fecha que, mirada desde `hoy`, tiene exactamente esa cantidad de días. */
 function fechaDeCorte(dias: number, hoy: Date): string {
   const d = new Date(aMedianoche(hoy).getTime() - dias * UN_DIA);
