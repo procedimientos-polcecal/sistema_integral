@@ -83,6 +83,7 @@ export default function FichaDeCondicion({
   esAdmin,
   onGuardada,
   onCerrar,
+  conversacionAbierta = false,
 }: {
   fila: FilaDeCondicion;
   catalogos: Catalogos;
@@ -91,6 +92,14 @@ export default function FichaDeCondicion({
   esAdmin: boolean;
   onGuardada: (fila: FilaDeCondicion) => void;
   onCerrar: () => void;
+  /**
+   * Si la conversación arranca desplegada en vez de plegada en su barra. Lo
+   * decide **cómo se llegó a esta ficha**: con `?condicion=` —el enlace del
+   * correo de una mención— se viene por la conversación, no a mirar la ficha, y
+   * encima abrirla es lo que marca la mención como leída. Abierta desde la
+   * lista arranca plegada, como el hilo de cualquier otra pantalla.
+   */
+  conversacionAbierta?: boolean;
 }) {
   const [borrador, setBorrador] = useState<Borrador>(() => borradorDe(fila));
   const [guardando, setGuardando] = useState(false);
@@ -572,6 +581,7 @@ export default function FichaDeCondicion({
           <HiloDeMensajes
             tipo="condicion_insegura"
             id={fila.id}
+            abiertoAlMontar={conversacionAbierta}
             aclaracion={
               "Es una conversación con otras personas, aparte de las «Observaciones» de arriba: " +
               "las observaciones son parte de la condición y los mensajes no la modifican. " +
