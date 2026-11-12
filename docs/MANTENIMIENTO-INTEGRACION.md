@@ -2766,6 +2766,46 @@ Tres cosas de esa decisión que no se deducen del código:
   esa grilla es de dos columnas y el mensaje, que nombra las dos fechas
   enteras, entraba partido en pedazos de 150 px.
 
+## El catálogo de tareas preventivas (12/11/2026)
+
+El motor de planes periódicos tiene **un plan cargado** y, al mismo tiempo, el
+**59,9 % de las OT del último año son PROGRAMADO** (1.455 contra 973
+correctivas). El preventivo se hace en volumen y se escribe a mano una orden
+por vez. El diseño, con todo lo medido, está en
+[el spec](superpowers/specs/2026-11-12-mantenimiento-catalogo-de-tareas-preventivas-design.md);
+acá lo que hay que saber antes de tocarlo:
+
+- **Una tarea es una acción sobre un componente.** La acción es vocabulario
+  nuevo (`ACCIONES_PREVENTIVAS`, seis entradas en
+  [lib/mantenimiento/tareasPreventivas.ts](../lib/mantenimiento/tareasPreventivas.ts))
+  y sale de los datos. El componente **no se inventa**: sale de
+  `equipos_componentes`.
+- **Y ahí está el hallazgo que desmintió el diseño inicial.** Se dio por
+  sentado que el objeto ya estaba resuelto —43 nombres curados— y la primera
+  corrida dio **156 de 1.465 órdenes (11 %)** con acción + componente. Las dos
+  listas hablan idiomas distintos: el catálogo nombra piezas de relevamiento
+  («Raspador / limpiador cinta», «Masa excéntrica») y las órdenes nombran lo
+  que se toca ese día. **Péndulos, grillas, rodamientos y correas no existen
+  como componente**, y son el segundo, tercero y cuarto objeto más frecuente de
+  todo el preventivo.
+- Por eso lo más accionable que imprime `npm run catalogo-de-tareas` no es el
+  catálogo sino **qué le falta a `equipos_componentes`**. Esas palabras **no se
+  agregan desde el sistema**: un componente inventado no cuelga de ningún
+  equipo, y la tarea aparecería en el lugar que no es.
+- **El 19 % de las PROGRAMADO no es preventivo**: 281 son reparación, obra o
+  soldadura. `ACCIONES_CORRECTIVAS` las reconoce **para contarlas, no para
+  reclasificar la OT**. Sin esa distinción, el «54 % con acción reconocida»
+  haría creer que hay 793 tareas preventivas donde hay 512.
+- El intervalo de cada tarea es **la mediana de los huecos y no el promedio**,
+  con menos de tres fechas no se opina, y dos órdenes del mismo día no son dos
+  repeticiones.
+
+**Esta etapa no escribe nada y no lleva migración.** El orden de lo que sigue
+importa y está en el spec: primero que alguien de planta complete los
+componentes que faltan, después confirmar el catálogo, y recién ahí la tabla y
+el enganche con el motor de planes. Al revés da una tabla que cubre el 11 % del
+preventivo y la sensación de que el problema está resuelto.
+
 ## Los datos: qué está y qué no
 
 **Todo lo que viene de las planillas está.** Avisos 138, órdenes de trabajo
