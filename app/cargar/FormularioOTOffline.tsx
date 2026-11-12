@@ -8,6 +8,7 @@ import RepuestosDeLaOT from "@/components/RepuestosDeLaOT";
 import FallaDeLaOT, { FALLA_VACIA, type LaFalla } from "@/components/FallaDeLaOT";
 import { lineasDesdeElCuerpo, type LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
+import { elCierreEsAnteriorAlInicio } from "@/lib/mantenimiento/cierreAnteriorAlInicio";
 import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -131,6 +132,9 @@ export default function FormularioOTOffline({
   const cierraAlCrearse =
     estadoSegunElCierre(form.fecha_cierre, form.estado) === "REALIZADO" &&
     Boolean(form.fecha_cierre.trim());
+
+  /** Si el cierre cae antes del inicio: entonces hay que decir por qué. */
+  const cierreAdelantado = elCierreEsAnteriorAlInicio(form.fecha_cierre, form.fecha_ejecucion);
 
   /**
    * Lo que el formulario dice y se contradice, **calculado en cada render**.
@@ -402,6 +406,21 @@ export default function FormularioOTOffline({
         </div>
       )}
 
+      {/* Debajo de las fechas y arriba de la falla: lo hacen aparecer las
+          fechas, y en un teléfono una sección que se abre más arriba empuja
+          hacia abajo el campo que se está completando. */}
+      {cierreAdelantado && (
+        <F label="Por qué se cierra antes de la fecha de inicio" required>
+          <textarea
+            value={form.cierre_justificacion}
+            onChange={(e) => f("cierre_justificacion", e.target.value)}
+            disabled={deshabilitado}
+            className="input min-h-20"
+            required
+          />
+        </F>
+      )}
+
       {/* Debajo de la fecha de cierre y no arriba: es ella la que lo hace
           aparecer, y en un teléfono una sección que se abre más arriba empuja
           hacia abajo el campo que se está completando. */}
@@ -558,6 +577,7 @@ function vacio() {
     fecha_ejecucion: "",
     fecha_fin: "",
     fecha_cierre: "",
+    cierre_justificacion: "",
     estado: "POR_HACER",
     contratista: "",
     horas: "",
