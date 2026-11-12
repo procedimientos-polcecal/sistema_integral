@@ -203,11 +203,6 @@ export default function HiloDeMensajes({
   const [error, setError] = useState("");
   const [resumen, setResumen] = useState<ResumenDelEnvio | null>(null);
 
-  const hayBorrador = texto.trim() !== "" || mencionados.length > 0;
-  useEffect(() => {
-    alCambiarElBorrador?.(hayBorrador);
-  }, [hayBorrador, alCambiarElBorrador]);
-
   // Los correos salen después de la respuesta: al enviar no se sabe si llegaron.
   // Se vuelve a leer el hilo un rato después para que `pendiente` se resuelva.
   const temporizadores = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -240,6 +235,18 @@ export default function HiloDeMensajes({
   const sinElegir = destinatarios.filter((d) => !mencionados.includes(d.id));
   const aQuienLeLlega = elegidos.filter((d) => d.tiene_correo);
   const aQuienNo = elegidos.filter((d) => !d.tiene_correo);
+
+  // **El borrador se mide sobre `elegidos` y no sobre `mencionados`**, y va acá
+  // abajo por eso: es la misma familia que el resto del comentario de arriba. Un
+  // id que `elegidos` filtra —la lista llegó vieja, o el correo no está
+  // configurado— no se ve en ningún chip, así que con el campo vacío el diálogo
+  // que monta este hilo decía «Descartar y cerrar» y Escape quedaba inerte, sin
+  // que hubiera nada escrito a la vista que justificara ninguna de las dos cosas.
+  // Lo que cuenta como borrador es lo que la pantalla muestra.
+  const hayBorrador = texto.trim() !== "" || elegidos.length > 0;
+  useEffect(() => {
+    alCambiarElBorrador?.(hayBorrador);
+  }, [hayBorrador, alCambiarElBorrador]);
 
   function mencionar(idDelUsuario: string) {
     if (!idDelUsuario) return;
@@ -501,10 +508,17 @@ export default function HiloDeMensajes({
               disabled={enviando}
               className="btn-primary"
             >
+              {/*
+                Cuenta `aQuienLeLlega` y no `elegidos`: a quien no tiene correo
+                cargado no se le avisa, y el botón no puede prometer un aviso
+                que no sale —es el anti-objetivo número uno—. Con todos los
+                elegidos sin correo dice «Enviar» a secas, que es lo que va a
+                pasar; el renglón de arriba ya dice a quién no le llega y por qué.
+              */}
               {enviando
                 ? "Enviando…"
-                : elegidos.length > 0
-                  ? `Enviar y avisar a ${elegidos.length}`
+                : aQuienLeLlega.length > 0
+                  ? `Enviar y avisar a ${aQuienLeLlega.length}`
                   : "Enviar"}
             </button>
           </div>

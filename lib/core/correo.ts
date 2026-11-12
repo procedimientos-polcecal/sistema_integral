@@ -24,10 +24,21 @@
  * quien lo guarda (la mensajería lo anota en la mención) necesita el texto
  * real. Lo mismo va a los registros del servidor con `console.error`.
  *
- * Mismo molde que `lib/core/webpush.ts`, que es el hermano de esto. Quien
- * llama son las dos rutas de alta, en el camino de rechazar una carga: lo que
- * la ruta le debe a la persona es la respuesta sobre su carga, y un problema
- * del correo no puede cambiarla.
+ * Mismo molde que `lib/core/webpush.ts`, que es el hermano de esto.
+ *
+ * ## QUIÉN LLAMA, Y POR QUÉ NO SON TODOS IGUALES
+ *
+ * Dos familias, y la segunda llegó después (11/11/2026):
+ *
+ * 1. **`lib/mantenimiento/avisarDeLaCarga.ts`**, en el camino de rechazar una
+ *    carga. Lo que la ruta le debe a la persona es la respuesta sobre su carga,
+ *    y un problema del correo no puede cambiarla. Ahí **no hay nadie mirando**:
+ *    el correo sólo se intenta para una carga que mandó el teléfono con la app
+ *    cerrada, así que la respuesta se la lleva el service worker.
+ * 2. **`app/api/mensajes/route.ts`**, el aviso de una mención. Ahí sí hay
+ *    alguien mirando —acaba de apretar «Enviar»— y el `detalle` **no se tira**:
+ *    se guarda en `mensajes_menciones.aviso_fallo` y la pantalla lo muestra al
+ *    releer el hilo. Es la razón por la que `detalle` existe.
  *
  * ## POR QUÉ UN `console.error` ALCANZA ACÁ
  *
@@ -36,10 +47,14 @@
  * a preguntar. Esa regla existe porque una escritura que no llega a la planilla
  * crea una divergencia que no avisa. Acá no hay divergencia: la carga sigue
  * parada, visible en `/cargar` y contada por la barra del layout. Un correo que
- * no sale degrada al estado anterior a esto, nada más. Y decírselo a alguien en
- * la respuesta sería inútil, porque por diseño **no hay nadie mirando** cuando
- * esto pasa: el correo sólo se intenta para una carga que mandó el teléfono con
- * la app cerrada, así que la respuesta se la lleva el service worker.
+ * no sale degrada al estado anterior a esto, nada más.
+ *
+ * **Pero eso vale para la familia 1 y no para las dos.** El `console.error` es
+ * todo lo que queda cuando la carga rechazada no avisa, y para la mensajería es
+ * sólo el registro del servidor: lo que de verdad le dice a la persona que el
+ * aviso no salió es el `aviso_fallo` que guarda esa ruta. Si aparece un tercer
+ * llamador, la pregunta a contestar es a cuál de las dos familias pertenece —si
+ * hay alguien a quien decirle—, y no si el `console.error` alcanza.
  */
 
 /**

@@ -89,9 +89,14 @@ export function aQuienLeLlega(mencionados: Destinatario[], autorId: string): Des
  * **El texto del mensaje va al cuerpo tal cual**, sin escapar nada: el cuerpo
  * viaja como texto plano y escapar `<` o `"` los mostraría deformados.
  *
- * **El cuerpo dice que no se responde ahí.** Va a pasar igual —es un correo, y
- * un correo se contesta—, y la respuesta cae en una casilla personal y se pierde
- * sin que nadie lo note. Más vale decir dónde se contesta.
+ * **El cuerpo dice que no se responde ahí, y dice por qué sin mentir.** Va a
+ * pasar igual —es un correo, y un correo se contesta—, y la respuesta **sí
+ * llega**: cae en la casilla desde la que el Apps Script manda, o sea la de
+ * quien lo publicó, donde nadie la está esperando. Eso es la «conversación
+ * partida en dos lugares» con la que el spec descartó el chat. Decía «no llega a
+ * nadie», que es falso, y no es un matiz: es el único texto que leen las catorce
+ * personas, y una falsedad chica ahí es lo que hace que después no se crea el
+ * resto. Más vale decir dónde se contesta.
  */
 export function correoPorMencion(m: {
   autor: string;
@@ -111,7 +116,7 @@ export function correoPorMencion(m: {
       `${m.autor} te mencionó en ${m.queEs}:`,
       m.texto,
       `Para verlo y contestar: ${m.dondeVerlo}`,
-      "No respondas a este correo: no llega a nadie. La respuesta se escribe en el sistema, en el mismo hilo.",
+      "No respondas a este correo: la respuesta cae en la casilla desde la que sale el aviso y no la lee nadie. Se contesta en el sistema, en el mismo hilo.",
     ].join("\n\n"),
   };
 }

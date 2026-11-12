@@ -3,13 +3,15 @@
  *
  * Un texto libre es un `<textarea>` sin tope —la descripción de una carga, el
  * cuerpo de un mensaje—, y el asunto es una **cabecera**: un salto de línea ahí
- * es una cabecera partida y dos mil caracteres son un asunto fuera de norma. Es
- * el único campo libre que llega a una.
+ * es una cabecera partida y dos mil caracteres son un asunto fuera de norma.
  *
- * Vivía en `lib/mantenimiento/correoDeLaCarga.ts`, y se sacó a `lib/core/` el
- * día que apareció el segundo constructor de correos (`mensajes.ts`): el mismo
- * problema resuelto dos veces es cómo se separan, y uno de los dos queda sin el
- * arreglo.
+ * **Son dos los campos libres que llegan a una cabecera**, y por eso esto está
+ * acá: vivía en `lib/mantenimiento/correoDeLaCarga.ts` y se sacó a `lib/core/`
+ * el día que apareció el segundo constructor de correos (`mensajes.ts`). El
+ * mismo problema resuelto dos veces es cómo se separan, y uno de los dos queda
+ * sin el arreglo. (Decía «es el único campo libre que llega a una» seis líneas
+ * arriba de contar que apareció el segundo: era del día anterior a `mensajes.ts`
+ * y se quedó.)
  */
 export const LARGO_DEL_ASUNTO = 80;
 
