@@ -119,6 +119,31 @@ function salir(motivo) {
   throw new Corte(motivo);
 }
 
+/**
+ * Lee un JSON **sacándole el BOM**, que es lo único que esto agrega sobre
+ * `JSON.parse(readFileSync(...))`.
+ *
+ * `readFileSync(..., "utf8")` no lo quita y `JSON.parse` lo rechaza con un
+ * "Unexpected token" que imprime un caracter invisible: el mensaje no se puede
+ * leer y manda a buscar un error de sintaxis que no existe. En Windows lo
+ * escribe cualquiera —el Bloc de notas al guardar, `Set-Content -Encoding
+ * utf8` de PowerShell 5.1—, así que los dos JSON de esta herramienta lo van a
+ * tener tarde o temprano.
+ *
+ * **Existe como función porque antes era una línea suelta en el lector de la
+ * configuración, y el de la credencial no la tenía.** Esa asimetría es la
+ * peor forma de este bug: la configuración la escribe el instalador y nunca
+ * iba a traer BOM, mientras que la credencial es justo el archivo que alguien
+ * copia A MANO a una máquina nueva —y abrir un .json en el Bloc de notas para
+ * ver si se copió bien es exactamente lo que uno hace ahí—. O sea que el
+ * archivo defendido era el que no corría riesgo. Dos lectores del mismo tipo
+ * de archivo, uno con la defensa y otro sin ella, es una sola función que
+ * falta.
+ */
+function leerJson(ruta) {
+  return JSON.parse(readFileSync(ruta, "utf8").replace(/^\uFEFF/, ""));
+}
+
 function b64url(x) {
   return Buffer.from(typeof x === "string" ? x : JSON.stringify(x)).toString("base64url");
 }
@@ -273,14 +298,7 @@ async function principal() {
 
   let config;
   try {
-    // Se saca el BOM antes de parsear. `readFileSync(..., "utf8")` no lo
-    // quita y `JSON.parse` lo rechaza con un "Unexpected token" que imprime
-    // un caracter invisible: el mensaje no se puede leer y manda a buscar un
-    // error de sintaxis que no existe. En Windows lo escribe cualquiera —el
-    // Bloc de notas, y `Set-Content -Encoding utf8` de PowerShell 5.1—, así
-    // que la configuración de esta herramienta lo va a tener tarde o
-    // temprano. Lo encontró el instalador probándose a sí mismo.
-    config = JSON.parse(readFileSync(rutaConfig, "utf8").replace(/^﻿/, ""));
+    config = leerJson(rutaConfig);
   } catch (e) {
     salir(`No se pudo leer la configuración en ${rutaConfig}: ${e.message}`);
   }
@@ -294,7 +312,7 @@ async function principal() {
 
   let cuenta;
   try {
-    cuenta = JSON.parse(readFileSync(resolve(credencial), "utf8"));
+    cuenta = leerJson(resolve(credencial));
   } catch (e) {
     salir(`No se pudo leer la credencial en ${credencial}: ${e.message}`);
   }
