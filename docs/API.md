@@ -190,6 +190,7 @@ en su documento, enlazado desde [CLAUDE.md](../CLAUDE.md).
 | `facturacion` | 8 | El buzón de facturas de proveedores y su enlace con Odoo |
 | `despacho` | 8 | Órdenes de carga y recepciones |
 | `seguridad-higiene` | 5 | Condiciones inseguras detectadas en planta |
+| `mensajes` | 3 | Transversal: los hilos de mensajes pegados a un registro y las menciones de cada uno. Ver abajo |
 | `produccion` | 5 | El parte de fábrica por turno y los molinos desde el robot |
 | `agenda` | 5 | Eventos propios y el espejo con Google Calendar |
 | `trituracion` | 3 | Partes de las plantas de trituración |
@@ -200,6 +201,46 @@ en su documento, enlazado desde [CLAUDE.md](../CLAUDE.md).
 | `mi-cuenta` | 1 | Lo que cada uno puede cambiar de lo suyo |
 | `buscar` | 1 | La búsqueda global |
 | `asistente` | 1 | El asistente que consulta la base en castellano |
+
+### `mensajes`: tres rutas, cinco handlers, ningún módulo
+
+Es la única carpeta que **no pertenece a un módulo**: la mensajería interna es
+transversal, como Agenda y Disponibilidad, y por eso el detalle está acá y no
+en el documento de un módulo. El diseño está en
+[el spec](superpowers/specs/2026-11-11-mensajeria-interna-design.md).
+
+| Handler | Qué hace |
+|---|---|
+| `GET /api/mensajes?tipo=&id=` | El hilo de un registro, del más nuevo al más viejo, con el autor y el estado del aviso de cada mención. **No marca nada como leído** |
+| `POST /api/mensajes` | Escribe un mensaje. Guarda el mensaje, después las menciones, y recién entonces manda los correos, en un `after()` |
+| `GET /api/mensajes/destinatarios?tipo=` | A quién se puede mencionar en ese tipo de registro, y si el correo está configurado. Devuelve `tiene_correo`, nunca la dirección |
+| `GET /api/mensajes/mios` | Las menciones propias sin leer, para la bandeja |
+| `PATCH /api/mensajes/mios` | Marca como leídas las menciones propias de un hilo. Lo llama la pantalla **cuando muestra el hilo**, no el GET |
+
+Cómo está conectada, en cuatro hechos que no se deducen de un archivo suelto:
+
+- **No hay tabla de hilos.** Un hilo *es* el par `(entidad_tipo, entidad_id)`, y
+  `entidad_id` **no tiene foreign key**: a propósito, para que un hilo pueda
+  pegarse a tres tablas distintas. La consecuencia es que la base no puede
+  contestar quién puede ver un registro, y por eso **el permiso lo pone la
+  ruta**, con `ENTIDADES[tipo].puedeVerlo` de `lib/mensajes/entidades.ts`. Las
+  tres leen con el cliente admin (sin él, `usuarios` sólo devuelve la fila
+  propia y todos los autores saldrían en blanco).
+- **`puedeVerlo` tiene que espejar la policy de SELECT de la tabla destino.** Es
+  un contrato entre dos archivos que nada comprueba: si una tabla afloja su
+  policy y el registro no se actualiza, el hilo queda más cerrado que el
+  registro; al revés, se abre un agujero. Hoy un requerimiento lo ven los
+  catorce (`puedeVerlo: () => true`) porque la migración 018 dejó así su SELECT,
+  y no es un descuido.
+- **Las dos cadenas de `select()` que traen el autor llevan el FK explícito**
+  (`autor:usuarios!mensajes_creado_por_fkey(...)`). `mensajes_menciones` abre un
+  segundo camino de `mensajes` a `usuarios`, así que `autor:usuarios(...)` a
+  secas es ambiguo y PostgREST contesta **300 PGRST201**. Ningún test de este
+  repo lo atrapa: las rutas no tienen tests y el embebido se resuelve del otro
+  lado del cable.
+- **El aviso es un correo y no un push**, y no pasa por
+  `avisarAQuienDecide()`: ver la fila de la mensajería en
+  [CLAUDE.md](../CLAUDE.md).
 
 ---
 
