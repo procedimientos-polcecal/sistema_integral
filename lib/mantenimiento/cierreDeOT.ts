@@ -142,6 +142,8 @@ export interface LoQueLaPlanillaNoSabe {
   operario_1: string | null | undefined;
   operario_2: string | null | undefined;
   operario_3: string | null | undefined;
+  /** Opcional: los generadores automáticos no tienen justificación que mandar. */
+  cierre_justificacion?: string | null;
 }
 
 /**
@@ -193,6 +195,7 @@ export function loQueHayQueExportar(orden: LoQueLaPlanillaNoSabe): Record<string
   if (cargado(orden.operario_1)) registro.operario_1 = orden.operario_1;
   if (cargado(orden.operario_2)) registro.operario_2 = orden.operario_2;
   if (cargado(orden.operario_3)) registro.operario_3 = orden.operario_3;
+  if (cargado(orden.cierre_justificacion)) registro.cierre_justificacion = orden.cierre_justificacion;
 
   // Si lo único que hay es el estado por hacer, no hay nada que exportar: las
   // horas y los operarios tienen que poder viajar solos, sin el estado.

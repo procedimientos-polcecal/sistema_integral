@@ -262,3 +262,23 @@ describe("lo que impide cerrar una orden", () => {
     expect(loQueImpideCerrar("2025-12-30", "2026-01-05")).toEqual([]);
   });
 });
+
+describe("la justificacion del cierre en lo que hay que exportar", () => {
+  it("la justificacion del cierre se puede rearmar desde la fila", () => {
+    expect(loQueHayQueExportar({
+      estado: "REALIZADO", fecha_cierre: "2026-11-04", horas: 4,
+      contratista: null, operario_1: "Aguirre", operario_2: null, operario_3: null,
+      cierre_justificacion: "Se rompio antes",
+    })).toMatchObject({ cierre_justificacion: "Se rompio antes" });
+  });
+
+  // Lo que esta vacio no viaja: vaciar una celda que nadie lleno es escribir de
+  // mas en una planilla que mira gente.
+  it("una orden sin justificacion no la manda", () => {
+    expect(loQueHayQueExportar({
+      estado: "REALIZADO", fecha_cierre: "2026-11-04", horas: 4,
+      contratista: null, operario_1: "Aguirre", operario_2: null, operario_3: null,
+      cierre_justificacion: null,
+    })).not.toHaveProperty("cierre_justificacion");
+  });
+});

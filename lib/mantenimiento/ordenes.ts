@@ -24,6 +24,7 @@ import { texto, fechaDeSheets, codigoDeEquipo } from "@/lib/mantenimiento/planil
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 import { textoParaLaCelda } from "@/lib/core/sheets";
 import { indiceDeColumnas } from "@/lib/mantenimiento/formulario";
+import { observacionDelCierreAdelantado } from "@/lib/mantenimiento/cierreAnteriorAlInicio";
 
 /**
  * Las especialidades que usa la planilla, verificadas contra ella.
@@ -285,6 +286,13 @@ export interface RegistroDeOT {
   operario_3?: string | null;
   observaciones?: string | null;
   foto_url?: string | null;
+  /**
+   * Por qué se cerró antes de empezar. Va opcional acá y obligatoria en
+   * `DatosDelAltaDeOT`, a propósito: allá la obligación hace que `tsc` nombre
+   * a quien arme el objeto sin ella; acá los generadores automáticos no tienen
+   * justificación que mandar y no hay por qué pedirles un `undefined`.
+   */
+  cierre_justificacion?: string | null;
 }
 
 /**
@@ -377,6 +385,14 @@ export function repartirRegistroDeOT(body: Record<string, unknown>): {
   // Sólo a la planilla: no tienen columna en la tabla.
   if (body.observaciones !== undefined) registro.observaciones = texto(body.observaciones);
   if (body.foto_url !== undefined) registro.foto_url = texto(body.foto_url);
+
+  // Sólo a la tabla, y no al `registro` a propósito: la celda de observaciones
+  // se compone desde la fila y no desde el cuerpo del pedido. Si viajara en el
+  // `registro`, el segundo registro de una OT —que no la trae— reescribiría la
+  // W sin el renglón de la justificación.
+  if (body.cierre_justificacion !== undefined) {
+    update.cierre_justificacion = texto(body.cierre_justificacion);
+  }
 
   return { update, registro };
 }
@@ -536,6 +552,14 @@ export function celdaDeEstado(estado: string | null | undefined, fila: number): 
  * sumarlos. **Y el estado además puede ser una fórmula** —ver `celdaDeEstado`—,
  * que es otra razón para que no lo toque `textoParaLaCelda`: le pondría el
  * apóstrofo delante y la escribiría como texto.
+ *
+ * **Costo que se acepta a conciencia, en la W.** Cuando drena la cola, el
+ * registro se rearma desde la fila y las observaciones no tienen columna para
+ * rearmarse: la W sale con la justificación sola. Si esa OT ya tenía las dos,
+ * el drenaje se lleva la parte de las observaciones. No se pierde el dato
+ * —quedan en `mantenimientos_ejecuciones.observations`, y las altas no tienen
+ * observaciones— pero sí esa copia en la planilla. La alternativa era que la
+ * justificación del alta no saliera nunca.
  */
 export function celdasParaRegistrar(
   registro: RegistroDeOT
@@ -562,8 +586,15 @@ export function celdasParaRegistrar(
   if (registro.operario_2 !== undefined) sumar(COL.operario2, textoParaLaCelda(registro.operario_2));
   if (registro.operario_3 !== undefined) sumar(COL.operario3, textoParaLaCelda(registro.operario_3));
   if (registro.foto_url !== undefined) sumar(COL.fotos, registro.foto_url ?? "");
-  if (registro.observaciones !== undefined) {
-    sumar(COL.observaciones, textoParaLaCelda(registro.observaciones));
+  // La W lleva las observaciones y la justificación del cierre adelantado, y se
+  // escribe si vino alguna de las dos.
+  if (registro.observaciones !== undefined || registro.cierre_justificacion !== undefined) {
+    sumar(
+      COL.observaciones,
+      textoParaLaCelda(
+        observacionDelCierreAdelantado(registro.cierre_justificacion, registro.observaciones)
+      )
+    );
   }
 
   return celdas;

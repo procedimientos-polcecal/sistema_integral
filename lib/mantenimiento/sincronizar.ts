@@ -487,7 +487,7 @@ export async function exportarLoPendiente(
 
   const { data: todos } = await admin
     .from("ordenes_trabajo")
-    .select("id, ot_number, estado, fecha_cierre, horas, contratista, operario_1, operario_2, operario_3, sheets_intentado_en")
+    .select("id, ot_number, estado, fecha_cierre, horas, contratista, operario_1, operario_2, operario_3, cierre_justificacion, sheets_intentado_en")
     .not("sheets_pendiente", "is", null);
 
   // Con freno cuando lo dispara una visita a la pantalla, y sin freno cuando lo
