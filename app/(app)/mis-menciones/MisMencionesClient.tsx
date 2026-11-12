@@ -20,12 +20,18 @@ import {
  * efecto de mirar esta pantalla —un GET que escribe se dispara con cualquier
  * precarga y marcaría como visto lo que nadie vio—:
  *
- * - **Abriendo la conversación.** `HiloDeMensajes` marca las propias al
- *   mostrarse, y desde acá se llega a él por el enlace de cada tarjeta.
- * - **Con el botón «Marcar como leído».** Hace falta porque el enlace no siempre
- *   llega al hilo: el de una orden de trabajo lleva a la lista filtrada y la
- *   conversación está adentro de la orden. Sin el botón, quien ya leyó el mensaje en el correo tendría que
- *   abrir igual el registro para que la mención se vaya.
+ * - **Abriendo la conversación.** `HiloDeMensajes` marca las propias **al
+ *   abrirse**, y no al mostrarse: el hilo arranca plegado en una barra, y
+ *   plegado nadie vio los mensajes —marcarlos ahí le diría al autor «ya lo vio»
+ *   sin que sea cierto—. Llegan abiertos los dos enlaces que van derecho a la
+ *   conversación, el del requerimiento y el de la condición insegura; en todo
+ *   lo demás hay que desplegar la barra.
+ * - **Con el botón «Marcar como leído».** Desde que el hilo arranca plegado,
+ *   **éste es el camino principal y no el de respaldo**: alcanza con que el
+ *   enlace no llegue hasta la conversación —el de una orden de trabajo lleva a
+ *   la lista filtrada, y la conversación está adentro de la orden— o con que
+ *   quien lee no despliegue la barra. Quien ya leyó el mensaje en el correo
+ *   cierra la mención desde acá y no tiene que abrir nada.
  *
  * Marcar es por hilo —lo que acepta el `PATCH`— y por eso las tarjetas son por
  * registro y no por mensaje.

@@ -200,6 +200,28 @@ export const REGISTRO = {
       "en ningún lado ni se consume un número. Lo que genera después lo protege del " +
       "borrado de espejo con `app_created` y `created_at_app`.",
   },
+  "lib/mantenimiento/generarEncadenadas.ts": {
+    estrategia: "cola",
+    porque:
+      "Compone `altaEnLaPlanilla` para crear la OT siguiente de un ciclo encadenado, " +
+      "igual que las periódicas — si el alta falla no se crea nada ni se consume un " +
+      "número—, pero además escribe la columna M del master, que el alta no toca " +
+      "porque vive sólo allá. Esa segunda escritura **falla casi siempre** (la fila " +
+      "llega por IMPORTRANGE segundos después) y por eso anota `sheets_pendiente` " +
+      "con `elPendienteDelIntento`: esa marca encola el reintento y evita que la " +
+      "importación siguiente pise el estado con la celda vacía. Es el mismo agujero " +
+      "que tuvieron el PATCH el 26/10/2026 y las periódicas el 30/10.",
+  },
+  "app/api/mantenimiento/ciclos/[id]/reiniciar/route.ts": {
+    estrategia: "cola",
+    porque:
+      "Suspende la OT que el ciclo estaba esperando cuando la pieza se cambió fuera " +
+      "de turno, así que cambia un estado que se exporta. Escribe la M y la " +
+      "observación previa, y lo que no salga queda en `sheets_pendiente` por " +
+      "`elPendienteDelIntento`. Sin eso la sincronización siguiente leería la celda " +
+      "vieja y devolvería la orden a POR_HACER — una orden que manda a rotar una " +
+      "pieza nueva, que es justo lo que este botón existe para evitar.",
+  },
   "lib/mantenimiento/planillaDelAviso.ts": {
     estrategia: "delega",
     porque:

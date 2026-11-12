@@ -3,6 +3,7 @@ import type { EntradaCaida, SaludDelSistema } from "@/lib/core/saludDeLasSincron
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import type { Notificacion } from "./notificaciones";
 import { cantidadDelAviso, type Ritmo } from "./ritmo";
+import type { Sospecha } from "@/lib/mantenimiento/sospechaDeCambio";
 
 /**
  * Los conteos que pueden generar un aviso. Todos opcionales: cada ruta pasa los
@@ -29,6 +30,7 @@ export interface ConteosParaAvisos {
   syhSinCompletar: number;
   syhFotosSinRespaldar: number;
   agendaDivergencias: number;
+  mensajesMencionesSinLeer: number;
 }
 
 /**
@@ -169,6 +171,21 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * al salir de una sola función.
    */
   { clave: "agendaDivergencias", id: "agenda-divergencias", titulo: "Eventos del calendario que alguien cambió desde Google", href: "/agenda" },
+  /*
+   * LA MENSAJERÍA: las menciones que a alguien le quedaron sin leer. Es de quien
+   * mira, como `agenda-divergencias`, y tampoco se gatea por módulo: una mención
+   * es de una persona y el hilo puede ser de cualquier registro que ella vea.
+   * Cuenta lo mismo que la bandeja (`mencionesSinLeerVisibles`), así que una
+   * mención de un hilo que ya no puede abrir no suma.
+   *
+   * **Id nuevo** porque es un conteo nuevo. Y va en `ES_POR_PERSONA`: el número
+   * depende de quién mira y la foto diaria es una sola. De ahí que aparezca en la
+   * campana apenas se abre el SdG y en el push de los lunes, que lleva totales,
+   * **pero no en el push diario**. El aviso en el momento lo da el correo, que ya
+   * sale al mencionar; esto es el stock que queda hasta que se lee. No pasa por
+   * `avisarAQuienDecide()`: una mención no frena nada hasta que alguien decida.
+   */
+  { clave: "mensajesMencionesSinLeer", id: "mensajes-menciones-sin-leer", titulo: "Menciones sin leer en conversaciones del sistema", href: "/mis-menciones" },
 ];
 
 /**
@@ -177,7 +194,7 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
  *
  * El resumen diario compara cada aviso contra esa foto. Un aviso que no está en
  * la foto «subió desde cero», así que sin esta lista el de la Agenda saldría
- * todos los días como «3 más · Eventos del calendario…» con el total entero,
+ * todos los días como «3 más · Eventos del calendario…» (o «2 más · Menciones sin leer…») con el total entero,
  * rotulado como incremento y repitiéndose hasta que alguien abra la Agenda: la
  * novedad falsa que el diseño del resumen existe para evitar. `loQueSeMovio` los
  * saltea, y quedan en la campana y en el resumen de los lunes, que lleva totales.
@@ -190,7 +207,7 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
  * pide una foto por persona en `avisos_fotos` (ids como `agenda-divergencias:<usuario>`)
  * y enseñarle al cron del resumen a leerla.
  */
-export const ES_POR_PERSONA: ReadonlySet<string> = new Set(["agenda-divergencias"]);
+export const ES_POR_PERSONA: ReadonlySet<string> = new Set(["agenda-divergencias", "mensajes-menciones-sin-leer"]);
 
 export function avisosDeConteos(conteos: Partial<ConteosParaAvisos>): Notificacion[] {
   return AVISOS.flatMap(({ clave, id, titulo, href }) => {
@@ -411,4 +428,39 @@ export function avisosDeSalud(
 function elDiaComoNumero(hoy: string): number {
   const ms = Date.parse(`${hoy}T00:00:00Z`);
   return Number.isNaN(ms) ? 1 : Math.floor(ms / 86_400_000);
+}
+
+/**
+ * Un aviso por ciclo encadenado cuya pieza parece haberse cambiado sin que el
+ * ciclo se entere.
+ *
+ * ── POR QUÉ UNO POR CICLO Y NO UNO CON EL CONTEO ────────────────────────────
+ *
+ * Es la misma razón que en `avisosDeSalud`, y es la que hace que el descarte
+ * signifique algo. Un solo aviso que dijera «2 ciclos para revisar» pierde
+ * identidad: el día que se resuelve uno y aparece otro el número queda igual,
+ * `filtrarDescartadas` compara `cantidad > cantidad_vista` y **no suena la
+ * campana ni sale el push**. Con un aviso por ciclo, uno nuevo es siempre una
+ * novedad, el título puede nombrar el equipo, y el enlace va a su ficha — que
+ * es donde está el botón que lo resuelve.
+ *
+ * `resumirParaPush` ya sabe juntar varios en un mensaje, así que el push no se
+ * multiplica.
+ *
+ * ── Y POR QUÉ ESTE AVISO SE APAGA SOLO ──────────────────────────────────────
+ *
+ * Porque `sospechasDeCambio` sólo mira lo cerrado **después** del último
+ * trabajo conocido del ciclo. Cuando alguien aprieta el botón —o cuando la
+ * madre del ciclo se cierra— esa fecha se mueve y lo viejo cae del conteo. Sin
+ * ese corte esto contaría un hecho histórico que nunca cambia: 56 el primer
+ * día, medido el 12/11/2026, y después un globo permanente o un silencio para
+ * siempre según lo descartara alguien.
+ */
+export function avisosDeCiclos(sospechas: readonly Sospecha[]): Notificacion[] {
+  return sospechas.map((s) => ({
+    id: `mant-ciclo-sospechoso-${s.equipo}`,
+    titulo: `Puede que se hayan cambiado ${s.componente.toLowerCase()} de ${s.equipo} sin avisar al ciclo`,
+    cantidad: s.ot.length,
+    href: `/mantenimiento/equipos/${s.equipment_id}`,
+  }));
 }

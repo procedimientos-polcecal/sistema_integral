@@ -46,6 +46,7 @@ import { lasQueLesFaltaLaFormula } from "@/lib/mantenimiento/formulaDelEstado";
 import { contrastar, type OrdenDelSistema } from "@/lib/mantenimiento/contraste";
 import { loQueSeGuardaDelContraste } from "@/lib/mantenimiento/divergencias";
 import { generarLasPeriodicas } from "@/lib/mantenimiento/generarPeriodicas";
+import { generarLasEncadenadas } from "@/lib/mantenimiento/generarEncadenadas";
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
 import { escribirEnLaFilaDeLaOS } from "@/lib/mantenimiento/planillaDeOS";
@@ -1375,6 +1376,35 @@ export const SINCRONIZACIONES = [
         sin_estado_todavia: r.sinEstadoTodavia,
         // El evento que no se pudo crear de una periódica no tiene otro
         // lugar donde decirse: la corrida de estas no tiene pantalla.
+        ...(r.sinCalendario.length > 0 ? { sin_calendario: r.sinCalendario } : {}),
+      });
+    },
+  },
+  // ── Y LOS CICLOS ENCADENADOS ──────────────────────────────────────────────
+  //
+  // Lo mismo que las periódicas por otro lado: en vez de mirar un calendario,
+  // mira si la OT anterior del ciclo se cerró. Va **después de `ordenes`** y no
+  // es negociable: el `estado` y la `fecha_cierre` que esto lee los trae esa
+  // importación de la planilla, donde se cierran 225 de cada 248 órdenes de
+  // estos equipos. Al revés generaría sobre el estado de la corrida pasada.
+  //
+  // No tira: `generarLasEncadenadas` devuelve qué pasó con cada ciclo y esto lo
+  // pasa a `Resultado`. Un ciclo trabado no frena al siguiente, y ninguno frena
+  // las cuatro sincronizaciones de arriba.
+  {
+    recurso: "ciclos",
+    correr: async (_o?: OpcionesDeCorrida): Promise<Resultado> => {
+      const r = await generarLasEncadenadas();
+      return logra({
+        generadas: r.generadas.length,
+        ot: r.generadas.map((g) => g.ot_number),
+        // Los que esperan que una persona cargue su punto de arranque. Se
+        // informan en cada corrida porque un ciclo sin arrancar no genera
+        // ninguna OT, así que `mant-atrasadas` no tiene cómo verlo.
+        sin_arrancar: r.sinArrancar,
+        trabados: r.trabados,
+        fallaron: r.fallaron,
+        sin_estado_todavia: r.sinEstadoTodavia,
         ...(r.sinCalendario.length > 0 ? { sin_calendario: r.sinCalendario } : {}),
       });
     },

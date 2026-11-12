@@ -72,12 +72,31 @@ export interface Accion {
  */
 export const ACCIONES_PREVENTIVAS: readonly Accion[] = [
   {
+    // **El verbo, y el sustantivo sólo con su verbo al lado.** La primera
+    // versión reconocía «aceite» y «grasa» sueltos y, como ésta es la primera
+    // del vocabulario, se llevaba todo lo que los nombrara: «Reparación de
+    // pérdida de aceite» y «Revisión perdida de aceite en cono» salían como
+    // lubricaciones. Lo destaparon los tests del sellado, que es el mismo
+    // error por el otro lado —el sustantivo dice qué había, el verbo dice qué
+    // se hizo, y lo que clasifica una tarea es lo segundo—.
+    //
+    // Sigue ganándole a CAMBIO cuando corresponde —«cambio de aceite» es
+    // lubricar y no reemplazar una pieza—, que es para lo que está primera.
     clave: "LUBRICACION", etiqueta: "Lubricación / engrase", corta: "lubricación de",
-    reconoce: /\b(lubric\w*|engras\w*|aceita\w*|grasa|aceite)\b/,
+    reconoce:
+      /\b(lubric\w*|engras\w*|aceita\w*)\b|\b(cambio|cambiar|cambia[rn]?|reponer|rellen\w*)\s+(de\s+)?(aceite|grasa)\b/,
   },
   {
     clave: "ROTACION", etiqueta: "Rotación de piezas", corta: "rotación de",
     reconoce: /\b(rotacion|rotar|rota[rn]?|rotada?s?)\b/,
+  },
+  {
+    clave: "BALANCEO", etiqueta: "Balanceo", corta: "balanceo de",
+    reconoce: /\b(balance\w*)\b/,
+  },
+  {
+    clave: "CLASIFICACION", etiqueta: "Clasificación de carga moledora", corta: "clasificación de",
+    reconoce: /\b(clasific\w*|seleccion\w*)\b|\bcuerpos moledores\b|\bcarga de molino\b/,
   },
   {
     clave: "REGULACION", etiqueta: "Regulación / ajuste", corta: "regulación de",
@@ -88,8 +107,25 @@ export const ACCIONES_PREVENTIVAS: readonly Accion[] = [
     reconoce: /\b(revision|revisar|revisa[rn]?|chequ\w*|control\w*|inspec\w*|verific\w*|relev\w*)\b/,
   },
   {
+    clave: "REPASO", etiqueta: "Repaso", corta: "repaso de",
+    reconoce: /\b(repas\w*)\b/,
+  },
+  {
+    // **El verbo y no el sustantivo.** `\bperdidas?\b` a secas parecía la
+    // forma obvia y es un error: «Reparación de pérdida de aceite» es una
+    // reparación, y como las preventivas se miran antes que las correctivas,
+    // esa orden se habría contado como sellado. Lo que distingue una cosa de
+    // la otra es qué se hizo, no qué había.
+    clave: "SELLADO", etiqueta: "Sellado de pérdidas", corta: "sellado de",
+    reconoce: /\b(sell\w*)\b|\belimina\w*\s+perdidas?\b/,
+  },
+  {
     clave: "LIMPIEZA", etiqueta: "Limpieza", corta: "limpieza de",
     reconoce: /\b(limpieza|limpiar|limpia[rn]?|aspir\w*|barrid\w*|destap\w*)\b/,
+  },
+  {
+    clave: "PINTURA", etiqueta: "Pintura", corta: "pintura de",
+    reconoce: /\b(pint\w*)\b/,
   },
   {
     clave: "CAMBIO", etiqueta: "Cambio de pieza de desgaste", corta: "cambio de",
@@ -119,6 +155,14 @@ export const ACCIONES_CORRECTIVAS: readonly Accion[] = [
   {
     clave: "REPARACION", etiqueta: "Reparación", corta: "reparación de",
     reconoce: /\b(reparacion|reparar|repara[rn]?|reparada?s?|arregl\w*)\b/,
+  },
+  {
+    clave: "REACONDICIONAR", etiqueta: "Reacondicionamiento", corta: "reacondicionamiento de",
+    reconoce: /\b(reacondicion\w*)\b/,
+  },
+  {
+    clave: "DESARME", etiqueta: "Desarme / desmontaje", corta: "desarme de",
+    reconoce: /\b(desarm\w*|desmont\w*|desacopl\w*)\b/,
   },
   {
     clave: "MONTAJE", etiqueta: "Montaje / obra nueva", corta: "montaje de",

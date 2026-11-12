@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avisosDeConteos, avisosDeRitmo, avisosDeSalud } from "./avisos";
+import { avisosDeCiclos, avisosDeConteos, avisosDeRitmo, avisosDeSalud, ES_POR_PERSONA } from "./avisos";
 import { CRECE_CON_EL_DIA, filtrarDescartadas } from "./notificaciones";
 import type { EntradaCaida } from "@/lib/core/saludDeLasSincronizaciones";
 
@@ -386,5 +386,55 @@ describe("avisosDeSalud", () => {
       caidas: [caida("agenda/canales")], sinDeclarar: ["nuevo/cosa"], sinComprobar: false, corridas: [],
     });
     expect(avisos.map((a) => a.id)).toEqual(["salud-agenda/canales", "salud-sin-declarar"]);
+  });
+});
+
+describe("el aviso de menciones sin leer", () => {
+  it("sale con id propio, lleva a la bandeja y es de una persona", () => {
+    expect(avisosDeConteos({ mensajesMencionesSinLeer: 2 })).toEqual([
+      {
+        id: "mensajes-menciones-sin-leer",
+        titulo: "Menciones sin leer en conversaciones del sistema",
+        cantidad: 2,
+        href: "/mis-menciones",
+      },
+    ]);
+    expect(ES_POR_PERSONA.has("mensajes-menciones-sin-leer")).toBe(true);
+  });
+
+  it("con cero no avisa", () => {
+    expect(avisosDeConteos({ mensajesMencionesSinLeer: 0 })).toEqual([]);
+  });
+});
+
+describe("avisosDeCiclos", () => {
+  it("un aviso por ciclo, con id propio y enlace a la ficha del equipo", () => {
+    expect(avisosDeCiclos([
+      { ciclo_id: "c1", equipment_id: "e1", equipo: "PO-C1-04", componente: "Martillos", ot: [70, 71] },
+    ])).toEqual([{
+      id: "mant-ciclo-sospechoso-PO-C1-04",
+      titulo: "Puede que se hayan cambiado martillos de PO-C1-04 sin avisar al ciclo",
+      cantidad: 2,
+      href: "/mantenimiento/equipos/e1",
+    }]);
+  });
+
+  /**
+   * Uno por ciclo y no uno con el conteo: con un aviso único, resolver uno y
+   * que aparezca otro deja el número igual y `filtrarDescartadas` no lo suelta.
+   */
+  it("dos ciclos son dos avisos con ids distintos", () => {
+    const r = avisosDeCiclos([
+      { ciclo_id: "c1", equipment_id: "e1", equipo: "PO-C1-04", componente: "Martillos", ot: [70] },
+      { ciclo_id: "c2", equipment_id: "e2", equipo: "PY-B1-06", componente: "Martillos", ot: [80] },
+    ]);
+    expect(r.map((a) => a.id)).toEqual([
+      "mant-ciclo-sospechoso-PO-C1-04",
+      "mant-ciclo-sospechoso-PY-B1-06",
+    ]);
+  });
+
+  it("sin sospechas no hay avisos", () => {
+    expect(avisosDeCiclos([])).toEqual([]);
   });
 });

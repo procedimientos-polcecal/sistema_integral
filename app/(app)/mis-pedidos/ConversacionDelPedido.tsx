@@ -75,6 +75,7 @@ export default function ConversacionDelPedido({
             tipo="requerimiento"
             id={id}
             alCambiarElBorrador={setHayBorrador}
+            abiertoAlMontar
             aclaracion={
               "Es una conversación con otras personas: no cambia el estado del pedido ni llega a " +
               "la planilla de Compras. Un requerimiento lo ve toda persona con acceso al sistema, " +
