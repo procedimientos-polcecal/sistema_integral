@@ -13,7 +13,7 @@
   "origenes": [
     { "nombre": "Filler 1", "carpeta": "/datos/filler1" },
     { "nombre": "Filler 2", "carpeta": "/datos/filler2" },
-    { "nombre": "Planta 02", "carpeta": "/datos/planta02" },
+    { "nombre": "Planta 02", "carpeta": "/datos/planta02", "ignorar": " - (INICIO|AL INICIAR) " },
     { "nombre": "Hornos", "carpeta": "/datos/hornos" },
     { "nombre": "Porteria", "carpeta": "/datos/porteria" },
     { "nombre": "Pesadas Balanza", "carpeta": "/datos/balanza", "carpetaEntera": true }

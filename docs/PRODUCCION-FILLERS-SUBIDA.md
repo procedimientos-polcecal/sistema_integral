@@ -56,6 +56,21 @@ Lo que hay que saber de cada una de las tres que no se leen, medido el
   hoy va en 566, así que en algún momento lo pusieron a cero con un desfasaje
   —una resta a través de ese salto da horas que no existieron—. Leerlo es un
   diseño, no un prefijo más en `produccion_molinos`.
+
+  **Y es el único origen que lleva `ignorar`, por algo que costó un archivo.**
+  Ese robot deja **dos clases de zip** en la misma carpeta: el bueno —
+  `PLANTA 02 AAAA-MM-DD HH;MM;SS.zip`, con `DAT001.CSV` adentro, ~21 KB— y
+  otro al arrancar —`PLANTA 02 - INICIO …` o `- AL INICIAR …`— de **868
+  bytes**, que no tiene el CSV sino cuatro `.txt` sueltos de 0 a 16 bytes
+  (`NUEVO ARHICOV.txt`, `DATOS PLANTA 2 - copia.txt`…). El 11/11/2026 el
+  basura se escribió a las 10:49, después del bueno de las 09:30; el subidor
+  elige el más nuevo, y al día siguiente **pisó en Drive el archivo bueno de
+  21.155 bytes con uno de 868**. Lo único que lo delató fue el número en el
+  log, que nadie mira.
+  Ahora hay dos defensas y las dos hacen falta: `ignorar` saca a esos zips de
+  la elección —va **por origen y nunca global**, porque en Hornos los
+  `- INICIO` sí traen las dieciocho planillas—, y la red de seguridad de abajo
+  cubre el caso que nadie previó.
 - **`Hornos` no es un robot**: cada zip trae dieciocho `.xlsx` mensuales
   (`202611-HORNOS NOVIEMBRE 2026.xlsx` y los anteriores). 1,1 MB por copia.
   Exporta más de una vez por día y con el nombre cambiando —se vio
@@ -508,6 +523,24 @@ que sí hay que mirar del informe son dos cosas:
   días sin correr y dos corriendo con los seis orígenes en
   `UNKNOWN: unknown error, scandir`— y que el log, solo, no deja ver: **una
   corrida que no ocurrió no escribe ninguna línea.**
+
+# Un archivo más chico no pisa al que ya está
+
+De que todo acumule se sigue algo que conviene tener escrito: **estos archivos
+sólo crecen**. Así que uno que encogió no es un dato nuevo — es el origen roto,
+truncado o reemplazado por otra cosa.
+
+Desde el 12/11/2026 el subidor **se niega** a reemplazar un archivo de Drive
+por uno más chico, y lo cuenta como **fallo** y no como aviso: el "último
+resultado" de la tarea programada pasa a `0x1`, que es lo que hace que alguien
+se entere. `--permitir-encoger` lo levanta, para el día que de verdad haya que
+hacerlo.
+
+Es la misma defensa que `laPlanillaEncogio` de
+[lib/core/sheets.ts](../lib/core/sheets.ts), por el mismo motivo y después del
+mismo susto. Y es la red de seguridad **genérica**: `ignorar` resuelve el caso
+conocido de Planta 02, pero esto cubre el que nadie previó —un zip truncado de
+Filler 1, por ejemplo, que sí tendría consecuencias porque el SdG lo importa—.
 
 # Qué pasa si un día falla
 

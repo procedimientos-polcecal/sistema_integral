@@ -160,8 +160,16 @@ for (const origen of config.origenes) {
   // Un archivo de Drive por día. Sólo se mira contra los días que el servidor
   // TODAVÍA tiene: de uno cuyo zip ya se borró de allá no se puede decir nada,
   // y decirlo sería inventar.
+  // El mismo `ignorar` que usa el subidor, por la misma razón: si acá no se
+  // aplicara, un día en que el robot de Planta 02 dejó sólo su zip basura
+  // saldría como ROMPE —"el más nuevo no está en Drive"— cuando lo correcto
+  // es que ese archivo no se sube. Dos filtros distintos sobre los mismos
+  // archivos son dos respuestas distintas a la misma pregunta.
+  const descartar = origen.ignorar ? new RegExp(origen.ignorar, "i") : null;
   const porDia = new Map();
-  for (const a of archivos.filter((x) => x.nombre.toLowerCase().endsWith(".zip"))) {
+  for (const a of archivos.filter(
+    (x) => x.nombre.toLowerCase().endsWith(".zip") && !descartar?.test(x.nombre),
+  )) {
     const d = dia(a.mtime);
     const actual = porDia.get(d);
     if (!actual || a.mtime > actual.mtime) porDia.set(d, a);

@@ -95,6 +95,13 @@ Paso 3 "Las carpetas del servidor"
 #   Planta 02            tambien es un PC Robot, pero su CSV es un horimetro
 #                        por hora y SIN kilos, asi que el SdG todavia no sabe
 #                        leerlo. Se sube igual para no seguir perdiendo el dato.
+#                        Lleva `ignorar` porque ese robot deja DOS clases de
+#                        zip: el bueno (con DAT001.CSV, ~21 KB) y uno de 868
+#                        bytes al arrancar, con cuatro .txt sueltos y sin el
+#                        CSV. El 12/11/2026 ese piso al bueno en Drive, porque
+#                        el subidor elige el mas nuevo y el basura salio
+#                        despues. El filtro va POR ORIGEN y no global: en
+#                        Hornos los `- INICIO` si traen las 18 planillas.
 #   Hornos               no es un robot: son 18 planillas mensuales que alguien
 #                        respalda todos los dias. Se guarda, no se lee.
 #   Porteria             tampoco: es el respaldo del escritorio completo de esa
@@ -117,7 +124,7 @@ Paso 3 "Las carpetas del servidor"
 $origenes = @(
   @{ nombre = "Filler 1";        carpeta = "\\$Servidor\EXTERIOR\Filler1";         obligatorio = $true  },
   @{ nombre = "Filler 2";        carpeta = "\\$Servidor\EXTERIOR\Filler2";         obligatorio = $true  },
-  @{ nombre = "Planta 02";       carpeta = "\\$Servidor\EXTERIOR\Planta 02";       obligatorio = $false },
+  @{ nombre = "Planta 02";       carpeta = "\\$Servidor\EXTERIOR\Planta 02";       obligatorio = $false; ignorar = " - (INICIO|AL INICIAR) " },
   @{ nombre = "Hornos";          carpeta = "\\$Servidor\EXTERIOR\Hornos";          obligatorio = $false },
   @{ nombre = "Porteria";        carpeta = "\\$Servidor\EXTERIOR\Porteria";        obligatorio = $false },
   @{ nombre = "Pesadas Balanza"; carpeta = "\\$Servidor\EXTERIOR\Pesadas Balanza"; obligatorio = $false; carpetaEntera = $true }
@@ -163,6 +170,7 @@ $contenido = [ordered]@{
   origenes     = @($incluidos | ForEach-Object {
     $o = [ordered]@{ nombre = $_.nombre; carpeta = $_.carpeta }
     if ($_.carpetaEntera) { $o.carpetaEntera = $true }
+    if ($_.ignorar) { $o.ignorar = $_.ignorar }
     $o
   })
   log          = $log
