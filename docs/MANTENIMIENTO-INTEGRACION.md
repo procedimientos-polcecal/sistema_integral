@@ -679,6 +679,37 @@ columnas, así que hay que ensancharla a 24 y poner `OBSERVACIÓN PREVIA` en `X1
 Hasta que esté, la nota se guarda igual y la pantalla avisa que no llegó a la
 planilla con lo que haya dicho Google.
 
+### Y abajo hay otra caja de texto que **no** es esto (11/11/2026)
+
+Desde la mensajería interna, en la pantalla de la OT conviven **dos cosas que se
+escriben igual y no son lo mismo**, una debajo de la otra. Confundirlas es el
+error fácil, así que acá está cuál es cuál:
+
+| | «Por qué no se hizo» | El hilo de mensajes |
+|---|---|---|
+| Qué dice | por qué esta orden sigue abierta | lo que se habla sobre la orden |
+| Dónde vive | `ordenes_trabajo_notas` | `mensajes` + `mensajes_menciones` |
+| **A la planilla** | **sí, la última va a la columna X** | **no, a ninguna** |
+| Avisa a alguien | no | sí: al mencionado le sale un correo con el texto adentro |
+| Quién la puede escribir | quien puede editar la OT | **cualquiera que pueda abrir la pantalla** — ver y escribir son lo mismo, así que no depende de `canEdit` |
+
+De ahí salen las dos consecuencias que importan:
+
+- **Un mensaje no reemplaza a una justificación.** Explicar en el hilo por qué
+  la orden está parada deja la columna X vacía, y quien mira la planilla —que es
+  quien no entra al sistema— no se entera de nada. Eso es exactamente la
+  divergencia que no avisa de la que habla CLAUDE.md.
+- **Una justificación no reemplaza a un mensaje.** La nota no le llega a nadie:
+  si hay que avisarle a alguien, es una mención.
+
+La pantalla lo dice con el `aclaracion` de `<HiloDeMensajes>`
+(`app/(app)/mantenimiento/ordenes/OrdenesClient.tsx`), y el texto cambia según
+si esa orden pide justificación. Está escrito también acá porque un renglón de
+JSX no es donde alguien va a buscarlo seis meses después. El resto de la
+mensajería —cómo se decide quién puede ver un hilo, por qué el aviso es un
+correo— está en [el spec](superpowers/specs/2026-11-11-mensajeria-interna-design.md)
+y resumido en la fila de CLAUDE.md.
+
 ## Iniciar una OT pregunta por el equipo
 
 Pasar una OT a "en proceso" quiere decir que alguien va a intervenir la máquina.

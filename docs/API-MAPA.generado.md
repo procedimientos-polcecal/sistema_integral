@@ -4,7 +4,7 @@
 > Lo escrito a mano —para qué sirve cada módulo, cómo está armada una ruta y
 > las trampas— está en [API.md](API.md). Acá sólo hay lo que sale del código.
 
-Al 2026-11-11: **285 rutas** y **441 handlers** en 24 carpetas.
+Al 2026-11-12: **285 rutas** y **441 handlers** en 24 carpetas.
 
 ## Cómo leer la columna «guarda»
 
