@@ -64,10 +64,15 @@ esperando»: la OT, el requerimiento de compra y la condición insegura.
 
 ## Cómo llega, y acá está la inversión
 
-**Por correo, no por push.** Es lo contrario de lo que hace el resto del
-sistema hoy, y el motivo es el número de arriba: el push llega a 1 de 14 y el
-correo a 14 de 14. Un mensaje interno que no le llega a nadie no es una
+**El que avisa es el correo, no el push.** Es lo contrario de lo que hace el
+resto del sistema hoy, y el motivo es el número de arriba: el push llega a 1 de
+14 y el correo a 14 de 14. Un mensaje interno que no le llega a nadie no es una
 mensajería, es un cuaderno.
+
+(Esto decía «por correo, no por push» a secas. Dejó de ser exacto el
+12/11/2026, cuando una mención sin leer pasó a ser también un aviso de la
+campana: ver «Y desde el 12/11/2026 también por la campana», acá abajo. Lo que
+no cambió es cuál de los dos es el que interrumpe en el momento.)
 
 Se usa el camino que ya existe y ya está probado contra el script real:
 `lib/core/correo.ts` y el Apps Script de `docs/sdg-correo-apps-script.gs`
@@ -79,6 +84,43 @@ de Google.**
 a otra no cumple la segunda —nada se frena hasta que conteste—. La Agenda ya
 entró cumpliendo dos de tres y su propio encabezado dice que es «un precedente
 y no un permiso»; esto no lo usa de excusa.
+
+### Y desde el 12/11/2026 también por la campana
+
+**Lo pidió el usuario después de ver la mensajería andando**, y sabiendo lo que
+eso arrastra: en este sistema **la campana y el push del resumen salen de la
+misma función** (`avisosDeUsuario()`), a propósito, para que no puedan decir
+cosas distintas. O sea que esto no es sólo la campana.
+
+Una mención sin leer es un aviso más de `lib/home/avisos.ts`, con id
+`mensajes-menciones-sin-leer` y enlace a `/mis-menciones`. El conteo lo da
+`contarMencionesSinLeer()` de `lib/mensajes/menciones.ts`, que es la **misma**
+definición de «mención pendiente» que usa la bandeja: un número en la campana
+que no coincide con las tarjetas es peor que ningún número.
+
+**Lo que no cambió, y es lo que había que conservar:**
+
+- **No es un quinto emisor instantáneo** y **no pasa por
+  `avisarAQuienDecide()`**. Un mensaje de una persona a otra sigue sin cumplir
+  la segunda condición del portón —nada se frena hasta que conteste—, así que
+  la Agenda sigue siendo «un precedente y no un permiso» y esto no lo usa de
+  excusa. **El aviso en el momento lo sigue dando el correo.**
+- El correo sigue siendo el canal que llega a los catorce. La campana no lo
+  reemplaza: la ve quien entra al sistema, y la mitad del equipo no entra todos
+  los días.
+
+**Es un aviso por persona, y por eso va en `ES_POR_PERSONA`.** La foto diaria
+(`avisos_fotos`) es **una sola para todo el sistema**, así que comparar contra
+ella un conteo que cambia por usuario mostraría cada día «N más» con el total
+entero. Lo que se pierde por esa decisión, dicho entero porque es la mitad que
+no se ve:
+
+- **La campana lo muestra enseguida**, que es lo que se pidió.
+- **El push lo nombra los lunes y no en el diario.** El resumen diario cuenta
+  movimiento contra la foto, y un aviso por persona no entra en la foto; el de
+  los lunes manda totales, así que ahí sí sale.
+- Hacerlo diario pediría **una foto por persona**, que hoy no existe y que no
+  vale la pena por esto: el canal que avisa en el momento ya es el correo.
 
 ## A quién le llega: mencionar
 
@@ -333,10 +375,17 @@ que resuelven, no un hilo que se lee. En orden:
 
 1. **Que `SDG_CORREO_URL` y `SDG_CORREO_SECRET` estén en el proyecto
    `sistema-integral` de Vercel.** Si faltan, la pantalla lo dice —la mención
-   queda deshabilitada con el motivo— pero **no sale ni un correo**, y como no
-   hay contador de menciones sin leer en el menú ni en la campana (deliberado:
-   el canal es el correo), la mensajería queda muda sin que nadie se entere.
+   queda deshabilitada con el motivo— pero **no sale ni un correo**.
    Lo contesta `correo_configurado` de `/api/mensajes/destinatarios`.
+
+   **Esto era lo más grave de la lista y dejó de serlo el 12/11/2026.** Decía
+   que sin correo «la mensajería queda muda sin que nadie se entere», porque no
+   había contador de menciones sin leer en ningún lado. Ahora la campana lo
+   tiene (`mensajes-menciones-sin-leer`), así que sin correo la mención **igual
+   se ve** al entrar al SdG, y los lunes sale en el push. Lo que se pierde sin
+   correo es la interrupción —quien no entre ese día no se entera— y por eso
+   sigue siendo lo primero de la lista, pero ya no es un canal mudo: es un canal
+   lento.
 2. **Que `NEXT_PUBLIC_APP_URL` esté puesta allá.** En local no se nota, porque
    la url base cae al `host`; lo que se ve es un correo con el dominio
    equivocado.

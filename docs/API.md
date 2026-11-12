@@ -211,11 +211,11 @@ en el documento de un módulo. El diseño está en
 
 | Handler | Qué hace |
 |---|---|
-| `GET /api/mensajes?tipo=&id=` | El hilo de un registro, del más nuevo al más viejo, con el autor y el estado del aviso de cada mención. **No marca nada como leído** |
+| `GET /api/mensajes?tipo=&id=` | El hilo de un registro, del más nuevo al más viejo, con el autor y el estado del aviso de cada mención. **No marca nada como leído**, pero sí dice cuántas sin leer tiene acá quien pregunta (`mis_menciones_sin_leer`), que es lo único que la pantalla no puede contar sola: no conoce su propio id |
 | `POST /api/mensajes` | Escribe un mensaje. Guarda el mensaje, después las menciones, y recién entonces manda los correos, en un `after()` |
 | `GET /api/mensajes/destinatarios?tipo=` | A quién se puede mencionar en ese tipo de registro, y si el correo está configurado. Devuelve `tiene_correo`, nunca la dirección |
 | `GET /api/mensajes/mios` | Las menciones propias sin leer, para la bandeja |
-| `PATCH /api/mensajes/mios` | Marca como leídas las menciones propias de un hilo. Lo llama la pantalla **cuando muestra el hilo**, no el GET |
+| `PATCH /api/mensajes/mios` | Marca como leídas las menciones propias de un hilo. Lo llama la pantalla **cuando alguien abre el hilo**, no el GET: desde el 12/11/2026 el hilo arranca plegado en una barra, y plegado nadie lo vio |
 
 Cómo está conectada, en cuatro hechos que no se deducen de un archivo suelto:
 
