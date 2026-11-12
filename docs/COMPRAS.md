@@ -211,6 +211,52 @@ trabajo es comparar. En el teléfono esa vista se convierte en tarjetas apiladas
 **Al aprobarse la compra, la comparativa se congela.** Desde ahí es el respaldo
 de por qué se eligió ese precio: no se agrega, no se edita y no se borra.
 
+## El semáforo de pedidos y el reclamo (12/11/2026)
+
+`/mis-pedidos` pinta de verde, amarillo o rojo los pedidos que **esperan a
+Compras**, y en los amarillos y rojos del área propia ofrece **«Reclamar»**:
+abre el hilo de mensajes de ese RI con la pregunta redactada y los gestores de
+Compras marcados. El diseño está en
+[el spec](superpowers/specs/2026-11-12-compras-semaforo-y-reclamo-design.md) y
+[el plan](superpowers/plans/2026-11-12-compras-semaforo-y-reclamo.md).
+
+Seis cosas que no se deducen del código:
+
+- **Los cortes son 30 y 90 días, y salieron de medir.** Con 10/30 quedaban 50
+  de 106 en rojo y Mantenimiento abría la pantalla con 33 reclamos posibles;
+  con 30/90 abre con 11. **El rojo tiene que costar poco de atender o deja de
+  significar algo** — que es exactamente lo que ya le pasó a la prioridad de
+  este módulo, con el 42% de los abiertos marcados `URGENTE`.
+- **`EN_ESPERA` queda afuera del conjunto reclamable**, y es lo que evita que
+  esto se muera en la primera semana: **9 de los 10 pedidos más viejos estaban
+  ahí**, frenados a propósito. Sin excluirlos, lo primero que ve el área arriba
+  de todo son pedidos que alguien congeló, y el primer reclamo se contesta con
+  «ése está en espera».
+- **El eje es la fecha de requerimiento y no la de necesidad.** La segunda está
+  cargada en 539 de 540, pero el **91% ya está vencido** y el margen mediano
+  entre pedir y necesitar es de **4 días**: la gente escribe «lo necesito ya»,
+  así que esa fecha no ordena nada.
+- **El destinatario sale del grant explícito de `usuario_modulos`, nunca de
+  `nivelEnModulo()`.** Esa función le devuelve `admin` a todo `admin_sistema`
+  sin mirar el grant: por ahí entraría una quinta persona que en Compras tiene
+  `lectura` explícita. Es el mismo error que ya se pagó con
+  `compras-por-aprobar`, que le llegaba a 6 personas de las cuales 3 no podían
+  aprobar. Hoy los cuatro del grant coinciden con `compras_aprobadores`, pero
+  son dos listas distintas por definición y pueden divergir.
+- **El orden por defecto no cambia; al filtrar por un color, sí.** Medido para
+  Mantenimiento —1.125 pedidos, 23 páginas— los 11 rojos caían en las páginas
+  5, 6, 7, 11, 12 y 15 y **la página 1 no tenía un solo punto de color**: con
+  el orden de siempre el semáforo era invisible. Y el orden sin filtro se deja
+  porque esta pantalla también sirve para buscar si alguien ya pidió lo mismo,
+  y eso se navega por número.
+- **Hay 5 pedidos que esperan a un aprobador y no a Compras** (`estado_aprobacion
+  = PENDIENTE`). Hoy no se nota porque las dos listas coinciden; el día que
+  dejen de coincidir, esos reclaman a quien no decide.
+
+Y una decisión de palabras que es una decisión de datos: el renglón dice
+**«último mensaje»** y no «reclamado». El hilo guarda cualquier conversación
+sobre el pedido, y el dato no sabe cuál fue un reclamo.
+
 ## Integración con el resto del SdG
 
 - **Proveedores viven en el núcleo**, no dentro de Compras. Mantenimiento ya
