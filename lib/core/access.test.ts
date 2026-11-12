@@ -25,6 +25,7 @@ describe("modulosVisibles", () => {
       "taller_vial",
       "trituracion",
       "seguridad_higiene",
+      "ventas",
     ]);
   });
 

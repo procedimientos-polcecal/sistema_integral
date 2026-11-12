@@ -5,6 +5,7 @@ import { useCargar } from "@/lib/core/useCargar";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { textoDelReclamo } from "@/lib/compras/reclamo";
+import { traerTodo } from "@/lib/core/paginado";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import ConversacionDelPedido from "./ConversacionDelPedido";
 import {
@@ -12,22 +13,13 @@ import {
 } from "@/lib/compras/constants";
 import {
   DIAS_VERDE, DIAS_AMARILLO, rangoDeColor, colorDelPedido, diasEsperando,
-  esReclamable, textoDeEspera, type ColorDelPedido,
+  esReclamable, textoDeEspera, ESPERAN_A_COMPRAS, type ColorDelPedido,
 } from "@/lib/compras/semaforo";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 
 type Opcion = { id: string; nombre: string };
 
 const POR_PAGINA = 50;
-
-/**
- * Los estados en los que el pedido todavía depende de Compras.
- *
- * Es el mismo conjunto que `esReclamable()` de `lib/compras/semaforo.ts`, acá
- * en la forma que PostgREST necesita para un `.in()`. El test
- * `semaforo.test.ts` ata los dos lados.
- */
-const ESTADOS_QUE_ESPERAN = ["SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO"];
 
 /**
  * Lo que una consulta de Supabase tiene que saber hacer para que los filtros
@@ -41,7 +33,7 @@ interface Filtrable {
   neq(columna: string, valor: string | number): Filtrable;
   or(filtro: string): Filtrable;
   gte(columna: string, valor: string): Filtrable;
-  lte(columna: string, valor: string): Filtrable;
+  lt(columna: string, valor: string): Filtrable;
   order(columna: string, o: { ascending: boolean }): Filtrable;
   range(desde: number, hasta: number): PromiseLike<{ data: unknown; count: number | null; error: { message: string } | null }>;
   then: PromiseLike<{ count: number | null }>["then"];
@@ -188,6 +180,9 @@ export default function MisPedidosClient({
     // puesto deja la franja diciendo «15 en rojo» mientras la lista ya muestra
     // otra cosa, que es la forma más rápida de que nadie vuelva a creerle.
     setColor(null);
+    // Por lo mismo se vacían los números: mientras los nuevos no lleguen, la
+    // franja no dice nada en vez de decir los de antes.
+    setConteos(null);
   }
 
   // El color sí resetea la página, pero no al revés.
@@ -228,12 +223,19 @@ export default function MisPedidosClient({
     return r;
   }
 
-  /** El conjunto reclamable de un color: los cuatro estados que esperan a Compras. */
+  /**
+   * El conjunto reclamable de un color: los cuatro estados que esperan a Compras.
+   *
+   * El borde de arriba va con `.lt()` y no con `.lte()`. `fecha` es un
+   * `timestamptz` —los RI cargados en la app llevan hora— y un `.lte` contra
+   * una fecha sin hora compara contra las 00:00 de ese día: un pedido de ese
+   * mismo día a las 13:00 se caía de los tres colores a la vez.
+   */
   function conColor(q: Filtrable, c: ColorDelPedido): Filtrable {
-    const { desde, hasta } = rangoDeColor(c, new Date());
-    let r = q.in("estado_compra", ESTADOS_QUE_ESPERAN).neq("estado_aprobacion", "DENEGADA");
+    const { desde, hastaExclusivo } = rangoDeColor(c, new Date());
+    let r = q.in("estado_compra", ESPERAN_A_COMPRAS).neq("estado_aprobacion", "DENEGADA");
     if (desde) r = r.gte("fecha", desde);
-    if (hasta) r = r.lte("fecha", hasta);
+    if (hastaExclusivo) r = r.lt("fecha", hastaExclusivo);
     return r;
   }
 
@@ -275,9 +277,17 @@ export default function MisPedidosClient({
      * no se toca porque esta pantalla también sirve para buscar si alguien ya
      * pidió lo mismo, y eso se navega por número.
      */
+    /*
+     * El orden por antigüedad lleva `nro_ri` de desempate, y no es cosmético:
+     * `fecha` **no es única** —las filas que entran por la planilla comparten
+     * el mismo instante, y hay grupos de doce— y Postgres no garantiza ningún
+     * orden adentro de un empate. Con el corte de página cayendo en medio de
+     * uno, el mismo pedido aparece en dos páginas o en ninguna, y el que se
+     * pierde es justo uno que el área ya no puede reclamar desde el filtro.
+     */
     const { data, count, error: err } = await (
       color
-        ? q.order("fecha", { ascending: true })
+        ? q.order("fecha", { ascending: true }).order("nro_ri", { ascending: false })
         : q.order("nro_ri", { ascending: false })
     ).range(desde, desde + POR_PAGINA - 1);
 
@@ -302,17 +312,21 @@ export default function MisPedidosClient({
   const contar = useCargar(async (vigente) => {
     const supabase = createClient();
     const colores: ColorDelPedido[] = ["verde", "amarillo", "rojo"];
+    setConteos(null);
 
     const cuentas = await Promise.all(
       colores.map(async (c) => {
-        const { count } = await conColor(
+        const { count, error: err } = (await conColor(
           conAlcanceYBusqueda(
             supabase
               .from("compras_requerimientos")
               .select("id", { count: "exact", head: true }) as unknown as Filtrable
           ),
           c
-        );
+        )) as { count: number | null; error: unknown };
+        // Un conteo que falló no es cero. «0 · más de 90 días» se lee como
+        // «no hay nada que reclamar», que es lo contrario de lo que pasó.
+        if (err) throw err;
         return count ?? 0;
       })
     );
@@ -343,16 +357,26 @@ export default function MisPedidosClient({
   useCargar(async (vigente) => {
     if (pedidos.length === 0) { setUltimoMensaje({}); return; }
     const supabase = createClient();
-    const { data, error: err } = await supabase
-      .from("mensajes")
-      .select("entidad_id, creado_en")
-      .eq("entidad_tipo", "requerimiento")
-      .in("entidad_id", pedidos.map((p) => p.id))
-      .order("creado_en", { ascending: false });
+    /*
+     * Con `traerTodo` y no con una consulta suelta: PostgREST corta en 1000
+     * filas y no avisa. Cincuenta pedidos con veinte mensajes cada uno ya
+     * pasan ese techo, y lo que se pierde al cortar son los mensajes más
+     * viejos de los últimos pedidos — o sea, filas que se quedan sin etiqueta
+     * sin que nada lo diga.
+     */
+    const data = await traerTodo<{ entidad_id: string; creado_en: string }>((desde, hasta) =>
+      supabase
+        .from("mensajes")
+        .select("entidad_id, creado_en")
+        .eq("entidad_tipo", "requerimiento")
+        .in("entidad_id", pedidos.map((p) => p.id))
+        .order("creado_en", { ascending: false })
+        .range(desde, hasta)
+    ).catch(() => null);
 
-    if (!vigente() || err) return;
+    if (!vigente() || !data) return;
     const ultimo: Record<string, string> = {};
-    for (const m of data ?? []) {
+    for (const m of data) {
       // Vienen del más nuevo al más viejo: el primero de cada pedido gana.
       const id = m.entidad_id as string;
       if (!ultimo[id]) ultimo[id] = m.creado_en as string;

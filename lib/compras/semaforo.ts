@@ -46,8 +46,15 @@ export const DIAS_AMARILLO = 90;
 
 export type ColorDelPedido = "verde" | "amarillo" | "rojo";
 
-/** Los estados de compra en los que el pedido todavía depende de Compras. */
-const ESPERAN_A_COMPRAS = ["SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO"];
+/**
+ * Los estados de compra en los que el pedido todavía depende de Compras.
+ *
+ * Se exporta porque la pantalla lo necesita para su `.in()` de PostgREST. Es
+ * la misma lista y no una copia a propósito: con dos listas, agregar un quinto
+ * estado hace que el punto aparezca en renglones que los chips no cuentan y
+ * que el filtro no devuelve, sin que nada lo note.
+ */
+export const ESPERAN_A_COMPRAS = ["SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO"];
 
 /**
  * Si este pedido es de los que el semáforo pinta y se pueden reclamar.
@@ -84,21 +91,33 @@ export function colorDelPedido(fecha: string, hoy: Date): ColorDelPedido {
 /**
  * El rango de fechas de un color, para filtrar y contar del lado del servidor.
  *
- * `desde` y `hasta` son inclusivos y van en ISO corto, que es como PostgREST
- * compara una columna `date`. El verde no tiene `hasta` a propósito: una fecha
- * adelantada tiene que entrar ahí y no quedarse sin color.
+ * **`hastaExclusivo` se consume con `.lt()` y nunca con `.lte()`**, y el
+ * nombre lo dice porque confundirlo cuesta caro. `fecha` es un `timestamptz`
+ * —no un `date`, aunque se lea como uno—: los RI cargados en la app llevan la
+ * hora real (medido: `2026-11-12T13:06:59Z`) y los que entran por la planilla
+ * quedan a medianoche. Con un borde superior inclusivo, PostgREST compara
+ * `2026-10-12` contra las 00:00 de ese día, así que un pedido de ese mismo día
+ * a las 13:00 **no entra en ningún color**: el punto del renglón lo pinta
+ * amarillo y los tres chips lo cuentan en ninguno. Por eso el borde de arriba
+ * es el primer día del color siguiente, excluido.
+ *
+ * El verde no tiene borde de arriba a propósito: una fecha adelantada tiene
+ * que entrar ahí y no quedarse sin color.
  */
-export function rangoDeColor(color: ColorDelPedido, hoy: Date): { desde?: string; hasta?: string } {
+export function rangoDeColor(
+  color: ColorDelPedido,
+  hoy: Date
+): { desde?: string; hastaExclusivo?: string } {
   switch (color) {
     case "verde":
       return { desde: fechaDeCorte(DIAS_VERDE, hoy) };
     case "amarillo":
       return {
         desde: fechaDeCorte(DIAS_AMARILLO, hoy),
-        hasta: fechaDeCorte(DIAS_VERDE + 1, hoy),
+        hastaExclusivo: fechaDeCorte(DIAS_VERDE, hoy),
       };
     case "rojo":
-      return { hasta: fechaDeCorte(DIAS_AMARILLO + 1, hoy) };
+      return { hastaExclusivo: fechaDeCorte(DIAS_AMARILLO, hoy) };
   }
 }
 
@@ -123,10 +142,10 @@ function fechaDeCorte(dias: number, hoy: Date): string {
 /**
  * La misma fecha a medianoche UTC.
  *
- * La columna `fecha` es un `date` sin hora, y la de `hoy` trae la del momento
- * en que se abrió la pantalla. Sin esto, el mismo pedido cambiaría de color
- * según la hora a la que alguien mire, y los bordes de `rangoDeColor` no
- * coincidirían con los de `colorDelPedido`.
+ * `fecha` es un `timestamptz` y trae hora, igual que la de `hoy`. Sin truncar
+ * las dos, el mismo pedido cambiaría de color según la hora a la que alguien
+ * mire la pantalla. Lo que **no** arregla es el borde del filtro del servidor,
+ * que compara los timestamps crudos: de eso se ocupa `hastaExclusivo`.
  */
 function aMedianoche(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));

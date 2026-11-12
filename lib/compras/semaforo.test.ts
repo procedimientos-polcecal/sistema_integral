@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   esReclamable, colorDelPedido, diasEsperando, rangoDeColor, textoDeEspera,
+  ESPERAN_A_COMPRAS,
 } from "./semaforo";
 
 describe("esReclamable", () => {
@@ -24,6 +25,21 @@ describe("esReclamable", () => {
    */
   it("deja afuera EN_ESPERA, que es un desvío y no una etapa", () => {
     expect(esReclamable({ estado_compra: "EN_ESPERA", estado_aprobacion: "APROBADA" })).toBe(false);
+  });
+
+  /*
+   * La pantalla usa `ESPERAN_A_COMPRAS` para su `.in()` de PostgREST. Esto ata
+   * las dos puntas: si alguien agrega un estado a la lista sin que
+   * `esReclamable` lo acepte —o al revés— el punto del renglón y los chips
+   * empiezan a decir cosas distintas y nada más lo nota.
+   */
+  it("acepta exactamente lo que dice la lista que usa la pantalla", () => {
+    for (const e of ESPERAN_A_COMPRAS) {
+      expect(esReclamable({ estado_compra: e, estado_aprobacion: "APROBADA" })).toBe(true);
+    }
+    for (const e of ["PEDIDO", "RECIBIDO", "DENEGADO", "EN_ESPERA"]) {
+      expect(ESPERAN_A_COMPRAS).not.toContain(e);
+    }
   });
 
   it("deja afuera lo denegado por gerencia aunque la compra no se haya tocado", () => {
@@ -60,15 +76,46 @@ describe("rangoDeColor", () => {
   const hoy = new Date("2026-11-12T10:00:00Z");
 
   it("el rojo es todo lo anterior al corte de 90", () => {
-    expect(rangoDeColor("rojo", hoy)).toEqual({ hasta: "2026-08-13" });
+    expect(rangoDeColor("rojo", hoy)).toEqual({ hastaExclusivo: "2026-08-14" });
   });
 
   it("el amarillo tiene las dos puntas", () => {
-    expect(rangoDeColor("amarillo", hoy)).toEqual({ desde: "2026-08-14", hasta: "2026-10-12" });
+    expect(rangoDeColor("amarillo", hoy)).toEqual({
+      desde: "2026-08-14", hastaExclusivo: "2026-10-13",
+    });
   });
 
   it("el verde no tiene tope: una fecha futura entra", () => {
     expect(rangoDeColor("verde", hoy)).toEqual({ desde: "2026-10-13" });
+  });
+
+  /*
+   * `fecha` es un `timestamptz`, no un `date`: los RI cargados en la app
+   * llevan la hora real (medido: `2026-11-12T13:06:59Z`) y los que vienen de
+   * la planilla quedan a medianoche.
+   *
+   * Un borde superior inclusivo los deja afuera de todo. Con `hasta` en
+   * `2026-10-12` y un `.lte`, PostgREST compara contra las 00:00 de ese día,
+   * así que un pedido de ese mismo día a las 13:00 no entra en amarillo — y
+   * tampoco en rojo ni en verde. El punto del renglón lo pinta amarillo y los
+   * tres chips lo cuentan en ninguno.
+   *
+   * Por eso el borde de arriba es **exclusivo y un día después**: así cae del
+   * lado correcto venga con hora o sin ella.
+   */
+  it("el borde de arriba deja adentro un pedido con hora de ese mismo día", () => {
+    const { desde, hastaExclusivo } = rangoDeColor("amarillo", hoy);
+    const conHora = "2026-10-12T13:06:59.000Z";
+    expect(colorDelPedido(conHora, hoy)).toBe("amarillo");
+    expect(desde! <= conHora).toBe(true);
+    expect(conHora < hastaExclusivo!).toBe(true);
+  });
+
+  it("y deja afuera el primer día del color de al lado, también con hora", () => {
+    const { hastaExclusivo } = rangoDeColor("amarillo", hoy);
+    const verdeConHora = "2026-10-13T13:06:59.000Z";
+    expect(colorDelPedido(verdeConHora, hoy)).toBe("verde");
+    expect(verdeConHora < hastaExclusivo!).toBe(false);
   });
 
   /*
@@ -80,8 +127,9 @@ describe("rangoDeColor", () => {
   it("los bordes coinciden con los de colorDelPedido", () => {
     for (const color of ["verde", "amarillo", "rojo"] as const) {
       const r = rangoDeColor(color, hoy);
+      // El de abajo es del color; el de arriba es exclusivo, así que ya NO lo es.
       if (r.desde) expect(colorDelPedido(r.desde, hoy)).toBe(color);
-      if (r.hasta) expect(colorDelPedido(r.hasta, hoy)).toBe(color);
+      if (r.hastaExclusivo) expect(colorDelPedido(r.hastaExclusivo, hoy)).not.toBe(color);
     }
   });
 });
