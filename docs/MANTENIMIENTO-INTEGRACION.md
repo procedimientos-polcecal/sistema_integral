@@ -2857,6 +2857,108 @@ componentes que faltan, después confirmar el catálogo, y recién ahí la tabla
 el enganche con el motor de planes. Al revés da una tabla que cubre el 11 % del
 preventivo y la sensación de que el problema está resuelto.
 
+## Las OT encadenadas: el ciclo de martillos (12/11/2026)
+
+Una OT que al cerrarse genera la siguiente. Una **madre** arranca el ciclo, de
+su cierre nace una **hija** que se repite x veces, y después de la última vuelve
+la madre. El primer —y único— caso cargado:
+
+> **Cambio de martillos** → **Rotación de martillos** × 3 → Cambio de martillos → …
+
+en PO-C1-04 (Hidratación, cada 3 días), PY-B1-06 (Filler 2, 6), PY-A1-05
+(Filler 1, 6) y PY-C1-03 (Planta 0-2 mm, 10). **Filler 3 (PY-D1-03) hace el
+mismo ciclo y quedó afuera a pedido**, así que no es un olvido.
+
+El diseño está en
+[el spec](superpowers/specs/2026-11-12-mantenimiento-ot-encadenadas-design.md) y
+el plan en [su plan](superpowers/plans/2026-11-12-mantenimiento-ot-encadenadas.md).
+
+### Lo que no se deduce del código
+
+**1. El estado son dos campos y un corte, y el corte es todo.**
+`mant_ciclos_de_ot.desde` es la fecha del último trabajo **hecho** y
+`vuelta_desde` qué vuelta era ése. **Sólo cuentan las OT del ciclo creadas en
+`desde` o después.**
+
+Sin ese corte esto se rompe de la peor manera posible, y vale saber cómo porque
+la primera versión del diseño lo tenía así: el estado se derivaba de «la última
+OT con `ciclo_id`» y el botón de reinicio suspendía la hija que esperaba. Pero
+entonces la última pasaba a ser la hija **anterior, ya cerrada**, y la corrida
+siguiente volvía a crear exactamente la orden recién suspendida, fechada sobre
+un cierre viejo —o sea nacida atrasada— sobre martillos recién cambiados. Es,
+palabra por palabra, lo que quien pidió esto nombró como su única razón para
+dejar de confiar: «que genere OT sobre martillos que ya se cambiaron». El
+mecanismo que existía para evitar el anti-objetivo lo producía.
+
+**El corte lo mueven tres puntas y nada más**: la madre al cerrarse
+(`elCorteQueSigue`), el botón de reinicio y la carga inicial. Las hijas no:
+quedan dentro del rango y la decisión ya las lee bien. Por eso una madre cerrada
+devuelve `esperar` y no `crear` — **sin alguien que mueva el corte, el ciclo se
+detiene para siempre después del primer cambio**.
+
+**2. La cara es la vuelta más uno, y eso lo confirmaron los datos.** La
+rotación n lleva el martillo a la cara n+1, porque entra nuevo en la 1ª. No es
+una convención elegida: de las 248 OT de martillos de estos cuatro equipos,
+**63 nombran la cara en el texto libre y aparecen la 2ª, la 3ª y la 4ª — nunca
+la 1ª y nunca una 5ª**. Un juego que entra nuevo, se rota tres veces y se
+cambia. Esa coincidencia entre lo que dijo la gente y lo que dicen los datos es
+lo que hace que `repeticiones` = 3 no sea una conjetura.
+
+**3. El ciclo apunta a `mant_tareas_preventivas` y no guarda los nombres.** Ese
+catálogo —de la misma fecha, otra sesión— ya es donde vive «Rotación de
+Martillos en PO-C1-04 cada 3 días», y **existe para generar OT**. El día que
+alguien lo enganche al generador, estas cuatro máquinas recibirían la rotación
+dos veces en la planilla que mira la planta. Con la FK eso se contesta con un
+join; sin ella habría que cruzarlas por texto, que es lo que los dos diseños
+prohíben. Por lo mismo, el «cada cuántos días» **no se guarda en el ciclo**: es
+el `periodo_dias` de la tarea hija.
+
+**Si estás escribiendo ese enganche: una tarea referenciada por un ciclo activo
+no se genera por plan.**
+
+### Las tres capas contra el anti-objetivo
+
+El botón solo no alcanza **porque depende de que alguien se acuerde de
+apretarlo**.
+
+1. **El botón «Se cambiaron los martillos»**, en la ficha del equipo. Si la OT
+   viva es una hija, queda SUSPENDIDA y sale del ciclo. Si es la **madre**, no
+   se toca y se explica: el trabajo existió, y cerrarla desde un botón sería el
+   sistema registrando trabajo ajeno en las columnas M y K del master.
+2. **El aviso que pregunta sin decidir** (`mant-ciclo-sospechoso-<equipo>`).
+   Es la única parte de todo esto que mira el texto de una descripción, y mirarlo
+   se puede porque **no decide**: un falso positivo cuesta una pregunta, uno que
+   no detecta deja todo como estaba.
+3. **La OT dice en qué se basa**: «Rotación de martillos — a 3ª cara (2 de 3).
+   Martillos cambiados el 23/10/2026». Es la que de verdad protege y no cuesta
+   nada: si los cambiaron el 05/11, quien abre la orden lo ve sin tener que
+   confiar en el estado interno de nada.
+
+### Por qué vive en el cron y no en el botón de cerrar
+
+Porque **las OT se cierran en la planilla**: de las 248 medidas, **225 ni
+siquiera nacieron en el sistema** (`app_created = false`). Un enganche en la
+ruta PATCH vería una minoría de los cierres. Es una reconciliación —`ciclos` en
+`SINCRONIZACIONES`, después de `ordenes` sí o sí— y la idempotencia la da el
+dato: si la última del ciclo está abierta no se hace nada.
+
+### Qué falta para que esto genere algo
+
+**Los cuatro ciclos nacen con `desde` y `vuelta_desde` en null, y así no generan
+ninguna OT.** El punto de arranque lo carga una persona desde la ficha de cada
+equipo, y es el único dato del mecanismo que no sale de otro dato.
+
+Se intentó deducirlo y no da: contando rotaciones cerradas desde el último
+cambio, **dos de los cuatro equipos dan 6 rotaciones de un ciclo de 3**, porque
+el texto libre mezcla rotaciones con revisiones («Revisión de rompedora y ver si
+es necesario rotar martillos»). La cara que el texto nombra sí sirve —la OT 3067
+del 11/11/2026 dice «a 4ta cara»— pero no todas la nombran.
+
+Y ojo con esto: **un ciclo sin arrancar no genera ninguna OT, así que nada se
+atrasa y `mant-atrasadas` no puede verlo.** Se informa en el resultado de cada
+corrida (`sin_arrancar`) y la ficha del equipo lo dice con todas las letras,
+pero si nadie carga esas cuatro fechas la función queda desplegada y dormida.
+
 ## Los datos: qué está y qué no
 
 **Todo lo que viene de las planillas está.** Avisos 138, órdenes de trabajo
