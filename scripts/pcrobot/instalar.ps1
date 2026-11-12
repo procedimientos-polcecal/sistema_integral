@@ -9,10 +9,17 @@
 
       1. comprueba Node
       2. comprueba que este el JSON de la cuenta de servicio
-      3. escribe `subir-zips.config.json` con las rutas de ESTA maquina
-      4. comprueba que se vean las carpetas del servidor
+      3. comprueba que se vean las carpetas del servidor
+      4. escribe `subir-zips.config.json` con las rutas de ESTA maquina
       5. corre una prueba EN SECO, que no sube nada
       6. recien si esa prueba sale bien, registra la tarea programada
+      7. y la vuelve a leer del Programador, para contestar la unica pregunta
+         que importa: ¿quedo instalada, y a que hora corre?
+
+    La ventana NO se cierra sola al terminar, ni cuando sale bien ni cuando
+    falla: espera una tecla. Con "Ejecutar con PowerShell" se cerraba de
+    inmediato y se perdia justo el mensaje que explicaba el error. Se saltea
+    con -SinPausa.
 
     El orden importa y es la unica decision de diseno de este archivo: una
     tarea instalada que no puede funcionar es peor que ninguna, porque se
@@ -35,6 +42,7 @@
 
 param(
   [switch]$Probar,
+  [switch]$SinPausa,
   [string]$Hora = "22:00",
   [string]$Servidor = "server"
 )
@@ -51,7 +59,29 @@ $CARPETA_DRIVE = "0AH83x2YPTJdbUk9PVA"   # la unidad compartida "PC Robot"
 function Paso($n, $texto) { Write-Host "`n[$n] $texto" -ForegroundColor Cyan }
 function Bien($texto)     { Write-Host "    OK  $texto" -ForegroundColor Green }
 function Mal($texto)      { Write-Host "    --  $texto" -ForegroundColor Red }
-function Cortar($texto)   { Mal $texto; Write-Host ""; exit 1 }
+
+<#
+    Deja la ventana abierta hasta que alguien apriete una tecla.
+
+    Esto NO es cosmetico y por eso esta en todas las salidas, tambien en las
+    que fallan. Con "Ejecutar con PowerShell" del boton derecho, la ventana se
+    cierra sola en cuanto el script termina: el que corrio el instalador no
+    llega a leer si salio bien, y si salio mal pierde justamente el mensaje que
+    dice por que. Un instalador que explica sus errores y despues los borra de
+    la pantalla no explica nada.
+
+    Se salta con -SinPausa, para cuando esto lo llame otro script. Y el
+    Read-Host va en try/catch porque en una sesion sin consola —una tarea
+    programada, un pipe— tirar ahi seria cambiar un final limpio por un error.
+#>
+function Pausar {
+  if ($SinPausa) { return }
+  Write-Host ""
+  Write-Host "Apreta una tecla para cerrar..." -ForegroundColor DarkGray
+  try { $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") } catch { }
+}
+
+function Cortar($texto)   { Mal $texto; Write-Host ""; Pausar; exit 1 }
 
 Write-Host "Instalador de la subida de zips del PC Robot" -ForegroundColor White
 Write-Host "Carpeta: $Aca"
@@ -204,6 +234,7 @@ Bien "la prueba paso"
 if ($Probar) {
   Write-Host "`n-Probar: llegue hasta aca y no registro la tarea." -ForegroundColor Yellow
   Write-Host "Corre esto mismo sin -Probar para instalarla.`n"
+  Pausar
   exit 0
 }
 
@@ -268,6 +299,29 @@ Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue
 if ($LASTEXITCODE -ne 0) { Cortar "No se pudo registrar la tarea: $r" }
 Bien "registrada, corre todos los dias a las $Hora"
 
+# ── 7. Leerla de vuelta ────────────────────────────────────────────────────
+# Se vuelve a preguntar por la tarea en vez de confiar en que `schtasks
+# /create` devolvio 0. No es desconfianza del comando: es que la pregunta que
+# se hace el que corrio esto es "¿quedo instalada?", y la unica respuesta que
+# vale es la del Programador, no la del instalador diciendo que le parece que
+# si. Ademas imprime la proxima ejecucion, que es lo que hay que mirar para
+# saber si la hora quedo como se queria.
+Paso 7 "Comprobarla en el Programador"
+$q = & schtasks /query /tn $NOMBRE_TAREA /fo LIST /v 2>&1
+if ($LASTEXITCODE -ne 0) {
+  Cortar "schtasks /create dijo que si, pero la tarea no aparece al consultarla. No quedo instalada."
+}
+# El nombre del campo cambia con el idioma de Windows, asi que se busca por las
+# dos formas en vez de por una: en ingles no diria "Hora proxima ejecucion".
+#
+# Y los acentos van como `.` a proposito. `schtasks` escribe con la codepage de
+# la consola, que no es la que PowerShell usa para leerlo, asi que "próxima"
+# puede llegar como "prxima" o "pr?xima": buscar el texto con tilde no matchea
+# y el paso queda diciendo "la tarea existe" sin la hora, que era justo el dato
+# por el que se agrego. Comprobado el 12/11/2026, fallaba con el acento puesto.
+$proxima = $q | Select-String -Pattern "Hora pr.xima ejecuci.n|Next Run Time" | Select-Object -First 1
+if ($proxima) { Bien ($proxima.Line.Trim()) } else { Bien "la tarea existe en el Programador" }
+
 # ── Cierre ─────────────────────────────────────────────────────────────────
 Write-Host "`nListo.`n" -ForegroundColor Green
 Write-Host "  Probarla ahora:   schtasks /run /tn `"$NOMBRE_TAREA`""
@@ -281,3 +335,4 @@ Write-Host "    tenga contrasena se puede pasar a modo desatendido."
 Write-Host "  - Si un dia falla no se pierde nada: el zip del robot es"
 Write-Host "    acumulativo y el del dia siguiente trae todo igual."
 Write-Host ""
+Pausar
