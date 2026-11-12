@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Select from "@/components/Select";
 import type { TipoDeEntidad } from "@/lib/core/mensajes";
 import { haceCuanto } from "@/lib/core/haceCuanto";
@@ -52,13 +52,23 @@ import { MAXIMO_DE_MENCIONES, MAXIMO_DEL_TEXTO } from "@/lib/mensajes/limites";
  * mensaje no va a ninguna planilla. La pantalla que lo monta aclara cuál es cuál
  * con `aclaracion`.
  *
+ * ## Una barra que se despliega
+ *
+ * Sin mensajes, el hilo entero ocupaba medio metro entre la información del
+ * registro. Por eso arranca plegado en una sola barra que dice si vale la pena
+ * abrirla: cuántos mensajes hay, si hay menciones propias sin leer y si hay un
+ * borrador sin enviar. Abierto muestra todo lo de siempre. Plegar **no tira el
+ * borrador**: el contenido sigue montado, sólo oculto, y la barra lo avisa.
+ *
  * ## Orden y lectura
  *
  * Se muestran del más viejo al más nuevo, con el campo para escribir debajo: es
  * como se lee una conversación, y lo que uno acaba de enviar queda pegado al
  * campo. La ruta los devuelve al revés y acá se dan vuelta.
  *
- * Mostrar el hilo marca como leídas las menciones propias (`PATCH
+ * Mostrar el hilo marca como leídas las menciones propias —**mostrarlo es
+ * abrirlo, no cargarlo**: el componente arranca plegado en una barra y lee el
+ * hilo igual, para poder decir cuántos mensajes hay— (`PATCH
  * /api/mensajes/mios`). Va acá y no en el GET porque un GET que escribe se dispara
  * con cualquier precarga y marcaría como visto lo que nadie vio. Si el PATCH falla
  * no se le avisa a nadie: lo único que pasa es que la mención sigue en la bandeja
@@ -157,18 +167,50 @@ export default function HiloDeMensajes({
     setErrorDelHilo("");
     setCargando(false);
 
-    // Se está mostrando el hilo: lo que me mencionaron acá deja de estar sin
-    // leer. Una vez por hilo, y sólo si hay algo que pudiera mencionarme.
-    const clave = `${tipo}:${id}`;
-    if (data.length > 0 && yaMarque.current !== clave) {
-      yaMarque.current = clave;
-      void fetch("/api/mensajes/mios", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo, id }),
-      }).catch(() => {});
+  }, [tipo, id]);
+
+  // ── Plegado o abierto ──────────────────────────────────────────────────────
+  // Arranca plegado, siempre: un hilo vacío ocupaba medio metro entre la
+  // información del registro. El contenido **no se desmonta al plegar**, sólo se
+  // oculta con `hidden`: lo que se estaba escribiendo vive en el estado de acá y
+  // desmontarlo lo tiraba sin avisar.
+  const [abierto, setAbierto] = useState(false);
+  const idDelContenido = useId();
+
+  // Cuántas menciones mías sin leer hay en este hilo, para decirlo en la barra.
+  // `null` es «no se sabe» (todavía no contestó, o falló): en ese caso la barra no
+  // dice nada, y no afirma que no hay. Sale de la bandeja —`GET /api/mensajes/mios`—
+  // porque el hilo no dice quién soy yo, y filtra por este hilo.
+  const [sinLeerMias, setSinLeerMias] = useState<number | null>(null);
+  useCargar(async (vigente) => {
+    try {
+      const res = await fetch("/api/mensajes/mios");
+      if (!res.ok) return;
+      const cuerpo = await leerJson(res);
+      if (!vigente()) return;
+      const filas = (cuerpo.data ?? []) as { tipo: string; id: string }[];
+      setSinLeerMias(filas.filter((f) => f.tipo === tipo && f.id === id).length);
+    } catch {
+      // Sin respuesta la barra calla: no es motivo para mostrar un error.
     }
   }, [tipo, id]);
+
+  // Abrir el hilo es lo que lo marca como leído, y no cargarlo: plegado, nadie vio
+  // los mensajes, y marcarlos sería decirle al autor «ya lo vio» sin que sea
+  // cierto (es lo que dice `PATCH /api/mensajes/mios`). Una vez por hilo, y sólo
+  // si hay algo que pudiera mencionarme.
+  useEffect(() => {
+    if (!abierto || cargando || errorDelHilo || mensajes.length === 0) return;
+    const clave = `${tipo}:${id}`;
+    if (yaMarque.current === clave) return;
+    yaMarque.current = clave;
+    setSinLeerMias(0);
+    void fetch("/api/mensajes/mios", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo, id }),
+    }).catch(() => {});
+  }, [abierto, cargando, errorDelHilo, mensajes.length, tipo, id]);
 
   // ── A quién se puede mencionar ─────────────────────────────────────────────
   const [destinatarios, setDestinatarios] = useState<Destinatario[]>([]);
@@ -333,8 +375,43 @@ export default function HiloDeMensajes({
     correoConfigurado === true && !errorDeLaLista && destinatarios.length > 0;
   const alLimite = elegidos.length >= MAXIMO_DE_MENCIONES;
 
+  // Lo que dice la barra de cuánto hay adentro, para que nadie abra un hilo al pepe.
+  // Sólo afirma lo que se sabe: con error o cargando no inventa un conteo.
+  let estadoDeLaBarra: string;
+  if (cargando) estadoDeLaBarra = "buscando…";
+  else if (errorDelHilo) estadoDeLaBarra = "no se pudo leer (abrilo para ver el motivo)";
+  else if (mensajes.length === 0) {
+    estadoDeLaBarra = existe ? "todavía nadie escribió" : "el registro ya no está";
+  } else {
+    estadoDeLaBarra = mensajes.length === 1 ? "1 mensaje" : `${mensajes.length} mensajes`;
+  }
+
   return (
-    <div className="space-y-3 border-t border-slate-200 pt-3">
+    <div className="border-t border-slate-200 pt-3">
+      <button
+        type="button"
+        onClick={() => setAbierto((a) => !a)}
+        aria-expanded={abierto}
+        aria-controls={idDelContenido}
+        className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left hover:bg-slate-50"
+      >
+        <span className="min-w-0 text-sm text-slate-700">
+          <span className="font-medium">Mensajes</span>
+          <span className="text-slate-500"> · {estadoDeLaBarra}</span>
+          {sinLeerMias !== null && sinLeerMias > 0 && (
+            <span className="font-medium text-amber-700">
+              {" · "}
+              {sinLeerMias === 1 ? "1 mención tuya sin leer" : `${sinLeerMias} menciones tuyas sin leer`}
+            </span>
+          )}
+          {hayBorrador && (
+            <span className="font-medium text-amber-700"> · borrador sin enviar</span>
+          )}
+        </span>
+        <span aria-hidden className="shrink-0 text-xs text-slate-400">{abierto ? "▲" : "▼"}</span>
+      </button>
+
+      <div id={idDelContenido} hidden={!abierto} className="mt-3 space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="text-xs font-medium text-slate-500">
           Mensajes{titulo ? ` · ${titulo}` : ""}
@@ -416,7 +493,9 @@ export default function HiloDeMensajes({
           />
 
           <div className="space-y-1.5">
-            <p className="text-xs font-medium text-slate-500">Avisar por correo a</p>
+            <p className="text-xs font-medium text-slate-500">
+              Avisar a (le llega un correo y le queda marcado en el sistema)
+            </p>
 
             <div className="w-full sm:w-72">
               <Select
@@ -479,7 +558,7 @@ export default function HiloDeMensajes({
             {/* A quién le va a llegar, antes de enviar y no después. */}
             <p className="text-xs text-slate-600">
               {elegidos.length === 0 ? (
-                <>No vas a avisar a nadie: el mensaje queda en el hilo y lo ve quien lo abra.</>
+                <>No vas a avisar a nadie: ni correo ni marca en el sistema. El mensaje queda en el hilo y lo ve quien lo abra.</>
               ) : (
                 <>
                   {aQuienLeLlega.length > 0 && (
@@ -488,12 +567,14 @@ export default function HiloDeMensajes({
                       <span className="font-medium">
                         {aQuienLeLlega.map((d) => d.nombre).join(", ")}
                       </span>
-                      . Que llegue se confirma recién después de enviar.{" "}
+                      , y le queda marcado en el sistema. Que el correo llegue se confirma recién
+                      después de enviar.{" "}
                     </>
                   )}
                   {aQuienNo.length > 0 && (
                     <span className="text-amber-700">
-                      Sin correo cargado, el aviso no sale: {aQuienNo.map((d) => d.nombre).join(", ")}.
+                      Sin correo cargado, el correo no sale, pero le queda marcado en el sistema:{" "}
+                      {aQuienNo.map((d) => d.nombre).join(", ")}.
                     </span>
                   )}
                 </>
@@ -526,6 +607,7 @@ export default function HiloDeMensajes({
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
       )}
+      </div>
     </div>
   );
 }
