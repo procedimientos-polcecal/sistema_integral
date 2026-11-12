@@ -114,7 +114,7 @@ async function leerJson(res: Response): Promise<CuerpoDeLaRuta> {
 }
 
 export default function HiloDeMensajes({
-  tipo, id, aclaracion, alCambiarElBorrador,
+  tipo, id, aclaracion, alCambiarElBorrador, abiertoAlMontar = false,
 }: {
   tipo: TipoDeEntidad;
   id: string;
@@ -131,6 +131,15 @@ export default function HiloDeMensajes({
    * del campo vive acá y desde afuera no se ve. Debe ser una función estable.
    */
   alCambiarElBorrador?: (hayBorrador: boolean) => void;
+  /**
+   * Si el hilo arranca desplegado. Por defecto **no**: en una OT, un requerimiento
+   * o una condición el hilo es un agregado entre la información del registro, y
+   * abierto ocupaba medio metro que nadie pidió. Sólo lo abre la pantalla donde
+   * el hilo es el motivo de estar ahí —el diálogo de «Mis pedidos», que se abre
+   * porque alguien apretó «Mensajes»—: plegado ahí costaría un clic que no compra
+   * nada. Se lee una sola vez, al montar.
+   */
+  abiertoAlMontar?: boolean;
 }) {
   // ── El hilo ────────────────────────────────────────────────────────────────
   const [mensajes, setMensajes] = useState<MensajeParaLaPantalla[]>([]);
@@ -170,11 +179,11 @@ export default function HiloDeMensajes({
   }, [tipo, id]);
 
   // ── Plegado o abierto ──────────────────────────────────────────────────────
-  // Arranca plegado, siempre: un hilo vacío ocupaba medio metro entre la
+  // Arranca plegado salvo que `abiertoAlMontar` diga otra cosa: un hilo vacío ocupaba medio metro entre la
   // información del registro. El contenido **no se desmonta al plegar**, sólo se
   // oculta con `hidden`: lo que se estaba escribiendo vive en el estado de acá y
   // desmontarlo lo tiraba sin avisar.
-  const [abierto, setAbierto] = useState(false);
+  const [abierto, setAbierto] = useState(abiertoAlMontar);
   const idDelContenido = useId();
 
   // Cuántas menciones mías sin leer hay en este hilo, para decirlo en la barra.
