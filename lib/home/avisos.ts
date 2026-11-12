@@ -28,6 +28,7 @@ export interface ConteosParaAvisos {
   syhSinCompletar: number;
   syhFotosSinRespaldar: number;
   agendaDivergencias: number;
+  mensajesMencionesSinLeer: number;
 }
 
 /**
@@ -150,6 +151,21 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * al salir de una sola función.
    */
   { clave: "agendaDivergencias", id: "agenda-divergencias", titulo: "Eventos del calendario que alguien cambió desde Google", href: "/agenda" },
+  /*
+   * LA MENSAJERÍA: las menciones que a alguien le quedaron sin leer. Es de quien
+   * mira, como `agenda-divergencias`, y tampoco se gatea por módulo: una mención
+   * es de una persona y el hilo puede ser de cualquier registro que ella vea.
+   * Cuenta lo mismo que la bandeja (`mencionesSinLeerVisibles`), así que una
+   * mención de un hilo que ya no puede abrir no suma.
+   *
+   * **Id nuevo** porque es un conteo nuevo. Y va en `ES_POR_PERSONA`: el número
+   * depende de quién mira y la foto diaria es una sola. De ahí que aparezca en la
+   * campana apenas se abre el SdG y en el push de los lunes, que lleva totales,
+   * **pero no en el push diario**. El aviso en el momento lo da el correo, que ya
+   * sale al mencionar; esto es el stock que queda hasta que se lee. No pasa por
+   * `avisarAQuienDecide()`: una mención no frena nada hasta que alguien decida.
+   */
+  { clave: "mensajesMencionesSinLeer", id: "mensajes-menciones-sin-leer", titulo: "Menciones sin leer en conversaciones del sistema", href: "/mis-menciones" },
 ];
 
 /**
@@ -158,7 +174,7 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
  *
  * El resumen diario compara cada aviso contra esa foto. Un aviso que no está en
  * la foto «subió desde cero», así que sin esta lista el de la Agenda saldría
- * todos los días como «3 más · Eventos del calendario…» con el total entero,
+ * todos los días como «3 más · Eventos del calendario…» (o «2 más · Menciones sin leer…») con el total entero,
  * rotulado como incremento y repitiéndose hasta que alguien abra la Agenda: la
  * novedad falsa que el diseño del resumen existe para evitar. `loQueSeMovio` los
  * saltea, y quedan en la campana y en el resumen de los lunes, que lleva totales.
@@ -171,7 +187,7 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
  * pide una foto por persona en `avisos_fotos` (ids como `agenda-divergencias:<usuario>`)
  * y enseñarle al cron del resumen a leerla.
  */
-export const ES_POR_PERSONA: ReadonlySet<string> = new Set(["agenda-divergencias"]);
+export const ES_POR_PERSONA: ReadonlySet<string> = new Set(["agenda-divergencias", "mensajes-menciones-sin-leer"]);
 
 export function avisosDeConteos(conteos: Partial<ConteosParaAvisos>): Notificacion[] {
   return AVISOS.flatMap(({ clave, id, titulo, href }) => {

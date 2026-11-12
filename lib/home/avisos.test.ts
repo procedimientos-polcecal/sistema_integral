@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avisosDeConteos, avisosDeRitmo, avisosDeSalud } from "./avisos";
+import { avisosDeConteos, avisosDeRitmo, avisosDeSalud, ES_POR_PERSONA } from "./avisos";
 import { CRECE_CON_EL_DIA, filtrarDescartadas } from "./notificaciones";
 import type { EntradaCaida } from "@/lib/core/saludDeLasSincronizaciones";
 
@@ -352,5 +352,23 @@ describe("avisosDeSalud", () => {
       caidas: [caida("agenda/canales")], sinDeclarar: ["nuevo/cosa"], sinComprobar: false, corridas: [],
     });
     expect(avisos.map((a) => a.id)).toEqual(["salud-agenda/canales", "salud-sin-declarar"]);
+  });
+});
+
+describe("el aviso de menciones sin leer", () => {
+  it("sale con id propio, lleva a la bandeja y es de una persona", () => {
+    expect(avisosDeConteos({ mensajesMencionesSinLeer: 2 })).toEqual([
+      {
+        id: "mensajes-menciones-sin-leer",
+        titulo: "Menciones sin leer en conversaciones del sistema",
+        cantidad: 2,
+        href: "/mis-menciones",
+      },
+    ]);
+    expect(ES_POR_PERSONA.has("mensajes-menciones-sin-leer")).toBe(true);
+  });
+
+  it("con cero no avisa", () => {
+    expect(avisosDeConteos({ mensajesMencionesSinLeer: 0 })).toEqual([]);
   });
 });

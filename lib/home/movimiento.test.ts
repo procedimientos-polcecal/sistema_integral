@@ -144,6 +144,10 @@ describe("loQueSeMovio con avisos que son de una persona", () => {
     ]);
   });
 
+  it("las menciones sin leer tampoco: son de una persona", () => {
+    expect(loQueSeMovio([aviso("mensajes-menciones-sin-leer", 2)], new Map())).toEqual([]);
+  });
+
   /*
    * El contraste: los de salud son del sistema —no dependen de quién mira— así
    * que la foto los recuerda y el movimiento los ve. Es el día que ese recurso
