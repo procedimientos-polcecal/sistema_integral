@@ -18,6 +18,10 @@ import {
   estadoSegunElCierre, loQueHayQueExportar, loQueImpideCerrar,
 } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
+import {
+  elCierreCambio, justificacionParaLaPlanilla, laJustificacionQueSeGuarda,
+  loQueFaltaPorElCierreAdelantado,
+} from "@/lib/mantenimiento/cierreAnteriorAlInicio";
 import { elPendienteDelIntento } from "@/lib/mantenimiento/pendienteDeLaOT";
 import {
   reintentarHastaQueSalga, hacePocoQueSeDreno,
@@ -215,7 +219,7 @@ export async function POST(request: Request) {
   const {
     equipment_id, sector_id, sector_raw, equipo_raw, equipo_code,
     especialidad, tipo, quien, descripcion,
-    fecha, fecha_ejecucion, fecha_fin, fecha_cierre,
+    fecha, fecha_ejecucion, fecha_fin, fecha_cierre, cierre_justificacion,
     estado, contratista, horas, operario_1, operario_2, operario_3, prioridad,
     schedule_id, aviso_id,
   } = body;
@@ -314,6 +318,7 @@ export async function POST(request: Request) {
     sector_id, equipment_id, descripcion, especialidad, tipo, quien, fecha_ejecucion,
     fecha_fin,
     fecha_cierre, horas, contratista, operario_1, operario_2, operario_3,
+    cierre_justificacion,
   });
   if (falta.length > 0) {
     const error = `Falta cargar ${falta.join(", ")}.`;
@@ -327,6 +332,7 @@ export async function POST(request: Request) {
     sector_id, equipment_id, descripcion, especialidad, tipo, quien,
     fecha_ejecucion, fecha_fin,
     fecha_cierre, horas, contratista, operario_1, operario_2, operario_3,
+    cierre_justificacion,
   });
   if (contradice.length > 0) {
     const error = `No se puede guardar porque ${contradice.join(", ")}.`;
@@ -534,6 +540,13 @@ export async function POST(request: Request) {
     // Vacía quiere decir «dura un día»; no es un dato que falte.
     fecha_fin:       fecha_fin || null,
     fecha_cierre:    fecha_cierre || null,
+    // Por qué se cerró antes de empezar. **No se guarda el texto tal cual**: lo
+    // filtra `laJustificacionQueSeGuarda` contra las dos fechas, así que una
+    // justificación que se escribió y después quedó sin sentido —porque se
+    // corrigió la fecha antes de mandar— no entra diciendo algo que ya no pasa.
+    cierre_justificacion: laJustificacionQueSeGuarda(
+      fecha_cierre, fecha_ejecucion, cierre_justificacion
+    ),
     // Una orden con fecha de cierre ya se hizo: la fecha manda sobre el estado
     // que haya venido. La regla está acá y no sólo en el formulario porque el
     // formulario no es el único que puede llamar a esta ruta.
@@ -772,8 +785,21 @@ export async function PATCH(request: Request) {
   // está en ninguna de sus dos listas, así que este PATCH no la puede cambiar.
   // El inicio contra el que se compara es el que tiene la orden, siempre.
   //
-  // Se lee **sólo cuando hay cierre**: un PATCH que cambia el estado o las
-  // observaciones no paga esta consulta.
+  // Se lee **sólo cuando el pedido toca el cierre** —su fecha o su
+  // justificación—: un PATCH que cambia el estado o las observaciones no paga
+  // esta consulta.
+  //
+  // Y se traen **tres** columnas y no sólo la fecha de inicio. Las otras dos
+  // son el estado guardado del cierre, y hacen falta las dos:
+  //
+  // - `fecha_cierre`, para saber si la que llega es **otra**. «Registrar el
+  //   trabajo» manda la fecha en todos los guardados, así que con «vino la
+  //   clave» como criterio quien sólo corrige las horas de una orden ya cerrada
+  //   antes de su inicio tendría que justificarla de nuevo cada vez.
+  // - `cierre_justificacion`, porque un pedido puede mover la fecha de cierre
+  //   **sin mandar justificación**: cualquier PATCH que no venga de «Registrar
+  //   el trabajo». Sin el texto guardado, lo que se escribiría es el
+  //   `undefined` del cuerpo, y eso borraría una justificación válida.
   //
   // Medido el 05/11/2026 sobre las 2.417 órdenes, que es lo que dice si esto
   // sirve: 63 de las 2.143 cerradas tienen el cierre antes del inicio. No son
@@ -781,9 +807,14 @@ export async function PATCH(request: Request) {
   // detectaba, porque cada fecha por separado es válida. Esas 63 **quedan como
   // están**: son dato de la planilla, que es la que manda en este módulo, y
   // corregirlas de este lado las pisa en la próxima sincronización.
-  if (update.fecha_cierre) {
+  const tocaElCierre =
+    body.fecha_cierre !== undefined || body.cierre_justificacion !== undefined;
+
+  if (tocaElCierre) {
     const { data: laOrden, error: noSePudoLeer } = await admin
-      .from("ordenes_trabajo").select("fecha_ejecucion").eq("id", id).maybeSingle();
+      .from("ordenes_trabajo")
+      .select("fecha_ejecucion, fecha_cierre, cierre_justificacion")
+      .eq("id", id).maybeSingle();
 
     if (noSePudoLeer) {
       return NextResponse.json({ error: noSePudoLeer.message }, { status: 500 });
@@ -792,18 +823,81 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "No se encontró la orden" }, { status: 404 });
     }
 
-    const impide = loQueImpideCerrar(laOrden.fecha_ejecucion, update.fecha_cierre as string);
-    if (impide.length > 0) {
-      return NextResponse.json(
-        { error: `No se puede guardar porque ${impide.join(", ")}.` },
-        { status: 400 }
-      );
+    // Con qué cierre y con qué texto queda la orden después de este pedido: lo
+    // que vino si vino, y lo guardado si no. Las dos puntas se resuelven acá y
+    // una sola vez, porque lo que se valida tiene que ser exactamente lo que se
+    // guarda — si no, se puede rechazar un texto que igual iba a quedar, o
+    // guardar uno que nadie validó.
+    const elCierre = body.fecha_cierre !== undefined
+      ? (update.fecha_cierre as string | null)
+      : (laOrden.fecha_cierre as string | null);
+    const elTexto = body.cierre_justificacion !== undefined
+      ? (update.cierre_justificacion as string | null)
+      : (laOrden.cierre_justificacion as string | null);
+
+    if (update.fecha_cierre) {
+      const impide = loQueImpideCerrar(laOrden.fecha_ejecucion, update.fecha_cierre as string);
+      if (impide.length > 0) {
+        return NextResponse.json(
+          { error: `No se puede guardar porque ${impide.join(", ")}.` },
+          { status: 400 }
+        );
+      }
     }
+
+    // ── Y SI SE CIERRA ANTES DE EMPEZAR, QUE DIGA POR QUÉ ────────────────────
+    //
+    // Sólo cuando la fecha de cierre **cambia**, por lo de arriba: reenviar la
+    // misma no es cerrar de nuevo. Y el mensaje es el de las altas, letra por
+    // letra, para que quien carga vea siempre la misma frase venga de donde
+    // venga el pedido.
+    if (body.fecha_cierre !== undefined && elCierreCambio(elCierre, laOrden.fecha_cierre)) {
+      const falta = loQueFaltaPorElCierreAdelantado({
+        fecha_cierre: elCierre,
+        fecha_ejecucion: laOrden.fecha_ejecucion,
+        cierre_justificacion: elTexto,
+      });
+      if (falta.length > 0) {
+        return NextResponse.json(
+          { error: `Falta cargar ${falta.join(", ")}.` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // La columna sale de la regla y no del cuerpo: si las fechas dejaron de
+    // contradecirse, se vacía. Y se escribe **sólo acá dentro**, que es lo que
+    // deja intacto el chequeo de «no se envió ningún cambio» de más arriba:
+    // escribirla en todo PATCH dejaría a `update` siempre con dos claves y un
+    // pedido vacío de verdad no recibiría más su 400.
+    update.cierre_justificacion = laJustificacionQueSeGuarda(
+      elCierre, laOrden.fecha_ejecucion, elTexto
+    );
   }
 
   const { data: updated, error } = await admin
     .from("ordenes_trabajo").update(update).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // ── LO QUE VA A LA CELDA W, DESPUÉS DEL UPDATE Y NO ANTES ─────────────────
+  //
+  // La W lleva las observaciones y la justificación juntas, así que se compone
+  // desde **la fila ya guardada** —`updated`— y no desde el cuerpo: lo que la
+  // celda tiene que decir es lo que la orden quedó diciendo, y eso recién se
+  // sabe acá.
+  //
+  // Cuándo viaja lo decide `justificacionParaLaPlanilla`, y `undefined` es «no
+  // la toques»: por eso la clave no se asigna en ese caso en vez de asignarle
+  // `undefined`. `celdasParaRegistrar` mira si la clave está presente, así que
+  // asignársela igual escribiría la W de todas formas —con la justificación
+  // sola— y se llevaría unas observaciones que no tienen columna propia desde
+  // la cual rearmarse.
+  const paraLaCeldaW = justificacionParaLaPlanilla(
+    registro.observaciones !== undefined,
+    body.cierre_justificacion !== undefined,
+    (updated.cierre_justificacion ?? null) as string | null
+  );
+  if (paraLaCeldaW !== undefined) registro.cierre_justificacion = paraLaCeldaW;
 
   const planilla_error = await escribirEnLaPlanilla(updated, registro);
 
