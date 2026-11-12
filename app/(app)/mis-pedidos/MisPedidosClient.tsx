@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { textoDelReclamo } from "@/lib/compras/reclamo";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import ConversacionDelPedido from "./ConversacionDelPedido";
 import {
@@ -74,6 +75,21 @@ interface Filtrable {
  * pantalla tarde tres segundos en abrir.
  */
 /** Por qué no se pudo abrir el pedido de un `?pedido=`: tres causas que se dicen distinto. */
+/**
+ * El pedido cuya conversación está abierta.
+ *
+ * Lleva el borrador porque el hilo se abre de dos maneras: desde «Mensajes»,
+ * en blanco, y desde «Reclamar», con la pregunta redactada y los de Compras
+ * marcados. Lo que cambia es con qué arranca el campo, no el hilo.
+ */
+export interface Conversacion {
+  id: string;
+  nroRi: number;
+  descripcion: string;
+  textoInicial?: string;
+  mencionesIniciales?: string[];
+}
+
 export type ProblemaDelEnlace =
   | { tipo: "no-valido" }
   | { tipo: "no-existe" }
@@ -91,7 +107,8 @@ function textoDelProblema(p: ProblemaDelEnlace): string {
 }
 
 export default function MisPedidosClient({
-  usuarioId, misAreas, areas, empresas, ubicaciones, conversacionInicial = null, problemaDelEnlace = null,
+  usuarioId, misAreas, areas, empresas, ubicaciones, gestoresDeCompras = [],
+  conversacionInicial = null, problemaDelEnlace = null,
 }: {
   /** El pedido cuya conversación hay que abrir al cargar: el del enlace de un correo. */
   conversacionInicial?: { id: string; nroRi: number; descripcion: string } | null;
@@ -100,6 +117,13 @@ export default function MisPedidosClient({
   usuarioId: string;
   /** Los ids de las áreas de esta persona. Vacío = todavía no se le asignó. */
   misAreas: string[];
+  /**
+   * A quiénes menciona el reclamo: los que tienen `edicion` o `admin` en
+   * Compras. Lo resuelve el servidor, que es el único que puede leer
+   * `usuario_modulos` de otra persona. Vacío es aceptable: el hilo se abre sin
+   * nadie marcado y se elige a mano.
+   */
+  gestoresDeCompras?: string[];
   areas: Opcion[];
   empresas: Opcion[];
   ubicaciones: Opcion[];
@@ -109,8 +133,7 @@ export default function MisPedidosClient({
   // El pedido cuya conversación está abierta. Guarda lo que el diálogo muestra
   // en el encabezado, y no sólo el id, para no buscarlo de nuevo en `pedidos`:
   // la lista se recarga al cambiar de página y el pedido puede ya no estar.
-  const [conversacion, setConversacion] =
-    useState<{ id: string; nroRi: number; descripcion: string } | null>(conversacionInicial);
+  const [conversacion, setConversacion] = useState<Conversacion | null>(conversacionInicial);
   // Si ya se está en Mis pedidos y llega otro `?pedido=` (la página se vuelve a
   // pedir al servidor sin remontar esto), el estado de arriba no se recalcula
   // solo. Se ajusta durante el render comparando contra el valor previo, y no
@@ -401,6 +424,19 @@ export default function MisPedidosClient({
         </div>
       )}
 
+      {/*
+        Sin área asignada no hay nada que reclamar, y conviene decirlo.
+        Esa persona abre en «Todos» —la lista no está vacía, así que el cartel
+        de abajo no aparece— ve el semáforo pintado y ni un botón «Reclamar»,
+        sin una palabra sobre por qué. Son seis personas hoy.
+      */}
+      {misAreas.length === 0 && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          No tenés un área asignada, así que podés mirar todos los pedidos pero no reclamar
+          ninguno como propio. Se asigna en Administración → Usuarios.
+        </div>
+      )}
+
       {problemaDelEnlace && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {textoDelProblema(problemaDelEnlace)}
@@ -463,7 +499,13 @@ export default function MisPedidosClient({
                 <PuntoDelSemaforo pedido={p} />
               </div>
 
-              <BotonDeMensajes pedido={p} onAbrir={setConversacion} />
+              <div className="mt-1.5 flex flex-wrap items-center gap-3">
+                <BotonDeMensajes pedido={p} onAbrir={setConversacion} />
+                <BotonDeReclamo
+                  pedido={p} esMio={esMio(p)} gestores={gestoresDeCompras}
+                  onAbrir={setConversacion}
+                />
+              </div>
             </article>
           ))}
         </div>
@@ -513,8 +555,12 @@ export default function MisPedidosClient({
                       {p.estado_compra === "RECIBIDO" && p.fecha_recepcion && (
                         <div className="text-xs text-green-700">Recibido el {fecha(p.fecha_recepcion)}</div>
                       )}
-                      <div className="mt-0.5">
+                      <div className="mt-0.5 flex flex-wrap items-center gap-3">
                         <BotonDeMensajes pedido={p} onAbrir={setConversacion} />
+                        <BotonDeReclamo
+                          pedido={p} esMio={esMio(p)} gestores={gestoresDeCompras}
+                          onAbrir={setConversacion}
+                        />
                       </div>
                     </td>
                     <td className="px-3 py-2 text-right text-slate-600">{p.cantidad ?? "—"}</td>
@@ -559,11 +605,19 @@ export default function MisPedidosClient({
 
       {conversacion && (
         <ConversacionDelPedido
-          // Un hilo por pedido: al abrir otro, el texto y las menciones arrancan limpios.
-          key={conversacion.id}
+          /*
+           * Un hilo por pedido, **y el reclamo cuenta como otra apertura**.
+           * El borrador se lee una sola vez al montar, así que con la clave
+           * puesta sólo en el id, abrir «Mensajes» y después «Reclamar» del
+           * mismo pedido reusaba el componente y el texto redactado no
+           * aparecía nunca.
+           */
+          key={`${conversacion.id}|${conversacion.textoInicial ? "reclamo" : "libre"}`}
           id={conversacion.id}
           nroRi={conversacion.nroRi}
           descripcion={conversacion.descripcion}
+          textoInicial={conversacion.textoInicial}
+          mencionesIniciales={conversacion.mencionesIniciales}
           onCerrar={() => {
             setConversacion(null);
             // Sacar `?pedido=` de la barra: si no, recargar la página vuelve a
@@ -661,15 +715,63 @@ function BotonDeMensajes({
   pedido, onAbrir,
 }: {
   pedido: RequerimientoConRelaciones;
-  onAbrir: (p: { id: string; nroRi: number; descripcion: string }) => void;
+  onAbrir: (p: Conversacion) => void;
 }) {
   return (
     <button
       type="button"
       onClick={() => onAbrir({ id: pedido.id, nroRi: pedido.nro_ri, descripcion: pedido.descripcion })}
-      className="mt-1.5 text-xs font-medium text-slate-600 underline hover:text-slate-900"
+      className="text-xs font-medium text-slate-600 underline hover:text-slate-900"
     >
       Mensajes
+    </button>
+  );
+}
+
+/**
+ * Pedirle a Compras que explique por qué ese pedido está demorado.
+ *
+ * Abre **el mismo hilo** que «Mensajes», con la pregunta redactada y los de
+ * Compras marcados. No hay estado «reclamado» nuevo: el hilo ya es el registro
+ * de que se reclamó y de qué contestaron, y una columna aparte sería una
+ * segunda fuente de verdad sobre lo mismo.
+ *
+ * **Sólo en amarillo y rojo, y sólo sobre pedidos del área propia.** Un pedido
+ * de treinta días no es noticia, y reclamar por el pedido de otra área es
+ * ruido para Compras que no ayuda a nadie.
+ */
+function BotonDeReclamo({
+  pedido, esMio, gestores, onAbrir,
+}: {
+  pedido: RequerimientoConRelaciones;
+  esMio: boolean;
+  gestores: string[];
+  onAbrir: (p: Conversacion) => void;
+}) {
+  if (!esMio || !esReclamable(pedido)) return null;
+  const dias = diasEsperando(pedido.fecha, new Date());
+  if (colorDelPedido(pedido.fecha, new Date()) === "verde") return null;
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        onAbrir({
+          id: pedido.id,
+          nroRi: pedido.nro_ri,
+          descripcion: pedido.descripcion,
+          textoInicial: textoDelReclamo({
+            nro_ri: pedido.nro_ri,
+            descripcion: pedido.descripcion,
+            dias,
+            estado: pedido.estado_compra,
+          }),
+          mencionesIniciales: gestores,
+        })
+      }
+      className="text-xs font-semibold text-[var(--primary)] underline hover:opacity-80"
+    >
+      Reclamar
     </button>
   );
 }

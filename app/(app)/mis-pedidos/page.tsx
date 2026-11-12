@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import MisPedidosClient, { type ProblemaDelEnlace } from "./MisPedidosClient";
 
 /**
@@ -46,6 +47,32 @@ export default async function MisPedidosPage({
       supabase.from("usuario_areas_compras").select("area_id").eq("usuario_id", user.id),
     ]);
 
+  /*
+   * A quiénes menciona el reclamo: los que gestionan la compra.
+   *
+   * **Es el grant explícito de `usuario_modulos` y no `nivelEnModulo()`**, que
+   * le devuelve `admin` a todo `admin_sistema` sin mirar el grant. Medido el
+   * 12/11/2026: por el grant son cuatro; por el nivel efectivo son cinco, y la
+   * quinta tiene `lectura` explícita en Compras. Usar el nivel repetiría el
+   * error que ya se pagó con `compras-por-aprobar`, que le llegaba a seis
+   * personas de las cuales tres no podían aprobar.
+   *
+   * Va con el cliente admin porque `usuario_modulos` y `usuarios` no dejan
+   * leer la fila de otro con el cliente de la sesión. No se filtra nada
+   * sensible: son los mismos nombres que el desplegable de menciones ya ofrece.
+   *
+   * Si la consulta falla, la lista queda vacía: el botón de reclamo abre el
+   * hilo sin nadie marcado y se elige a mano, que es el comportamiento de
+   * antes. Un reclamo sin destinatario es mejor que una pantalla que no carga.
+   */
+  const admin = createAdminClient();
+  const { data: gestores } = await admin
+    .from("usuario_modulos")
+    .select("usuario_id, usuarios!inner(activo)")
+    .eq("modulo", "compras")
+    .in("nivel", ["edicion", "admin"])
+    .eq("usuarios.activo", true);
+
   // El pedido del enlace se resuelve **acá y por su id**, no buscándolo entre los
   // que trae el cliente: ése trae una página de 50 filtrada por área o búsqueda,
   // y el pedido por el que avisaron puede ser de otra área o estar en la página
@@ -86,6 +113,7 @@ export default async function MisPedidosPage({
       problemaDelEnlace={problemaDelEnlace}
       usuarioId={user.id}
       misAreas={(mias ?? []).map((a) => a.area_id as string)}
+      gestoresDeCompras={(gestores ?? []).map((g) => g.usuario_id as string)}
       areas={areas ?? []}
       empresas={empresas ?? []}
       ubicaciones={ubicaciones ?? []}

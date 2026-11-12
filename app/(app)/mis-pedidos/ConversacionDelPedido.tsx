@@ -26,12 +26,16 @@ import HiloDeMensajes from "@/components/HiloDeMensajes";
  * scrollea y una caja interior **sin** `overflow`.
  */
 export default function ConversacionDelPedido({
-  id, nroRi, descripcion, onCerrar,
+  id, nroRi, descripcion, onCerrar, textoInicial, mencionesIniciales,
 }: {
   id: string;
   nroRi: number;
   descripcion: string;
   onCerrar: () => void;
+  /** Cuando se llega por «Reclamar»: la pregunta ya redactada, editable. */
+  textoInicial?: string;
+  /** Y los de Compras ya marcados, para que reclamar sea un clic y no elegir de a quince. */
+  mencionesIniciales?: string[];
 }) {
   // Lo escrito y no enviado vive adentro del hilo; avisa acá para no tirarlo
   // sin que se note. Mismo criterio que la ficha de la condición: con cambios
@@ -76,6 +80,8 @@ export default function ConversacionDelPedido({
             id={id}
             alCambiarElBorrador={setHayBorrador}
             abiertoAlMontar
+            textoInicial={textoInicial}
+            mencionesIniciales={mencionesIniciales}
             aclaracion={
               "Es una conversación con otras personas: no cambia el estado del pedido ni llega a " +
               "la planilla de Compras. Un requerimiento lo ve toda persona con acceso al sistema, " +
