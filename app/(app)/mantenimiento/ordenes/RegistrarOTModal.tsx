@@ -8,6 +8,10 @@ import FallaDeLaOT, { type LaFalla } from "@/components/FallaDeLaOT";
 import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import { loQueImpideCerrar } from "@/lib/mantenimiento/cierreDeOT";
 import { comoSeLee } from "@/lib/core/fechas";
+import {
+  elCierreEsAnteriorAlInicio,
+  loQueFaltaPorElCierreAdelantado,
+} from "@/lib/mantenimiento/cierreAnteriorAlInicio";
 
 /**
  * Registrar el trabajo de una orden.
@@ -70,12 +74,39 @@ export default function RegistrarOTModal({
      * lo dicen, trabando el registro del trabajo sin un solo error.
      */
     fecha_ejecucion: string | null;
+    /**
+     * Las dos que ya tiene la orden, para precargar el modal con ellas y no con
+     * lo que se le ocurra a la pantalla.
+     *
+     * Obligatorias y no opcionales por lo mismo que las de arriba, y acá la
+     * consecuencia es peor que un cartel de más: este modal manda todos sus
+     * campos en cada guardado, y el PATCH exige la justificación cuando el
+     * cierre queda antes del inicio. Si el listado dejara de traer
+     * `cierre_justificacion`, reabrir una OT adelantada para corregirle las
+     * horas mandaría el campo vacío y recibiría un 400 —o borraría la que
+     * había—, sin un solo error de tipos. Y si dejara de traer `fecha_cierre`,
+     * la fecha volvería a arrancar en hoy y se movería en silencio.
+     */
+    fecha_cierre: string | null;
+    cierre_justificacion: string | null;
   };
   onCerrar: () => void;
   onRegistrada: () => void;
 }) {
   const [resultado, setResultado] = useState<string>("completado");
-  const [cuando, setCuando] = useState(hoy());
+  /*
+   * Arranca en la fecha de cierre que la orden ya tiene, y en hoy sólo si no
+   * tiene. Antes arrancaba siempre en hoy, así que reabrir una OT cerrada para
+   * corregirle las horas le movía la fecha de cierre al día de hoy, en
+   * silencio. Es un cambio de comportamiento en una pantalla que nadie pidió
+   * cambiar, y está acá porque sin él «corregir una OT vieja no la obliga a
+   * justificar nada de nuevo» no se sostiene: una orden cerrada antes de su
+   * inicio se reabriría con la fecha de hoy, que ya no es anterior.
+   */
+  const [cuando, setCuando] = useState(orden.fecha_cierre ?? hoy());
+  // Precargada por lo mismo que la fecha: si arrancara vacía, corregir las
+  // horas de una OT adelantada mandaría "" y borraría el motivo guardado.
+  const [justificacion, setJustificacion] = useState(orden.cierre_justificacion ?? "");
   const [horas, setHoras] = useState(orden.horas != null ? String(orden.horas) : "");
   const [contratista, setContratista] = useState(orden.contratista ?? "");
   const [operario1, setOperario1] = useState(orden.operario_1 ?? "");
@@ -154,9 +185,25 @@ export default function RegistrarOTModal({
    */
   const impideCerrar = loQueImpideCerrar(orden.fecha_ejecucion, cuando);
 
+  // Sale y entra con las dos fechas, como la alerta de arriba.
+  const pideJustificacion = elCierreEsAnteriorAlInicio(cuando, orden.fecha_ejecucion);
+
   async function guardar() {
     if (!observaciones.trim() && resultado !== "completado") {
       setError("Contá qué pasó: un trabajo parcial o cancelado sin explicación no sirve después.");
+      return;
+    }
+
+    // Antes de postear nada, por lo mismo que el control de las fechas de más
+    // abajo: la ejecución se guarda primero y no se deshace, así que un rechazo
+    // del servidor dejaría el trabajo registrado y la orden sin cerrar.
+    const faltaElPorQue = loQueFaltaPorElCierreAdelantado({
+      fecha_cierre: cuando,
+      fecha_ejecucion: orden.fecha_ejecucion,
+      cierre_justificacion: justificacion,
+    });
+    if (faltaElPorQue.length > 0) {
+      setError(`Falta ${faltaElPorQue.join(", ")}.`);
       return;
     }
 
@@ -212,6 +259,7 @@ export default function RegistrarOTModal({
         id: orden.id,
         estado: ESTADO_SEGUN[resultado],
         fecha_cierre: cuando,
+        cierre_justificacion: justificacion.trim() || null,
         horas: horas ? Number(horas) : null,
         contratista: contratista.trim() || null,
         operario_1: operario1.trim() || null,
@@ -352,6 +400,18 @@ export default function RegistrarOTModal({
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
             No se puede guardar porque {impideCerrar.join(", ")}.
           </div>
+        )}
+
+        {/* Debajo de la grilla y no adentro de la celda de la fecha, por lo
+            mismo que la alerta: en media columna el rótulo se parte. */}
+        {pideJustificacion && (
+          <Campo etiqueta="Por qué se cierra antes de la fecha de inicio">
+            <textarea
+              value={justificacion}
+              onChange={(e) => setJustificacion(e.target.value)}
+              className="input min-h-20"
+            />
+          </Campo>
         )}
 
         <Campo etiqueta="Quiénes lo hicieron">
