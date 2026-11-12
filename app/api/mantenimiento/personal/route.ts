@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdminMantenimiento } from "@/lib/mantenimiento/auth";
 import { esFechaIso, hoyEnArgentina } from "@/lib/core/fechas";
+import { auditar, nombreParaAuditoria } from "@/lib/core/auditoria";
 
 /**
  * El padrón del taller: quién es mecánico, electricista o lubricador, de qué
@@ -243,4 +244,86 @@ export async function PATCH(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });
+}
+
+/**
+ * DELETE — saca la fila del padrón, de verdad.
+ *
+ * NO ES LO MISMO QUE DAR DE BAJA, Y ÉSA ES LA RAZÓN DE QUE EXISTA. El `PATCH`
+ * con `hasta` dice «esta persona dejó el taller» y **conserva la fila**, porque
+ * la semana del mes pasado tiene que seguir mostrándola. Esto dice «esta fila
+ * nunca debió existir» y la borra. Las dos cosas se piden seguido y confundirlas
+ * es el error caro, así que la pantalla las nombra distinto.
+ *
+ * El caso real que lo trajo: el padrón tenía a la misma persona dos veces, con
+ * vigencias que no se superponen —del 9 al 15 y desde el 16—, así que pasaron la
+ * validación sin problema; quien se equivocó al cargar sólo podía darle de baja,
+ * que deja la fila igual.
+ *
+ * SE AUDITA, Y EL REGISTRO VA ANTES DEL BORRADO: si no entra, no se borra. Lo
+ * que la fila dice —oficio, grupo, desde, hasta— **no está en ningún otro
+ * lado**, así que sin el registro el borrado no se puede ni mirar ni rehacer.
+ * Es el mismo criterio que el renglón del cuaderno de contratista, y usa el
+ * verbo `borrar`, que ya existe: no necesita migración.
+ *
+ * Lo que queda sin resolver, dicho: `mant_programacion_pisadas` guarda los
+ * movimientos a mano por `empleado_id` y **no cuelga de esta tabla**, así que
+ * borrar una fila del padrón dejaría una pisada apuntando a alguien que ya no
+ * figura. Hoy no pasa —medido el 12/11/2026: 0 pisadas y 0 semanas de
+ * referencia, la programación todavía no se usó—, y cuando se use hay que
+ * decidir qué hacer con eso.
+ */
+export async function DELETE(request: Request) {
+  const permiso = await admitir();
+  if (permiso.error) return permiso.error;
+
+  const id = new URL(request.url).searchParams.get("id") ?? "";
+  if (!UUID.test(id)) {
+    return NextResponse.json({ error: "Falta qué fila del padrón se saca" }, { status: 400 });
+  }
+
+  const db = createAdminClient();
+
+  const { data: fila, error: errFila } = await db
+    .from("mant_personal_taller")
+    .select("id, empleado_id, oficio, grupo, desde, hasta")
+    .eq("id", id)
+    .maybeSingle();
+  if (errFila) return NextResponse.json({ error: errFila.message }, { status: 500 });
+  if (!fila) return NextResponse.json({ error: "Esa fila del padrón ya no existe" }, { status: 404 });
+
+  // ── El registro, antes del borrado ──────────────────────
+  const supabase = await createClient();
+  const { data: quien } = await supabase
+    .from("usuarios")
+    .select("nombre, apellido, email")
+    .eq("id", permiso.user!.id)
+    .maybeSingle();
+
+  const registro = await auditar(db, {
+    modulo: "mantenimiento",
+    entidad: "mant_personal_taller",
+    entidadId: fila.id,
+    accion: "borrar",
+    usuario: { id: permiso.user!.id, nombre: nombreParaAuditoria(quien) },
+    valorAnterior: `${fila.oficio}${fila.grupo ? ` ${fila.grupo}` : ""}, desde ${fila.desde}${
+      fila.hasta ? ` hasta ${fila.hasta}` : ""
+    }`,
+    valorNuevo: null,
+    contexto: { fila },
+  });
+  if (!registro.ok) {
+    return NextResponse.json(
+      {
+        error:
+          `No se sacó del padrón porque no se pudo registrar quién lo sacaba: ${registro.error}. ` +
+          `Lo que no se deshace queda registrado o no se hace.`,
+      },
+      { status: 500 }
+    );
+  }
+
+  const { error } = await db.from("mant_personal_taller").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return new NextResponse(null, { status: 204 });
 }
