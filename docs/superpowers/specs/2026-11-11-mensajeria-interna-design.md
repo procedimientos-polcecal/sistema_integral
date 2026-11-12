@@ -274,3 +274,87 @@ que falta para que entren los otros ocho, o puede ser una pantalla más que mira
 una sola persona, como las notas de la OT. Lo que sí se puede hacer es
 mirarlo: a los dos meses, contar cuántas personas distintas escribieron un
 mensaje. Si es una, el diagnóstico no era éste.
+
+## Cómo terminó
+
+Construido el 11 y 12 de noviembre de 2026, en diecisiete commits. La migración
+`20261111110717_mensajes_pegados_a_su_registro.sql` está **aplicada**. Lo que
+sigue no es el resumen de lo que se hizo —eso lo cuenta el código— sino las
+cuatro cosas que costaron y que el próximo no tiene por qué volver a descubrir.
+
+**El bug que ningún test de este repo puede atrapar, y que casi se entrega.**
+`mensajes` llega a `usuarios` por dos caminos —el `creado_por` y el
+muchos-a-muchos que crea `mensajes_menciones`—, así que `autor:usuarios(...)`
+es ambiguo y PostgREST contesta **300 `PGRST201`**. La feature se fabricó su
+propia ambigüedad al agregar la tabla de menciones: por eso
+`ordenes_trabajo_notas`, con el mismo embebido, sigue andando. Lo que lo vuelve
+grave no es la consulta sino el reparto: **el `POST` funciona igual**, porque su
+`select()` no embebe nada. O sea que alguien escribía, mencionaba, **el correo
+salía**, y después el hilo no se podía abrir ni por el autor ni por el
+mencionado — el anti-objetivo número uno en su forma literal. Los 6045 tests
+estaban en verde: las cadenas de `select()` no las mira nadie. Apareció recién
+al correr las consultas contra la base, y la defensa es que **las dos cadenas
+de esta familia llevan el FK explícito** (`usuarios!mensajes_creado_por_fkey`).
+El `usuario:usuarios(...)` anidado dentro de `menciones:` no lo lleva ni lo
+necesita: desde ahí hay un solo camino.
+
+**RLS sabía más de lo que el plan creía.** El plan decía que quien decide si
+alguien ve un hilo es la ruta «porque RLS no lo sabe», y es falso para dos de
+los tres tipos: `mant_puede_ver()` y `tiene_acceso_syh()` dependen del usuario
+y no del registro. Con la lectura abierta, cualquiera con su token leía por
+PostgREST los hilos de Mantenimiento y de Seguridad e Higiene que su rol no ve,
+incluido `aviso_fallo`. Se cerró con un `case entidad_tipo` antes de aplicar la
+migración. De ahí sale la regla que hay que sostener: **`ENTIDADES[tipo].puedeVerlo`
+tiene que espejar la policy de SELECT de la tabla destino**, y nada lo comprueba.
+
+**Un enlace que funciona para ocho no funciona.** El correo de un requerimiento
+apuntaba a la pantalla del módulo Compras, que redirige a quien no lo tiene —
+justo las seis personas por las que el hilo se montó en Mis pedidos. Ahora
+apunta a `/mis-pedidos?pedido=<id>`, que alcanzan los catorce, y el costo
+asumido es que quien **sí** tiene Compras cae ahí y no en el detalle del
+módulo. La condición insegura tuvo el mismo problema y la misma solución
+(`?condicion=<id>`). **La orden de trabajo sigue sin resolverlo**: su enlace
+lleva a la lista filtrada por `?q=<número>` y no a la orden, porque
+Mantenimiento no tiene página por orden y hacerla pide diseño, no un parámetro.
+Es el único de los tres que todavía depende de que quien lee busque.
+
+**Lo que se decidió y no se hizo**, para que no se lea como un olvido: el
+`aviso_fallo` lo puede leer por PostgREST cualquiera que vea el hilo, y taparlo
+sólo en la pantalla es una cortesía y no una frontera —cerrarlo de verdad pide
+`grant` por columna—; y una caída de la base averiguando el permiso de una OT
+sale como **403 y no como 503**, porque `nivelMantenimientoDe` descarta el
+`error` de sus lecturas. Arreglar eso es tocar otro módulo con tráfico, así que
+quedó dicho en los docstrings en vez de hecho a medias.
+
+### Lo que sólo se puede comprobar en la primera corrida real
+
+Nada se probó con datos: las dos tablas están vacías y lo medido son consultas
+que resuelven, no un hilo que se lee. En orden:
+
+1. **Que `SDG_CORREO_URL` y `SDG_CORREO_SECRET` estén en el proyecto
+   `sistema-integral` de Vercel.** Si faltan, la pantalla lo dice —la mención
+   queda deshabilitada con el motivo— pero **no sale ni un correo**, y como no
+   hay contador de menciones sin leer en el menú ni en la campana (deliberado:
+   el canal es el correo), la mensajería queda muda sin que nadie se entere.
+   Lo contesta `correo_configurado` de `/api/mensajes/destinatarios`.
+2. **Que `NEXT_PUBLIC_APP_URL` esté puesta allá.** En local no se nota, porque
+   la url base cae al `host`; lo que se ve es un correo con el dominio
+   equivocado.
+3. **Leer un hilo antes que escribir uno.** Es el orden que habría encontrado
+   el `PGRST201` el primer día en vez del último.
+4. **Mencionar a alguien sin el módulo** y confirmar que no se lo puede ni
+   elegir, y **escribir con alguien que ve Seguridad e Higiene pero no la
+   edita**, que tiene que poder: es la decisión que se tomó contra el
+   precedente de las notas de la OT.
+5. **Que un correo deje `avisado_en` escrito.** Si queda en null con el
+   `aviso_fallo` también vacío, el `after()` no llegó a correr y la mención va a
+   decir «pendiente» para siempre.
+
+### Lo que quedó anotado y no se arregló
+
+Una docena de cosas menores, ninguna bloqueante, triadas por la revisión final:
+el cartel de «esto no es privado» desaparece en el hilo huérfano; el `PATCH`
+marca todas las menciones del hilo y no sólo las que la tarjeta mostraba; la
+concordancia en singular del aviso de mencionados ausentes; `creado_por` sin
+`on delete`, que ahora pide su propia migración. El detalle vivía en el registro
+de ejecución, que se borró al cerrar: lo que de verdad importaba está arriba.
