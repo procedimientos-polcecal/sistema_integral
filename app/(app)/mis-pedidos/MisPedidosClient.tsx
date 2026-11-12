@@ -159,6 +159,8 @@ export default function MisPedidosClient({
   const [color, setColor] = useState<ColorDelPedido | null>(null);
   /** Cuántos pedidos esperan a Compras en cada color, del conjunto filtrado entero. */
   const [conteos, setConteos] = useState<Record<ColorDelPedido, number> | null>(null);
+  /** Cuándo fue el último mensaje de cada pedido en pantalla, por id. */
+  const [ultimoMensaje, setUltimoMensaje] = useState<Record<string, string>>({});
 
   const [pedidos, setPedidos] = useState<RequerimientoConRelaciones[]>([]);
   const [total, setTotal] = useState(0);
@@ -319,6 +321,44 @@ export default function MisPedidosClient({
     setConteos({ verde: cuentas[0], amarillo: cuentas[1], rojo: cuentas[2] });
   }, [alcance, busquedaAplicada, misAreas]);
 
+
+  /*
+   * Cuándo se habló por última vez de cada pedido que está en pantalla.
+   *
+   * Sirve para no reclamar dos veces lo mismo: sin esto, las mismas filas
+   * rojas se reclaman un día sí y otro también, y los quince que miran con
+   * alcance «Todos» le mandan el mismo correo a las mismas cuatro personas —
+   * que es, textualmente, cómo este sistema ya documentó que mueren sus
+   * notificaciones.
+   *
+   * **Dice «último mensaje» y no «reclamado», a propósito.** El hilo guarda
+   * cualquier conversación sobre el pedido, no sólo reclamos, y llamarlo
+   * reclamo afirmaría algo que el dato no sabe. Para lo que tiene que servir
+   * —ver que de esto ya se habló— alcanza igual.
+   *
+   * Un `.in()` de 50 ids como mucho, que es el tamaño de la página, y el
+   * índice `mensajes_entidad_idx` lo cubre. Si falla, la lista se muestra sin
+   * la etiqueta: esto es un agregado y no puede tumbar la pantalla.
+   */
+  useCargar(async (vigente) => {
+    if (pedidos.length === 0) { setUltimoMensaje({}); return; }
+    const supabase = createClient();
+    const { data, error: err } = await supabase
+      .from("mensajes")
+      .select("entidad_id, creado_en")
+      .eq("entidad_tipo", "requerimiento")
+      .in("entidad_id", pedidos.map((p) => p.id))
+      .order("creado_en", { ascending: false });
+
+    if (!vigente() || err) return;
+    const ultimo: Record<string, string> = {};
+    for (const m of data ?? []) {
+      // Vienen del más nuevo al más viejo: el primero de cada pedido gana.
+      const id = m.entidad_id as string;
+      if (!ultimo[id]) ultimo[id] = m.creado_en as string;
+    }
+    setUltimoMensaje(ultimo);
+  }, [pedidos]);
 
   const paginas = Math.ceil(total / POR_PAGINA);
   /** De mi área. Es lo que se marca al mirar todos. */
@@ -505,6 +545,7 @@ export default function MisPedidosClient({
                   pedido={p} esMio={esMio(p)} gestores={gestoresDeCompras}
                   onAbrir={setConversacion}
                 />
+                <UltimoMensaje cuando={ultimoMensaje[p.id]} />
               </div>
             </article>
           ))}
@@ -561,6 +602,7 @@ export default function MisPedidosClient({
                           pedido={p} esMio={esMio(p)} gestores={gestoresDeCompras}
                           onAbrir={setConversacion}
                         />
+                        <UltimoMensaje cuando={ultimoMensaje[p.id]} />
                       </div>
                     </td>
                     <td className="px-3 py-2 text-right text-slate-600">{p.cantidad ?? "—"}</td>
@@ -709,6 +751,17 @@ function PuntoDelSemaforo({ pedido }: { pedido: RequerimientoConRelaciones }) {
       <span>Esperando hace {textoDeEspera(diasEsperando(pedido.fecha, new Date()))}</span>
     </span>
   );
+}
+
+/**
+ * Cuándo se habló por última vez de este pedido.
+ *
+ * Dice «último mensaje» y no «reclamado»: el hilo guarda cualquier
+ * conversación, y el dato no sabe cuál de ellas fue un reclamo.
+ */
+function UltimoMensaje({ cuando }: { cuando?: string }) {
+  if (!cuando) return null;
+  return <span className="text-xs text-slate-400">Último mensaje el {fecha(cuando)}</span>;
 }
 
 function BotonDeMensajes({
