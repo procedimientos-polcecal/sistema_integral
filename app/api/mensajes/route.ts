@@ -70,6 +70,10 @@ const SIN_PERMISO = "No se pudieron comprobar tus permisos. Probá de nuevo en u
  * **Este GET no marca nada como leído.** Un GET que escribe se dispara con
  * cualquier precarga del navegador: eso es el `PATCH /api/mensajes/mios`, que
  * llama la pantalla cuando efectivamente muestra el hilo.
+ *
+ * **Sí dice cuántas menciones sin leer tiene acá quien pregunta**
+ * (`mis_menciones_sin_leer`), para la barra del hilo plegado. Contar no es
+ * marcar, y es gratis: sale de las mismas filas.
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -127,6 +131,17 @@ export async function GET(request: Request) {
     return NextResponse.json({
       titulo: tituloDelHilo(queEs(tipo, numeros.get(id) ?? null), existe),
       existe_el_registro: existe,
+      // Para la barra del hilo plegado, que dice si hay algo propio esperando.
+      // Sale de las filas que ya se leyeron: no cuesta ni una consulta más.
+      // Lo cuenta esta ruta porque **es la única que sabe quién pregunta**: la
+      // pantalla recibe `usuario_id` y `leido` de cada mención pero no conoce su
+      // propio id, y por eso antes pedía la bandeja entera —todas las menciones
+      // del sistema, con su texto— sólo para contar las de un hilo.
+      mis_menciones_sin_leer: filas.reduce(
+        (n, f) =>
+          n + (f.menciones ?? []).filter((m) => m.usuario_id === user.id && m.leido_en === null).length,
+        0
+      ),
       data: filas.map((f) => darFormaAlMensaje(f, user.id)),
     });
   } catch (e) {
