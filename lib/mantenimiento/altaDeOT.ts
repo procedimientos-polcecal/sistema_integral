@@ -14,6 +14,7 @@
 import {
   loQueFaltaParaCerrar, loQueImpideCerrar, type DatosDelCierre,
 } from "@/lib/mantenimiento/cierreDeOT";
+import { loQueFaltaPorElCierreAdelantado } from "@/lib/mantenimiento/cierreAnteriorAlInicio";
 
 export interface DatosDelAltaDeOT extends DatosDelCierre {
   sector_id: string | null | undefined;
@@ -61,6 +62,16 @@ export interface DatosDelAltaDeOT extends DatosDelCierre {
    * vuelve sin ella: llega como `undefined` y recibe un 400 que la nombra.
    */
   fecha_fin: string | null | undefined;
+  /**
+   * Por qué se cerró antes de la fecha de inicio. Sólo se pide cuando el cierre
+   * es anterior al inicio; ver `cierreAnteriorAlInicio.ts`.
+   *
+   * **La clave es obligatoria en el tipo aunque el valor pueda faltar**, por la
+   * misma razón que `fecha_fin` (léase su docstring): con la clave opcional, un
+   * lugar que arma este objeto sin nombrarla la manda `undefined` y `tsc` no
+   * dice nada. Exigirla hace que el compilador nombre a quien se olvide.
+   */
+  cierre_justificacion: string | null | undefined;
 }
 
 /**
@@ -98,7 +109,12 @@ export function loQueFaltaParaCrear(datos: DatosDelAltaDeOT): string[] {
     .filter(([campo]) => String(datos[campo] ?? "").trim() === "")
     .map(([, nombre]) => nombre);
 
-  return [...falta, ...loQueFaltaParaCerrar(datos)];
+  // La justificación va al final porque su campo está al final del formulario.
+  return [
+    ...falta,
+    ...loQueFaltaParaCerrar(datos),
+    ...loQueFaltaPorElCierreAdelantado(datos),
+  ];
 }
 
 /**
