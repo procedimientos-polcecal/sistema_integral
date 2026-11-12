@@ -138,6 +138,13 @@ export function loQueFaltaParaCrear(datos: DatosDelAltaDeOT): string[] {
  * mensaje, y dos copias de la regla es como el botón de los avisos se quedó
  * atrás dos días en silencio el 19/10/2026.
  *
+ * **Pero desde el 12/11/2026 las dos dejaron de contestarse igual, y la
+ * diferencia es deliberada:** el cierre anterior al inicio se acepta cuando hay
+ * una justificación que lo explica —se pidió así— y la fecha de **fin** no,
+ * porque es la ventana estimada que se promete al crear la orden y nadie pidió
+ * poder prometer una que termina antes de empezar. Por eso la justificación
+ * viaja sólo al segundo chequeo.
+ *
  * Y si falta la de inicio se calla —el `if (inicio)`—, porque de eso ya habla
  * `loQueFaltaParaCrear`, que la exige, y dos mensajes por un solo hueco es
  * ruido. Allá esa rama sí habla, y tiene que hacerlo: el que registra trabajo
@@ -152,7 +159,11 @@ export function loQueSeContradice(datos: DatosDelAltaDeOT): string[] {
   if (fin && fin < inicio) {
     problemas.push(`la fecha de fin (${fin}) es anterior a la de inicio (${inicio})`);
   }
-  problemas.push(...loQueImpideCerrar(inicio, datos.fecha_cierre));
+  // La justificación va con las fechas porque desde el 12/11/2026 es parte de
+  // la regla: un cierre anterior al inicio deja de contradecirse cuando hay un
+  // texto que lo explica. Sin pasarla, esta pantalla seguiría mostrando el
+  // cartel rojo al lado del campo que lo levanta.
+  problemas.push(...loQueImpideCerrar(inicio, datos.fecha_cierre, datos.cierre_justificacion));
 
   return problemas;
 }

@@ -71,6 +71,31 @@ describe("lo que se contradice en una orden nueva", () => {
       .toEqual(["la fecha de cierre (2026-10-19) es anterior a la de inicio (2026-10-20)"]);
   });
 
+  /**
+   * Desde el 12/11/2026 ese bloqueo cede si hay un motivo que explica, y la
+   * justificacion le llega por esta funcion: sin pasarsela, el alta mostraria
+   * el campo que pide el motivo y el cartel rojo al mismo tiempo.
+   */
+  it("con justificacion, nacer cerrada antes de empezar deja de contradecirse", () => {
+    expect(loQueSeContradice({
+      ...completa,
+      fecha_cierre: "2026-10-19",
+      cierre_justificacion: "El equipo fallo antes y se intervino",
+    })).toEqual([]);
+  });
+
+  /**
+   * Y la de fin NO cede, que es la mitad que nadie pidio dar vuelta: es la
+   * ventana estimada, no la real.
+   */
+  it("la justificacion no destraba la fecha de fin dada vuelta", () => {
+    expect(loQueSeContradice({
+      ...completa,
+      fecha_fin: "2026-10-19",
+      cierre_justificacion: "El equipo fallo antes y se intervino",
+    })).toEqual(["la fecha de fin (2026-10-19) es anterior a la de inicio (2026-10-20)"]);
+  });
+
   it("cerrar el mismo dia que empieza esta bien", () => {
     expect(loQueSeContradice({ ...completa, fecha_cierre: "2026-10-20" })).toEqual([]);
   });

@@ -328,6 +328,15 @@ export async function POST(request: Request) {
 
   // Aparte de lo que falta, y con otro verbo: acá los datos están, lo que no
   // cierra es lo que dicen entre ellos. Ver `loQueSeContradice`.
+  //
+  // **Va después de los faltantes a propósito, y desde el 12/11/2026 eso se
+  // nota**: una orden que nace cerrada antes de su inicio y sin justificación
+  // tiene las dos cosas para decir, y la que sirve es «Falta cargar por qué se
+  // cerró antes de la fecha de inicio», que nombra el campo que la destraba.
+  // «No se puede guardar porque …» diría que no hay nada que hacer, y ahora sí
+  // lo hay. El PATCH quedó en el mismo orden por la misma razón — las dos
+  // rutas contestan lo mismo al mismo hecho, que es lo que esta ruta ya se
+  // había propuesto más abajo.
   const contradice = loQueSeContradice({
     sector_id, equipment_id, descripcion, especialidad, tipo, quien,
     fecha_ejecucion, fecha_fin,
@@ -849,16 +858,6 @@ export async function PATCH(request: Request) {
       ? (update.cierre_justificacion as string | null)
       : (laOrden.cierre_justificacion as string | null);
 
-    if (update.fecha_cierre) {
-      const impide = loQueImpideCerrar(laOrden.fecha_ejecucion, elCierre);
-      if (impide.length > 0) {
-        return NextResponse.json(
-          { error: `No se puede guardar porque ${impide.join(", ")}.` },
-          { status: 400 }
-        );
-      }
-    }
-
     // ── Y SI SE CIERRA ANTES DE EMPEZAR, QUE DIGA POR QUÉ ────────────────────
     //
     // Lo que se mira es **el estado en que queda la orden** y no lo que vino en
@@ -904,6 +903,40 @@ export async function PATCH(request: Request) {
       if (falta.length > 0) {
         return NextResponse.json(
           { error: `Falta cargar ${falta.join(", ")}.` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // ── Y RECIÉN ACÁ LO QUE IMPIDE CERRAR, QUE ANTES IBA ARRIBA ──────────────
+    //
+    // **El orden de estos dos chequeos está elegido y no es el que había.**
+    // Hasta el 12/11/2026 `loQueImpideCerrar` corría primero, así que un PATCH
+    // sin justificación recibía «No se puede guardar porque la fecha de cierre
+    // … es anterior a la de inicio» mientras el POST, que exige los faltantes
+    // antes de mirar las contradicciones, contestaba «Falta cargar por qué se
+    // cerró antes de la fecha de inicio» **por el mismo hecho**. Eso es
+    // exactamente lo que el comentario de más arriba declara que no puede
+    // pasar.
+    //
+    // Gana el faltante, y la razón es lo que cada frase le deja a quien está
+    // cargando: «Falta cargar …» nombra el campo que destraba el guardado, y
+    // «No se puede guardar porque …» dice que no hay nada que hacer — que era
+    // cierto hasta hoy y dejó de serlo.
+    //
+    // Lo que queda abajo no es decorativo: es el piso para todo lo que esta
+    // ruta no puede pedir. Una orden **sin fecha de inicio** no se cierra ni
+    // con justificación, y un PATCH que reenvía la misma fecha de cierre de una
+    // de las 63 órdenes viejas sin tocar la justificación no pasa por el
+    // chequeo de arriba —se decidió no volver a preguntar cuando nada del
+    // cierre cambió— y lo frena este. Ahí sí sale el mensaje viejo; es el mismo
+    // 400 que esa orden recibe hoy, así que nada empeora, pero es el único
+    // lugar donde las dos rutas todavía contestan distinto.
+    if (update.fecha_cierre) {
+      const impide = loQueImpideCerrar(laOrden.fecha_ejecucion, elCierre, elTexto);
+      if (impide.length > 0) {
+        return NextResponse.json(
+          { error: `No se puede guardar porque ${impide.join(", ")}.` },
           { status: 400 }
         );
       }

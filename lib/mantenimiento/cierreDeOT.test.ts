@@ -261,6 +261,38 @@ describe("lo que impide cerrar una orden", () => {
     expect(loQueImpideCerrar("2026-01-05", "2025-12-30")).toHaveLength(1);
     expect(loQueImpideCerrar("2025-12-30", "2026-01-05")).toEqual([]);
   });
+
+  /**
+   * El 12/11/2026 la segunda regla cede: se pidio poder cerrar antes del inicio
+   * diciendo por que. Los tests de arriba siguen tal cual porque ninguno pasa un
+   * tercer argumento, y sin el la regla se comporta como el 05/11/2026.
+   */
+  it("con una justificacion que explica, el cierre anterior al inicio deja de impedir", () => {
+    expect(loQueImpideCerrar("2026-11-06", "2026-11-04", "El equipo fallo antes y se intervino"))
+      .toEqual([]);
+  });
+
+  /** La guarda es `justificacionQueExplica`, el mismo filtro que usa Compras. */
+  it("una no-respuesta no levanta el impedimento", () => {
+    for (const texto of ["", "x", "no", "   ", undefined]) {
+      expect(loQueImpideCerrar("2026-11-06", "2026-11-04", texto)).toHaveLength(1);
+    }
+  });
+
+  /**
+   * La otra mitad de la regla NO cede: una orden sin fecha de inicio no se
+   * cierra, con justificacion o sin ella. De esa fecha salen el atraso, el MTBF
+   * y la ventana del equipo, y no es lo que se pidio dar vuelta.
+   */
+  it("sin fecha de inicio sigue impidiendo, aunque haya justificacion", () => {
+    expect(loQueImpideCerrar(null, "2026-11-04", "El equipo fallo antes y se intervino"))
+      .toHaveLength(1);
+  });
+
+  /** Una justificacion no vuelve valido lo que ya era valido: sigue sin opinar. */
+  it("con el cierre despues del inicio no opina, haya justificacion o no", () => {
+    expect(loQueImpideCerrar("2026-11-04", "2026-11-06", "lo que sea")).toEqual([]);
+  });
 });
 
 describe("la justificacion del cierre en lo que hay que exportar", () => {

@@ -182,8 +182,13 @@ export default function RegistrarOTModal({
    *
    * La fecha de inicio no se edita acá, así que de las dos sólo se mueve una:
    * la alerta aparece y desaparece al cambiar el día, sin apretar nada.
+   *
+   * **Y desde el 12/11/2026 depende también de lo que se escriba**: el cartel
+   * rojo se apaga cuando la justificación explica. Sin pasarla, la pantalla
+   * mostraría a la vez el campo que pide el motivo y el cartel que dice que
+   * igual no se puede guardar — que es el estado que esta tarea vino a sacar.
    */
-  const impideCerrar = loQueImpideCerrar(orden.fecha_ejecucion, cuando);
+  const impideCerrar = loQueImpideCerrar(orden.fecha_ejecucion, cuando, justificacion);
 
   // Sale y entra con las dos fechas, como la alerta de arriba.
   const pideJustificacion = elCierreEsAnteriorAlInicio(cuando, orden.fecha_ejecucion);
@@ -329,25 +334,29 @@ export default function RegistrarOTModal({
 
           <Campo etiqueta="Cuándo">
             {/*
-              `min` es la fecha de inicio de la OT: el calendario del navegador
-              deja los días anteriores en gris, así que el caso más común —el
-              dedo que erra por un día— no llega ni a elegirse. Es sólo la
-              primera defensa y no la regla: un `min` se saltea tipeando, y en
-              el teléfono depende del navegador. Quien decide es
-              `loQueImpideCerrar`, acá arriba y en el servidor.
+              **Sin `min`, desde el 12/11/2026.** Tenía la fecha de inicio de la
+              OT para que el calendario dejara los días anteriores en gris, y
+              eso dejó de corresponder cuando se pidió poder cerrar antes del
+              inicio explicando por qué: el calendario no deja ni *elegir* un
+              día en gris, así que con el `min` puesto el campo de justificación
+              que aparece abajo era inalcanzable desde esta pantalla. Quien
+              decide sigue siendo `loQueImpideCerrar`, acá arriba y en el
+              servidor; lo que se perdió, dicho, es la defensa barata contra el
+              dedo que erra por un día, y lo que la reemplaza es tener que
+              escribir el motivo.
             */}
             <input
               type="date"
               value={cuando}
-              min={orden.fecha_ejecucion ?? undefined}
               onChange={(e) => setCuando(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
             {/*
-              Y dicho con todas las letras, porque el gris del calendario no se
-              explica solo: quien registra el trabajo no tiene la fecha de
-              inicio delante —está en la ficha de la OT— y sin esto el piso
-              parece arbitrario.
+              Y esto se queda, aunque ya no haya gris que explicar: quien
+              registra el trabajo no tiene la fecha de inicio delante —está en
+              la ficha de la OT— y sin ella no puede saber si lo que está
+              eligiendo cae antes. Sacado el `min`, es lo único que lo dice
+              antes de que aparezca el campo del motivo.
             */}
             {orden.fecha_ejecucion && (
               <p className="mt-1 text-xs text-slate-400">

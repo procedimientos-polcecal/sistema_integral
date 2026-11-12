@@ -9,10 +9,20 @@
  * y no tiene de dónde deducir si fue un adelanto real o un dedo equivocado.
  * Medido el 12/11/2026: de las 2.176 OT que tienen las dos fechas, 66 ya están
  * así —44 PROGRAMADO y 22 CORRECTIVO—, la mediana del adelanto es de 2 días y
- * 57 de las 66 caen dentro de la semana; sólo 3 entraron por la app. Y hoy nada
- * lo frena: `loQueSeContradice` de `altaDeOT.ts` no mira la fecha de cierre y el
- * PATCH de `app/api/mantenimiento/ordenes/route.ts` no valida fechas. Así que lo
+ * 57 de las 66 caen dentro de la semana; sólo 3 entraron por la app. Así que lo
  * que se pide es que alguien lo diga, y queda escrito.
+ *
+ * **Lo que este encabezado decía hasta el 12/11/2026 era falso, y vale anotar
+ * en qué**: decía que «hoy nada lo frena», que `loQueSeContradice` no mira la
+ * fecha de cierre y que el PATCH no valida fechas. Las tres cosas dejaron de
+ * ser ciertas el **05/11/2026**, con `loQueImpideCerrar` (commit `2c38520c`):
+ * desde entonces el alta y el PATCH rechazaban con 400 **todos** estos casos.
+ * La frase sobrevivió de leer el archivo en una rama anterior a ese commit, y
+ * con ella en pie esta regla entera era inalcanzable — quien cargaba veía a la
+ * vez el campo que pide el motivo y el cartel que decía que igual no se podía
+ * guardar. El 12/11/2026 ese bloqueo cede cuando hay una justificación que
+ * explica, y la guarda pasa a ser ésta; el detalle de qué cedió y qué no está
+ * en el docstring de `loQueImpideCerrar`.
  *
  * Por qué se pide SIEMPRE y sin umbral. Un umbral («tolerar hasta dos días»)
  * habría que justificarlo con la distribución de las diferencias, y la mediana de
@@ -25,7 +35,7 @@
  * pase por `justificacionQueExplica` —el mismo filtro de no-respuestas que usa
  * Compras para denegar—, que rechaza «no», «x» o «prueba» y acepta «Rotura».
  *
- * Las cinco funciones son puras y las llaman las tres pantallas y las dos rutas:
+ * Las seis funciones son puras y las llaman las tres pantallas y las dos rutas:
  * que el formulario y el servidor vean exactamente lo mismo es el punto de
  * tenerlas en un solo archivo.
  */

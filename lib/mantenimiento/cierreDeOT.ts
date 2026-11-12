@@ -9,6 +9,7 @@
  * Dos reglas, y la segunda sale de la primera: si la fecha de cierre dice que
  * ya se hizo, entonces tiene que decir también cuánto llevó y quién la hizo.
  */
+import { justificacionQueExplica } from "@/lib/core/justificacion";
 
 /** Los estados en que puede nacer una orden, como los guarda el sistema. */
 type Estado = string;
@@ -115,10 +116,36 @@ export function loQueFaltaParaCerrar(datos: DatosDelCierre): string[] {
  * qué, y la que está mal puede ser cualquiera de las dos.
  *
  * Sin fecha de cierre devuelve `[]` y no mira nada: no se está cerrando.
+ *
+ * ── QUÉ CEDIÓ EL 12/11/2026, Y QUÉ NO ──────────────────────────────────────
+ *
+ * **Cede la segunda regla y sólo ella**, a pedido: «quiero que se pueda poner
+ * una fecha de cierre de una OT anterior a su fecha de inicio, pero que te
+ * pida una justificación obligatoria si eso ocurre». O sea que el bloqueo no
+ * desaparece: se cambia por una guarda. Si el texto pasa
+ * `justificacionQueExplica`, la fecha se acepta; sin él, o con un «no» o una
+ * «x», sigue saliendo el mismo mensaje de siempre.
+ *
+ * **Las mediciones de arriba siguen siendo ciertas y por eso no se borran**:
+ * son el porqué de que la regla naciera el 05/11/2026 y siguen siendo el
+ * porqué de que ahora se pida una explicación en vez de dejarlo pasar. Lo que
+ * cambió no es el dato sino qué se hace con él: antes esas 63 no se podían
+ * repetir, ahora se pueden y queda escrito por qué.
+ *
+ * **La primera regla no se toca**, y no por omisión: cerrar sin fecha de
+ * inicio no es lo que se pidió dar vuelta, y una justificación no reemplaza a
+ * la fecha de la que salen el atraso, el MTBF y la ventana del equipo —no hay
+ * texto que haga calculable un intervalo sin extremo—. Con justificación o sin
+ * ella, esa rama sigue devolviendo lo mismo.
+ *
+ * El tercer parámetro es **opcional** a propósito: los llamadores que no están
+ * cerrando nada no tienen justificación que pasar, y sin él la función se
+ * comporta exactamente como antes del 12/11/2026.
  */
 export function loQueImpideCerrar(
   fechaInicio: string | null | undefined,
-  fechaCierre: string | null | undefined
+  fechaCierre: string | null | undefined,
+  justificacion?: string | null | undefined
 ): string[] {
   const cierre = String(fechaCierre ?? "").trim();
   if (!cierre) return [];
@@ -128,9 +155,10 @@ export function loQueImpideCerrar(
     return ["la orden no dice cuándo empezó, y un trabajo no se cierra antes de empezar"];
   }
 
-  return cierre < inicio
-    ? [`la fecha de cierre (${cierre}) es anterior a la de inicio (${inicio})`]
-    : [];
+  if (cierre >= inicio) return [];
+  if (justificacionQueExplica(justificacion)) return [];
+
+  return [`la fecha de cierre (${cierre}) es anterior a la de inicio (${inicio})`];
 }
 
 /** Lo que una orden recién creada puede tener para la planilla. */

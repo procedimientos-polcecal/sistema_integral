@@ -366,13 +366,21 @@ export default function FormularioOTOffline({
             ANTES de esa fecha vuelve sin la clave y el servidor la va a
             rechazar nombrando el campo. Es visible y se arregla completándolo;
             medido ese día, las 13 cargas de la tabla estaban resueltas. */}
-        {/* El `min` de las dos es la fecha de inicio: el calendario deja en
-            gris los días anteriores, así que el dedo que erra por un día no
-            llega ni a elegirlos. Acá importa más que con señal, por lo mismo
-            que arriba: sin conexión el que contesta es el servidor horas o
-            días después, y lo que contesta es un 400 definitivo para la cola.
-            Igual no es la regla —un `min` se saltea tipeando—: quien decide es
-            `loQueSeContradice`, en el submit y en el servidor. */}
+        {/* El `min` es la fecha de inicio: el calendario deja en gris los días
+            anteriores, así que el dedo que erra por un día no llega ni a
+            elegirlos. Acá importa más que con señal, por lo mismo que arriba:
+            sin conexión el que contesta es el servidor horas o días después, y
+            lo que contesta es un 400 definitivo para la cola. Igual no es la
+            regla —un `min` se saltea tipeando—: quien decide es
+            `loQueSeContradice`, en el submit y en el servidor.
+
+            **Lo lleva la de fin y ya no la de cierre** (12/11/2026). Son dos
+            reglas distintas: la de fin es la ventana estimada, que nadie pidió
+            poder prometer al revés; la de cierre se puede dar vuelta desde que
+            se explica por qué, y con el `min` puesto el campo del motivo que
+            aparece acá abajo no se podía ni hacer aparecer. El submit sigue
+            frenando lo que no se explica, así que la cola no se lleva nada que
+            el servidor vaya a rechazar por esto. */}
         <F label="Fecha de fin (estimada)" required>
           <input
             type="date"
@@ -387,7 +395,6 @@ export default function FormularioOTOffline({
           <input
             type="date"
             value={form.fecha_cierre}
-            min={form.fecha_ejecucion || undefined}
             onChange={(e) => f("fecha_cierre", e.target.value)}
             disabled={deshabilitado}
             className="input"

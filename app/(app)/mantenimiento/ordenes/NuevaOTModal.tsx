@@ -433,18 +433,24 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
                 termina; lo que se gana al exigirla es que toda OT cargada a
                 mano tenga ventana. Quién la exige es `loQueFaltaParaCrear`, no
                 este `required`, que sólo pinta el asterisco. */}
-            {/* El `min` de las dos es la fecha de inicio: el calendario del
-                navegador deja en gris los días anteriores, así que el dedo que
-                erra por un día no llega ni a elegirlos. Es la primera defensa y
-                no la regla —un `min` se saltea tipeando—: quien decide es
-                `loQueSeContradice`, en el submit y en el servidor. Vacío no
-                limita nada, que es lo que corresponde cuando todavía no se
-                eligió el inicio. */}
+            {/* El `min` es la fecha de inicio: el calendario del navegador deja
+                en gris los días anteriores, así que el dedo que erra por un día
+                no llega ni a elegirlos. Es la primera defensa y no la regla —un
+                `min` se saltea tipeando—: quien decide es `loQueSeContradice`,
+                en el submit y en el servidor. Vacío no limita nada, que es lo
+                que corresponde cuando todavía no se eligió el inicio.
+
+                **Lo lleva la de fin y ya no la de cierre** (12/11/2026). Son
+                dos reglas distintas: la de fin es la ventana estimada, que
+                nadie pidió poder prometer al revés; la de cierre se puede dar
+                vuelta desde que se explica por qué, y con el `min` puesto el
+                campo del motivo que aparece acá abajo no se podía ni hacer
+                aparecer. */}
             <F label="Fecha de fin (estimada)" required>
               <input type="date" value={form.fecha_fin} min={form.fecha_ejecucion || undefined} onChange={e => f("fecha_fin", e.target.value)} className="input" />
             </F>
             <F label="Fecha cierre">
-              <input type="date" value={form.fecha_cierre} min={form.fecha_ejecucion || undefined} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
+              <input type="date" value={form.fecha_cierre} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
             </F>
           </div>
 
