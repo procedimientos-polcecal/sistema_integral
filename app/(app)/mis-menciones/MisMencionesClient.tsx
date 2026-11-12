@@ -23,9 +23,8 @@ import {
  * - **Abriendo la conversación.** `HiloDeMensajes` marca las propias al
  *   mostrarse, y desde acá se llega a él por el enlace de cada tarjeta.
  * - **Con el botón «Marcar como leído».** Hace falta porque el enlace no siempre
- *   llega al hilo: el de una orden de trabajo lleva a la lista filtrada y el de
- *   una condición insegura a la lista a secas, y la conversación está adentro del
- *   registro. Sin el botón, quien ya leyó el mensaje en el correo tendría que
+ *   llega al hilo: el de una orden de trabajo lleva a la lista filtrada y la
+ *   conversación está adentro de la orden. Sin el botón, quien ya leyó el mensaje en el correo tendría que
  *   abrir igual el registro para que la mención se vaya.
  *
  * Marcar es por hilo —lo que acepta el `PATCH`— y por eso las tarjetas son por
