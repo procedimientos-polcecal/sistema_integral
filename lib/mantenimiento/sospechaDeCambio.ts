@@ -109,6 +109,8 @@ export interface Sospecha {
   ciclo_id: string;
   equipment_id: string;
   equipo: string;
+  /** Para que el aviso pueda nombrarla: este mecanismo no es sólo de martillos. */
+  componente: string;
   ot: number[];
 }
 
@@ -139,6 +141,7 @@ export function sospechasDeCambio(
         ciclo_id: ciclo.id,
         equipment_id: ciclo.equipment_id,
         equipo: ciclo.equipo,
+        componente: ciclo.componente,
         ot,
       });
     }

@@ -4,9 +4,12 @@ import { FILTRO_FALTA_ALGO } from "@/lib/seguridadHigiene/condicion";
 import { corteDeFotosAtascadas } from "@/lib/seguridadHigiene/respaldoDeFotos";
 import { puedeAprobarCompras } from "@/lib/compras/auth";
 import type { Modulo, Rol, UsuarioModulo } from "@/lib/core/types";
+import {
+  sospechasDeCambio, type CicloVigilado, type Sospecha,
+} from "@/lib/mantenimiento/sospechaDeCambio";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { filtrarDescartadas, type Notificacion } from "./notificaciones";
-import { avisosDeConteos, avisosDeRitmo, avisosDeSalud, type ConteosParaAvisos } from "./avisos";
+import { avisosDeCiclos, avisosDeConteos, avisosDeRitmo, avisosDeSalud, type ConteosParaAvisos } from "./avisos";
 import { contarDivergenciasSinVer } from "@/lib/agenda/avisosDeLaAgenda";
 import { leerLaSalud, type SaludDelSistema } from "@/lib/core/saludDeLasSincronizaciones";
 import { contarMencionesSinLeer } from "@/lib/mensajes/menciones";
@@ -178,8 +181,55 @@ async function avisosDeLosModulos(
   return [
     ...avisosDeConteos(conteos),
     ...avisosDeRitmo(ritmoPorModulo(filasRitmo), modulos),
+    ...avisosDeCiclos(tiene("mantenimiento") ? await lasSospechasDeLosCiclos(supabase) : []),
     ...avisosDeSalud(salud),
   ];
+}
+
+/**
+ * Los ciclos encadenados cuya pieza parece haberse cambiado sin avisarles.
+ *
+ * Va aparte del `Promise.all` de arriba porque **son dos consultas encadenadas
+ * y la segunda depende de la primera**: sin ciclos arrancados no hay nada que
+ * preguntar, y hoy hay cuatro en toda la planta. Meterla allá costaría una
+ * lectura de órdenes cerradas a todo el que abra el inicio, para nada.
+ *
+ * El corte por `desde` es lo que hace que esto no se vuelva ruido: sólo mira lo
+ * cerrado después del último trabajo conocido de cada ciclo. Sin él serían 56
+ * el primer día — ver `sospechaDeCambio.ts`.
+ */
+async function lasSospechasDeLosCiclos(
+  supabase: SupabaseClient
+): Promise<Sospecha[]> {
+  const { data } = await supabase
+    .from("mant_ciclos_de_ot")
+    .select("id, equipment_id, desde, equipos:equipment_id(code), hija:tarea_hija_id(componente)")
+    .eq("activo", true)
+    .not("desde", "is", null);
+
+  const ciclos: CicloVigilado[] = (data ?? []).flatMap((c) => {
+    const equipo = (c.equipos as unknown as { code: string | null } | null)?.code;
+    const componente = (c.hija as unknown as { componente: string } | null)?.componente;
+    if (!equipo || !componente) return [];
+    return [{
+      id: c.id, equipment_id: c.equipment_id, equipo,
+      desde: c.desde, componente,
+    }];
+  });
+
+  if (ciclos.length === 0) return [];
+
+  // Lo cerrado en esos equipos desde la fecha más vieja de todos los ciclos.
+  // El filtro fino —cada ciclo contra su propio `desde`— lo hace la función
+  // pura; acá sólo se acota el bulto que viaja.
+  const masVieja = ciclos.map((c) => c.desde!).sort()[0];
+  const { data: cerradas } = await supabase
+    .from("ordenes_trabajo")
+    .select("ot_number, equipment_id, descripcion, fecha_cierre, ciclo_id")
+    .in("equipment_id", ciclos.map((c) => c.equipment_id))
+    .gt("fecha_cierre", masVieja);
+
+  return sospechasDeCambio(ciclos, cerradas ?? []);
 }
 
 /**

@@ -64,7 +64,8 @@ describe("sospechasDeCambio", () => {
 
   it("avisa de un cambio ajeno posterior a desde", () => {
     expect(sospechasDeCambio([ciclo], [cerrada({ ot_number: 70 })]))
-      .toEqual([{ ciclo_id: "c1", equipment_id: "e1", equipo: "PO-C1-04", ot: [70] }]);
+      .toEqual([{ ciclo_id: "c1", equipment_id: "e1", equipo: "PO-C1-04",
+                  componente: "Martillos", ot: [70] }]);
   });
 
   it("junta las varias de un mismo ciclo", () => {

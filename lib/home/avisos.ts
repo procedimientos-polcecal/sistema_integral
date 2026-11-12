@@ -3,6 +3,7 @@ import type { EntradaCaida, SaludDelSistema } from "@/lib/core/saludDeLasSincron
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import type { Notificacion } from "./notificaciones";
 import { cantidadDelAviso, type Ritmo } from "./ritmo";
+import type { Sospecha } from "@/lib/mantenimiento/sospechaDeCambio";
 
 /**
  * Los conteos que pueden generar un aviso. Todos opcionales: cada ruta pasa los
@@ -408,4 +409,39 @@ export function avisosDeSalud(
 function elDiaComoNumero(hoy: string): number {
   const ms = Date.parse(`${hoy}T00:00:00Z`);
   return Number.isNaN(ms) ? 1 : Math.floor(ms / 86_400_000);
+}
+
+/**
+ * Un aviso por ciclo encadenado cuya pieza parece haberse cambiado sin que el
+ * ciclo se entere.
+ *
+ * ── POR QUÉ UNO POR CICLO Y NO UNO CON EL CONTEO ────────────────────────────
+ *
+ * Es la misma razón que en `avisosDeSalud`, y es la que hace que el descarte
+ * signifique algo. Un solo aviso que dijera «2 ciclos para revisar» pierde
+ * identidad: el día que se resuelve uno y aparece otro el número queda igual,
+ * `filtrarDescartadas` compara `cantidad > cantidad_vista` y **no suena la
+ * campana ni sale el push**. Con un aviso por ciclo, uno nuevo es siempre una
+ * novedad, el título puede nombrar el equipo, y el enlace va a su ficha — que
+ * es donde está el botón que lo resuelve.
+ *
+ * `resumirParaPush` ya sabe juntar varios en un mensaje, así que el push no se
+ * multiplica.
+ *
+ * ── Y POR QUÉ ESTE AVISO SE APAGA SOLO ──────────────────────────────────────
+ *
+ * Porque `sospechasDeCambio` sólo mira lo cerrado **después** del último
+ * trabajo conocido del ciclo. Cuando alguien aprieta el botón —o cuando la
+ * madre del ciclo se cierra— esa fecha se mueve y lo viejo cae del conteo. Sin
+ * ese corte esto contaría un hecho histórico que nunca cambia: 56 el primer
+ * día, medido el 12/11/2026, y después un globo permanente o un silencio para
+ * siempre según lo descartara alguien.
+ */
+export function avisosDeCiclos(sospechas: readonly Sospecha[]): Notificacion[] {
+  return sospechas.map((s) => ({
+    id: `mant-ciclo-sospechoso-${s.equipo}`,
+    titulo: `Puede que se hayan cambiado ${s.componente.toLowerCase()} de ${s.equipo} sin avisar al ciclo`,
+    cantidad: s.ot.length,
+    href: `/mantenimiento/equipos/${s.equipment_id}`,
+  }));
 }
