@@ -264,8 +264,10 @@ export async function generarLasEncadenadas(
     });
 
     if (paraLaPlanilla) {
-      const orden = { id: "", ot_number: alta.ot_number };
-      const falloLaM = await escribirEnLaFilaDeLaOT(orden, celdasParaRegistrar(paraLaPlanilla));
+      const falloLaM = await escribirEnLaFilaDeLaOT(
+        { ot_number: alta.ot_number },
+        celdasParaRegistrar(paraLaPlanilla)
+      );
       const pendiente = elPendienteDelIntento(
         { estado: "POR_HACER", fecha_cierre: null, horas: null,
           contratista: null, operario_1: null, operario_2: null, operario_3: null },
