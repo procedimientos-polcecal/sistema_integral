@@ -280,10 +280,13 @@ misma queda afuera del rango y la corrida siguiente cae en la primera fila de la
 tabla. Es la misma regla, no una excepción: por eso `desde` es la fecha en que
 los martillos se cambiaron **de verdad** y no en que se pidió cambiarlos.
 
-Igual que la madre, cada hija que se cierra mueve `desde` y `vuelta_desde` a lo
-suyo. Así el par siempre describe el último trabajo hecho, venga de donde venga
-—de una OT cerrada, del botón, o de la carga inicial— y la tabla de arriba es
-una sola regla con tres entradas, no tres mecanismos.
+**Las hijas, en cambio, no lo mueven, y es a propósito.** Una hija cerrada queda
+dentro del rango y la tabla ya la lee bien; moverlo también ahí sería un segundo
+mecanismo que llega a la misma respuesta — y dos mecanismos que coinciden hoy
+son dos que se pueden separar mañana. El corte lo escriben **tres puntas y nada
+más**: la madre al cerrarse, el botón de reinicio, y la carga inicial. Las tres
+contestan la misma pregunta —«¿desde cuándo son nuevos estos martillos?»— que es
+justo lo que `desde` quiere decir.
 
 **Cerrada quiere decir REALIZADO con `fecha_cierre`.** Si está REALIZADO sin
 fecha de cierre —pasa: 168 de 986 REALIZADO históricas no la tienen— se usa la
