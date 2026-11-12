@@ -5,7 +5,8 @@ import { tituloDelHilo, type TipoDeEntidad } from "@/lib/core/mensajes";
 import { traerTodo } from "@/lib/core/paginado";
 import { errorDeValidacion, validar } from "@/lib/core/validar";
 import { nombreCompleto } from "@/lib/mensajes/avisos";
-import { ENTIDADES, TIPOS_DE_ENTIDAD, queEs } from "@/lib/mensajes/entidades";
+import { ENTIDADES, queEs } from "@/lib/mensajes/entidades";
+import { mencionesSinLeerVisibles } from "@/lib/mensajes/menciones";
 import { esquemaDelHilo } from "@/lib/mensajes/pedidos";
 
 /**
@@ -24,17 +25,6 @@ import { esquemaDelHilo } from "@/lib/mensajes/pedidos";
  * bandeja de quien ya no tiene permiso de leerlo.
  */
 
-type FilaDeMencion = {
-  mensaje_id: string;
-  mensajes: {
-    entidad_tipo: TipoDeEntidad;
-    entidad_id: string;
-    texto: string;
-    creado_en: string;
-    autor: { nombre: string; apellido?: string | null } | null;
-  };
-};
-
 /** GET — mis menciones sin leer, las más nuevas primero. */
 export async function GET() {
   const supabase = await createClient();
@@ -44,42 +34,13 @@ export async function GET() {
   const admin = createAdminClient();
 
   try {
-    // `traerTodo` porque la tabla crece y PostgREST corta en 1000 sin avisar. Se
-    // ordena por la clave para que las páginas no se pisen, y por fecha después,
-    // en memoria: la ordenación por una columna de la tabla embebida no se
-    // probó, y la migración todavía no estaba aplicada para poder probarla.
-    const filas = await traerTodo<FilaDeMencion>((desde, hasta) =>
-      admin
-        .from("mensajes_menciones")
-        // La cadena va literal. **El `autor` nombra su foreign key y tiene que
-        // seguir nombrándola**: `mensajes_menciones` abre un segundo camino de
-        // `mensajes` a `usuarios` —el muchos-a-muchos—, así que
-        // `autor:usuarios(...)` a secas es ambiguo y PostgREST contesta 300
-        // PGRST201. Medido contra la base: sin el FK, 300; con él, 200.
-        .select("mensaje_id, mensajes!inner(entidad_tipo, entidad_id, texto, creado_en, autor:usuarios!mensajes_creado_por_fkey(nombre, apellido))")
-        .eq("usuario_id", user.id)
-        .is("leido_en", null)
-        .order("mensaje_id")
-        .range(desde, hasta)
-        // Sin esquema generado, Supabase infiere el embebido como lista aunque
-        // PostgREST devuelva un objeto cuando el vínculo es de uno a uno.
-        .returns<FilaDeMencion[]>()
-    );
-
-    // Una pregunta de permiso por tipo, no por mención.
-    const tiposQueVe = new Set<TipoDeEntidad>();
-    for (const tipo of TIPOS_DE_ENTIDAD) {
-      if (filas.some((f) => f.mensajes.entidad_tipo === tipo) &&
-          (await ENTIDADES[tipo].puedeVerlo(admin, user.id))) {
-        tiposQueVe.add(tipo);
-      }
-    }
-
-    const visibles = filas.filter((f) => tiposQueVe.has(f.mensajes.entidad_tipo));
+    // La definición de «mención pendiente» es una sola y la comparte la campana:
+    // ver `mencionesSinLeerVisibles`.
+    const visibles = await mencionesSinLeerVisibles(admin, user.id);
 
     // Los números de los registros, de a un tipo por consulta.
     const numeros = new Map<TipoDeEntidad, Map<string, number>>();
-    for (const tipo of tiposQueVe) {
+    for (const tipo of new Set(visibles.map((f) => f.mensajes.entidad_tipo))) {
       const ids = visibles
         .filter((f) => f.mensajes.entidad_tipo === tipo)
         .map((f) => f.mensajes.entidad_id);

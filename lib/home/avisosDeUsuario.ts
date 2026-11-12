@@ -8,6 +8,8 @@ import { hoyEnArgentina } from "@/lib/core/fechas";
 import { filtrarDescartadas, type Notificacion } from "./notificaciones";
 import { avisosDeConteos, avisosDeRitmo, type ConteosParaAvisos } from "./avisos";
 import { contarDivergenciasSinVer, leerLaSaludDeLaAgenda } from "@/lib/agenda/avisosDeLaAgenda";
+import { contarMencionesSinLeer } from "@/lib/mensajes/menciones";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ritmoPorModulo } from "./ritmo";
 import { traerRitmo, sinClasificarDelUltimoDiaHabil, equiposTallerVialSinService } from "./consultas";
 
@@ -75,7 +77,7 @@ async function avisosDeLosModulos(
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
     tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar, filasRitmo,
-    agendaDivergencias, saludDeLaAgenda,
+    agendaDivergencias, saludDeLaAgenda, mensajesMencionesSinLeer,
   ] = await Promise.all([
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
     contarSiTiene("mantenimiento", () => head("ordenes_trabajo").eq("estado", "ATRASADO")),
@@ -144,6 +146,11 @@ async function avisosDeLosModulos(
     opciones.saludDeLaAgenda
       ? leerLaSaludDeLaAgenda(supabase)
       : Promise.resolve({ caidos: 0, sinComprobar: false, corridas: [] }),
+    // Tampoco por módulo y también de quien mira: las menciones sin leer. Va con
+    // el cliente admin aunque acá llegue el de la sesión, porque `puedeVerlo` lee
+    // los permisos de la persona nombrada y con la sesión `usuarios` sólo deja
+    // leer la fila propia. Ver `mensajesMencionesSinLeer` en `avisos.ts`.
+    opciones.usuarioId ? contarMencionesSinLeer(createAdminClient(), opciones.usuarioId) : Promise.resolve(0),
   ]);
 
   const conteos: Partial<ConteosParaAvisos> = {
@@ -154,6 +161,7 @@ async function avisosDeLosModulos(
     trituracionSinPlanilla,
     tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar,
     agendaDivergencias,
+    mensajesMencionesSinLeer,
     agendaPasosCaidos: saludDeLaAgenda.caidos,
     agendaSaludSinComprobar: saludDeLaAgenda.sinComprobar ? 1 : 0,
   };

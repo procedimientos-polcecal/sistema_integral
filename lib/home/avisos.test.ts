@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avisosDeConteos, avisosDeRitmo } from "./avisos";
+import { avisosDeConteos, avisosDeRitmo, ES_POR_PERSONA } from "./avisos";
 
 describe("avisosDeConteos", () => {
   it("los dos avisos de Seguridad e Higiene salen con sus títulos y links", () => {
@@ -176,5 +176,23 @@ describe("los avisos de la Agenda", () => {
         href: "/agenda",
       },
     ]);
+  });
+});
+
+describe("el aviso de menciones sin leer", () => {
+  it("sale con id propio, lleva a la bandeja y es de una persona", () => {
+    expect(avisosDeConteos({ mensajesMencionesSinLeer: 2 })).toEqual([
+      {
+        id: "mensajes-menciones-sin-leer",
+        titulo: "Menciones sin leer en conversaciones del sistema",
+        cantidad: 2,
+        href: "/mis-menciones",
+      },
+    ]);
+    expect(ES_POR_PERSONA.has("mensajes-menciones-sin-leer")).toBe(true);
+  });
+
+  it("con cero no avisa", () => {
+    expect(avisosDeConteos({ mensajesMencionesSinLeer: 0 })).toEqual([]);
   });
 });

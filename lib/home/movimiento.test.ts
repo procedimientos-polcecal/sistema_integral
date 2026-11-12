@@ -144,6 +144,10 @@ describe("loQueSeMovio con avisos que son de una persona", () => {
     ]);
   });
 
+  it("las menciones sin leer tampoco: son de una persona", () => {
+    expect(loQueSeMovio([aviso("mensajes-menciones-sin-leer", 2)], new Map())).toEqual([]);
+  });
+
   it("el de salud, que es del sistema, sí sale cuando sube", () => {
     expect(loQueSeMovio([aviso("agenda-pasos-caidos", 1)], new Map([["agenda-pasos-caidos", 0]]))).toHaveLength(1);
   });
