@@ -127,6 +127,9 @@ export const NAV: NavItem[] = [
       { label: "MTBF", href: "/mantenimiento/mtbf", modulo: "mantenimiento" },
       { label: "Avisos", href: "/mantenimiento/avisos", modulo: "mantenimiento" },
       { label: "Órdenes de trabajo", href: "/mantenimiento/ordenes", modulo: "mantenimiento" },
+      // Debajo de las órdenes porque sale de ellas: el catálogo se propone con
+      // lo que esas órdenes dicen que ya se viene haciendo.
+      { label: "Tareas preventivas", href: "/mantenimiento/tareas-preventivas", modulo: "mantenimiento" },
       /*
        * ACÁ VIVÍA «Cargar sin señal», Y SE SACÓ EL 02/11/2026.
        *

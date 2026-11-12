@@ -2840,7 +2840,18 @@ acá lo que hay que saber antes de tocarlo:
   con menos de tres fechas no se opina, y dos órdenes del mismo día no son dos
   repeticiones.
 
-**Esta etapa no escribe nada y no lleva migración.** El orden de lo que sigue
+**La pantalla para confirmar el catálogo está hecha desde el 12/11/2026**:
+`/mantenimiento/tareas-preventivas`, con la migración
+`20261112101003_mantenimiento_tareas_preventivas_confirmadas.sql`. Lo que hay
+que saber antes de tocarla: **sólo se guarda la decisión, nunca la propuesta**
+—se recalcula del historial en cada lectura—; **descartar escribe una fila**,
+porque sin ella la tarea vuelve mañana y la lista no se termina nunca; la clave
+natural es **(equipo, acción, componente)** y la ruta hace upsert sobre ella; y
+el **ritmo medido y el período decidido son dos columnas**, porque que no
+coincidan es información. Confirmar **todavía no genera ninguna orden**, y eso
+está escrito arriba de la pantalla.
+
+**La etapa de la propuesta no escribe nada y no lleva migración.** El orden de lo que sigue
 importa y está en el spec: primero que alguien de planta complete los
 componentes que faltan, después confirmar el catálogo, y recién ahí la tabla y
 el enganche con el motor de planes. Al revés da una tabla que cubre el 11 % del
