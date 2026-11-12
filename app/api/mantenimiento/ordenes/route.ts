@@ -927,11 +927,12 @@ export async function PATCH(request: Request) {
     // Lo que queda abajo no es decorativo: es el piso para todo lo que esta
     // ruta no puede pedir. Una orden **sin fecha de inicio** no se cierra ni
     // con justificación, y un PATCH que reenvía la misma fecha de cierre de una
-    // de las 63 órdenes viejas sin tocar la justificación no pasa por el
-    // chequeo de arriba —se decidió no volver a preguntar cuando nada del
-    // cierre cambió— y lo frena este. Ahí sí sale el mensaje viejo; es el mismo
-    // 400 que esa orden recibe hoy, así que nada empeora, pero es el único
-    // lugar donde las dos rutas todavía contestan distinto.
+    // orden que ya está cerrada antes de su inicio —medido el 12/11/2026, 66 de
+    // las 2.176 OT que tienen las dos fechas— sin tocar la justificación no
+    // pasa por el chequeo de arriba —se decidió no volver a preguntar cuando
+    // nada del cierre cambió— y lo frena este. Ahí sí sale el mensaje viejo; es
+    // el mismo 400 que esa orden recibe hoy, así que nada empeora, pero es el
+    // único lugar donde las dos rutas todavía contestan distinto.
     if (update.fecha_cierre) {
       const impide = loQueImpideCerrar(laOrden.fecha_ejecucion, elCierre, elTexto);
       if (impide.length > 0) {

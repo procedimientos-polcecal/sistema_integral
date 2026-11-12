@@ -184,14 +184,35 @@ export default function RegistrarOTModal({
    * la alerta aparece y desaparece al cambiar el día, sin apretar nada.
    *
    * **Y desde el 12/11/2026 depende también de lo que se escriba**: el cartel
-   * rojo se apaga cuando la justificación explica. Sin pasarla, la pantalla
-   * mostraría a la vez el campo que pide el motivo y el cartel que dice que
-   * igual no se puede guardar — que es el estado que esta tarea vino a sacar.
+   * se apaga cuando la justificación explica. Sin pasarla, seguiría encendido
+   * con el motivo ya escrito abajo — un cartel que dice que no se puede
+   * guardar lo que sí se puede.
    */
   const impideCerrar = loQueImpideCerrar(orden.fecha_ejecucion, cuando, justificacion);
 
   // Sale y entra con las dos fechas, como la alerta de arriba.
   const pideJustificacion = elCierreEsAnteriorAlInicio(cuando, orden.fecha_ejecucion);
+
+  /**
+   * Lo que falta, que mientras falte es lo único que hay que decir.
+   *
+   * Pasar la justificación apaga el cartel recién **después** de que el texto
+   * explique; en el medio —la fecha elegida y el campo todavía vacío— lo que
+   * quedaría es el impedimento, justo al lado del campo que lo levanta. Es la
+   * misma elección que hicieron las dos rutas: primero el faltante, que nombra
+   * lo que destraba el guardado, y después la contradicción.
+   *
+   * Y el impedimento no se va a ninguna parte: en esta pantalla es el único
+   * que puede decir «la orden no dice cuándo empezó», que no lo arregla ningún
+   * texto y que es lo que de verdad impide. Mientras falte el motivo, eso no
+   * corre: sin fecha de inicio no hay adelanto que justificar y esta lista
+   * viene vacía.
+   */
+  const faltaElPorQue = loQueFaltaPorElCierreAdelantado({
+    fecha_cierre: cuando,
+    fecha_ejecucion: orden.fecha_ejecucion,
+    cierre_justificacion: justificacion,
+  });
 
   async function guardar() {
     if (!observaciones.trim() && resultado !== "completado") {
@@ -202,13 +223,13 @@ export default function RegistrarOTModal({
     // Antes de postear nada, por lo mismo que el control de las fechas de más
     // abajo: la ejecución se guarda primero y no se deshace, así que un rechazo
     // del servidor dejaría el trabajo registrado y la orden sin cerrar.
-    const faltaElPorQue = loQueFaltaPorElCierreAdelantado({
-      fecha_cierre: cuando,
-      fecha_ejecucion: orden.fecha_ejecucion,
-      cierre_justificacion: justificacion,
-    });
+    //
+    // El mismo valor que ya mostró el cartel de arriba, y en el mismo orden que
+    // el servidor: el faltante primero. «Falta cargar» y no «Falta», que es lo
+    // que contestan las dos rutas y lo que dicen los otros dos formularios: dos
+    // frases para el mismo hecho mandan a buscar dos cosas distintas.
     if (faltaElPorQue.length > 0) {
-      setError(`Falta ${faltaElPorQue.join(", ")}.`);
+      setError(`Falta cargar ${faltaElPorQue.join(", ")}.`);
       return;
     }
 
@@ -337,13 +358,13 @@ export default function RegistrarOTModal({
               **Sin `min`, desde el 12/11/2026.** Tenía la fecha de inicio de la
               OT para que el calendario dejara los días anteriores en gris, y
               eso dejó de corresponder cuando se pidió poder cerrar antes del
-              inicio explicando por qué: el calendario no deja ni *elegir* un
-              día en gris, así que con el `min` puesto el campo de justificación
-              que aparece abajo era inalcanzable desde esta pantalla. Quien
-              decide sigue siendo `loQueImpideCerrar`, acá arriba y en el
-              servidor; lo que se perdió, dicho, es la defensa barata contra el
-              dedo que erra por un día, y lo que la reemplaza es tener que
-              escribir el motivo.
+              inicio explicando por qué: con el `min` puesto, **el camino normal
+              quedaba cerrado** —el calendario no ofrece los días en gris, así
+              que al campo del motivo sólo llegaba quien tipeara la fecha a
+              mano, que es la salida de emergencia y no la puerta—. Quien decide
+              sigue siendo `loQueImpideCerrar`, acá arriba y en el servidor; lo
+              que se perdió, dicho, es la defensa barata contra el dedo que erra
+              por un día, y lo que la reemplaza es tener que escribir el motivo.
             */}
             <input
               type="date"
@@ -404,12 +425,22 @@ export default function RegistrarOTModal({
             dejaría el porqué acá arriba y el botón mudo abajo, que en un
             teléfono es media pantalla de distancia; apretarlo repite el mismo
             texto donde la persona está mirando, y el guardado igual no pasa:
-            lo frena `guardar()` y, si llegara, el servidor. */}
-        {impideCerrar.length > 0 && (
+            lo frena `guardar()` y, si llegara, el servidor.
+
+            **Y cuál de las dos frases, en el mismo orden que `guardar()` y que
+            las dos rutas**: mientras falte el motivo se pide el motivo, y el
+            impedimento queda para lo que de verdad impide — acá, una orden que
+            no dice cuándo empezó, que no lo arregla ningún texto. En ámbar y
+            no en rojo porque lo que falta es el campo que está acá abajo. */}
+        {faltaElPorQue.length > 0 ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+            Falta cargar {faltaElPorQue.join(", ")}.
+          </div>
+        ) : impideCerrar.length > 0 ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
             No se puede guardar porque {impideCerrar.join(", ")}.
           </div>
-        )}
+        ) : null}
 
         {/* Debajo de la grilla y no adentro de la celda de la fecha, por lo
             mismo que la alerta: en media columna el rótulo se parte. */}

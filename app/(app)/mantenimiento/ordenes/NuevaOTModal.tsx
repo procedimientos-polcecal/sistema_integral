@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import Select from "@/components/Select";
 import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
-import { elCierreEsAnteriorAlInicio } from "@/lib/mantenimiento/cierreAnteriorAlInicio";
+import {
+  elCierreEsAnteriorAlInicio, loQueFaltaPorElCierreAdelantado,
+} from "@/lib/mantenimiento/cierreAnteriorAlInicio";
 import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -206,6 +208,23 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
 
   /** Si el cierre cae antes del inicio: entonces hay que decir por qué. */
   const cierreAdelantado = elCierreEsAnteriorAlInicio(form.fecha_cierre, form.fecha_ejecucion);
+
+  /**
+   * Y si además todavía no lo dice, **que el cartel pida eso y no otra cosa**.
+   *
+   * Es la misma elección que hicieron las dos rutas el 12/11/2026 —primero el
+   * faltante, después la contradicción— traída al único lugar donde la gente la
+   * mira. Sin esto, entre que alguien elige la fecha y escribe el motivo ve
+   * «No se puede guardar porque la fecha de cierre … es anterior a la de
+   * inicio» **al lado del campo que lo levanta**: el cartel dice que no hay
+   * nada que hacer y abajo está exactamente lo que hay que hacer.
+   *
+   * Habla sólo de la justificación y no de todo lo que falta —para eso está
+   * `loQueFaltaParaCrear`, en el submit—, porque esto corre en cada render:
+   * gritar «falta el sector» mientras se completa el formulario es lo que
+   * convierte una alerta en un cartel que está siempre.
+   */
+  const faltaElPorQue = loQueFaltaPorElCierreAdelantado(form);
 
   /**
    * Lo que el formulario dice y se contradice, **calculado en cada render**.
@@ -444,8 +463,9 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
                 dos reglas distintas: la de fin es la ventana estimada, que
                 nadie pidió poder prometer al revés; la de cierre se puede dar
                 vuelta desde que se explica por qué, y con el `min` puesto el
-                campo del motivo que aparece acá abajo no se podía ni hacer
-                aparecer. */}
+                camino normal al campo del motivo quedaba cerrado —el calendario
+                no ofrece los días en gris, así que llegaba sólo quien tipeara
+                la fecha a mano—. */}
             <F label="Fecha de fin (estimada)" required>
               <input type="date" value={form.fecha_fin} min={form.fecha_ejecucion || undefined} onChange={e => f("fecha_fin", e.target.value)} className="input" />
             </F>
@@ -459,12 +479,26 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               completar: el cartel de error de este modal vive abajo de todo,
               al lado de los botones, y en un teléfono eso son dos pantallas.
               Los dos dicen la misma frase a propósito — éste cuando pasa, y
-              aquél si alguien aprieta guardar igual. */}
-          {contradicciones.length > 0 && (
+              aquél si alguien aprieta guardar igual.
+
+              **Y cuál de las dos frases, en el mismo orden que el submit y que
+              las dos rutas**: si lo que pasa es que falta el motivo, se dice
+              eso; el impedimento queda para lo que de verdad impide —una fecha
+              de fin dada vuelta—, que no lo arregla ningún texto. Mientras
+              falta el motivo el impedimento no se muestra, igual que el submit
+              se detiene en el faltante y no llega a nombrar la contradicción.
+
+              En ámbar y no en rojo: lo que falta es un campo por completar, que
+              está acá abajo, y no un guardado trabado. */}
+          {faltaElPorQue.length > 0 ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+              Falta cargar {faltaElPorQue.join(", ")}.
+            </div>
+          ) : contradicciones.length > 0 ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
               No se puede guardar porque {contradicciones.join(", ")}.
             </div>
-          )}
+          ) : null}
 
           {/* Debajo de las fechas y arriba de la falla: lo hacen aparecer las
               fechas, y en un teléfono una sección que se abre más arriba empuja
