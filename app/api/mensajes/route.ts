@@ -35,11 +35,21 @@ import { esquemaDelHilo, esquemaDelMensaje, parametrosDeLaUrl } from "@/lib/mens
  * —y el de cada mencionado— volvería `null` para todos menos uno mismo, y un
  * mensaje sin autor no sirve.
  *
- * ## Si no se pudo averiguar el permiso, es un 503
+ * ## Si no se pudo averiguar el permiso es un 503, pero **sólo en un tipo de los tres**
  *
- * Seguridad e Higiene distingue «no tiene permiso» de «no se pudo averiguar», y
- * esta ruta también: una caída de la base contestada con un 403 le diría a
- * alguien que no puede ver algo que sí puede.
+ * La intención es la de siempre: una caída de la base contestada con un 403 le
+ * diría a alguien que no puede ver algo que sí puede. Lo cumple **Seguridad e
+ * Higiene y nadie más**, porque `nivelSyhDe` devuelve `{ ok, error }` y su
+ * adaptador de `lib/mensajes/entidades.ts` lanza, y la ruta lo convierte en 503.
+ *
+ * `nivelMantenimientoDe` (`lib/mantenimiento/auth.ts`) **descarta el `error` de
+ * sus dos lecturas**, así que una caída de la base le da `null` → `puedeVerlo`
+ * falso → **403**, no 503. El `requerimiento` ni siquiera pregunta: es `true`
+ * fijo. Está escrito acá en vez de arreglado a propósito: esa función es de otro
+ * módulo y la llaman decenas de rutas, y cambiarle la firma desde la mensajería
+ * es tocar código con tráfico por un caso de borde. Lo que no se puede es que el
+ * docstring prometa un 503 que no va a salir: quien lea esto y crea que ya está
+ * no lo va a mirar nunca más.
  */
 
 // El correo sale en un `after()`, después de la respuesta, y cada uno espera al
@@ -73,18 +83,34 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
 
+  // Dos `try` y no uno, y no es estilo: con uno solo, cualquier fallo de la
+  // consulta salía con el texto de `SIN_PERMISO` —«No se pudieron comprobar tus
+  // permisos»— y la pantalla acusaba a los permisos de un problema de la base.
+  // Un diagnóstico que no se distingue de otro no es un diagnóstico.
   try {
     if (!(await entidad.puedeVerlo(admin, user.id))) {
       return NextResponse.json({ error: "Sin permisos para ver este registro" }, { status: 403 });
     }
+  } catch (e) {
+    console.error("mensajes: no se pudieron comprobar los permisos", (e as Error).message);
+    return NextResponse.json({ error: SIN_PERMISO }, { status: 503 });
+  }
 
+  try {
     const [filas, numeros] = await Promise.all([
       traerTodo<FilaDeMensaje>((desde, hasta) =>
         admin
           .from("mensajes")
           // La cadena va literal, en una sola línea: partida con `+` o armada
           // en una variable, Supabase pierde la inferencia de tipos.
-          .select("id, texto, creado_en, creado_por, autor:usuarios(nombre, apellido), menciones:mensajes_menciones(usuario_id, leido_en, avisado_en, aviso_fallo, usuario:usuarios(nombre, apellido))")
+          //
+          // **El `autor` nombra su foreign key y tiene que seguir nombrándola.**
+          // `mensajes_menciones` abre un segundo camino de `mensajes` a
+          // `usuarios` —el muchos-a-muchos—, así que `autor:usuarios(...)` a
+          // secas es ambiguo y PostgREST contesta 300 PGRST201. El `usuario:`
+          // de adentro de `menciones` no lleva FK porque desde
+          // `mensajes_menciones` hay uno solo.
+          .select("id, texto, creado_en, creado_por, autor:usuarios!mensajes_creado_por_fkey(nombre, apellido), menciones:mensajes_menciones(usuario_id, leido_en, avisado_en, aviso_fallo, usuario:usuarios(nombre, apellido))")
           .eq("entidad_tipo", tipo)
           .eq("entidad_id", id)
           .order("creado_en", { ascending: false })
@@ -105,7 +131,17 @@ export async function GET(request: Request) {
     });
   } catch (e) {
     console.error("mensajes: no se pudo leer el hilo", (e as Error).message);
-    return NextResponse.json({ error: SIN_PERMISO }, { status: 503 });
+    // Lo que dijo la base, detrás del texto en castellano: es lo mismo que hace
+    // el 503 del insert de acá abajo, y es lo que distingue una caída de una
+    // consulta mal armada.
+    return NextResponse.json(
+      {
+        error:
+          "No se pudo leer el hilo: la base no contestó bien. Probá de nuevo en un momento. " +
+          (e as Error).message,
+      },
+      { status: 503 }
+    );
   }
 }
 
@@ -142,6 +178,14 @@ export async function GET(request: Request) {
  * o que ya no puede ver el registro, **rechaza el pedido entero**, antes de
  * guardar nada: guardar el mensaje sin esa mención dejaría a quien escribe
  * creyendo que avisó, que es justo lo que esta feature no puede permitir.
+ *
+ * **Y por eso ese 400 no afirma que el otro no puede ver el registro.** Por lo
+ * que dice el encabezado de arriba, `puedeVerlo` de una OT devuelve `false`
+ * tanto cuando la persona no tiene el módulo como cuando la base tuvo un hipo:
+ * desde acá los dos casos se ven igual. Decir «Fulano no puede ver este
+ * registro» sería una afirmación falsa sobre los permisos de un compañero, que
+ * además queda en la pantalla de un tercero. El texto dice lo que sí se sabe:
+ * que no se pudo confirmar.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -234,8 +278,9 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error:
-              `${quienes} no puede ver este registro, así que no se le puede mencionar. ` +
-              "Sacalo de la lista y volvé a probar: el mensaje no se guardó.",
+              `No se pudo confirmar que ${quienes} pueda ver este registro, así que no se le ` +
+              "puede mencionar: puede que no tenga el módulo, o que la base no haya contestado " +
+              "bien. Sacalo de la lista, o probá de nuevo en un momento: el mensaje no se guardó.",
           },
           { status: 400 }
         );
