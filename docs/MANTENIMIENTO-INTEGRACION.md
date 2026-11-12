@@ -679,6 +679,37 @@ columnas, así que hay que ensancharla a 24 y poner `OBSERVACIÓN PREVIA` en `X1
 Hasta que esté, la nota se guarda igual y la pantalla avisa que no llegó a la
 planilla con lo que haya dicho Google.
 
+### Y abajo hay otra caja de texto que **no** es esto (11/11/2026)
+
+Desde la mensajería interna, en la pantalla de la OT conviven **dos cosas que se
+escriben igual y no son lo mismo**, una debajo de la otra. Confundirlas es el
+error fácil, así que acá está cuál es cuál:
+
+| | «Por qué no se hizo» | El hilo de mensajes |
+|---|---|---|
+| Qué dice | por qué esta orden sigue abierta | lo que se habla sobre la orden |
+| Dónde vive | `ordenes_trabajo_notas` | `mensajes` + `mensajes_menciones` |
+| **A la planilla** | **sí, la última va a la columna X** | **no, a ninguna** |
+| Avisa a alguien | no | sí: al mencionado le sale un correo con el texto adentro |
+| Quién la puede escribir | quien puede editar la OT | **cualquiera que pueda abrir la pantalla** — ver y escribir son lo mismo, así que no depende de `canEdit` |
+
+De ahí salen las dos consecuencias que importan:
+
+- **Un mensaje no reemplaza a una justificación.** Explicar en el hilo por qué
+  la orden está parada deja la columna X vacía, y quien mira la planilla —que es
+  quien no entra al sistema— no se entera de nada. Eso es exactamente la
+  divergencia que no avisa de la que habla CLAUDE.md.
+- **Una justificación no reemplaza a un mensaje.** La nota no le llega a nadie:
+  si hay que avisarle a alguien, es una mención.
+
+La pantalla lo dice con el `aclaracion` de `<HiloDeMensajes>`
+(`app/(app)/mantenimiento/ordenes/OrdenesClient.tsx`), y el texto cambia según
+si esa orden pide justificación. Está escrito también acá porque un renglón de
+JSX no es donde alguien va a buscarlo seis meses después. El resto de la
+mensajería —cómo se decide quién puede ver un hilo, por qué el aviso es un
+correo— está en [el spec](superpowers/specs/2026-11-11-mensajeria-interna-design.md)
+y resumido en la fila de CLAUDE.md.
+
 ## Preguntarle a Compras por un repuesto (31/10/2026)
 
 El diseño está en
@@ -2823,6 +2854,55 @@ Tres cosas de esa decisión que no se deducen del código:
 - **Va debajo de la grilla y no adentro de la celda** en el modal de registrar:
   esa grilla es de dos columnas y el mensaje, que nombra las dos fechas
   enteras, entraba partido en pedazos de 150 px.
+
+## El catálogo de tareas preventivas (12/11/2026)
+
+El motor de planes periódicos tiene **un plan cargado** y, al mismo tiempo, el
+**59,9 % de las OT del último año son PROGRAMADO** (1.455 contra 973
+correctivas). El preventivo se hace en volumen y se escribe a mano una orden
+por vez. El diseño, con todo lo medido, está en
+[el spec](superpowers/specs/2026-11-12-mantenimiento-catalogo-de-tareas-preventivas-design.md);
+acá lo que hay que saber antes de tocarlo:
+
+- **Una tarea es una acción sobre un componente.** La acción es vocabulario
+  nuevo (`ACCIONES_PREVENTIVAS`, seis entradas en
+  [lib/mantenimiento/tareasPreventivas.ts](../lib/mantenimiento/tareasPreventivas.ts))
+  y sale de los datos. El componente **no se inventa**: sale de
+  `equipos_componentes`.
+- **Y ahí está el hallazgo que desmintió el diseño inicial.** Se dio por
+  sentado que el objeto ya estaba resuelto —43 nombres curados— y la primera
+  corrida dio **156 de 1.465 órdenes (11 %)** con acción + componente. Las dos
+  listas hablan idiomas distintos: el catálogo nombra piezas de relevamiento
+  («Raspador / limpiador cinta», «Masa excéntrica») y las órdenes nombran lo
+  que se toca ese día. **Péndulos, grillas, rodamientos y correas no existen
+  como componente**, y son el segundo, tercero y cuarto objeto más frecuente de
+  todo el preventivo.
+- Por eso lo más accionable que imprime `npm run catalogo-de-tareas` no es el
+  catálogo sino **qué le falta a `equipos_componentes`**.
+- **Eso se completó el mismo día, y sin inventar nada**: qué equipo tiene qué
+  componente sale del historial, porque cada OT que nombra «péndulos» ya viene
+  con su `equipment_id`. `scripts/componentes-desde-las-ot.mts` agregó **91
+  filas** y la cobertura pasó de **156 órdenes (11 %) a 278 (19 %)**, y las
+  tareas de 26 a 46. Las filas llevan `componente_id` con prefijo
+  **`COMP-OT-`** justamente para poder sacarlas: `delete from
+  public.equipos_componentes where componente_id like 'COMP-OT-%'`. El script
+  **no escribe si no le pasan `--aplicar`**.
+- Lo que NO se puede hacer desde el sistema sigue siendo lo mismo: **inventar
+  un componente que ninguna OT nombra**. Un componente así no cuelga de ningún
+  equipo y la tarea aparecería en el lugar que no es.
+- **El 19 % de las PROGRAMADO no es preventivo**: 281 son reparación, obra o
+  soldadura. `ACCIONES_CORRECTIVAS` las reconoce **para contarlas, no para
+  reclasificar la OT**. Sin esa distinción, el «54 % con acción reconocida»
+  haría creer que hay 793 tareas preventivas donde hay 512.
+- El intervalo de cada tarea es **la mediana de los huecos y no el promedio**,
+  con menos de tres fechas no se opina, y dos órdenes del mismo día no son dos
+  repeticiones.
+
+**Esta etapa no escribe nada y no lleva migración.** El orden de lo que sigue
+importa y está en el spec: primero que alguien de planta complete los
+componentes que faltan, después confirmar el catálogo, y recién ahí la tabla y
+el enganche con el motor de planes. Al revés da una tabla que cubre el 11 % del
+preventivo y la sensación de que el problema está resuelto.
 
 ## Los datos: qué está y qué no
 

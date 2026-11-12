@@ -1,10 +1,16 @@
 /**
  * Los zips del PC Robot que viven en la unidad compartida `PC Robot` de Drive.
  *
- * Una tarea programada sube todos los días, a las 09:30 de Argentina, un zip por
+ * Una tarea programada sube todos los días, a las 22:00 de Argentina, un zip por
  * molino: `Filler 1 2026-10-29.zip`, `Filler 2 2026-10-29.zip`. El prefijo es el
  * `prefijo_archivo` del catálogo `produccion_molinos`, y la fecha del nombre no
  * se lee: manda `modifiedTime`, que no se puede escribir mal.
+ *
+ * **Las tres horas de este frente se movieron juntas el 12/11/2026**, y están
+ * encadenadas: el robot genera a las 21:00, la tarea sube a las 22:00, y el
+ * cron de `produccion-molinos-sync` importa a las 07:00 (10:00 UTC). Antes
+ * eran 09:00, 09:30 y 10:00. Cambiar una sola las desalinea sin que nada lo
+ * diga — el porqué largo está en el encabezado de esa ruta.
  *
  * **En la carpeta hay más de lo que se lee.** Desde el 04/11/2026 esa misma
  * tarea sube además `Planta 02`, `Hornos` y `Porteria`, y desde el 05/11/2026

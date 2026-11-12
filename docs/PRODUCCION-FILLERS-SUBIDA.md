@@ -56,6 +56,21 @@ Lo que hay que saber de cada una de las tres que no se leen, medido el
   hoy va en 566, así que en algún momento lo pusieron a cero con un desfasaje
   —una resta a través de ese salto da horas que no existieron—. Leerlo es un
   diseño, no un prefijo más en `produccion_molinos`.
+
+  **Y es el único origen que lleva `ignorar`, por algo que costó un archivo.**
+  Ese robot deja **dos clases de zip** en la misma carpeta: el bueno —
+  `PLANTA 02 AAAA-MM-DD HH;MM;SS.zip`, con `DAT001.CSV` adentro, ~21 KB— y
+  otro al arrancar —`PLANTA 02 - INICIO …` o `- AL INICIAR …`— de **868
+  bytes**, que no tiene el CSV sino cuatro `.txt` sueltos de 0 a 16 bytes
+  (`NUEVO ARHICOV.txt`, `DATOS PLANTA 2 - copia.txt`…). El 11/11/2026 el
+  basura se escribió a las 10:49, después del bueno de las 09:30; el subidor
+  elige el más nuevo, y al día siguiente **pisó en Drive el archivo bueno de
+  21.155 bytes con uno de 868**. Lo único que lo delató fue el número en el
+  log, que nadie mira.
+  Ahora hay dos defensas y las dos hacen falta: `ignorar` saca a esos zips de
+  la elección —va **por origen y nunca global**, porque en Hornos los
+  `- INICIO` sí traen las dieciocho planillas—, y la red de seguridad de abajo
+  cubre el caso que nadie previó.
 - **`Hornos` no es un robot**: cada zip trae dieciocho `.xlsx` mensuales
   (`202611-HORNOS NOVIEMBRE 2026.xlsx` y los anteriores). 1,1 MB por copia.
   Exporta más de una vez por día y con el nombre cambiando —se vio
@@ -329,7 +344,7 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
-Arranca **subiendo**, sin esperar a las 09:30, y después corre todos los días a
+Arranca **subiendo**, sin esperar a las 22:00, y después corre todos los días a
 esa hora. Mirar que los dos archivos aparezcan en la carpeta de Drive.
 
 ## Lo que hay que saber de esta instalación
@@ -341,7 +356,7 @@ esa hora. Mirar que los dos archivos aparezcan en la carpeta de Drive.
   importa: aunque el script tuviera un error, no puede tocar la carpeta del
   robot. Lo único que sabe hacer con ella es leer.
 - **La zona horaria del contenedor es la que decide a qué hora sube.**
-  `--diario 09:30` compara contra la hora local del proceso, y la imagen trae
+  `--diario 22:00` compara contra la hora local del proceso, y la imagen trae
   `TZ=America/Argentina/Buenos_Aires`. Si alguien la cambia, cambia la hora de
   la subida.
 - **La imagen es `node:22-slim` y no `alpine`** justamente por eso: alpine trae
@@ -388,7 +403,7 @@ resultado `0` y saltó los dos archivos que ya estaban subidos — la idempotenc
 comprobada en la instalación real y no sólo en el script.
 
 **Esa notebook no es el destino final.** Sirve para que esto empiece a correr
-hoy, pero el trabajo es diario a las 09:30 y una notebook se cierra y se lleva.
+hoy, pero el trabajo es diario a las 22:00 y una notebook se cierra y se lleva.
 Mudar esto a la máquina definitiva es copiar la carpeta, los tres archivos de
 configuración y el XML.
 
@@ -430,14 +445,14 @@ dependencias: es un archivo suelto, no hace falta el repo ni `npm install`.
      ejecuta nada con la máquina a batería**. En una notebook eso significa que
      no corre la mitad de los días, y no avisa. Es el tipo de falla que se
      descubre un mes después mirando por qué faltan datos.
-   - **`StartWhenAvailable=true`.** Si la máquina estaba apagada a las 09:30,
+   - **`StartWhenAvailable=true`.** Si la máquina estaba apagada a las 22:00,
      corre cuando vuelve. Sale gratis porque la subida es idempotente.
    - **`RestartOnFailure`**, tres reintentos cada 15 minutos, para cuando la red
      todavía no está lista al arrancar.
 
    Y dos cosas sobre la cuenta:
 
-   - **`/st 09:30`** es hora local, media hora después de que el robot exporta.
+   - **`/st 22:00`** es hora local, después de que exportaron todos los robots.
      No antes: el archivo todavía no existe.
    - El XML usa **`LogonType=InteractiveToken`**, o sea que corre **sólo con la
      sesión iniciada**. Es lo único posible cuando la cuenta de Windows no
@@ -463,6 +478,30 @@ dependencias: es un archivo suelto, no hace falta el repo ni `npm install`.
    correr todos los días.
 
 ---
+
+# Las tres horas están encadenadas
+
+Desde el 12/11/2026, y a pedido, este frente corre así:
+
+| Hora (Argentina) | Qué pasa | Dónde se cambia |
+|---|---|---|
+| **21:00** | el robot genera el export del día | en el PC Robot, no en este repo |
+| **22:00** | la tarea sube los zips a Drive | `-Hora` de `instalar.ps1`, o la tarea en el Programador |
+| **07:00** (10:00 UTC) | el SdG los importa | el `schedule` de `vercel.json` |
+
+Antes eran 09:00, 09:30 y 10:00.
+
+**Lo que hay que saber antes de mover una sola: desalinearlas no rompe nada y
+nada lo dice.** Si la importación se adelanta a antes de la subida, entra el
+zip de anteayer y `estaObsoleto` igual da que está al día, porque mide 24 horas
+contra el `modifiedTime` de Drive —la hora de la **subida**— y no contra la
+hora del export del robot, que es lo que de verdad envejece. Las dos reglas
+que hay que conservar son que la importación quede **después** de la subida y
+**antes** de que alguien abra la pantalla a la mañana.
+
+(Y la subida a las 22:00 tiene un beneficio aparte que la de las 09:30 no
+tenía: a las 09:30 la subida de Planta 02 quedaba **empatada** con su propio
+export de las 09:30:37, una carrera que a veces se perdía.)
 
 # Cómo se comprueba que sigue andando
 
@@ -508,6 +547,24 @@ que sí hay que mirar del informe son dos cosas:
   días sin correr y dos corriendo con los seis orígenes en
   `UNKNOWN: unknown error, scandir`— y que el log, solo, no deja ver: **una
   corrida que no ocurrió no escribe ninguna línea.**
+
+# Un archivo más chico no pisa al que ya está
+
+De que todo acumule se sigue algo que conviene tener escrito: **estos archivos
+sólo crecen**. Así que uno que encogió no es un dato nuevo — es el origen roto,
+truncado o reemplazado por otra cosa.
+
+Desde el 12/11/2026 el subidor **se niega** a reemplazar un archivo de Drive
+por uno más chico, y lo cuenta como **fallo** y no como aviso: el "último
+resultado" de la tarea programada pasa a `0x1`, que es lo que hace que alguien
+se entere. `--permitir-encoger` lo levanta, para el día que de verdad haya que
+hacerlo.
+
+Es la misma defensa que `laPlanillaEncogio` de
+[lib/core/sheets.ts](../lib/core/sheets.ts), por el mismo motivo y después del
+mismo susto. Y es la red de seguridad **genérica**: `ignorar` resuelve el caso
+conocido de Planta 02, pero esto cubre el que nadie previó —un zip truncado de
+Filler 1, por ejemplo, que sí tendría consecuencias porque el SdG lo importa—.
 
 # Qué pasa si un día falla
 

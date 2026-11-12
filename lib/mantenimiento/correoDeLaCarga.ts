@@ -1,4 +1,5 @@
 import { DISPARO, concordado, conSuArticulo } from "@/public/cola/colaOffline.js";
+import { paraUnAsunto } from "@/lib/core/asuntoDeCorreo";
 
 /**
  * Si una carga rechazada merece un correo, y cuál de los dos textos.
@@ -83,22 +84,6 @@ function comoSeEscribe(fecha: string): string {
 }
 
 /** Qué carga era, lo suficiente para reconocerla entre varias. */
-/**
- * Cuánto de la descripción entra en un asunto.
- *
- * La descripción es un `<textarea>` sin tope en los dos formularios, y el
- * asunto es una **cabecera**: un salto de línea ahí es una cabecera partida y
- * dos mil caracteres son un asunto fuera de norma. Es el único campo libre que
- * llega a una.
- */
-const LARGO_DEL_ASUNTO = 80;
-
-/** Lo que puede ir en una cabecera: una sola línea y acotada. */
-function paraUnAsunto(texto: string): string {
-  const unaLinea = texto.replace(/\s+/g, " ").trim();
-  return unaLinea.length > LARGO_DEL_ASUNTO ? `${unaLinea.slice(0, LARGO_DEL_ASUNTO - 1)}…` : unaLinea;
-}
-
 function cualEra(rechazo: RechazoDeCarga): string {
   const sector = rechazo.sector?.trim();
   // Sin descripción es justo el caso del 400 «Contá qué pasa»: unas comillas

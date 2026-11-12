@@ -14,6 +14,8 @@
  *   node subir-zips.mjs                      usa ./subir-zips.config.json
  *   node subir-zips.mjs otra-config.json     usa otra
  *   node subir-zips.mjs --seco               dice qué haría, no sube nada
+ *   node subir-zips.mjs --permitir-encoger   deja pisar un archivo de Drive
+ *                                            con uno más chico (ver abajo)
  *   node subir-zips.mjs --diario 09:30       no termina: sube ahora y después
  *                                            todos los días a esa hora local
  *
@@ -25,7 +27,7 @@
  * Cómo se instala, de las dos maneras, en docs/PRODUCCION-FILLERS-SUBIDA.md.
  *
  * ──────────────────────────────────────────────────────────────────────────
- * TRES COSAS QUE SE PAGAN CARO SI NO SE SABEN
+ * CUATRO COSAS QUE SE PAGAN CARO SI NO SE SABEN
  *
  * 1. La carpeta de destino tiene que estar en una UNIDAD COMPARTIDA. Una
  *    cuenta de servicio no tiene cuota de Drive: subir a "Mi unidad" de una
@@ -48,7 +50,24 @@
  *    nunca se reescriba — ahí un día perdido se pierde para siempre, y eso
  *    pide una cola, que es justamente lo que este script no tiene.
  *
- * 3. Todo lo ejecutable vive adentro de `principal()` y nada corre al cargar
+ * 3. UN ARCHIVO MÁS CHICO NO PISA AL QUE YA ESTÁ. De lo anterior se sigue que
+ *    estos archivos sólo crecen, así que uno que encogió no es un dato nuevo:
+ *    es el origen roto. El 12/11/2026 el robot de Planta 02 dejó, después de
+ *    su export bueno de las 09:30, un `PLANTA 02 - INICIO …zip` de 868 bytes
+ *    que no tiene `DAT001.CSV` sino cuatro `.txt` sueltos de 0 a 16 bytes —y
+ *    como el subidor elige "el más nuevo", piso en Drive el archivo bueno de
+ *    21.155 bytes—. Ahora eso se niega y cuenta como FALLO, para que el
+ *    "último resultado" de la tarea programada pase a 0x1 y alguien se entere;
+ *    `--permitir-encoger` lo levanta. Es la misma defensa que
+ *    `laPlanillaEncogio` de lib/core/sheets.ts y está acá por el mismo susto.
+ *
+ *    Esa es la red de seguridad genérica. Lo que evita que Planta 02 la haga
+ *    saltar todos los días es `ignorar` en su entrada de la configuración, una
+ *    expresión regular de nombres que no son el dato. Va POR ORIGEN y no
+ *    global a propósito: en Hornos los `- INICIO` sí traen las dieciocho
+ *    planillas, así que una regla global sobre ese texto estaría mal.
+ *
+ * 4. Todo lo ejecutable vive adentro de `principal()` y nada corre al cargar
  *    el módulo. No es estilo: `salir()` se usa mientras se lee la
  *    configuración, y si el `class Corte` o el `let archivoLog` que necesita
  *    quedan declarados más abajo, el primer error de una instalación nueva
@@ -114,22 +133,30 @@ function b64url(x) {
  * `if` arriba que elige qué archivos son el dato, y un camino abajo que los
  * sube; dos caminos de subida se habrían separado a la primera corrección.
  */
-function zipMasNuevo(carpeta) {
+function zipMasNuevo(carpeta, ignorar) {
   let archivos;
   try {
     archivos = readdirSync(carpeta);
   } catch (e) {
     return { error: `no se pudo leer ${carpeta}: ${e.message}` };
   }
+  const descartar = ignorar ? new RegExp(ignorar, "i") : null;
   const zips = archivos
     .filter((n) => n.toLowerCase().endsWith(".zip"))
+    .filter((n) => !descartar?.test(n))
     .map((n) => {
       const ruta = join(carpeta, n);
       const s = statSync(ruta);
       return { ruta, nombre: n, mtime: s.mtime, tamano: s.size };
     })
     .sort((a, b) => b.mtime - a.mtime);
-  if (zips.length === 0) return { error: `no hay ningún .zip en ${carpeta}` };
+  if (zips.length === 0) {
+    return {
+      error: ignorar
+        ? `no hay ningún .zip en ${carpeta} que no coincida con "ignorar"`
+        : `no hay ningún .zip en ${carpeta}`,
+    };
+  }
   return { archivos: [zips[0]] };
 }
 
@@ -224,22 +251,24 @@ function tipoDe(nombre) {
 function leerArgumentos(argv) {
   const sueltos = [];
   let seco = false;
+  let permitirEncoger = false;
   let diario; // undefined = no se pidió; "" = se pidió sin valor
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--seco" || a === "--dry-run") seco = true;
+    else if (a === "--permitir-encoger") permitirEncoger = true;
     else if (a === "--diario") diario = argv[++i] ?? "";
     else if (a.startsWith("--")) sueltos.push(a); // desconocido: que falle al abrirlo
     else sueltos.push(a);
   }
-  return { seco, diario, rutaConfig: sueltos[0] ?? "subir-zips.config.json" };
+  return { seco, diario, permitirEncoger, rutaConfig: sueltos[0] ?? "subir-zips.config.json" };
 }
 
 const opciones = leerArgumentos(process.argv.slice(2));
 
 async function principal() {
   // ── Configuración ───────────────────────────────────────────────────────
-  const { seco } = opciones;
+  const { seco, permitirEncoger } = opciones;
   const rutaConfig = resolve(opciones.rutaConfig);
 
   let config;
@@ -399,7 +428,7 @@ async function principal() {
     // doce. `carpetaEntera: true` lo dice en la configuración.
     const { archivos, error } = origen.carpetaEntera
       ? todosLosArchivos(origen.carpeta)
-      : zipMasNuevo(origen.carpeta);
+      : zipMasNuevo(origen.carpeta, origen.ignorar);
     if (error) {
       decir(`ERROR ${etiqueta}: ${error}`);
       fallaron++;
@@ -422,6 +451,26 @@ async function principal() {
       const yaEsta = await buscar(destino);
       if (yaEsta && Number(yaEsta.size) === archivo.tamano) {
         decir(`= ${etiqueta}: ${destino} ya está en Drive con el mismo tamaño, no se sube${aviso}`);
+        continue;
+      }
+
+      // LA RED DE SEGURIDAD: no se reemplaza un archivo de Drive por uno MÁS
+      // CHICO. Los seis orígenes acumulan, así que encoger no es una novedad
+      // del día: es el origen roto, truncado o reemplazado por otra cosa. El
+      // 12/11/2026 un zip de 868 bytes piso en Drive uno bueno de 21.155, y la
+      // única señal fue el número en el log, que nadie mira.
+      //
+      // Se cuenta como fallo —y no como un aviso— a propósito: el "último
+      // resultado" de la tarea programada pasa a 0x1 y eso es lo que hace que
+      // alguien se entere. Es la misma decisión que `laPlanillaEncogio` de
+      // lib/core/sheets.ts, por el mismo motivo y después del mismo susto.
+      if (yaEsta && archivo.tamano < Number(yaEsta.size) && !permitirEncoger) {
+        decir(
+          `ERROR ${etiqueta}: ${archivo.nombre} pesa ${archivo.tamano} bytes y ${destino} ya tiene ` +
+            `${yaEsta.size} en Drive. NO se reemplaza: estos archivos sólo crecen, así que uno más ` +
+            `chico es el origen roto y no un dato nuevo. Si de verdad encogió, correr con --permitir-encoger.`
+        );
+        fallaron++;
         continue;
       }
 

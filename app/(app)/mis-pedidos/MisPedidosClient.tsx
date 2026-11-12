@@ -5,6 +5,7 @@ import { useCargar } from "@/lib/core/useCargar";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
+import ConversacionDelPedido from "./ConversacionDelPedido";
 import {
   APROBACION_LABELS, COMPRA_LABELS, etiquetaPrioridad, fecha,
 } from "@/lib/compras/constants";
@@ -41,9 +42,30 @@ const POR_PAGINA = 50;
  * y mandarlos todos al navegador para mostrar cincuenta es lo que hace que una
  * pantalla tarde tres segundos en abrir.
  */
+/** Por qué no se pudo abrir el pedido de un `?pedido=`: tres causas que se dicen distinto. */
+export type ProblemaDelEnlace =
+  | { tipo: "no-valido" }
+  | { tipo: "no-existe" }
+  | { tipo: "error"; detalle: string };
+
+function textoDelProblema(p: ProblemaDelEnlace): string {
+  switch (p.tipo) {
+    case "no-valido":
+      return "El enlace no es válido: el identificador del pedido está mal escrito. Podés buscarlo por su N° de RI acá abajo.";
+    case "no-existe":
+      return "El pedido al que llevaba ese enlace ya no existe. Podés buscarlo por su N° de RI acá abajo.";
+    case "error":
+      return `No se pudo abrir el pedido del enlace (${p.detalle}). Probá de nuevo en un rato, o buscalo por su N° de RI acá abajo.`;
+  }
+}
+
 export default function MisPedidosClient({
-  usuarioId, misAreas, areas, empresas, ubicaciones,
+  usuarioId, misAreas, areas, empresas, ubicaciones, conversacionInicial = null, problemaDelEnlace = null,
 }: {
+  /** El pedido cuya conversación hay que abrir al cargar: el del enlace de un correo. */
+  conversacionInicial?: { id: string; nroRi: number; descripcion: string } | null;
+  /** Vino un `?pedido=` y no se pudo abrir: se dice por qué, en vez de mostrar la lista como si nada. */
+  problemaDelEnlace?: ProblemaDelEnlace | null;
   usuarioId: string;
   /** Los ids de las áreas de esta persona. Vacío = todavía no se le asignó. */
   misAreas: string[];
@@ -53,6 +75,22 @@ export default function MisPedidosClient({
 }) {
   const router = useRouter();
   const [modalAbierto, setModalAbierto] = useState(false);
+  // El pedido cuya conversación está abierta. Guarda lo que el diálogo muestra
+  // en el encabezado, y no sólo el id, para no buscarlo de nuevo en `pedidos`:
+  // la lista se recarga al cambiar de página y el pedido puede ya no estar.
+  const [conversacion, setConversacion] =
+    useState<{ id: string; nroRi: number; descripcion: string } | null>(conversacionInicial);
+  // Si ya se está en Mis pedidos y llega otro `?pedido=` (la página se vuelve a
+  // pedir al servidor sin remontar esto), el estado de arriba no se recalcula
+  // solo. Se ajusta durante el render comparando contra el valor previo, y no
+  // con un `key` en la página: un `key` que sale de la URL cambia cuando se
+  // cierra el diálogo y se limpia `?pedido=`, y remontaría la pantalla
+  // llevándose el filtro, la página y la búsqueda de quien ya estaba mirando.
+  const [inicialPrevia, setInicialPrevia] = useState(conversacionInicial?.id ?? null);
+  if ((conversacionInicial?.id ?? null) !== inicialPrevia) {
+    setInicialPrevia(conversacionInicial?.id ?? null);
+    if (conversacionInicial) setConversacion(conversacionInicial);
+  }
 
   // Arranca en el área propia, que es a lo que se entra. Salvo que no tenga
   // ninguna asignada: ahí mostrar una lista vacía sería un callejón, así que
@@ -196,6 +234,12 @@ export default function MisPedidosClient({
         )}
       </div>
 
+      {problemaDelEnlace && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {textoDelProblema(problemaDelEnlace)}
+        </div>
+      )}
+
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
@@ -250,6 +294,8 @@ export default function MisPedidosClient({
                 <Solicitante pedido={p} mostrar={alcance === "todos"} />
                 <Chip {...etiquetaPrioridad(p.prioridad)} />
               </div>
+
+              <BotonDeMensajes pedido={p} onAbrir={setConversacion} />
             </article>
           ))}
         </div>
@@ -298,6 +344,9 @@ export default function MisPedidosClient({
                       {p.estado_compra === "RECIBIDO" && p.fecha_recepcion && (
                         <div className="text-xs text-green-700">Recibido el {fecha(p.fecha_recepcion)}</div>
                       )}
+                      <div className="mt-0.5">
+                        <BotonDeMensajes pedido={p} onAbrir={setConversacion} />
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-right text-slate-600">{p.cantidad ?? "—"}</td>
                     <td className="px-3 py-2 text-slate-600">{p.compras_areas?.nombre ?? "—"}</td>
@@ -338,6 +387,24 @@ export default function MisPedidosClient({
         </>
       )}
 
+      {conversacion && (
+        <ConversacionDelPedido
+          // Un hilo por pedido: al abrir otro, el texto y las menciones arrancan limpios.
+          key={conversacion.id}
+          id={conversacion.id}
+          nroRi={conversacion.nroRi}
+          descripcion={conversacion.descripcion}
+          onCerrar={() => {
+            setConversacion(null);
+            // Sacar `?pedido=` de la barra: si no, recargar la página vuelve a
+            // abrir una conversación que ya se cerró.
+            if (window.location.search.includes("pedido=")) {
+              window.history.replaceState(null, "", window.location.pathname);
+            }
+          }}
+        />
+      )}
+
       {modalAbierto && (
         <NuevoRequerimientoModal
           areas={areas}
@@ -348,6 +415,27 @@ export default function MisPedidosClient({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * La puerta a la conversación de un pedido. Un botón de texto y no un `.btn-*`:
+ * va en cada tarjeta y en cada renglón, y tiene que ser lo más chico de ahí.
+ */
+function BotonDeMensajes({
+  pedido, onAbrir,
+}: {
+  pedido: RequerimientoConRelaciones;
+  onAbrir: (p: { id: string; nroRi: number; descripcion: string }) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onAbrir({ id: pedido.id, nroRi: pedido.nro_ri, descripcion: pedido.descripcion })}
+      className="mt-1.5 text-xs font-medium text-slate-600 underline hover:text-slate-900"
+    >
+      Mensajes
+    </button>
   );
 }
 

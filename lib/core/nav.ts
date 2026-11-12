@@ -447,6 +447,11 @@ export const NAV: NavItem[] = [
   // mal no compromete nada; decidir qué se hace con eso —generar la OT,
   // desestimarlo— sí, y eso queda adentro del módulo.
   { label: "Mis avisos", href: "/mis-avisos" },
+  // Sin `modulo`, por lo mismo: a alguien lo mencionan en una condición insegura
+  // o en un requerimiento sin tener ese módulo, y la bandeja no puede depender
+  // de uno. **No se llama «Avisos»** por la razón de «Disponibilidad» (abajo):
+  // esa palabra ya tiene dos significados.
+  { label: "Mis menciones", href: "/mis-menciones" },
   // Sin `modulo`, por lo mismo: quién no viene y qué día lo necesita saber quien
   // arma un turno o pide un camión, tenga o no RRHH. El motivo no sale en
   // ninguna de las dos pestañas; qué se ve del ausentismo lo decide la ruta.
