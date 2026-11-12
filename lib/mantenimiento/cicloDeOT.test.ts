@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  queSigueEnElCiclo, caraDeLaVuelta, descripcionDeLaOT,
+  queSigueEnElCiclo, elCorteQueSigue, caraDeLaVuelta, descripcionDeLaOT,
   type CicloParaDecidir, type OTDelCiclo,
 } from "./cicloDeOT";
 
@@ -115,6 +115,56 @@ describe("queSigueEnElCiclo", () => {
   it("con dos abiertas no crea una tercera", () => {
     const filas = [ot({ ot_number: 17, ciclo_vuelta: 1 }), ot({ ot_number: 18, ciclo_vuelta: 2 })];
     expect(queSigueEnElCiclo(CICLO, filas).que).toBe("esperar");
+  });
+});
+
+/**
+ * El corte lo mueven tres puntas: la madre al cerrarse, el botón y la carga
+ * inicial. Ésta es la primera. Sin ella el ciclo se detiene para siempre
+ * después del primer cambio: `queSigueEnElCiclo` devuelve `esperar` sobre una
+ * madre cerrada, y nadie la saca nunca del rango.
+ */
+describe("elCorteQueSigue", () => {
+  it("la madre cerrada mueve el corte a su fecha de cierre", () => {
+    const filas = [ot({ ot_number: 30, ciclo_vuelta: 0, estado: "REALIZADO", fecha_cierre: "2026-11-20" })];
+    expect(elCorteQueSigue(CICLO, filas)).toEqual({ desde: "2026-11-20", vuelta_desde: 0 });
+  });
+
+  it("una hija cerrada no mueve nada", () => {
+    const filas = [ot({ ot_number: 31, ciclo_vuelta: 1, estado: "REALIZADO", fecha_cierre: "2026-11-07" })];
+    expect(elCorteQueSigue(CICLO, filas)).toBeNull();
+  });
+
+  it("una madre abierta no mueve nada", () => {
+    expect(elCorteQueSigue(CICLO, [ot({ ot_number: 32, ciclo_vuelta: 0 })])).toBeNull();
+  });
+
+  it("una madre cerrada sin fecha de cierre usa la de ejecucion", () => {
+    const filas = [ot({
+      ot_number: 33, ciclo_vuelta: 0, estado: "REALIZADO",
+      fecha_cierre: null, fecha_ejecucion: "2026-11-19",
+    })];
+    expect(elCorteQueSigue(CICLO, filas)).toEqual({ desde: "2026-11-19", vuelta_desde: 0 });
+  });
+
+  it("una madre cerrada sin ninguna fecha no mueve nada", () => {
+    const filas = [ot({
+      ot_number: 34, ciclo_vuelta: 0, estado: "REALIZADO",
+      fecha_cierre: null, fecha_ejecucion: null,
+    })];
+    expect(elCorteQueSigue(CICLO, filas)).toBeNull();
+  });
+
+  it("una madre de antes del corte no lo mueve de nuevo", () => {
+    const filas = [ot({
+      ot_number: 35, ciclo_vuelta: 0, estado: "REALIZADO",
+      fecha_cierre: "2026-10-28", created_at_app: "2026-10-20T12:00:00Z",
+    })];
+    expect(elCorteQueSigue(CICLO, filas)).toBeNull();
+  });
+
+  it("un ciclo sin arrancar no mueve nada", () => {
+    expect(elCorteQueSigue({ ...CICLO, desde: null, vuelta_desde: null }, [])).toBeNull();
   });
 });
 

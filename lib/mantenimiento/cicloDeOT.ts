@@ -79,6 +79,30 @@ export type Decision =
 const CERRADA = "REALIZADO";
 
 /**
+ * La OT que manda, aplicando el corte.
+ *
+ * Es la de mayor vuelta, y a igualdad la creada más tarde: la vuelta ordena el
+ * ciclo, así que una hija 2 creada antes que una hija 3 reencolada sigue siendo
+ * la anterior.
+ */
+function laUltimaEnRango(
+  ciclo: CicloParaDecidir,
+  ots: readonly OTDelCiclo[]
+): OTDelCiclo | undefined {
+  const desde = ciclo.desde;
+  if (!desde) return undefined;
+
+  return [...ots]
+    .filter((o) => (o.created_at_app ?? "").slice(0, 10) >= desde)
+    .sort(
+      (a, b) =>
+        a.ciclo_vuelta - b.ciclo_vuelta ||
+        String(a.created_at_app ?? "").localeCompare(String(b.created_at_app ?? ""))
+    )
+    .at(-1);
+}
+
+/**
  * Qué OT sigue, o por qué ninguna.
  *
  * @param ots Las OT **de este ciclo**, en cualquier orden. Se recortan acá.
@@ -101,19 +125,7 @@ export function queSigueEnElCiclo(
     };
   }
 
-  // ── El corte ──────────────────────────────────────────────────────────────
-  const enRango = ots.filter(
-    (o) => (o.created_at_app ?? "").slice(0, 10) >= ciclo.desde!
-  );
-
-  // La última es la de mayor vuelta; a igualdad, la creada más tarde. La vuelta
-  // manda sobre la fecha porque es lo que ordena el ciclo: una hija 2 creada
-  // antes que una hija 3 reencolada sigue siendo la anterior.
-  const ultima = [...enRango].sort(
-    (a, b) =>
-      a.ciclo_vuelta - b.ciclo_vuelta ||
-      String(a.created_at_app ?? "").localeCompare(String(b.created_at_app ?? ""))
-  ).at(-1);
+  const ultima = laUltimaEnRango(ciclo, ots);
 
   if (!ultima) {
     return crearLaSiguiente(ciclo, ciclo.vuelta_desde, ciclo.desde);
@@ -148,6 +160,36 @@ export function queSigueEnElCiclo(
   }
 
   return crearLaSiguiente(ciclo, ultima.ciclo_vuelta, cerradaEl);
+}
+
+/**
+ * Adónde hay que mover el corte, o `null` si no hay que moverlo.
+ *
+ * Es la primera de las tres puntas que lo mueven —las otras dos son el botón de
+ * reinicio y la carga inicial— y **sin ella el ciclo se detiene para siempre
+ * después del primer cambio**: `queSigueEnElCiclo` devuelve `esperar` sobre una
+ * madre cerrada, así que si nadie la saca del rango queda siendo la última para
+ * toda la eternidad.
+ *
+ * Las hijas no mueven nada: quedan dentro del rango y la decisión ya las lee
+ * bien. Un segundo mecanismo que hoy da la misma respuesta es uno que mañana se
+ * puede separar.
+ */
+export function elCorteQueSigue(
+  ciclo: CicloParaDecidir,
+  ots: readonly OTDelCiclo[]
+): { desde: string; vuelta_desde: number } | null {
+  if (!ciclo.desde) return null;
+
+  const ultima = laUltimaEnRango(ciclo, ots);
+  if (!ultima) return null;
+  if (ultima.ciclo_vuelta !== 0) return null;
+  if (ultima.estado !== CERRADA) return null;
+
+  const cerradaEl = ultima.fecha_cierre ?? ultima.fecha_ejecucion;
+  if (!cerradaEl) return null;
+
+  return { desde: cerradaEl, vuelta_desde: 0 };
 }
 
 /** Después de la vuelta `hecha`, qué toca y cuándo. */
