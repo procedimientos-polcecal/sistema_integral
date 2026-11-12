@@ -575,8 +575,8 @@ export default function FichaDeCondicion({
             aclaracion={
               "Es una conversación con otras personas, aparte de las «Observaciones» de arriba: " +
               "las observaciones son parte de la condición y los mensajes no la modifican. " +
-              "El enlace del correo lleva a la lista de condiciones y no a esta ficha: " +
-              `quien lo reciba tiene que abrir la N° ${fila.numero}.`
+              `El enlace del correo abre esta ficha, la N° ${fila.numero}, ` +
+              "así que quien lo reciba llega directo a la conversación."
             }
           />
         </div>
