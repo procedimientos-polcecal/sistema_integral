@@ -225,3 +225,106 @@ tabla con scroll.
   antes de sacar el de «líneas leídas»); la diferencia son los cuatro duplicados
   de la tarjeta del teléfono (P. vol., Cal útil y Acumulado en el listado de
   Ensayos, y «Fuera de límite» en Indicadores), que están bien.
+
+## Producción
+
+Son dos frentes que se confunden: **el parte de fábrica** (`/produccion/dia`, la
+carga del parte) y **los molinos** (`/produccion/molinos` y su mes, lo que mide
+el robot). Los documentos son `docs/PRODUCCION.md` y, para los molinos, su sección
+«Los molinos» (desde la línea 331). Ninguna pantalla lleva un `(i)` de pantalla: la
+portada ya lo tenía y las demás tienen subtítulo. No se repite lo de Calidad, que
+es el otro sector.
+
+Un número de columna lleva su `(i)` en el `<th>`; el de una tarjeta de indicador va
+al lado de su rótulo. Ninguna de estas pantallas tiene una tarjeta de teléfono
+aparte: las tablas siguen siendo tablas con scroll.
+
+### Molinos
+
+| Dónde | Texto | De dónde salió |
+|---|---|---|
+| `/produccion/molinos` y `/produccion/molinos/mes` (tabla de turnos señalados) · columna «Turno del robot» | Son los cuatro cortes del contador del robot (20 a 24, 00 a 04, 04 a 12, 12 a 20), no los dos del parte; los de 20 a 24 y 00 a 04 sólo existen acá; las toneladas de uno y otro no se suman. | `docs/PRODUCCION.md`, «Qué mide, y por qué no se suma con el parte de fábrica» (343-365); `formato.ts` `comoSeLeeElTurnoDelRobot` |
+| `/produccion/molinos` · columna «Parada» | Es lo que falta a la marcha para llegar a la teórica del corte (4 h o 8 h; la de toda la racha en un acumulado); se despeja, no se carga; «—» en un turno sin informar o inconsistente. | `PRODUCCION.md:361-364`; `turnos.ts` `DURACION` (240/240/480/480); la propia fila (`MolinosClient.tsx`: «—» en `huerfano` e `inconsistente`) |
+| `/produccion/molinos` · columna «Estado» | «Sin informar» es falta de dato y no una parada; lo normal es verlo en el día en curso porque el archivo se corta a las 9:00. | `PRODUCCION.md:434-445` (el huérfano y «el zip se corta a las 09:00»); `formato.ts` `leyendaDelEstado` |
+| Molinos y mes · tarjeta «Toneladas» | La etiqueta `MATERIAL` del robot sólo es confiable con un material por turno; no se guarda y ninguna pantalla muestra material (el reparto correcto sí se guarda). Con fecha: en una medición de octubre de 2026, 11,3 % de las toneladas de Filler 1 quedaban mal. | `PRODUCCION.md:449-463`; `csv.ts`, encabezado (líneas 10-17); la fecha es aproximada, ver los huecos |
+| Molinos y mes · tarjeta «Horas no trabajadas» | Se despejan (teórica − marcha); un día sin ninguna fila es planta cerrada y no suma; un turno en cero dentro de un día con filas sí es parada; quedan afuera los inconsistentes y los no informados. | `PRODUCCION.md:362-364, 380-398`; encabezado de `turnos.ts` (reglas 1, 2 y 4) y de `indicadores.ts` |
+| Molinos y mes · tarjeta «Utilización» | Marcha sobre teórica de los turnos que cuentan; marcar «planta parada» **no la mueve**; «—» y no cero sin horas teóricas. | `PRODUCCION.md:399-407` («Y acá hay que ser preciso…»); `indicadores.ts` (`indicadoresDe(turnos, diasNoOperativos)` no recibe paradas) y su docstring de `null` |
+| Molinos y mes · tarjeta «Productividad» | Las toneladas incluyen las de los inconsistentes y las horas no, a propósito: la balanza midió lo uno, el reloj falla en lo otro. «—» sin marcha. | `indicadores.ts`, encabezado (líneas 97-101) y el comentario de `productividad` |
+| `/produccion/molinos/sin-explicar` · «N sin explicar» | Qué cuenta: parada que llega al mínimo y sin motivo ni «planta parada»; no entran los no informados ni los inconsistentes. | `cola.ts`, encabezado (condiciones 1 a 4 y la nota del `inconsistente`); `consultas.ts` `colaDeMolino` pasa todos los turnos desde `desde` sin otro filtro |
+| `/produccion/molinos/sin-explicar` · botón «Planta parada todo el día» | Saca los cuatro turnos de la cola y **no cambia ningún indicador**; para domingo, feriado o parada programada. | `PRODUCCION.md:387-407`; ni `armarElDia` ni `armarElMes` reciben paradas, y `produccion_molino_paradas` sólo se lee en `colaDeMolino` |
+
+### El parte de fábrica
+
+| Dónde | Texto | De dónde salió |
+|---|---|---|
+| `/produccion/dia` · «Producción T1» | T1 es el turno de 4 a 12; no se carga, se despeja con la cuenta; un negativo sale en rojo y no se recorta. | `PRODUCCION.md`, «Que la producción no se mide: se despeja» y «Los cuatro estados…» (producción negativa); `produccion.ts` `produccionDelTurno`; `turnos.ts` `TURNOS` |
+| `/produccion/dia` · «Producción T2» | T2 es de 12 a 20, contra el parte de 4 a 12 del mismo día; de 20 a 4 no hay parte. | `turnos.ts` `parteAnterior`; `PRODUCCION.md`, «Qué reemplaza» (las otras ocho horas no se registran) |
+| `/produccion/dia` · «Producción del día» | Suma de T1 y T2; con un turno o un parte anterior faltante queda «—»; el primer parte es sólo línea de base. | `produccion.ts` `produccionDelDia`; `PRODUCCION.md`, «El primer día no va a mostrar producción, y está bien» |
+| `/produccion/dia` · «Despachado» | Son bultos, no kilos; sólo renglones con producto reconocido; uno con kilos pero sin bultos suma cero. | `despachos.ts` `totalesDeDespacho` (`bultos ?? 0`, `sinProducto`) y su interfaz; `cantidades.ts`, docstring inicial (línea 14: «`bultos ?? 0`… desaparezca del total del día») |
+| `/produccion/parte/[fecha]/[turno]` · «Reconocido como» (renglón de despacho) | Sólo los renglones con producto elegido suman a despachado, rotura y producción; uno «sin reconocer» se guarda pero no entra en ninguna cuenta. | `despachos.ts` `totalesDeDespacho` (el `continue` antes de sumar despachado **y** rotura) |
+| `/produccion/parte/[fecha]/[turno]` · «Bultos» | Es lo que se suma como despachado; con kilos y sin bultos suma cero. | `despachos.ts` `totalesDeDespacho`; `cantidades.ts` docstring |
+| `/produccion/parte/[fecha]/[turno]` · «Kilos» | No se suman; sólo sirven para el aviso de «no cierran con los bultos», que necesita bultos, producto reconocido y un kilo por unidad definido; sin eso, que no aparezca el cartel no prueba que cierre. | `despachos.ts` `desajustesDeKilos` (los `continue`) y `kilosQueCoinciden`; `PRODUCCION.md`, «Los kilos por unidad ya no son del renglón» (166-180); el único otro uso de `kilos` es guardarlo (`api/produccion/partes/route.ts`) |
+
+### Lo que no se escribió, y dónde se buscó
+
+- **Las tarjetas «Producido / Despachado / Rotura este mes» de la portada dicen
+  «t», y lo que suman son bultos y unidades.** `page.tsx` suma `produccionCalculada`,
+  `despacho` y `rotura` de `armarElMes` y los formatea como toneladas
+  (`num1 … t`); `totalesDeDespacho` dice «Bultos despachados por producto» y
+  Resúmenes dice «Bultos despachados» y «Unidades rotas». Lo que **no** se pudo
+  determinar es qué unidad tiene el depósito (de ahí sale la producción): el
+  propio `PRODUCCION.md`, «Lo que está pendiente de una persona» punto 4, dice
+  que en el papel el número a veces parece kilos y a veces bultos. **Es un posible
+  defecto de rótulo y no se tocó ni se explicó.** Además `KpiCard` tiene
+  `overflow-hidden` y un `transform` al pasar el mouse, así que un `(i)` ahí se
+  recortaría. Se buscó en `produccion/page.tsx`, `despachos.ts`, `PRODUCCION.md`
+  (completo) y `ResumenesClient.tsx`.
+- **Resúmenes: el «·» de las celdas de Producción.** El comentario de
+  `CeldaProduccion` dice que significa «ningún turno del día tocó este producto»,
+  pero `produccionDelDia([null, null])` devuelve `{}` y un día **sin ningún parte**
+  también lo muestra como «·» (`mes.ts:163`). Hay dos causas y el comentario cubre
+  una: no se escribió, porque el texto sería incompleto. Se buscó en
+  `ResumenesClient.tsx`, `produccion.ts` y `mes.ts`.
+- **«Sin informar» no siempre es «el robot no informó».** `csv.ts` descarta con un
+  aviso las líneas que no puede leer (fecha inválida, hora que no es un corte, un
+  valor no entero) y el turno de esa línea sale después como huérfano o queda
+  absorbido en un acumulado, sin distinguirse del que el robot de verdad no trajo.
+  La leyenda de `formato.ts` dice «El robot no informó este turno» y el `(i)` de
+  «Estado» habla de «falta de dato». No está escrito en ningún documento qué hacer
+  con eso; se anota porque cambia lo que quiere decir el estado. Se buscó en
+  `PRODUCCION.md`, el spec de molinos y `csv.ts`.
+- **Las cifras de utilización que dependen de la regla** (65,3 % / 75,0 % / 87,8 %
+  de Filler 2 con tres reglas distintas, medidas el 03/11/2026 sobre 1.054 filas;
+  85,3 % contra 82,0 % en Filler 1 según se atraviese o no un día cerrado) están
+  escritas con fecha en `PRODUCCION.md:405-428` pero **no se pusieron**: envejecen
+  con cada importación y el `(i)` de «Utilización» habla de la regla, no de sus
+  números.
+- **La fecha exacta de la medición del 11,3 %.** `PRODUCCION.md`, `csv.ts` y el
+  spec dan 4.034 de 35.797 toneladas y 809 turnos, sin decir de qué corte del zip
+  salieron (el control del zip del 19/10/2026 trae 36.028 toneladas, otro
+  número). El `(i)` de «Toneladas» dice «una medición de octubre de 2026», que es
+  lo único que los documentos permiten afirmar (el spec es del 21/10 y la sección
+  del 30/10); si alguien la rehace, ahí va la fecha.
+- **«Orden de trabajo (opcional)» en la cola de sin explicar.** El desplegable ofrece
+  las OT no realizadas de cualquier fecha y las de los últimos 90 días
+  (`filtroDeVentanaDeOt`, y está escrito), pero el campo se repite en **cada** fila
+  de la cola —decenas— y un `(i)` por fila es ruido; la pantalla ya avisa cuando
+  no hay acceso a Mantenimiento. No se colocó.
+- **`/produccion/resumenes`: nada nuevo que explicar.** Cada tabla ya trae su
+  leyenda («Bultos despachados…», «Depósito − depósito anterior + despachado +
+  rotura…») y sus notas ámbar (días que no entran en el total, `%` que puede salir
+  más alto). Un `(i)` repetiría lo que la pantalla dice.
+- **La planilla de Google y el día 31.** El espejo tiene 30 filas, así que en un mes
+  de 31 días el parte del 31 queda `sheets_pendiente` (`PRODUCCION.md`, «La
+  planilla…»). El pendiente se muestra con lo que dijo el sistema en el aviso rojo
+  del día, y el estado de la planilla hoy (si se ampliaron las filas) no está en
+  ningún documento posterior a septiembre: no se escribió.
+- **`/produccion/productos` (Renglones del parte).** «Productos que cuenta» y «sin
+  definir» están explicados en su propio texto al pie y en el documento, pero es la
+  pantalla de un solo rol (`admin`). No se agregó nada.
+- **Cuenta de colocaciones:** 17 `(i)` colocados y 16 textos distintos, en 6
+  archivos (4 en `DiaClient.tsx`, 3 en `MolinosClient.tsx`, 4 tarjetas en
+  `Piezas.tsx` que se ven en las dos pantallas de molinos, 1 en `MesClient.tsx`,
+  2 en `ColaClient.tsx` y 3 en `ParteClient.tsx`). Los repetidos: «Turno del
+  robot» (molinos y mes) y las cuatro tarjetas, que se renderizan una vez por
+  molino y por pantalla.

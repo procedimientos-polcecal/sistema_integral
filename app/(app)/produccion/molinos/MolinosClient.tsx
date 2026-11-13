@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import InfoTip from "@/components/InfoTip";
 import { comoSeLee, hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
 import {
   comoSeLeeElTurnoDelRobot,
@@ -10,8 +11,17 @@ import {
   minutosComoSeLee,
 } from "@/lib/produccion/molinos/formato";
 import type { CasillaDelDia } from "@/lib/produccion/molinos/consultas";
-import { InsigniaDeEstado, TarjetasDeIndicadores, formatoToneladas } from "./Piezas";
+import { INFO_TURNO_DEL_ROBOT, InsigniaDeEstado, TarjetasDeIndicadores, formatoToneladas } from "./Piezas";
 import type { MolinoDelDia } from "./page";
+
+/**
+ * Los `(i)` de los encabezados. El respaldo de cada uno está en
+ * `docs/INFOTIPS.md`; salen de `docs/PRODUCCION.md`, sección «Los molinos».
+ */
+const INFO_PARADA =
+  "Lo que le falta a la marcha para llegar a la duración teórica del corte (4 horas los de 20 a 24 y de 00 a 04, 8 horas los otros dos; la de toda la racha si es un acumulado). No se carga: se despeja. Un turno que el robot no informó, o inconsistente, muestra «—» porque sus horas no se afirman.";
+const INFO_ESTADO =
+  "Sin informar quiere decir que no hay dato de ese turno, así que no cuenta como parada ni entra en ningún indicador. Lo normal es verlo en el día en curso, porque el archivo del robot se corta a las 9:00.";
 
 function fechaLegible(fecha: string): string {
   const dia = new Date(`${fecha}T00:00:00`).toLocaleDateString("es-AR", { weekday: "long" });
@@ -110,11 +120,20 @@ export default function MolinosClient({ fecha, molinos }: { fecha: string; molin
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                       <tr>
-                        <th className="px-3 py-2 text-left">Turno del robot</th>
+                        <th className="px-3 py-2 text-left">
+                          Turno del robot
+                          <InfoTip text={INFO_TURNO_DEL_ROBOT} className="ml-1" />
+                        </th>
                         <th className="px-3 py-2 text-right">Toneladas</th>
                         <th className="px-3 py-2 text-right">Marcha</th>
-                        <th className="px-3 py-2 text-right">Parada</th>
-                        <th className="px-3 py-2 text-left">Estado</th>
+                        <th className="px-3 py-2 text-right">
+                          Parada
+                          <InfoTip text={INFO_PARADA} className="ml-1" />
+                        </th>
+                        <th className="px-3 py-2 text-left">
+                          Estado
+                          <InfoTip text={INFO_ESTADO} className="ml-1" />
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">

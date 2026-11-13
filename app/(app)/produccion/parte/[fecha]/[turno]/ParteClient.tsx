@@ -8,6 +8,7 @@ import { comoSeLeeElTurno } from "@/lib/produccion/turnos";
 import type { Turno, RenglonDePapel, Familia, Parte, Despacho } from "@/lib/produccion/types";
 import { produccionDelTurno } from "@/lib/produccion/produccion";
 import { totalesDeDespacho, roturaTotal, desajustesDeKilos } from "@/lib/produccion/despachos";
+import InfoTip from "@/components/InfoTip";
 import Select from "@/components/Select";
 import {
   interpretarCantidadDeDeposito,
@@ -699,6 +700,18 @@ export default function ParteClient({
   );
 }
 
+/**
+ * Los `(i)` del renglón de despacho. El respaldo está en `docs/INFOTIPS.md`:
+ * salen de `totalesDeDespacho` y `desajustesDeKilos` (`lib/produccion/despachos.ts`)
+ * y de `docs/PRODUCCION.md`.
+ */
+const INFO_RECONOCIDO_COMO =
+  "Sólo los renglones con un producto elegido acá suman al despachado, a la rotura y a la producción del día. Uno «sin reconocer» se guarda con lo que escribiste, pero no entra en ninguna cuenta.";
+const INFO_BULTOS =
+  "Es lo que el sistema suma como despachado del producto. Un renglón con kilos pero sin bultos suma cero, aunque los kilos queden guardados.";
+const INFO_KILOS =
+  "No se suman en ningún lado: sólo sirven para avisar si no cierran con los bultos. Ese aviso necesita bultos, un producto reconocido y un kilo por unidad definido para el renglón del papel; si falta alguno no se compara nada, y que no aparezca el cartel no prueba que cierre.";
+
 /** Una tarjeta por camión: equipo, cliente, producto, kilos y bultos, envase, pallets y rotura. */
 function RenglonDespacho({
   indice, renglon, renglonesDePapel, puedeEditar, onCambiar, onQuitar,
@@ -720,11 +733,12 @@ function RenglonDespacho({
     etiqueta: string,
     valor: string,
     onChange: (v: string) => void,
-    opciones?: { numerico?: boolean; error?: string | null; placeholder?: string }
+    opciones?: { numerico?: boolean; error?: string | null; placeholder?: string; info?: string }
   ) {
     return (
       <label className="block">
         <span className="text-xs font-medium text-slate-600">{etiqueta}</span>
+        {opciones?.info && <InfoTip text={opciones.info} className="ml-1" />}
         <input
           value={valor}
           onChange={(e) => onChange(e.target.value)}
@@ -758,6 +772,7 @@ function RenglonDespacho({
         {campo("Producto (como está escrito)", renglon.producto_raw, (v) => onCambiar({ producto_raw: v }))}
         <label className="block">
           <span className="text-xs font-medium text-slate-600">Reconocido como</span>
+          <InfoTip text={INFO_RECONOCIDO_COMO} className="ml-1" />
           <Select
             value={renglon.renglon_papel_id}
             disabled={!puedeEditar}
@@ -788,10 +803,12 @@ function RenglonDespacho({
       <div className="grid gap-3 sm:grid-cols-3">
         {campo("Kilos", renglon.kilos, (v) => onCambiar({ kilos: v }), {
           numerico: true,
+          info: INFO_KILOS,
           error: errorDe(renglon.kilos, interpretarCantidadOpcional),
         })}
         {campo("Bultos", renglon.bultos, (v) => onCambiar({ bultos: v }), {
           numerico: true,
+          info: INFO_BULTOS,
           error: errorDe(renglon.bultos, interpretarCantidadOpcional),
         })}
         {campo("Envase", renglon.envase_raw, (v) => onCambiar({ envase_raw: v }), {

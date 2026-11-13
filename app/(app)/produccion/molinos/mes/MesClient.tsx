@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import InfoTip from "@/components/InfoTip";
 import { comoSeLee, hoyEnArgentina, mesRelativo } from "@/lib/core/fechas";
 import { comoSeLeeElTurnoDelRobot, leyendaDelEstado } from "@/lib/produccion/molinos/formato";
-import { InsigniaDeEstado, TarjetasDeIndicadores, formatoEntero } from "../Piezas";
+import { INFO_TURNO_DEL_ROBOT, InsigniaDeEstado, TarjetasDeIndicadores, formatoEntero } from "../Piezas";
 import type { MolinoDelMes } from "./page";
 
 const MESES = [
@@ -126,7 +127,10 @@ export default function MesClient({ mes, molinos }: { mes: string; molinos: Moli
                       <thead className="text-xs uppercase tracking-wide text-slate-500">
                         <tr>
                           <th className="px-2 py-1 text-left">Día</th>
-                          <th className="px-2 py-1 text-left">Turno del robot</th>
+                          <th className="px-2 py-1 text-left">
+                            Turno del robot
+                            <InfoTip text={INFO_TURNO_DEL_ROBOT} className="ml-1" />
+                          </th>
                           <th className="px-2 py-1 text-left">Estado</th>
                         </tr>
                       </thead>
