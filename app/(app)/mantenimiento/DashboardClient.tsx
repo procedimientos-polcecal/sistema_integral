@@ -9,6 +9,7 @@ import KpiCard from "@/components/KpiCard";
 import type { VentanaDeReparacion } from "@/lib/mantenimiento/dashboard";
 import { diasDeAtraso } from "@/lib/mantenimiento/alertas";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { useCargar } from "@/lib/core/useCargar";
 import type { FilaMtbf, Mtbf } from "@/lib/mantenimiento/mtbf";
 import { DIAS_DE_CALENDARIO, diasCorridos, fechaCorta } from "@/lib/mantenimiento/mtbfVista";
@@ -832,12 +833,13 @@ export default function DashboardClient({
       </section>
 
       {statusModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl space-y-4">
-            <h2 className="text-base font-bold text-slate-900">
-              Cambiar estado — {statusModal.sector.nombre}
-            </h2>
-
+        // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía
+        // no hay borrador, así que hoy los dos llaman a `setStatusModal(null)`.
+        <Modal
+          titulo={`Cambiar estado — ${statusModal.sector.nombre}`}
+          alSalir={() => setStatusModal(null)}
+        >
+          <div className="space-y-4">
             <div className="space-y-1">
               <label className="block text-xs font-medium text-slate-600">Nuevo estado</label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -883,7 +885,7 @@ export default function DashboardClient({
 
             {statusError && <p className="text-sm text-red-600">{statusError}</p>}
 
-            <div className="flex gap-2 pt-1">
+            <PieDeModal className="flex gap-2">
               <button
                 onClick={saveStatus}
                 disabled={statusSaving || newStatus === statusModal.sector.status}
@@ -895,9 +897,9 @@ export default function DashboardClient({
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
                 Cancelar
               </button>
-            </div>
+            </PieDeModal>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

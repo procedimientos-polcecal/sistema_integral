@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 /**
  * Editar lo que lleva una clase de máquina.
@@ -128,22 +129,17 @@ export default function TipoModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div
-        className="max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">
-              {esNuevo ? "Nuevo tipo de equipo" : `Tipo ${tipo.tipo_id}`}
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-400">
-              Lo que lleva esta clase de máquina. Es lo que se mira antes de abrir una.
-            </p>
-          </div>
-          <button onClick={onCerrar} className="text-xl leading-none text-slate-400 hover:text-slate-600">×</button>
-        </div>
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onCerrar`.
+    <Modal
+      titulo={esNuevo ? "Nuevo tipo de equipo" : `Tipo ${tipo.tipo_id}`}
+      alSalir={onCerrar}
+      ancho="ancho"
+    >
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-400">
+          Lo que lleva esta clase de máquina. Es lo que se mira antes de abrir una.
+        </p>
 
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>
@@ -198,7 +194,7 @@ export default function TipoModal({
           />
         </label>
 
-        <div className="flex gap-2 pt-1">
+        <PieDeModal className="flex gap-2">
           <button
             onClick={guardar}
             disabled={guardando}
@@ -212,8 +208,8 @@ export default function TipoModal({
           >
             Cancelar
           </button>
-        </div>
+        </PieDeModal>
       </div>
-    </div>
+    </Modal>
   );
 }

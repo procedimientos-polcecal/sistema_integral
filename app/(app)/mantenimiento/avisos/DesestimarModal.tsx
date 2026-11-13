@@ -6,6 +6,7 @@ import {
 } from "@/lib/mantenimiento/desestimarAviso";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import type { Aviso } from "@/lib/mantenimiento/types";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 /**
  * Por qué este aviso no va a ser orden de trabajo.
@@ -53,12 +54,10 @@ export default function DesestimarModal({ aviso, onClose, onHecho }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4">
-      <div className="mt-8 w-full max-w-lg rounded-lg bg-white p-5 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-900">
-          Desestimar el aviso {aviso.oa_number}
-        </h2>
-        <p className="mt-1 text-sm text-slate-500">
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onClose`.
+    <Modal titulo={`Desestimar el aviso ${aviso.oa_number}`} alSalir={onClose}>
+        <p className="text-sm text-slate-500">
           Deja de contar como pendiente. No se borra: queda con el motivo, quién lo decidió
           y cuándo, y se puede volver atrás.
         </p>
@@ -105,7 +104,7 @@ export default function DesestimarModal({ aviso, onClose, onHecho }: {
           </p>
         )}
 
-        <div className="mt-5 flex justify-end gap-2">
+        <PieDeModal className="mt-5 flex justify-end gap-2">
           <button
             onClick={onClose}
             className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-slate-100"
@@ -120,9 +119,8 @@ export default function DesestimarModal({ aviso, onClose, onHecho }: {
           >
             {guardando ? "Guardando…" : "Desestimar"}
           </button>
-        </div>
-      </div>
-    </div>
+        </PieDeModal>
+    </Modal>
   );
 }
 

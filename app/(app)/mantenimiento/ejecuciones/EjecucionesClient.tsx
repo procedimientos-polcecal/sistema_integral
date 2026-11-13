@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import InfoTip from "@/components/InfoTip";
 import { ahoraEnArgentina, hoyEnArgentina, instanteDeArgentina, sumarDias } from "@/lib/core/fechas";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 const STATUS_COLORS: Record<string, string> = {
   completado: "bg-green-100 text-green-800",
@@ -269,10 +270,10 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
       )}
 
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-base font-bold text-slate-900">Registrar ejecución</h2>
-
+        // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía
+        // no hay borrador, así que hoy los dos llaman a `setShowForm(false)`.
+        <Modal titulo="Registrar ejecución" alSalir={() => setShowForm(false)}>
+          <div className="space-y-4">
             <div className="space-y-3">
               <Field label="Mantenimiento" required>
                 <Select value={form.schedule_id} onChange={(e) => { field("schedule_id", e.target.value); openFor(e.target.value); }} className="input">
@@ -387,7 +388,7 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
 
             {error && <p className="text-sm text-red-600">{error}</p>}
 
-            <div className="flex gap-2 pt-1">
+            <PieDeModal className="flex gap-2">
               <button onClick={save} disabled={saving || uploadingPhotos}
                 className="btn-primary disabled:opacity-50">
                 {uploadingPhotos ? "Subiendo fotos..." : saving ? "Guardando..." : "Guardar"}
@@ -396,9 +397,9 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
                 Cancelar
               </button>
-            </div>
+            </PieDeModal>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

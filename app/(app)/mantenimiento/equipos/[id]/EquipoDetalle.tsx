@@ -11,6 +11,7 @@ import FallasDelEquipo from "./FallasDelEquipo";
 import CicloDeOT, { type CicloDeLaFicha } from "./CicloDeOT";
 import type { FallaContada } from "@/lib/mantenimiento/fallas";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { comoSeLee } from "@/lib/core/fechas";
 
 const OT_ESTADO: Record<string, { label: string; color: string; bg: string; dot: string }> = {
@@ -376,12 +377,14 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
       <CostoDelEquipo equipoId={equipo.id} {...costo} />
 
       {statusModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl space-y-4">
-            <h2 className="text-base font-bold text-slate-900">
-              Cambiar estado — <span className="font-mono text-sm text-slate-500">{equipo.code}</span>
-            </h2>
-
+        // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía
+        // no hay borrador, así que hoy los dos llaman a `setStatusModal(false)`.
+        <Modal
+          titulo={`Cambiar estado — ${equipo.code}`}
+          alSalir={() => setStatusModal(false)}
+          ancho="chico"
+        >
+          <div className="space-y-4">
             <div className="space-y-2">
               {STATUS_OPTIONS.map((opt) => {
                 const m = STATUS_META[opt.value];
@@ -431,7 +434,7 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
 
             {statusError && <p className="text-sm text-red-600">{statusError}</p>}
 
-            <div className="flex gap-2 pt-1">
+            <PieDeModal className="flex gap-2">
               <button
                 onClick={saveStatus}
                 disabled={statusSaving || newStatus === equipo.status}
@@ -443,9 +446,9 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
                 Cancelar
               </button>
-            </div>
+            </PieDeModal>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

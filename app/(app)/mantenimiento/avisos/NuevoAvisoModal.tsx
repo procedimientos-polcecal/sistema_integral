@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { URGENCIAS } from "@/lib/mantenimiento/avisos";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { CartelDelResultado } from "@/app/cargar/envio";
 import { mandarOEncolar, type Resultado } from "@/lib/core/mandarOEncolar";
 
@@ -174,17 +175,13 @@ export default function NuevoAvisoModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div
-        className="max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div>
-          <h2 className="text-base font-bold text-slate-900">Nuevo aviso</h2>
-          <p className="mt-0.5 text-xs text-slate-400">
-            El número se lo pone el sistema, siguiendo el último de la planilla.
-          </p>
-        </div>
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onCerrar`.
+    <Modal titulo="Nuevo aviso" alSalir={onCerrar}>
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-400">
+          El número se lo pone el sistema, siguiendo el último de la planilla.
+        </p>
 
         <CartelDelResultado tipo="aviso" resultado={resultado} />
 
@@ -345,7 +342,7 @@ export default function NuevoAvisoModal({
           Se escribe primero en la planilla de avisos, que es la base, y después acá.
         </p>
 
-        <div className="flex gap-2 pt-1">
+        <PieDeModal className="flex gap-2">
           <button
             onClick={crear}
             disabled={guardando || subiendo}
@@ -359,8 +356,8 @@ export default function NuevoAvisoModal({
           >
             Cancelar
           </button>
-        </div>
+        </PieDeModal>
       </div>
-    </div>
+    </Modal>
   );
 }

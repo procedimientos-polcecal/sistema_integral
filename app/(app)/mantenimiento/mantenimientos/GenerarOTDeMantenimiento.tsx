@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -80,12 +81,10 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4">
-      <div className="mt-8 w-full max-w-lg rounded-lg bg-white p-5 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-900">
-          Generar la orden de trabajo
-        </h2>
-        <p className="mt-1 text-sm text-slate-500">
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onClose`.
+    <Modal titulo="Generar la orden de trabajo" alSalir={onClose}>
+        <p className="text-sm text-slate-500">
           Del mantenimiento programado de {mantenimiento.equipos?.code ?? "—"}. Lo que el
           mantenimiento ya dice no se vuelve a preguntar.
         </p>
@@ -220,7 +219,7 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
           </p>
         )}
 
-        <div className="mt-5 flex justify-end gap-2">
+        <PieDeModal className="mt-5 flex justify-end gap-2">
           <button
             onClick={onClose}
             className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-slate-100"
@@ -235,9 +234,8 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
           >
             {guardando ? "Generando…" : "Generar la OT"}
           </button>
-        </div>
-      </div>
-    </div>
+        </PieDeModal>
+    </Modal>
   );
 }
 

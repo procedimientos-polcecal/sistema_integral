@@ -8,6 +8,7 @@ import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { AYUDA_GUT, ESCALAS_GUT } from "@/lib/mantenimiento/gut";
 import InfoTip from "@/components/InfoTip";
+import { Modal, PieDeModal } from "@/components/Modal";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
 import {
   cuerpoDeLaOT, loQuePropone, loQueFaltaDelAviso, loQueHayQuePreguntar,
@@ -126,10 +127,10 @@ export default function GenerarOTModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4">
-      <div className="my-8 w-full max-w-2xl rounded-lg bg-white p-5 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-900">Generar la orden de trabajo</h2>
-        <p className="mt-1 text-sm text-slate-500">
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onClose`.
+    <Modal titulo="Generar la orden de trabajo" alSalir={onClose} ancho="ancho">
+        <p className="text-sm text-slate-500">
           Del aviso {aviso.oa_number}. Viene con lo que el aviso dice; todo se puede
           corregir antes de crearla, y el aviso no se toca.
         </p>
@@ -297,7 +298,7 @@ export default function GenerarOTModal({
           </p>
         )}
 
-        <div className="mt-5 flex items-center justify-end gap-2">
+        <PieDeModal className="mt-5 flex items-center justify-end gap-2">
           {falta.length > 0 && (
             <span className="mr-auto text-xs text-slate-400">Falta {falta.join(", ")}.</span>
           )}
@@ -311,9 +312,8 @@ export default function GenerarOTModal({
           >
             {guardando ? "Generando…" : "Generar la OT"}
           </button>
-        </div>
-      </div>
-    </div>
+        </PieDeModal>
+    </Modal>
   );
 }
 

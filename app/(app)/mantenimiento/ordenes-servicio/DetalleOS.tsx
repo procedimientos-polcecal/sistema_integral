@@ -11,6 +11,7 @@ import type { OrdenServicio, CotizacionOS } from "@/lib/mantenimiento/types";
 import CotizacionForm from "./CotizacionForm";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { Modal } from "@/components/Modal";
 
 /**
  * Una orden de servicio abierta: cómo viene y qué se cotizó.
@@ -122,28 +123,19 @@ export default function DetalleOS({
   const resumen = resumenDeCotizaciones(cotizaciones ?? []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div
-        className="max-h-[90vh] w-full max-w-3xl space-y-5 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">
-              OS #{orden.os_number ?? "—"}
-              {orden.prioridad && (
-                <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                  {orden.prioridad}
-                </span>
-              )}
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-400">
-              {fecha(orden.fecha)} · {orden.area ?? "sin área"} ·{" "}
-              {orden.sectores?.nombre ?? orden.sector_raw ?? "sin sector"}
-            </p>
-          </div>
-          <button onClick={onCerrar} className="text-xl leading-none text-slate-400 hover:text-slate-600">×</button>
-        </div>
+    // El fondo, la X y Escape salen conservando. No tiene botón «Cancelar»: lo
+    // editable guarda con su propio «Guardar», así que no hay nada que tirar.
+    <Modal titulo={`OS #${orden.os_number ?? "—"}`} alSalir={onCerrar} ancho="ancho">
+      <div className="space-y-5">
+        <p className="-mt-2 text-xs text-slate-400">
+          {orden.prioridad && (
+            <span className="mr-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+              {orden.prioridad}
+            </span>
+          )}
+          {fecha(orden.fecha)} · {orden.area ?? "sin área"} ·{" "}
+          {orden.sectores?.nombre ?? orden.sector_raw ?? "sin sector"}
+        </p>
 
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
@@ -373,7 +365,7 @@ export default function DetalleOS({
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

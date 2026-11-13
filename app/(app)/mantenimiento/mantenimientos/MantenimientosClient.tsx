@@ -7,6 +7,7 @@ import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
 import { hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import GenerarOTDeMantenimiento from "./GenerarOTDeMantenimiento";
 import { TIPOS_DE_MANTENIMIENTO, etiquetaDeTipo } from "@/lib/mantenimiento/otDesdeMantenimiento";
 
@@ -469,12 +470,13 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-base font-bold text-slate-900">
-              {editing ? "Editar mantenimiento" : "Nuevo mantenimiento"}
-            </h2>
-
+        // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía
+        // no hay borrador, así que hoy los dos llaman a `setShowForm(false)`.
+        <Modal
+          titulo={editing ? "Editar mantenimiento" : "Nuevo mantenimiento"}
+          alSalir={() => setShowForm(false)}
+        >
+          <div className="space-y-4">
             <div className="space-y-3">
               <Field label="Equipo" required>
                 <Select value={form.equipment_id} onChange={(e) => field("equipment_id", e.target.value)} className="input">
@@ -566,7 +568,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
 
             {error && <p className="text-sm text-red-600">{error}</p>}
 
-            <div className="flex gap-2 pt-1">
+            <PieDeModal className="flex gap-2">
               <button
                 onClick={save}
                 disabled={saving}
@@ -580,9 +582,9 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
               >
                 Cancelar
               </button>
-            </div>
+            </PieDeModal>
           </div>
-        </div>
+        </Modal>
       )}
 
       {linkModal && (
@@ -634,15 +636,17 @@ function LinkOTModal({ schedule, busy, onClose, onPick }: {
   }, [q]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 space-y-3 shadow-xl max-h-[85vh] flex flex-col">
-        <h2 className="text-base font-bold text-slate-900">Vincular OT existente</h2>
-        <p className="text-xs text-slate-400">
+    // Es un selector sin nada que descartar —lo único que se escribe es la
+    // búsqueda—, así que sale derecho y nunca pregunta. Antes el fondo no lo
+    // cerraba; ahora la X, el fondo y Escape salen, y no se pierde nada.
+    <Modal titulo="Vincular OT existente" alSalir={onClose} soloLectura>
+      <div className="space-y-3">
+        <p className="-mt-2 text-xs text-slate-400">
           {schedule.equipos?.code} — {schedule.equipos?.name}
         </p>
         <input autoFocus value={q} onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar por N° OT, equipo, descripción..." className="input" />
-        <div className="flex-1 overflow-y-auto space-y-1.5 -mx-1 px-1">
+        <div className="max-h-[50vh] overflow-y-auto space-y-1.5 -mx-1 px-1">
           {loading && <p className="text-sm text-slate-400 py-4 text-center">Buscando...</p>}
           {!loading && results.length === 0 && (
             <p className="text-sm text-slate-400 py-4 text-center">Sin resultados.</p>
@@ -660,14 +664,14 @@ function LinkOTModal({ schedule, busy, onClose, onPick }: {
             );
           })}
         </div>
-        <div className="flex justify-end pt-1">
+        <PieDeModal className="flex justify-end">
           <button onClick={onClose}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
             Cerrar
           </button>
-        </div>
+        </PieDeModal>
       </div>
-    </div>
+    </Modal>
   );
 }
 

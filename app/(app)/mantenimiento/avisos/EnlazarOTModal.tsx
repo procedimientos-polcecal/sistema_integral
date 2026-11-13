@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Aviso } from "@/lib/mantenimiento/types";
+import { Modal, PieDeModal } from "@/components/Modal";
 import {
   comoSeLeeLaOT, type OTAEnlazar,
 } from "@/lib/mantenimiento/enlazarOtAlAviso";
@@ -73,10 +74,10 @@ export default function EnlazarOTModal({ aviso, onClose, onEnlazada }: {
   const impedida = (encontrada?.impide.length ?? 0) > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4">
-      <div className="my-8 w-full max-w-lg rounded-lg bg-white p-5 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-900">Enlazar una OT que ya existe</h2>
-        <p className="mt-1 text-sm text-slate-500">
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onClose`.
+    <Modal titulo="Enlazar una OT que ya existe" alSalir={onClose}>
+        <p className="text-sm text-slate-500">
           Para el aviso {aviso.oa_number ?? "—"}. Es para cuando el trabajo ya se cargó
           por otro lado: no se crea ninguna orden y la que elijas no se toca.
         </p>
@@ -150,7 +151,7 @@ export default function EnlazarOTModal({ aviso, onClose, onEnlazada }: {
           </p>
         )}
 
-        <div className="mt-5 flex items-center justify-end gap-2">
+        <PieDeModal className="mt-5 flex items-center justify-end gap-2">
           <button onClick={onClose} className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-slate-100">
             Cancelar
           </button>
@@ -165,8 +166,7 @@ export default function EnlazarOTModal({ aviso, onClose, onEnlazada }: {
                 ? `Enlazar la OT #${encontrada.ot.ot_number}`
                 : "Enlazar"}
           </button>
-        </div>
-      </div>
-    </div>
+        </PieDeModal>
+    </Modal>
   );
 }
