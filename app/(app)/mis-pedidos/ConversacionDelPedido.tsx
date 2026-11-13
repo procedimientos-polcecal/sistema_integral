@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import HiloDeMensajes from "@/components/HiloDeMensajes";
+import { Modal } from "@/components/Modal";
 
 /**
  * El hilo de mensajes de un pedido, para quien no tiene el módulo Compras.
@@ -22,8 +23,7 @@ import HiloDeMensajes from "@/components/HiloDeMensajes";
  * catorce usuarios: arriba de diez opciones abre un panel flotante, y adentro
  * de la tabla se recortaría dejando nombres que el mouse no alcanza. Y una
  * tarjeta del teléfono con un campo de texto y un desplegable adentro deja de
- * ser una tarjeta. El mismo patrón que `FichaDeCondicion`: un overlay que
- * scrollea y una caja interior **sin** `overflow`.
+ * ser una tarjeta. Pasa por el `Modal` compartido, como `FichaDeCondicion`.
  */
 export default function ConversacionDelPedido({
   id, nroRi, descripcion, onCerrar, textoInicial, mencionesIniciales,
@@ -42,54 +42,38 @@ export default function ConversacionDelPedido({
   // sin guardar, el botón dice «Descartar y cerrar».
   const [hayBorrador, setHayBorrador] = useState(false);
 
-  useEffect(() => {
-    function alTeclear(e: KeyboardEvent) {
-      // Escape **no** cierra el diálogo si ya lo atendió otro, ni si hay un
-      // borrador. El desplegable de menciones cierra su panel con Escape y hace
-      // `preventDefault` sin frenar la propagación: sin esta guarda, cerrar el
-      // panel cerraba también el diálogo y se perdía lo escrito. Y apretarlo
-      // desde el campo de texto con algo escrito haría lo mismo, sin avisar.
-      if (e.key !== "Escape" || e.defaultPrevented || hayBorrador) return;
-      onCerrar();
-    }
-    window.addEventListener("keydown", alTeclear);
-    return () => window.removeEventListener("keydown", alTeclear);
-  }, [onCerrar, hayBorrador]);
+  // Con algo escrito y sin enviar, el fondo, la X y Escape **no cierran**: el
+  // hilo vive adentro de este diálogo y cerrarlo lo desmonta con el borrador.
+  // Todavía no hay borrador que sobreviva a un cierre (llega con el cartel de
+  // «salir»), así que hasta entonces lo único que tira lo escrito es el botón
+  // «Descartar y cerrar». Escape ya atendido por el desplegable de menciones lo
+  // filtra el propio `Modal` (`defaultPrevented`).
+  const salir = () => { if (!hayBorrador) onCerrar(); };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-0 sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Mensajes del requerimiento ${nroRi}`}
-    >
-      <div className="w-full max-w-2xl bg-white sm:rounded-xl sm:shadow-xl">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
-          <div className="min-w-0 space-y-0.5">
-            <h2 className="text-lg font-bold text-slate-900">Pedido RI N° {nroRi}</h2>
-            <p className="break-words text-sm text-slate-500">{descripcion}</p>
-          </div>
+    <Modal titulo={`Pedido RI N° ${nroRi}`} alSalir={salir} ancho="ancho">
+      <div className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <p className="min-w-0 break-words text-sm text-slate-500">{descripcion}</p>
           <button type="button" onClick={onCerrar} className="btn-secondary shrink-0">
             {hayBorrador ? "Descartar y cerrar" : "Cerrar"}
           </button>
         </div>
 
-        <div className="p-4">
-          <HiloDeMensajes
-            tipo="requerimiento"
-            id={id}
-            alCambiarElBorrador={setHayBorrador}
-            abiertoAlMontar
-            textoInicial={textoInicial}
-            mencionesIniciales={mencionesIniciales}
-            aclaracion={
-              "Es una conversación con otras personas: no cambia el estado del pedido ni llega a " +
-              "la planilla de Compras. Un requerimiento lo ve toda persona con acceso al sistema, " +
-              "y este hilo también."
-            }
-          />
-        </div>
+        <HiloDeMensajes
+          tipo="requerimiento"
+          id={id}
+          alCambiarElBorrador={setHayBorrador}
+          abiertoAlMontar
+          textoInicial={textoInicial}
+          mencionesIniciales={mencionesIniciales}
+          aclaracion={
+            "Es una conversación con otras personas: no cambia el estado del pedido ni llega a " +
+            "la planilla de Compras. Un requerimiento lo ve toda persona con acceso al sistema, " +
+            "y este hilo también."
+          }
+        />
       </div>
-    </div>
+    </Modal>
   );
 }

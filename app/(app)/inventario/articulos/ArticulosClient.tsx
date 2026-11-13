@@ -12,6 +12,7 @@ import {
   type AltaDeReposicion, type RiAbierto,
 } from "@/lib/inventario/reponer";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { Modal, PieDeModal } from "@/components/Modal";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 
@@ -276,53 +277,45 @@ function ModalArticulo({
   const [seguridad, setSeguridad] = useState(String(articulo.stock_seguridad));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4" onClick={onCerrar}>
-      <div onClick={(e) => e.stopPropagation()} className="mt-16 w-full max-w-md rounded-xl bg-white shadow-xl">
-        <div className="border-b border-slate-200 px-6 py-4">
-          <h2 className="text-lg font-bold text-slate-900">
-            <span className="font-mono text-sm text-slate-500">{articulo.codigo}</span>
-          </h2>
-        </div>
-
-        <div className="space-y-4 px-6 py-5">
-          <label className="block">
-            <span className="text-xs font-medium text-slate-600">Descripción</span>
-            <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-slate-600">Ubicación</span>
-            <input value={ubicacion} onChange={(e) => setUbicacion(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-slate-600">Stock de seguridad</span>
-            <input type="number" min="0" step="any" value={seguridad}
-              onChange={(e) => setSeguridad(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-            <span className="mt-1 block text-xs text-slate-500">
-              Debajo de este número, el artículo aparece como faltante.
-            </span>
-          </label>
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4">
-          <button onClick={onCerrar}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
-            Cancelar
-          </button>
-          <button
-            onClick={() => onGuardar({
-              descripcion: descripcion.trim(),
-              ubicacion: ubicacion.trim() || null,
-              stock_seguridad: Number(seguridad) || 0,
-            })}
-            className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)]"
-          >
-            Guardar
-          </button>
-        </div>
+    <Modal titulo={articulo.codigo} alSalir={onCerrar}>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="text-xs font-medium text-slate-600">Descripción</span>
+          <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium text-slate-600">Ubicación</span>
+          <input value={ubicacion} onChange={(e) => setUbicacion(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium text-slate-600">Stock de seguridad</span>
+          <input type="number" min="0" step="any" value={seguridad}
+            onChange={(e) => setSeguridad(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <span className="mt-1 block text-xs text-slate-500">
+            Debajo de este número, el artículo aparece como faltante.
+          </span>
+        </label>
       </div>
-    </div>
+
+      <PieDeModal>
+        <button onClick={onCerrar}
+          className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+          Cancelar
+        </button>
+        <button
+          onClick={() => onGuardar({
+            descripcion: descripcion.trim(),
+            ubicacion: ubicacion.trim() || null,
+            stock_seguridad: Number(seguridad) || 0,
+          })}
+          className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)]"
+        >
+          Guardar
+        </button>
+      </PieDeModal>
+    </Modal>
   );
 }

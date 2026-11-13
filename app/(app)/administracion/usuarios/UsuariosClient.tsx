@@ -5,6 +5,7 @@ import { useConfirm } from "@/components/ConfirmProvider";
 import { MODULOS_ORDEN } from "@/lib/core/access";
 import type { Modulo } from "@/lib/core/types";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 type Rol = "admin_sistema" | "encargado" | "operario";
 type Nivel = "lectura" | "edicion" | "admin";
@@ -201,10 +202,9 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <h2 className="font-medium text-slate-900 mb-4">Nuevo usuario</h2>
-
+    // Con el link a la vista el usuario ya existe: salir por el fondo, la X o
+    // Escape tiene que refrescar la lista igual que «Listo».
+    <Modal titulo="Nuevo usuario" alSalir={resultado ? onSaved : onClose}>
         {resultado ? (
           <div className="space-y-3">
             <p className="text-sm text-slate-700">
@@ -262,16 +262,15 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
             Se le va a mandar un email a esa dirección para que defina su propia contraseña.
           </p>
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-2 pt-2">
+          <PieDeModal className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Creando..." : "Crear usuario"}
             </button>
-          </div>
+          </PieDeModal>
         </form>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -345,9 +344,7 @@ function EditarUsuarioModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h2 className="font-medium text-slate-900 mb-1">Editar usuario</h2>
+    <Modal titulo="Editar usuario" alSalir={onClose}>
         <p className="text-xs text-slate-500 mb-4">{usuario.email}</p>
         <form onSubmit={guardar} className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
@@ -445,14 +442,13 @@ function EditarUsuarioModal({
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-2 pt-2">
+          <PieDeModal className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Guardando..." : "Guardar"}
             </button>
-          </div>
+          </PieDeModal>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
