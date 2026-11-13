@@ -174,7 +174,7 @@ function CalendarioMes({
         <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm border border-emerald-200 bg-emerald-50" /> Operó</span>
         <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm border border-slate-300 bg-slate-100" /> No operó</span>
         <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm border border-dashed border-slate-200" /> Sin cargar</span>
-        <InfoTip text="El número en la esquina de un día es la cantidad de turnos que tiene; el ⚠, que algún turno de ese día no se pudo escribir en la planilla. Un día se pinta «Operó» si algún turno operó, aunque otro no." />
+        <InfoTip text="El número en la esquina de un día es la cantidad de turnos que tiene y aparece sólo cuando son más de uno; el ⚠, que algún turno de ese día no se pudo escribir en la planilla. Un día se pinta «Operó» si algún turno operó, aunque otro no." />
       </div>
     </div>
   );
@@ -675,12 +675,12 @@ export default function PartesClient({
                 <th className="text-right">Toneladas</th>
                 <th className="text-right">
                   Llegado (Cantera)
-                  <InfoTip className="ml-1" text="Toneladas de las pesadas de balanza de Cantera con destino «PT 1», «PT 2» o «PT 3» —según la planta, con o sin espacios— ese día. Un destino escrito de otra manera no cuenta, y sin acceso a Cantera aparece «—». Es un dato para comparar con lo procesado: no tiene por qué coincidir el mismo día." />
+                  <InfoTip className="ml-1" text="Toneladas de las pesadas de balanza de Cantera con destino «PT 1», «PT 2» o «PT 3» —según la planta, con o sin espacios— ese día. Un destino escrito de otra manera no cuenta, y aparece «—» si ese día no hubo pesadas a esa planta o si no tenés acceso a Cantera. Es un dato para comparar con lo procesado: no tiene por qué coincidir el mismo día." />
                 </th>
                 {mostrarViajesDeBloques && (
                   <th className="text-right">
                     Hs. viaje de bloques
-                    <InfoTip className="ml-1" text="Horas de «viaje de bloques» que Cantera cargó ese día, sumando todos los fleteros. Sólo aparece en Planta 2, que casi no tiene pesadas con destino PT 2: ésa es su medida de acarreo." />
+                    <InfoTip className="ml-1" text="Horas de «viaje de bloques» que Cantera cargó ese día, sumando todos los fleteros. Sólo aparece en Planta 2 y sólo si ese mes tiene algún viaje cargado; Planta 2 casi no tiene pesadas con destino PT 2: ésa es su medida de acarreo." />
                   </th>
                 )}
                 <th className="text-right">t/h real</th>

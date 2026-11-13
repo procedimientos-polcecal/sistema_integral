@@ -156,7 +156,7 @@ export default async function TrituracionInicioPage({
           color="#7E22CE"
           value={String(resumenGlobal.diasOperativos)}
           label="Días operativos (3 plantas)"
-          sub={<InfoTip text="Cuenta los días del mes en que operó al menos una de las tres plantas: si dos operaron el mismo día es un solo día, y un día con dos turnos «Operó» también. Las tarjetas de cada planta, abajo, cuentan los suyos y su suma da más; el informe mensual también suma los de cada planta." />}
+          sub={<InfoTip text="Cuenta los días del mes en que operó al menos una de las tres plantas: si dos operaron el mismo día es un solo día, y un día con dos turnos «Operó» también. Las tarjetas de cada planta, abajo, cuentan los suyos y su suma puede dar más; el informe mensual también suma los de cada planta." />}
         />
         <KpiCard
           color="#0891B2"

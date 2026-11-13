@@ -25,7 +25,7 @@ const AMBAR_CLARO = "#FFF7ED";
 /** Lo que cada columna de la Tabla N°4 no dice sola; el porqué de cada cuenta está en `lib/trituracion/informeMensual.ts`. */
 const AYUDAS_TABLA_4: Record<string, string> = {
   Disponibilidad: "(Horas teóricas − mantenimiento − varios) sobre horas teóricas, con las teóricas como días operativos × 8. La falta de piedra no resta: no es una falla de la planta. «Varios» es producción más otro. En el inicio y en los partes la disponibilidad es otra cuenta, y no van a coincidir.",
-  Utilización: "Horas reales sobre horas teóricas, donde las reales son las teóricas menos todas las horas perdidas, falta de piedra incluida. Contra el informe armado a mano de agosto de 2026 dio hasta 13 puntos de diferencia en una planta, porque la planilla elegía a mano qué horas sumar.",
+  Utilización: "Horas reales sobre horas teóricas, donde las reales son las teóricas menos todas las horas perdidas, falta de piedra incluida. Contra el informe armado a mano de agosto de 2026 dio 13 puntos de diferencia en Planta 3, porque la planilla elegía a mano qué horas sumar.",
   Dirección: "Horas teóricas (días operativos × 8) sobre todas las horas del mes calendario (días del mes × 24): qué parte del mes entero fue turno teórico.",
 };
 
