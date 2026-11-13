@@ -131,14 +131,14 @@ const INFO_DE_LOS_NUMEROS =
 
 const INFO_DEL_ESTADO =
   "Cerrada: tiene fecha de ejecución, aunque la máxima ya haya pasado. Vencida: no tiene fecha de ejecución y la fecha máxima es anterior a hoy; el día de la máxima todavía no vence. Pendiente: todo lo demás, incluida una sin fecha máxima, que por eso nunca vence. " +
-  "Las marcas ámbar de al lado son lo que le falta.";
+  "Las marcas ámbar junto al estado son lo que le falta.";
 
 const INFO_DEL_PELIGRO =
-  "Sale del glosario de peligros del sistema. Un guion quiere decir que no se eligió: las 44 condiciones que vinieron del Excel entraron sin peligro, porque la planilla no tenía esa columna —estaba escrito dentro de la descripción— y no se lo dedujo del texto. Se completa desde la ficha.";
+  "Sale del glosario de peligros del sistema. Si no se eligió, no se muestra (un guion en la tabla, nada en la tarjeta del teléfono): las 44 condiciones que vinieron del Excel entraron sin peligro, porque la planilla no tenía esa columna —estaba escrito dentro de la descripción— y no se lo dedujo del texto. Se completa desde la ficha.";
 
 const INFO_DEL_RIESGO =
   "Sigla de la clasificación y nivel (probabilidad × gravedad). Cortes: I desde 139, S desde 90, M desde 49, PS desde 18, NS menos de 18. El guion quiere decir que falta alguno de los cinco puntajes, que se cargan en la ficha. " +
-  "Al ordenar por esta columna, las sin evaluar quedan al final: no son de riesgo bajo, son de las que no se sabe.";
+  "En la tabla de la computadora, al ordenar por esta columna, las sin evaluar quedan al final: no son de riesgo bajo, son de las que no se sabe.";
 
 export default function CondicionesClient({
   filtrosIniciales,
@@ -522,6 +522,14 @@ export default function CondicionesClient({
           </div>
 
           {/* Tarjetas en el teléfono: la tabla no entra y recortarla miente. */}
+          {/* Las tarjetas son un botón entero y un `(i)` adentro sería un botón
+              dentro de otro, así que los tres van acá, una sola vez, con el mismo
+              texto que los encabezados de la tabla. */}
+          <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 md:hidden">
+            <span className="inline-flex items-center gap-1">Estado <InfoTip text={INFO_DEL_ESTADO} /></span>
+            <span className="inline-flex items-center gap-1">Riesgo <InfoTip text={INFO_DEL_RIESGO} /></span>
+            <span className="inline-flex items-center gap-1">Peligro <InfoTip text={INFO_DEL_PELIGRO} /></span>
+          </p>
           <ul className="space-y-2 md:hidden">
             {visibles.map((c) => (
               <li key={c.id}>
