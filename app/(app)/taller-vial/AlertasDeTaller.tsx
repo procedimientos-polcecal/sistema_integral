@@ -8,7 +8,7 @@ import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 
 /** Las condiciones completas de lo que avisa el panel: el texto vive acá porque lo usan los dos lugares donde aparece (la franja de «Todo en orden» y el encabezado). */
 const QUE_AVISA =
-  "Aparecen sólo estas situaciones: nadie cargó combustible hace 4 días o más; un equipo lleva 3 días o más fuera de servicio; un equipo pasó más de 3 veces su intervalo habitual entre cargas, con un mínimo de 7 días (no se mira si está fuera de servicio, si no carga hace más de 60 días o si tiene menos de 5 cargas en 180 días; y si nadie cargó hace 4 días no se avisa equipo por equipo); su consumo de los últimos 30 días supera en más de 25 % al de los 150 días anteriores (con 3 y 5 cargas como mínimo, contando sólo las que tienen consumo calculable: con lectura y una lectura anterior); o su service de 250 hs está vencido o a 50 hs o menos. Los de 500, 1000 y 2000 hs no avisan acá.";
+  "Aparecen sólo estas situaciones: nadie cargó combustible hace 4 días o más; un equipo lleva 3 días o más fuera de servicio; un equipo pasó más de 3 veces su intervalo habitual entre cargas, con un mínimo de 7 días (no se mira si está fuera de servicio, si no carga hace más de 60 días o si tiene menos de 5 cargas en 180 días; y si nadie cargó hace 4 días no se avisa equipo por equipo); su consumo de los últimos 30 días supera en más de 25 % al de los 150 días anteriores (con 3 y 5 cargas como mínimo, contando sólo las que tienen consumo calculable: con lectura y una lectura anterior que haya subido); o su service de 250 hs está vencido o a 50 hs o menos. Los de 500, 1000 y 2000 hs no avisan acá.";
 
 const CLAVE = "taller-vial:alertas-abierta";
 const EVENTO = "taller-vial:alertas-abierta-cambio";
