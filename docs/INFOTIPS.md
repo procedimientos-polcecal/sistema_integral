@@ -626,3 +626,46 @@ ni largo. Para revertir, basta volver a la frase de la columna «Decía», que e
   `/rrhh/francos`, sin `(i)`), y `administracion`.
 - **Cifras con fecha que no se pusieron:** 54 fichadas abiertas y 73 vs 70 empleados del doc de Lenox
   (07/10/2026), 931 días corregidos y 8.237 faltas sin clasificar (27/08 y 17/09/2026).
+
+## Seguridad e Higiene
+
+Doce `(i)` (catorce puntos de la pantalla, porque «Lugar» y «Prioridad» están en la ficha editable y en la de sólo lectura), todos en `/seguridad-higiene` y `/seguridad-higiene/condiciones` (y su ficha). **No tiene documento propio en `docs/`**: casi todo lo que sabe el módulo está en `CLAUDE.md` (sección «Seguridad e Higiene tampoco tiene planilla»), en el [spec](superpowers/specs/2026-10-29-seguridad-e-higiene-design.md) y en los docstrings de `lib/seguridadHigiene/`. Donde esa sección separa lo que se sabe de lo que es conjetura, el texto lo conserva: los de «Lugar» y los de las fechas dicen «no está confirmado» y no afirman la lectura probable.
+
+| Dónde | Texto (resumen) | Respaldo |
+|---|---|---|
+| `/seguridad-higiene`, título | Qué lleva el módulo (condiciones inseguras, antes un Excel por mail, hoy lo único que tiene) y que **el número grande de la tarjeta no es el total** sino las abiertas a las que les falta algo | `page.tsx:99`; `value={resumen.sinCompletar}` y `sub` con vencidas / abiertas / total; spec «Por qué» y «Lo que queda preparado y vacío» |
+| `/condiciones`, título | Dos tiempos de carga; lo que falta en ámbar; el orden por defecto (vencidas, abiertas con faltas, completas por nivel, cerradas) y que tocar un encabezado lo cambia | `CondicionesClient.tsx:124`; `gestion.ts:117-124` (`tramoDeGestion`), `:136-160` (`ordenarParaGestion`); spec «La carga va en dos tiempos»; botón «Volver al orden sugerido» |
+| `/condiciones`, junto a los tres contadores | Cuentan todas, no las filtradas; qué es sin completar y sus tres faltas; vencidas y sin completar se solapan; una cerrada no pide nada | `CondicionesClient.tsx:128` y `:367`; `resumen = resumenDeCondiciones(filas, hoy)` sobre `filas`, no sobre `visibles`; `condicion.ts:57-61` (las tres faltas); `gestion.ts:98-100` (`faltasPendientes`), docstring de `resumenDeCondiciones` |
+| Columna «Estado» | Cerrada / Vencida / Pendiente y el borde del día de la máxima; una sin fecha máxima no vence nunca | `condicion.ts:22-23` (`if (c.fecha_ejecucion)`, `fecha_maxima < hoy`) |
+| Columna «Peligro» | El guion es «no se eligió»; las 44 del Excel entraron sin peligro porque la planilla no tenía la columna y no se dedujo del texto | `filaDelExcel.ts:339-342` (`peligro_id: null`); spec «No entra el peligro» |
+| Columna «Riesgo» | Sigla + nivel; los cortes; guion = falta algún puntaje; al ordenar, las sin evaluar van al final | `riesgo.ts:26-30`; `CondicionesClient.tsx` (`Riesgo`: guion si `nivel_riesgo === null`); `ordenDeColumna.ts` (`null` al final en los dos sentidos) |
+| Ficha, «Detectada el …» (sólo N° 42, 43, 44, 7 y 6, y sólo mientras la fecha guardada sea la dudosa) | La fecha viene en duda, con la evidencia de cada una y «sin confirmar» | `fechaDudosa.ts` (tabla de `CLAUDE.md`, «Las cinco fechas dudosas») y su test |
+| Ficha, «Lugar» | Del catálogo; 37 de 44 sin sector al importar; el texto de la planilla en la última línea de Observaciones; Planta 02 / 2 / 3 sin asignar porque no está confirmado a qué se refieren | `FichaDeCondicion.tsx:38`; `filaDelExcel.ts` (`ALIAS_DE_SECTOR`, `sectorDe`); `CLAUDE.md`, tabla de textos de lugar y la parte «Conjetura, sin confirmar» |
+| Ficha, «Prioridad» | 1, 2 o 3 la elige quien carga; no ordena ni cambia avisos; el sistema no define la escala | `syh_cond_prioridad check (prioridad in (1,2,3))` (migración `20261029111053`); `prioridad` no aparece en `gestion.ts`, `ordenDeColumna.ts` ni `lib/home/` (búsqueda con `grep`) |
+| Ficha, título «Evaluación del riesgo» | Las tres fórmulas, la clasificación, sin un puntaje no hay nivel, y **quién evalúa: nivel admin del módulo, que `admin_sistema` tiene siempre** | `gestion.ts` (`nivelDeRiesgo`); `riesgo.ts:26-30`; `FichaDeCondicion.tsx` (`esAdmin ? <Select>`); `access.ts:26` (`admin_sistema` → `admin`); `page.tsx` de condiciones (`esAdmin={nivel === "admin"}`) |
+| Ficha, «Fecha máxima de ejecución» | Vence el día después; sin fecha máxima no vence nunca y cuenta como «sin asignar» | `condicion.ts:23` y `:59` |
+| Ficha, título «Fotos» | Las 44 del Excel entraron sin fotos (eran vínculos a un disco); las fotos son privadas y el link dura una hora | `CLAUDE.md` («las 44 entraron **sin foto**»); `condiciones/[id]/route.ts:365` (`UNA_HORA`) |
+
+### Los tres pasos del brief
+
+**(a) Qué filtra antes de llegar a cada número.**
+
+- *Tarjeta de la portada y contadores de la tabla.* Los dos salen de `resumenDeCondiciones`. Cadena: `traerTodo` sobre `syh_condiciones` **sin ningún `where`** (ni activos ni fechas; la portada pide sólo nueve columnas, la tabla `select *`) → `estadoDe(c, hoy)` con `hoy` de `hoyEnArgentina()` → se descartan las cerradas (tienen `fecha_ejecucion`) → «vencidas» es `fecha_maxima < hoy`; «sin completar» es abierta y `loQueFalta(c).length > 0` (cinco puntajes, responsable, fecha máxima, y sector **y** equipo ausentes). Los contadores de la tabla se calculan sobre `filas` y **no cambian con los filtros**; el «X de Y» del subtítulo sí. Los tres números son del mismo universo, y el texto lo dice.
+- *«Fotos sin respaldar»* (tarjeta de la portada, sólo aparece cuando hay): cuenta `syh_fotos` con `respaldada_en_drive_el` nulo y `subida_el` anterior a tres días. **No lleva `(i)`**: la propia tarjeta ya dice el umbral y a quién le toca.
+- *Nivel de riesgo.* Columna generada en Postgres; la pantalla sólo clasifica con `clasificar()`. Un puntaje nulo hace nulo todo el producto, y el 0 no clasifica.
+
+**(b) La línea que respalda cada oración**, en la columna «Respaldo» de arriba. Inferencias que se **borraron**: que la prioridad 1 sea la más urgente (no la define ningún documento ni el código); que el respaldo en Drive esté encendido (la tarjeta de la portada sólo aparece si está atascado, y no se sabe el estado real); que «sacar una foto» no deja copia en ningún lado (el cartel de la ficha lo afirma, pero la ruta `fotos/[id]` borra fila y archivo del bucket y **no toca Drive**); cuántos peligros tiene el glosario (el spec dice 32 y un commit posterior lo «completa»).
+
+**(c) Qué es «admin» en estas pantallas.** Es el nivel `admin` del módulo en `usuario_modulos`, **no** `admin_sistema` como grupo aparte: `nivelEnModulo` le da `admin` a todo `admin_sistema` (`access.ts:26`), así que el texto de «Evaluación del riesgo» dice ambas cosas. Es la única oración de los doce que habla de quién puede hacer algo. «Prioridad» y «Lugar» las corrige `edicion` (primera etapa); el texto no lo afirma y no hace falta.
+
+### Huecos
+
+- **Qué significa 1, 2 y 3 en «Prioridad».** Se buscó en el spec, el plan, `CLAUDE.md`, la migración, `cuerpoDeCondicion.ts`, `FormularioCondicionOffline.tsx` y `lib/home/`. No hay una definición ni una dirección (¿1 es lo más urgente?). El `(i)` de la ficha dice sólo lo que se sabe: no ordena nada. **Quien lo diseñó tiene que decirlo** y entonces va también al formulario de `/cargar` (`app/cargar/FormularioCondicionOffline.tsx`), que está fuera de la carpeta del módulo y no se tocó.
+- **«Requiere inversión: Sin definir».** El rótulo ya dice lo que es (el spec: null es «todavía no se decidió»). No lleva `(i)`.
+- **Responsable, Fecha de ejecución, Observaciones, Descripción, Acción propuesta.** Rótulos que dicen lo que son; «Fecha de ejecución» ya trae su ayuda escrita («Tener fecha de ejecución cierra la condición; borrarla la reabre»).
+- **Los cinco desplegables de la evaluación.** Cada opción ya muestra su texto completo de la planilla debajo al elegirla (`ayuda` del `Campo`). No lleva `(i)`.
+- **Filtros (Estado, Lo que falta, Sector o equipo, Clasificación).** Sus opciones se explican solas, y las definiciones de «sin evaluar / sin asignar / sin lugar» están en el `(i)` de los contadores.
+- **Subtítulos.** Ninguna de las dos pantallas necesitaba un `(i)` de subtítulo: el de la tabla es un conteo y el de la portada no dice qué es el módulo, que es lo que cubre el `(i)` del título.
+- **Para la Tarea 13 (acciones irreversibles).** `condiciones/[id]/route.ts:251-273`: **reabrir** una cerrada y **corregir un puntaje que ya tenía valor** se auditan con el verbo `corregir`; cerrar no se audita a propósito (`:24-28`). El botón «Reabrir» y los cinco `<Select>` de puntajes viven en `FichaDeCondicion.tsx`. «Sacar» una foto (`FotosDeLaCondicion.tsx`, `confirm(...)`) no se deshace: su cartel dice que «no queda en ningún lado» y la ruta no toca la copia de Drive si ya existía.
+- **Una discrepancia plan / código.** El plan (Task 9, Step 1) da como ejemplo de test que `sectorDe("Planta 02", …)` enlaza con «Planta 2». El código y `CLAUDE.md` dicen lo contrario y manda el código: ese texto no se enlaza. No se editó el plan.
+- **Una discrepancia chica dentro del módulo, no corregida.** El lugar de una fila se escribe «`code` · `name`» de equipo en la tabla (`CondicionesClient.tsx`, `lugarDe`) y sólo `name` al ordenar por la columna «Lugar» (`ordenDeColumna.ts`, `lugarDe`). Ordena por un texto distinto del que muestra.
