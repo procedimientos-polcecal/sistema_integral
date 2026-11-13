@@ -8,12 +8,6 @@ export interface ModalProps {
   children: React.ReactNode;
   /** Sale conservando: la X, el fondo y Escape. */
   alSalir: () => void;
-  /**
-   * Tira lo cargado. Es el botón negativo del formulario: lo dibuja y lo
-   * conecta el formulario, no el modal. Acá sólo queda declarado para que el
-   * par `alSalir` / `alCancelar` se lea junto: salir guarda, cancelar tira.
-   */
-  alCancelar?: () => void;
   /** Verdadero cuando hay algo a medio cargar: dispara la pregunta al salir. */
   tocado?: boolean;
   /** Un visor de sólo lectura: sale derecho y nunca pregunta. */
@@ -42,6 +36,9 @@ const ANCHOS = {
  *
  * El modal no decide si el formulario está tocado: lo recibe. Sin `tocado` es
  * inerte y sale derecho.
+ *
+ * **No dibuja pie ni botones**, a diferencia de los modales viejos: cada
+ * formulario dibuja su botón negativo y es el único que tira el borrador.
  */
 export function Modal({
   titulo,
