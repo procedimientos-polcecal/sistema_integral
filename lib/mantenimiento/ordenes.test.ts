@@ -424,3 +424,40 @@ describe("faltaLaColumna", () => {
     expect(faltaLaColumna("column ordenes_trabajo.otra does not exist", "fecha_fin")).toBe(false);
   });
 });
+
+describe("la celda de observaciones con la justificacion del cierre", () => {
+  it("lleva las dos cosas cuando hay las dos", () => {
+    const celdas = celdasParaRegistrar({
+      cierre_justificacion: "Se rompio antes", observaciones: "Se cambio el rodamiento",
+    });
+    const w = celdas.find((c) => c.letra === "W");
+    expect(w?.valor).toBe("Cerrada antes del inicio: Se rompio antes\nSe cambio el rodamiento");
+  });
+
+  it("la justificacion sola cuando el pedido no trae observaciones", () => {
+    const celdas = celdasParaRegistrar({ cierre_justificacion: "Se rompio antes" });
+    expect(celdas.find((c) => c.letra === "W")?.valor)
+      .toBe("Cerrada antes del inicio: Se rompio antes");
+  });
+
+  // Un pedido que no toca ninguna de las dos no toca la celda.
+  it("no toca la W si no viene ninguna de las dos", () => {
+    const celdas = celdasParaRegistrar({ horas: 4 });
+    expect(celdas.find((c) => c.letra === "W")).toBeUndefined();
+  });
+
+  // `USER_ENTERED` convierte en formula lo que arranca con =, +, - o @. Eso
+  // dejo once pestanas de Compras en blanco un dia entero.
+  // Con la justificacion el texto arranca siempre con el rotulo, asi que no hay
+  // formula posible; la que queda expuesta es la W cuando sale sin rotulo, o
+  // sea con observaciones solas.
+  it("una justificacion que arranca con = no puede ser una formula", () => {
+    const celdas = celdasParaRegistrar({ cierre_justificacion: "=IMPORTRANGE(x)" });
+    expect(String(celdas.find((c) => c.letra === "W")?.valor)).not.toMatch(/^[=+\-@]/);
+  });
+
+  it("unas observaciones que arrancan con = van como texto", () => {
+    const celdas = celdasParaRegistrar({ observaciones: "=IMPORTRANGE(x)" });
+    expect(String(celdas.find((c) => c.letra === "W")?.valor)).toMatch(/^'/);
+  });
+});

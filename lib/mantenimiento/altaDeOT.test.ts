@@ -24,6 +24,7 @@ const completa = {
   operario_1: "",
   operario_2: "",
   operario_3: "",
+  cierre_justificacion: "",
 };
 
 /**
@@ -68,6 +69,31 @@ describe("lo que se contradice en una orden nueva", () => {
   it("una orden que nace cerrada antes de empezar no pasa", () => {
     expect(loQueSeContradice({ ...completa, fecha_cierre: "2026-10-19" }))
       .toEqual(["la fecha de cierre (2026-10-19) es anterior a la de inicio (2026-10-20)"]);
+  });
+
+  /**
+   * Desde el 12/11/2026 ese bloqueo cede si hay un motivo que explica, y la
+   * justificacion le llega por esta funcion: sin pasarsela, el alta mostraria
+   * el campo que pide el motivo y el cartel rojo al mismo tiempo.
+   */
+  it("con justificacion, nacer cerrada antes de empezar deja de contradecirse", () => {
+    expect(loQueSeContradice({
+      ...completa,
+      fecha_cierre: "2026-10-19",
+      cierre_justificacion: "El equipo fallo antes y se intervino",
+    })).toEqual([]);
+  });
+
+  /**
+   * Y la de fin NO cede, que es la mitad que nadie pidio dar vuelta: es la
+   * ventana estimada, no la real.
+   */
+  it("la justificacion no destraba la fecha de fin dada vuelta", () => {
+    expect(loQueSeContradice({
+      ...completa,
+      fecha_fin: "2026-10-19",
+      cierre_justificacion: "El equipo fallo antes y se intervino",
+    })).toEqual(["la fecha de fin (2026-10-19) es anterior a la de inicio (2026-10-20)"]);
   });
 
   it("cerrar el mismo dia que empieza esta bien", () => {
@@ -158,5 +184,30 @@ describe("que le falta a una orden nueva", () => {
       operario_1: "Aguirre",
     });
     expect(r).toEqual(["el sector", "las horas que llevó"]);
+  });
+
+  it("con el cierre anterior al inicio pide la justificacion", () => {
+    expect(loQueFaltaParaCrear({
+      ...completa, fecha_ejecucion: "2026-10-20", fecha_cierre: "2026-10-18",
+      horas: "4", operario_1: "Aguirre",
+    })).toEqual(["por qué se cerró antes de la fecha de inicio"]);
+  });
+
+  it("con la justificacion cargada no pide nada", () => {
+    expect(loQueFaltaParaCrear({
+      ...completa, fecha_ejecucion: "2026-10-20", fecha_cierre: "2026-10-18",
+      horas: "4", operario_1: "Aguirre",
+      cierre_justificacion: "El equipo fallo antes y se intervino",
+    })).toEqual([]);
+  });
+
+  // Un solo mensaje y no tres pantallas: es la vara de `validar()` del nucleo.
+  it("sale junto con todo lo demas que falte, en el orden del formulario", () => {
+    expect(loQueFaltaParaCrear({
+      ...completa, sector_id: "", fecha_ejecucion: "2026-10-20",
+      fecha_cierre: "2026-10-18", horas: "", operario_1: "Aguirre",
+    })).toEqual([
+      "el sector", "las horas que llevó", "por qué se cerró antes de la fecha de inicio",
+    ]);
   });
 });
