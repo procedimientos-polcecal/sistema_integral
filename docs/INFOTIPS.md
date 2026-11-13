@@ -479,3 +479,17 @@ De los de Informe, uno es del título, uno de la serie, cinco del resumen por ca
   nombrar a RRHH. Quien mire una tarjeta sin RRHH ve un total menor al real sin ninguna marca.
 - **Cifras con fecha que no se pusieron:** los 354 de 7.510 pesadas sin fletero de `acarreo.ts:201`, los 7.623+ de `consultas.ts:385` y los
   valores de tarifa de `destape.ts:19-21` envejecen con cada carga.
+
+## Mantenimiento
+
+Los 48 que ya existían en el módulo no se tocaron. Éstos son los nuevos.
+
+### Los tres de pantalla
+
+| Pantalla | Texto | De dónde salió |
+|---|---|---|
+| `/mantenimiento/avisos` · título | Qué es un aviso, sus tres finales, que «Sin orden de trabajo» cuenta sólo los pendientes, que cualquier texto en OT ASIGNADA cuenta como con OT y que la OT gana sobre desestimado. | `finalDelAviso()` y su docstring en `lib/mantenimiento/desestimarAviso.ts` (`ot_asignada` con cualquier texto, «tener OT gana»); `estaPendiente` en `AvisosClient.tsx` |
+| `/mantenimiento/ordenes-servicio` · título | OS es trabajo a un tercero, no se crea acá, y «Sin proveedor elegido» incluye pedidos sin seguimiento. | Docstring de `lib/mantenimiento/os.ts` (SERVICIOS sin columnas de seguimiento); `esperaDecision()` en `aprobacion.ts`; el conteo `!o.proveedor_elegido` en `OrdenesServicioClient.tsx`; `MANTENIMIENTO-INTEGRACION.md`, «Por eso no se puede crear una OS desde la app» |
+| `/mantenimiento/equipos/[id]/checklist` · título | Un checklist por equipo y no por tipo, el obligatorio frena el guardado de la ejecución, y la ejecución guarda una copia. | `checklist/page.tsx` y `EjecucionesClient.tsx:69-76,122-129,143` (se busca por `equipment_id`, sin tipo); `api/mantenimiento/ejecuciones/route.ts:50` (`checklist_snapshot`) |
+
+No hay documento propio del checklist: la fuente es sólo el código.

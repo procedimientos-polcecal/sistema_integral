@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 type ItemType = "check" | "number" | "text" | "photo";
 
@@ -93,7 +94,10 @@ export default function ChecklistEditor({ equipo, checklist, canEdit }: {
       </div>
 
       <div className="flex items-start justify-between gap-4">
-        <h1 className="text-xl font-bold text-slate-900">Checklist</h1>
+        <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900">
+          Checklist
+          <InfoTip text="Es la lista que se completa al registrar un mantenimiento de este equipo, sea del tipo que sea: hay uno por equipo y no uno por tipo de mantenimiento. Un ítem obligatorio sin responder impide guardar la ejecución. Cada ejecución guarda una copia del checklist como estaba, así que cambiarlo acá no reescribe las ya registradas." />
+        </h1>
         {canEdit && (
           <button
             onClick={save}
