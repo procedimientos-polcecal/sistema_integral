@@ -2828,8 +2828,9 @@ commit. Con esa premisa en pie la función entera era inalcanzable —quien carg
 iba a ver a la vez el campo que pide el motivo y el cartel que decía que igual
 no se podía guardar—, y se descubrió a mitad de la rama. En total se corrigieron
 **cinco** afirmaciones de esa clase; otra decía que un cierre adelantado rompe
-el MTBF, que es falso: `fechaDeFalla` es `fecha_ejecucion` y ni el MTBF ni el
-MTTR leen `fecha_cierre`. La moraleja operativa es barata: **antes de escribir
+el MTBF, que es falso: `fechaDeFalla` es `fecha_ejecucion` y, si falta, la
+`fecha` de la orden — ni el MTBF ni el MTTR leen `fecha_cierre` para fechar
+nada. La moraleja operativa es barata: **antes de escribir
 «hoy nada lo frena», mirar el historial del archivo.**
 
 **Lo que se perdió a propósito: el calendario en gris.** El `min` de los tres
@@ -2897,13 +2898,23 @@ mismo guardado mandaría el campo vacío y recibiría un 400, o borraría el mot
 que había. Por eso el listado tiene que seguir trayendo `fecha_cierre` y
 `cierre_justificacion` — si dejara de hacerlo no habría un solo error de tipos.
 
-**El hueco que queda, dicho:** un PATCH que mueva **sólo** `fecha_ejecucion`
-hacia adelante no pasa por ninguno de los dos chequeos —los dos se disparan con
-`fecha_cierre` o `cierre_justificacion`—, así que dejaría una OT con el cierre
-anterior al inicio y sin justificación. Hoy no es alcanzable:
-`repartirRegistroDeOT` es lista blanca y `fecha_ejecucion` no está en ninguna de
-sus listas, y «Postergar» sólo se muestra en órdenes que no están REALIZADO. Es
-por dónde se rompe el día que alguien habilite editar esa fecha.
+**El hueco que queda, y no es teórico: se llega por Postergar.** Los dos
+chequeos se disparan con `fecha_cierre` o `cierre_justificacion`, así que lo que
+mueva **sólo** la fecha de inicio pasa de largo por los dos. Por el PATCH eso no
+se puede —`repartirRegistroDeOT` es lista blanca y no nombra `fecha_ejecucion`—,
+pero **`app/api/mantenimiento/ordenes/[id]/postergar` sí la mueve, y hacia
+adelante** (`loQueFaltaParaPostergar` rechaza `dias <= 0`). Esa ruta **trae
+`estado` en su `select` y después no lo mira nunca**: pide que la orden exista,
+que sea `app_created` y que tenga fecha de ejecución, y actualiza. O sea que un
+POST sobre una orden ya REALIZADO y con fecha de cierre le corre el inicio y la
+deja con el cierre anterior al inicio, sin justificación y sin que nada pregunte.
+
+**Lo único que lo frena hoy es que la pantalla esconde el botón** en las órdenes
+realizadas —`pideJustificacion(o.estado)` en `OrdenesClient`, que es
+`!== "REALIZADO"`—, y una guarda de pantalla no frena a quien llame la ruta.
+**No se cerró a propósito**: taparlo es inventar una regla que nadie pidió sobre
+una ruta que hace otra cosa. Queda escrito como lo que es, que es por dónde se
+rompe.
 
 ## El catálogo de tareas preventivas (12/11/2026)
 
