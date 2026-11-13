@@ -143,7 +143,7 @@ export default function ListaClient({
               <tr>
                 <th className="px-4 py-2 text-left">Nombre</th>
                 <th className="px-4 py-2 text-left">Destino habitual<InfoTip className="ml-1 normal-case tracking-normal" text="Es el destino que el formulario de movimientos propone cuando esa persona retira; quien carga lo puede cambiar en el momento. Sin destino, el movimiento queda sin sector salvo que se elija uno." /></th>
-                <th className="px-4 py-2 text-left">Empleado<InfoTip className="ml-1 normal-case tracking-normal" text="Se engancha solo con el padrón de empleados, comparando apellido y nombre en cualquiera de los dos órdenes, en cada sincronización y al agregar a alguien. Sólo se toca a los que están sueltos: un enlace ya hecho no se rehace. «Sin enganchar» puede ser alguien que no es empleado (un contratista, REGULADOR) o un nombre escrito distinto allá y acá." /></th>
+                <th className="px-4 py-2 text-left">Empleado<InfoTip className="ml-1 normal-case tracking-normal" text="Se engancha solo con el padrón de empleados, comparando apellido y nombre en cualquiera de los dos órdenes, en cada sincronización y al agregar a alguien. Sólo se toca a los que están sueltos: un enlace ya hecho no se rehace. «Sin enganchar» puede ser alguien que no es empleado (un contratista, REGULADOR) un nombre escrito distinto allá y acá, o dos empleados con el mismo nombre: ahí queda suelto a propósito, porque enlazar al que se le parece es peor que dejarlo vacío." /></th>
                 <th className="px-4 py-2"></th>
               </tr>
             </thead>
