@@ -7,6 +7,7 @@ import FichadaEditModal from "@/components/rrhh/FichadaEditModal";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const tabs = ["fichadas", "ausencias", "vacaciones", "francos"] as const;
@@ -836,9 +837,9 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
       )}
 
       {faltaEnEdicion && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setFaltaEnEdicion(null)}>
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-medium text-slate-800 mb-1">Clasificar falta</h3>
+        // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+        // hay borrador que tirar, así que hoy los dos cierran igual.
+        <Modal titulo="Clasificar falta" alSalir={() => setFaltaEnEdicion(null)}>
             <p className="text-sm text-slate-500 mb-4">
               {empleado.apellido}, {empleado.nombre} · {new Date(`${faltaEnEdicion}T00:00:00`).toLocaleDateString("es-AR", { timeZone: "UTC" })}
             </p>
@@ -877,7 +878,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               </label>
               <textarea value={claseFalta.observaciones} onChange={(e) => setClaseFalta({ ...claseFalta, observaciones: e.target.value })} className="input" rows={2} />
             </div>
-            <div className="flex justify-end gap-2">
+            <PieDeModal>
               <button onClick={() => setFaltaEnEdicion(null)} className="px-4 py-2 text-sm text-slate-600">Cancelar</button>
               <button
                 onClick={clasificarFalta}
@@ -886,9 +887,8 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               >
                 {clasificando ? "Guardando..." : "Guardar"}
               </button>
-            </div>
-          </div>
-        </div>
+            </PieDeModal>
+        </Modal>
       )}
     </div>
   );

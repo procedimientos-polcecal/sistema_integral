@@ -6,6 +6,7 @@ import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { usePuedeEditarRemises } from "@/lib/remises/context";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 export default function VehiculosClient({ vehiculos, choferes }: { vehiculos: any[]; choferes: any[] }) {
   const [tab, setTab] = useState<"vehiculos" | "choferes">("vehiculos");
@@ -141,9 +142,9 @@ function VehiculoModal({ v, choferes, onClose, onSaved }: { v: any | null; chofe
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-slate-800 mb-4">{v ? "Editar vehículo" : "Nuevo vehículo"}</h3>
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador que tirar, así que hoy los dos llaman a `onClose`.
+    <Modal titulo={v ? "Editar vehículo" : "Nuevo vehículo"} alSalir={onClose}>
         <form onSubmit={guardar} className="space-y-3">
           <div>
             <label className="block text-xs text-slate-500 mb-1">Nombre</label>
@@ -164,17 +165,16 @@ function VehiculoModal({ v, choferes, onClose, onSaved }: { v: any | null; chofe
               className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
-          <div className="flex gap-2 pt-2">
+          <PieDeModal className="flex gap-2">
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Guardando..." : "Guardar"}
             </button>
             <button type="button" onClick={onClose} className="border border-slate-300 px-4 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-50">
               Cancelar
             </button>
-          </div>
+          </PieDeModal>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -258,9 +258,8 @@ function ChoferModal({ c, onClose, onSaved }: { c: any | null; onClose: () => vo
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-slate-800 mb-4">{c ? "Editar chofer" : "Nuevo chofer"}</h3>
+    // Igual que el de vehículos: salir conserva, sólo «Cancelar» tira.
+    <Modal titulo={c ? "Editar chofer" : "Nuevo chofer"} alSalir={onClose}>
         <form onSubmit={guardar} className="space-y-3">
           <div>
             <label className="block text-xs text-slate-500 mb-1">Nombre</label>
@@ -273,16 +272,15 @@ function ChoferModal({ c, onClose, onSaved }: { c: any | null; onClose: () => vo
               className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
-          <div className="flex gap-2 pt-2">
+          <PieDeModal className="flex gap-2">
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Guardando..." : "Guardar"}
             </button>
             <button type="button" onClick={onClose} className="border border-slate-300 px-4 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-50">
               Cancelar
             </button>
-          </div>
+          </PieDeModal>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

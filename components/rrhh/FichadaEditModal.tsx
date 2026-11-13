@@ -7,7 +7,7 @@ import { diaDeLaSalida, problemaDeLaFila } from "@/lib/rrhh/fichadas/turnoDeNoch
 import type { TurnoLike } from "@/lib/rrhh/engine/recalcular-puro";
 import { useCargar } from "@/lib/core/useCargar";
 import AcreditadoDeFichada from "./AcreditadoDeFichada";
-import { Modal } from "@/components/Modal";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 interface Fichada {
   id: string;
@@ -384,7 +384,7 @@ export default function FichadaEditModal({
         {/* El cuerpo del modal es el que scrollea: con varias marcaciones los
             botones se iban abajo del todo. Pegados al pie, «Cancelar» y «Guardar»
             siempre están a mano. */}
-        <div className="sticky bottom-0 -mx-5 -mb-5 flex justify-end gap-2 border-t border-slate-200 bg-white px-5 pb-5 pt-3 mt-4">
+        <PieDeModal className="flex justify-end gap-2 mt-4">
           {diaSinProteger && !error ? (
             <button onClick={onClose} type="button" className="btn-primary">
               Entendido
@@ -399,7 +399,7 @@ export default function FichadaEditModal({
               </button>
             </>
           )}
-        </div>
+        </PieDeModal>
     </Modal>
   );
 }
