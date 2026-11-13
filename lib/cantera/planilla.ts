@@ -13,6 +13,7 @@ import { toneladasEstimadas } from "./toneladas";
 import { metrosYPozos } from "./tramos";
 import type { Bochon, Voladura, Yacimiento } from "./types";
 import { textoParaLaCelda } from "@/lib/core/sheets";
+import { serialDelDia } from "@/lib/core/fechaDeSheets";
 
 /** "8/9/2026": d/m, como escribe la planilla. Nunca m/d — eso dio vuelta 885 fechas en Compras. */
 export function fechaComoSeEscribe(fecha: string | null): string {
@@ -22,9 +23,39 @@ export function fechaComoSeEscribe(fecha: string | null): string {
   return `${Number(m[3])}/${Number(m[2])}/${m[1]}`;
 }
 
-/** Un número tal como lo entiende `USER_ENTERED`: punto decimal, sin separador de miles ni signo $. */
-function numeroComoSeEscribe(v: number | null): string {
-  return v == null || !isFinite(v) ? "" : String(v);
+/**
+ * La fecha como se manda a la planilla: el **serial**, no el texto.
+ *
+ * Un "8/9/2026" lo interpreta la planilla según su locale, y esta es es_AR/es_MX:
+ * un número no se interpreta (`serialDelDia`, `lib/core/fechaDeSheets.ts`). Un año
+ * de menos de 2000 es un error de tipeo —el SdG tiene "0026-10-16", un 26 mal
+ * escrito— y daría un serial negativo: se deja la celda vacía antes que escribir
+ * una fecha del año 26.
+ */
+export function fechaParaLaPlanilla(fecha: string | null): number | "" {
+  if (!fecha) return "";
+  const iso = fecha.slice(0, 10);
+  if (Number(iso.slice(0, 4)) < 2000) return "";
+  return serialDelDia(iso) ?? "";
+}
+
+/**
+ * Un número para la planilla, **como número y no como texto**.
+ *
+ * Antes iba `String(v)` con punto decimal y la planilla, en español, lo
+ * interpretaba a su manera: `"5.5"` quedaba como la fecha del 5 de mayo
+ * (46147), `"415.8"` como 4158 con el punto de miles, y `"12.81"` como texto.
+ * Medido el 13/11/2026 en la primera escritura real del espejo: las toneladas
+ * de una voladura quedaron en 41.579.999.999.999.900. Un número no se
+ * interpreta, y ésa es la regla de `escribirCeldas`.
+ */
+function numeroComoSeEscribe(v: number | null): number | "" {
+  return v == null || !isFinite(v) ? "" : v;
+}
+
+/** Un número dentro de un texto, con coma decimal como lo escribe la planilla ("emulex: 62,5"). */
+function numeroEnTexto(v: number): string {
+  return String(v).replace(".", ",");
 }
 
 /**
@@ -62,7 +93,7 @@ export interface RenglonPlano {
 export function resumenExplosivos(consumos: RenglonPlano[]): string {
   return consumos
     .filter((c) => c.tipo === "detonador" && c.insumo)
-    .map((c) => `${c.insumo}${c.cantidad != null ? `: ${numeroComoSeEscribe(c.cantidad)}` : ""}`)
+    .map((c) => `${c.insumo}${c.cantidad != null ? `: ${numeroEnTexto(c.cantidad)}` : ""}`)
     .join(" - ");
 }
 
@@ -71,7 +102,7 @@ export const COLUMNAS_VOLADURAS = 19;
 export const COLUMNAS_BOCHONES = 13;
 
 /** La fila de PERFORACIÓN para una voladura, A a M. */
-export function filaPerforacion(v: Voladura, yac: Yacimiento | null): string[] {
+export function filaPerforacion(v: Voladura, yac: Yacimiento | null): (string | number)[] {
   const perf = metrosYPozos(v.perf_tramos, v.pozos, v.metros_por_pozo);
   const montoPerf = montoPerforacion({
     metros: perf.metros,
@@ -84,8 +115,8 @@ export function filaPerforacion(v: Voladura, yac: Yacimiento | null): string[] {
 
   return [
     v.codigo,
-    fechaComoSeEscribe(v.perf_inicio),
-    fechaComoSeEscribe(v.perf_fin),
+    fechaParaLaPlanilla(v.perf_inicio),
+    fechaParaLaPlanilla(v.perf_fin),
     yac?.codigo ?? "",
     numeroComoSeEscribe(profundidadProm),
     numeroComoSeEscribe(perf.pozos),
@@ -100,7 +131,7 @@ export function filaPerforacion(v: Voladura, yac: Yacimiento | null): string[] {
 }
 
 /** La fila de VOLADURAS para una voladura, A a S. */
-export function filaVoladura(v: Voladura, yac: Yacimiento | null, consumos: RenglonPlano[]): string[] {
+export function filaVoladura(v: Voladura, yac: Yacimiento | null, consumos: RenglonPlano[]): (string | number)[] {
   const perf = metrosYPozos(v.perf_tramos, v.pozos, v.metros_por_pozo);
   const vol = metrosYPozos(v.vol_tramos, v.vol_pozos, v.vol_metros_por_pozo);
   const metrosVol = vol.metros ?? perf.metros;
@@ -132,8 +163,8 @@ export function filaVoladura(v: Voladura, yac: Yacimiento | null, consumos: Reng
 
   return [
     v.codigo,
-    fechaComoSeEscribe(v.vol_fecha_carga),
-    fechaComoSeEscribe(v.vol_fecha),
+    fechaParaLaPlanilla(v.vol_fecha_carga),
+    fechaParaLaPlanilla(v.vol_fecha),
     yac?.codigo ?? "",
     numeroComoSeEscribe(perf.pozos),
     numeroComoSeEscribe(perf.metros),
@@ -154,7 +185,7 @@ export function filaVoladura(v: Voladura, yac: Yacimiento | null, consumos: Reng
 }
 
 /** La fila de BOCHONES para un bochón, A a M. */
-export function filaBochon(b: Bochon, yac: Yacimiento | null): string[] {
+export function filaBochon(b: Bochon, yac: Yacimiento | null): (string | number)[] {
   const monto = montoBochon({
     cantidad: b.cantidad,
     metrosPerforados: b.metros_perforados,
@@ -164,8 +195,8 @@ export function filaBochon(b: Bochon, yac: Yacimiento | null): string[] {
 
   return [
     b.codigo,
-    fechaComoSeEscribe(b.inicio),
-    fechaComoSeEscribe(b.fin),
+    fechaParaLaPlanilla(b.inicio),
+    fechaParaLaPlanilla(b.fin),
     numeroComoSeEscribe(b.precio_usd_m),
     yac?.codigo ?? "",
     b.voladura_codigo ?? "",
