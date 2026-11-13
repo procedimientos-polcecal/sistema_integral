@@ -82,6 +82,13 @@ const CANDIDATOS: { nombre: string; reconoce: RegExp }[] = [
   { nombre: "Correas",     reconoce: /\bcorreas?\b/ },
   { nombre: "Reductor",    reconoce: /\breductor(es)?\b/ },
   { nombre: "Transmisión", reconoce: /\btransmision(es)?\b/ },
+  // Agregado en la segunda pasada, el 12/11/2026: lo nombran 12 órdenes y es
+  // la carga moledora de un molino de bolas. Apareció al extender el
+  // vocabulario de acciones —«clasificar cuerpos moledores» es una tarea
+  // periódica clásica de esos molinos— y quedaba sin poder agruparse porque el
+  // componente no existía. **«Bolas» a secas no se reconoce**: en estas
+  // descripciones aparece también como la bola de una válvula o de un cáncamo.
+  { nombre: "Cuerpos moledores", reconoce: /\bcuerpos moledores\b|\bcarga moledora\b/ },
 ];
 
 const admin = createAdminClient();

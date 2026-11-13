@@ -8,7 +8,7 @@ import { SINCRONIZACIONES, unaPorNumero, unaPorCelda } from "./sincronizar";
  * silencio y sin error.
  */
 describe("los recursos que se sincronizan", () => {
-  it("son los cinco, con los nombres que espera el Apps Script", () => {
+  it("son los seis, con los nombres que espera el Apps Script", () => {
     expect(SINCRONIZACIONES.map((s) => s.recurso)).toEqual([
       "avisos",
       "ordenes",
@@ -19,14 +19,33 @@ describe("los recursos que se sincronizan", () => {
       // porque lo que la tiene que llamar es el mismo reloj, y al final porque
       // una OT recién creada todavía no está en el master.
       "periodicas",
+      // `ciclos` se sumó el 12/11/2026 y es lo mismo por otro lado: genera la
+      // OT siguiente de un ciclo encadenado cuando la anterior se cerró. Lee
+      // los cierres, así que va después de `ordenes` sí o sí.
+      "ciclos",
     ]);
   });
 
   /** Lo nuevo no puede pisar a lo que ya se espeja: las cuatro siguen primero. */
-  it("las cuatro que espejan una planilla siguen yendo antes", () => {
+  it("las cuatro que espejan una planilla siguen yendo antes que las que generan", () => {
     const recursos = SINCRONIZACIONES.map((s) => s.recurso);
-    expect(recursos.indexOf("periodicas")).toBe(recursos.length - 1);
-    expect(recursos.indexOf("ordenes")).toBeLessThan(recursos.indexOf("periodicas"));
+    const espejan = ["avisos", "ordenes", "ordenes-servicio", "comparativas"] as const;
+    const generan = ["periodicas", "ciclos"] as const;
+    for (const g of generan) {
+      for (const e of espejan) {
+        expect(recursos.indexOf(e)).toBeLessThan(recursos.indexOf(g));
+      }
+    }
+  });
+
+  /**
+   * `ciclos` lee `fecha_cierre` y `estado` de las OT para saber si la anterior
+   * del ciclo se cerró, y esos dos los trae `ordenes` de la planilla: al revés
+   * generaría sobre el estado de la corrida pasada.
+   */
+  it("los ciclos van después de las órdenes", () => {
+    const recursos = SINCRONIZACIONES.map((s) => s.recurso);
+    expect(recursos.indexOf("ordenes")).toBeLessThan(recursos.indexOf("ciclos"));
   });
 
   it("las órdenes de servicio van antes que sus comparativas", () => {

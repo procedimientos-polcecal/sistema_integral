@@ -74,6 +74,7 @@ export default function PadronDelTaller({
   const [grupo, setGrupo] = useState<Grupo>("A");
   const [desde, setDesde] = useState(hoy);
   const [cerrando, setCerrando] = useState<string | null>(null); // id de la fila
+  const [sacando, setSacando] = useState<string | null>(null); // id de la fila que se va a borrar
   const [hastaDeBaja, setHastaDeBaja] = useState(hoy);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +145,24 @@ export default function PadronDelTaller({
     });
   }
 
+  /**
+   * La fila que nunca debió existir: se borra.
+   *
+   * **No es dar de baja, y confundirlas es el error caro.** Dar de baja dice
+   * «esta persona dejó el taller» y conserva la fila, porque la semana del mes
+   * pasado tiene que seguir mostrándola. Esto dice «esta fila está mal cargada».
+   * El caso que lo trajo: la misma persona dos veces, con vigencias que no se
+   * superponen, así que la validación las aceptó y no había forma de sacar la
+   * que sobraba.
+   */
+  async function sacarDelPadron(id: string) {
+    await hacer(async () => {
+      const r = await llamar(`/api/mantenimiento/personal?id=${encodeURIComponent(id)}`, "DELETE");
+      if (r.ok) setSacando(null);
+      return r;
+    });
+  }
+
   return (
     <section className="card">
       <button
@@ -208,21 +227,70 @@ export default function PadronDelTaller({
                       {f.hasta && ` · hasta ${comoSeLee(f.hasta)}`}
                     </span>
                   </span>
-                  {cerrando !== f.id && (
-                    <button
-                      type="button"
-                      className="btn-secondary shrink-0"
-                      disabled={enviando}
-                      onClick={() => {
-                        setCerrando(f.id);
-                        setHastaDeBaja(f.hasta ?? hoy);
-                        setError(null);
-                      }}
-                    >
-                      {f.hasta ? "Cambiar baja" : "Dar de baja"}
-                    </button>
+                  {cerrando !== f.id && sacando !== f.id && (
+                    <span className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={enviando}
+                        onClick={() => {
+                          setCerrando(f.id);
+                          setSacando(null);
+                          setHastaDeBaja(f.hasta ?? hoy);
+                          setError(null);
+                        }}
+                      >
+                        {f.hasta ? "Cambiar baja" : "Dar de baja"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        disabled={enviando}
+                        onClick={() => {
+                          setSacando(f.id);
+                          setCerrando(null);
+                          setError(null);
+                        }}
+                      >
+                        Sacar del padrón
+                      </button>
+                    </span>
                   )}
                 </div>
+
+                {/*
+                  La confirmación dice en qué se diferencia de la otra acción, y
+                  no sólo que no se deshace: el error que se quiere evitar no es
+                  apretar sin querer, es apretar ésta creyendo que es «Dar de
+                  baja».
+                */}
+                {sacando === f.id && (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                    <p className="text-xs text-amber-900">
+                      Se borra la fila del padrón y no se puede deshacer. Es para una fila mal cargada:
+                      si la persona <strong>trabajó</strong> en el taller y ahora se va, va «Dar de baja»,
+                      que la conserva para que las semanas de antes se sigan viendo igual.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn-danger"
+                        disabled={enviando}
+                        onClick={() => void sacarDelPadron(f.id)}
+                      >
+                        Sacar del padrón
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        disabled={enviando}
+                        onClick={() => setSacando(null)}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {cerrando === f.id && (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <label htmlFor={`baja-${f.id}`} className="text-xs text-slate-500">Último día en el taller</label>

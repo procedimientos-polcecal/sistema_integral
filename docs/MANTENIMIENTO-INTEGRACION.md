@@ -1525,11 +1525,17 @@ anotar qué hace falta no depende de saber si lo hay. Para conectarlo:
 Había que acordarse de apretar el botón en cada pantalla, y lo que se veía en el
 sistema era tan viejo como la última vez que alguien lo hizo.
 
-Ahora lo llaman dos relojes, igual que Compras: **GitHub Actions cada quince
-minutos**, que es la frecuencia real, y un **cron diario de Vercel** como red por
-si Actions falla. El cron vive en Actions y no en `vercel.json` porque el plan
-Hobby sólo admite crons diarios: poner una frecuencia mayor no degrada el cron,
-hace fallar el deploy entero.
+Ahora lo llama **un solo reloj: `vercel.json`, cada 10 minutos**. Hasta el
+05/11/2026 eran dos —Actions «cada quince minutos» y un cron diario de Vercel
+como red— y el motivo escrito era que el plan Hobby sólo admite crons diarios.
+**Las dos mitades de eso resultaron falsas**: el plan es Pro, y los quince
+minutos de Actions eran en los hechos **cada 4 a 8 horas**. El workflow
+`mantenimiento-sync.yml` conserva su disparo a mano y perdió el `schedule`.
+
+Para Mantenimiento esto importa más que para los otros, porque de esta
+sincronización cuelga el barrido que **mete las OT nuevas al calendario**: lo
+que antes tardaba hasta ocho horas en aparecerle a la gente, ahora tarda diez
+minutos.
 
 De paso se arregló un cron muerto: `vercel.json` llamaba todos los días a las 6
 a `/api/cron/sync`, una ruta que nunca existió en este repo —quedó copiada de la
@@ -2968,11 +2974,145 @@ acá lo que hay que saber antes de tocarlo:
   con menos de tres fechas no se opina, y dos órdenes del mismo día no son dos
   repeticiones.
 
-**Esta etapa no escribe nada y no lleva migración.** El orden de lo que sigue
+**La pantalla para confirmar el catálogo está hecha desde el 12/11/2026**:
+`/mantenimiento/tareas-preventivas`, con la migración
+`20261112101003_mantenimiento_tareas_preventivas_confirmadas.sql`. Lo que hay
+que saber antes de tocarla: **sólo se guarda la decisión, nunca la propuesta**
+—se recalcula del historial en cada lectura—; **descartar escribe una fila**,
+porque sin ella la tarea vuelve mañana y la lista no se termina nunca; la clave
+natural es **(equipo, acción, componente)** y la ruta hace upsert sobre ella; y
+el **ritmo medido y el período decidido son dos columnas**, porque que no
+coincidan es información. Confirmar **todavía no genera ninguna orden**, y eso
+está escrito arriba de la pantalla.
+
+**La etapa de la propuesta no escribe nada y no lleva migración.** El orden de lo que sigue
 importa y está en el spec: primero que alguien de planta complete los
 componentes que faltan, después confirmar el catálogo, y recién ahí la tabla y
 el enganche con el motor de planes. Al revés da una tabla que cubre el 11 % del
 preventivo y la sensación de que el problema está resuelto.
+
+## Las OT encadenadas: el ciclo de martillos (12/11/2026)
+
+Una OT que al cerrarse genera la siguiente. Una **madre** arranca el ciclo, de
+su cierre nace una **hija** que se repite x veces, y después de la última vuelve
+la madre. El primer —y único— caso cargado:
+
+> **Cambio de martillos** → **Rotación de martillos** × 3 → Cambio de martillos → …
+
+en PO-C1-04 (Hidratación, cada 3 días), PY-B1-06 (Filler 2, 6), PY-A1-05
+(Filler 1, 6) y PY-C1-03 (Planta 0-2 mm, 10). **Filler 3 (PY-D1-03) hace el
+mismo ciclo y quedó afuera a pedido**, así que no es un olvido.
+
+El diseño está en
+[el spec](superpowers/specs/2026-11-12-mantenimiento-ot-encadenadas-design.md) y
+el plan en [su plan](superpowers/plans/2026-11-12-mantenimiento-ot-encadenadas.md).
+
+### Lo que no se deduce del código
+
+**1. El estado son dos campos y un corte, y el corte es todo.**
+`mant_ciclos_de_ot.desde` es la fecha del último trabajo **hecho** y
+`vuelta_desde` qué vuelta era ése. **Sólo cuentan las OT del ciclo creadas en
+`desde` o después.**
+
+Sin ese corte esto se rompe de la peor manera posible, y vale saber cómo porque
+la primera versión del diseño lo tenía así: el estado se derivaba de «la última
+OT con `ciclo_id`» y el botón de reinicio suspendía la hija que esperaba. Pero
+entonces la última pasaba a ser la hija **anterior, ya cerrada**, y la corrida
+siguiente volvía a crear exactamente la orden recién suspendida, fechada sobre
+un cierre viejo —o sea nacida atrasada— sobre martillos recién cambiados. Es,
+palabra por palabra, lo que quien pidió esto nombró como su única razón para
+dejar de confiar: «que genere OT sobre martillos que ya se cambiaron». El
+mecanismo que existía para evitar el anti-objetivo lo producía.
+
+**El corte lo mueven tres puntas y nada más**: la madre al cerrarse
+(`elCorteQueSigue`), el botón de reinicio y la carga inicial. Las hijas no:
+quedan dentro del rango y la decisión ya las lee bien. Por eso una madre cerrada
+devuelve `esperar` y no `crear` — **sin alguien que mueva el corte, el ciclo se
+detiene para siempre después del primer cambio**.
+
+**2. La cara es la vuelta más uno, y eso lo confirmaron los datos.** La
+rotación n lleva el martillo a la cara n+1, porque entra nuevo en la 1ª. No es
+una convención elegida: de las 248 OT de martillos de estos cuatro equipos,
+**63 nombran la cara en el texto libre y aparecen la 2ª, la 3ª y la 4ª — nunca
+la 1ª y nunca una 5ª**. Un juego que entra nuevo, se rota tres veces y se
+cambia. Esa coincidencia entre lo que dijo la gente y lo que dicen los datos es
+lo que hace que `repeticiones` = 3 no sea una conjetura.
+
+**3. El ciclo apunta a `mant_tareas_preventivas` y no guarda los nombres.** Ese
+catálogo —de la misma fecha, otra sesión— ya es donde vive «Rotación de
+Martillos en PO-C1-04 cada 3 días», y **existe para generar OT**. El día que
+alguien lo enganche al generador, estas cuatro máquinas recibirían la rotación
+dos veces en la planilla que mira la planta. Con la FK eso se contesta con un
+join; sin ella habría que cruzarlas por texto, que es lo que los dos diseños
+prohíben. Por lo mismo, el «cada cuántos días» **no se guarda en el ciclo**: es
+el `periodo_dias` de la tarea hija.
+
+**Si estás escribiendo ese enganche: una tarea referenciada por un ciclo activo
+no se genera por plan.**
+
+### Las tres capas contra el anti-objetivo
+
+El botón solo no alcanza **porque depende de que alguien se acuerde de
+apretarlo**.
+
+1. **El botón «Se cambiaron los martillos»**, en la ficha del equipo. Si la OT
+   viva es una hija, queda SUSPENDIDA y sale del ciclo. Si es la **madre**, no
+   se toca y se explica: el trabajo existió, y cerrarla desde un botón sería el
+   sistema registrando trabajo ajeno en las columnas M y K del master.
+2. **El aviso que pregunta sin decidir** (`mant-ciclo-sospechoso-<equipo>`).
+   Es la única parte de todo esto que mira el texto de una descripción, y mirarlo
+   se puede porque **no decide**: un falso positivo cuesta una pregunta, uno que
+   no detecta deja todo como estaba.
+3. **La OT dice en qué se basa**: «Rotación de martillos — a 3ª cara (2 de 3).
+   Martillos cambiados el 23/10/2026». Es la que de verdad protege y no cuesta
+   nada: si los cambiaron el 05/11, quien abre la orden lo ve sin tener que
+   confiar en el estado interno de nada.
+
+### Por qué vive en el cron y no en el botón de cerrar
+
+Porque **las OT se cierran en la planilla**: de las 248 medidas, **225 ni
+siquiera nacieron en el sistema** (`app_created = false`). Un enganche en la
+ruta PATCH vería una minoría de los cierres. Es una reconciliación —`ciclos` en
+`SINCRONIZACIONES`, después de `ordenes` sí o sí— y la idempotencia la da el
+dato: si la última del ciclo está abierta no se hace nada.
+
+### El arranque lo trae un cambio de martillos (13/11/2026)
+
+**Los cuatro ciclos nacen con `desde` y `vuelta_desde` en null, y arrancan solos
+con el primer «Cambio de martillos» que se cierre a partir del día en que se
+configuraron.** Hasta entonces no generan ninguna OT.
+
+Es **la única parte de todo el mecanismo donde el texto de una descripción
+decide algo**, y eso es deliberado: la versión anterior pedía las cuatro fechas
+tipeadas, y lo que depende de que alguien se acuerde no pasa —el preventivo
+tenía pantalla, botón y cero OT generadas en toda la historia—. Peor: un ciclo
+sin arrancar **no genera órdenes, así que nada se atrasa** y `mant-atrasadas` no
+puede avisarlo. Se habría desplegado dormido.
+
+Lo que lo hace sostenible: decide *cuándo* arrancar y no *qué existe* (el ciclo
+ya lo configuró una persona); la orden que nace lleva escrita la fecha en que
+se basa, así que se puede desmentir; el botón de la ficha lo corrige en un clic;
+y la corrida informa `arrancados` con la OT que arrancó cada ciclo.
+
+**Mira hacia adelante y nunca hacia atrás**, y eso no es prudencia: medido el
+13/11/2026, arrancando del último cambio histórico los cuatro ciclos nacían con
+su primera rotación **atrasada 7, 21, 21 y 3 días**, y PY-B1-06 —que está en 4ª
+cara— recibiría «Rotación de Martillos — a 2ª cara» fechada el 23/10. Mirar
+hacia atrás produce exactamente el anti-objetivo.
+
+**Para verlo sin esperar a que alguien cambie unos martillos:**
+
+```bash
+npx tsx scripts/que-haria-el-ciclo.mts                  # qué haría la próxima corrida
+npx tsx scripts/que-haria-el-ciclo.mts --desde=2026-10-01   # «¿y si ya hubiera pasado?»
+```
+
+No escribe nada. El `--desde` corre el piso hacia atrás **sólo en la
+simulación**; la corrida de verdad usa siempre la fecha de configuración del
+ciclo.
+
+La carga a mano sigue existiendo en la ficha del equipo, para quien no quiera
+esperar al próximo cambio. Dejó de ser el camino principal y pasó a ser el atajo.
 
 ## Los datos: qué está y qué no
 

@@ -183,6 +183,10 @@ busca.
    con qué nombre y sobre qué equipos. Las de arriba ya se leen como un plan:
    regulación de péndulos 32 veces cada ~6 días en PY-B1-09, cambio de grillas
    12 veces cada ~3 días en PY-C1-03.
+   **La pantalla para hacerlo está hecha** (12/11/2026):
+   `/mantenimiento/tareas-preventivas`, con la migración
+   `20261112101003_mantenimiento_tareas_preventivas_confirmadas.sql`. Lo que
+   hay que saber antes de tocarla está abajo.
 3. Recién ahí, la tabla de tareas y el enganche con el motor de planes
    periódicos, que ya existe y sabe generar.
 
@@ -195,6 +199,63 @@ reconocer son, en su mayoría, nombres de equipo —«motor» 22, «balanza» 19
 «sistema». Componentes de verdad quedan pocos (grampas 9, cojinete 6). El
 techo siguiente no es el catálogo sino el **27 % sin acción reconocible**.
 
+## El 27 % sin acción, mirado de frente (12/11/2026)
+
+Se leyeron las 391 descripciones que no reconocía ninguna acción. **La mayoría
+no se puede reconocer porque no es una tarea repetible**: «Ayuda a desarmar
+cono», «Juntar bombas en cantera D6», «FALTA TORNILLO EN LA PLACA», «Trabajo
+achique nivel de agua». Son trabajos de una vez, y el texto libre dice la
+verdad sobre ellos.
+
+Pero adentro había vocabulario que faltaba. Se agregaron **cinco acciones
+preventivas** —balanceo, clasificación de carga moledora, repaso, sellado de
+pérdidas y pintura— y **dos correctivas** —reacondicionamiento y desarme—.
+
+El resultado, y conviene leerlo entero porque es modesto:
+
+| | antes | después |
+|---|---|---|
+| Preventivas reconocidas | 793 — 54 % | **835 — 57 %** |
+| Sin acción reconocible | 391 — 27 % | **332 — 23 %** |
+| Órdenes en el catálogo | 278 — 19 % | **291 — 20 %** |
+
+**Reconocer 42 órdenes más sumó 13 al catálogo**, porque casi ninguna nombra
+un componente que exista. O sea que el techo no era el vocabulario: es que el
+resto del preventivo son trabajos distintos entre sí.
+
+Lo que sí apareció vale más que el porcentaje: **«clasificación de Cuerpos
+moledores», 12 órdenes, cada ~24 días en PY-A1-08 y ~55 en PO-D1-14**. Es una
+tarea periódica clásica de un molino de bolas que hasta ese día era invisible
+por las dos puntas —no existía la acción ni el componente—. Se agregó «Cuerpos
+moledores» a los dos molinos (COMP-OT-0092 y 0093); **«bolas» a secas no se
+reconoce**, porque en estas descripciones es también la bola de una válvula.
+
+### Dos errores que los tests destaparon, y son el mismo
+
+Los dos son **el sustantivo en lugar del verbo**, y por eso quedan escritos
+juntos:
+
+- `perdidas?` parecía la forma obvia de reconocer el sellado. Como las
+  preventivas se miran **antes** que las correctivas, «Reparación de pérdida de
+  aceite» se habría contado como un sellado.
+- Y lo mismo ya estaba en el vocabulario desde el principio: `LUBRICACION`
+  reconocía «aceite» y «grasa» sueltos y, siendo la primera de la lista, se
+  llevaba todo lo que los nombrara. «Revisión perdida de aceite en cono» salía
+  como una lubricación.
+
+El sustantivo dice **qué había**; el verbo dice **qué se hizo**, y lo que
+clasifica una tarea es lo segundo. Las dos expresiones piden ahora el verbo, y
+`LUBRICACION` acepta el sustantivo sólo con su verbo al lado («cambio de
+aceite»), que es para lo que estaba primera.
+
+### Y una que no es de dominio sino de herramienta
+
+La primera versión de esas expresiones se escribió con un heredoc y quedaron
+**caracteres de retroceso de verdad** (0x08) adentro de los `RegExp`: `/(...)/`
+salió como `/<BS>(...)/`. Compila, `tsc` pasa y la expresión busca otra cosa.
+Hay un test que lo fija —ninguna expresión del vocabulario puede tener
+caracteres de control— porque es invisible leyendo el archivo.
+
 ## Lo que haría fracasar esto aunque funcione
 
 - **Que se agreguen los componentes faltantes como nombres sueltos**, sin
@@ -205,3 +266,43 @@ techo siguiente no es el catálogo sino el **27 % sin acción reconocible**.
 - **Que para subir la cobertura se afloje el reconocimiento** —nombres de menos
   de cuatro letras, coincidencias parciales—. Un componente mal reconocido es
   peor que ninguno: la tarea aparece colgada de la máquina que no es.
+
+## La pantalla para confirmarlo (12/11/2026)
+
+`/mantenimiento/tareas-preventivas`. Cinco cosas que no se deducen del código:
+
+- **Sólo se guarda la decisión, nunca la propuesta.** Qué tareas hay, en qué
+  equipos y con qué ritmo se recalcula del historial en cada lectura;
+  `mant_tareas_preventivas` guarda lo único que el historial no puede
+  contestar. Guardar la propuesta crearía una segunda fuente de verdad que
+  envejece sola: diría «cada 4 días» tres meses después de que el ritmo cambió
+  y nada avisaría.
+- **Descartar escribe una fila, y no es «no hacer nada».** Sin esa fila la
+  tarea vuelve a la lista mañana, y pasado, y la pantalla se vuelve algo que
+  nadie termina. «Volver a proponer» borra la decisión, que es otra cosa:
+  descartar es «ya la miré y no va», volver a proponer es «me equivoqué».
+- **La clave natural es `(equipo, acción, componente)`.** No `(acción,
+  componente)`: «rotación de martillos» se hace en seis equipos con ritmos
+  distintos —cada ~4 días en PO-C1-04 y cada ~22 en PY-C1-03—, así que un plan
+  es por máquina y una decisión también. La ruta hace **upsert** sobre esa
+  clave, por eso cambiar de opinión es el mismo pedido y no hay que borrar.
+- **El ritmo medido y el período decidido son dos columnas y no una.** «Cada»
+  es lo que pasa hoy; «Período» es lo que alguien fijó. Que no coincidan es
+  información —el ritmo se movió desde que se decidió— y taparlo con un solo
+  número la perdería. El campo arranca con el sugerido, redondeado a cómo se
+  habla: hasta dos semanas el día importa, hasta el mes va a semanas, después a
+  meses. Nadie programa «cada 27 días».
+- **Una decisión puede quedar sin respaldo en el historial**, y se muestra en
+  vez de esconderse. Una tarea confirmada es un plan: que no aparezca en los
+  últimos 365 días es justamente lo que alguien querría notar —se dejó de
+  hacer, o el equipo salió de servicio—.
+
+`accion` y `componente` van como **texto y no como claves foráneas**: la acción
+es vocabulario del código, igual que los modos de falla, y el componente es el
+**nombre** y no el id de `equipos_componentes` —esa tabla tiene una fila por
+equipo, «Martillos» son cinco, y lo que identifica la tarea es el nombre, que
+es además lo que el historial reconoce en la descripción—.
+
+Y lo que la pantalla dice arriba de todo, en texto visible: **confirmar una
+tarea todavía no genera ninguna orden.** Quien confirma cincuenta creyendo que
+el sistema va a empezar a emitirlas se entera tarde y mal.

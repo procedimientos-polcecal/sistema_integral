@@ -93,8 +93,18 @@ export function agruparPorRegistro(menciones: MencionDeLaBandeja[]): RegistroCon
  *   número (`?q=`): la conversación está dentro de la orden y hay que abrirla.
  *   Es el único de los tres que todavía no llega solo.
  *
- * Sólo el último depende de que quien lee abra el registro a mano, y por eso la
- * tarjeta ofrece aparte «Marcar como leído».
+ * **Los dos primeros llegan hasta la conversación porque le pasan
+ * `abiertoAlMontar` a `HiloDeMensajes`**, que desde el 12/11/2026 arranca
+ * plegado en una barra. Es un contrato entre esta función y esas dos pantallas
+ * que nada comprueba: si una dejara de pasarlo, el enlace seguiría abriendo el
+ * registro, el texto de acá seguiría prometiendo la conversación, y lo que
+ * llegaría es una barra cerrada —y la mención no se marcaría, porque marcar es
+ * abrir el hilo y no cargarlo—.
+ *
+ * La orden de trabajo es la única que no llega sola, y por eso su nota lo dice.
+ * El «Marcar como leído» de la tarjeta, en cambio, ya no está ahí sólo por
+ * ella: desde que el hilo arranca plegado es el camino principal, porque quien
+ * abre el registro y no despliega la barra tampoco marcó nada.
  */
 export function comoSeLlega(
   tipo: TipoDeEntidad,
