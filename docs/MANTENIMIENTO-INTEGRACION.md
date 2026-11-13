@@ -2799,6 +2799,8 @@ Tres cosas de esa decisión que no se deducen del código:
 
 ## El cierre anterior al inicio (12/11/2026)
 
+**Antes de desplegar: la columna `ordenes_trabajo.cierre_justificacion` no existe en producción hasta que alguien corra a mano la migración `20261112095357_…`.** Sin ella no falla sólo el alta de OT (el 400 de PostgREST): el `select` de `exportarLoPendiente` nombra la columna y su llamador, en `lib/mantenimiento/sincronizar.ts`, destructura `{ data: todos }` sin mirar `error`, así que `todos` queda `undefined`, `sinExportar` queda vacío y **la sincronización pisa con la planilla lo que el sistema acaba de registrar** —justo lo que `pendienteDeLaOT.ts` existe para evitar—, sin un solo error visible. Que ese `error` se ignore es anterior a esta rama y no se tocó.
+
 Una OT **se puede** cerrar con fecha anterior a su fecha de inicio, pero sólo si
 alguien dice por qué. La regla vive en
 [lib/mantenimiento/cierreAnteriorAlInicio.ts](../lib/mantenimiento/cierreAnteriorAlInicio.ts)
@@ -2908,6 +2910,13 @@ adelante** (`loQueFaltaParaPostergar` rechaza `dias <= 0`). Esa ruta **trae
 que sea `app_created` y que tenga fecha de ejecución, y actualiza. O sea que un
 POST sobre una orden ya REALIZADO y con fecha de cierre le corre el inicio y la
 deja con el cierre anterior al inicio, sin justificación y sin que nada pregunte.
+
+**Otro hueco, éste del lado de la planilla: la sincronización puede mover la fecha de inicio hacia atrás.**
+`lib/mantenimiento/sincronizar.ts` hace `upsert` de `fecha_ejecucion` desde la
+planilla (en el armado de `registros`), y si alguien la corrige allá la OT deja de
+tener el cierre adelantado mientras `cierre_justificacion` se queda llena: la
+ficha sigue diciendo «Por qué se cerró antes del inicio» de una orden que ya no
+lo está. Es poco probable y es el borde de «la planilla manda»; no se cerró.
 
 **Lo único que lo frena hoy es que la pantalla esconde el botón** en las órdenes
 realizadas —`pideJustificacion(o.estado)` en `OrdenesClient`, que es

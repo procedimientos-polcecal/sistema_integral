@@ -19,6 +19,11 @@ import {
  * Es el momento en que la OT deja de ser un pedido y pasa a ser algo que se
  * hizo: quién lo hizo, cuánto tardó, qué encontró. Queda de los dos lados —en
  * el sistema como ejecución y en la planilla, que sigue siendo la base—.
+ *
+ * `fecha_cierre` y `cierre_justificacion` se declaran obligatorias para que
+ * `tsc` nombre a quien se olvide de pasarlas, pero hoy el único call site llega
+ * como `any` (`useState<any | null>` en `OrdenesClient`): ese contrato es de
+ * palabra y el compilador no lo comprueba.
  */
 
 const RESULTADOS = [

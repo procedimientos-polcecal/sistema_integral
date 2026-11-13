@@ -1068,7 +1068,7 @@ function OTDetail({
       {o.descripcion && (
         <div>
           <p className="text-xs text-slate-500 font-medium mb-0.5">Descripción</p>
-          <p className="text-sm text-slate-800">{o.descripcion}</p>
+          <p className="text-sm text-slate-800 whitespace-pre-wrap">{o.descripcion}</p>
         </div>
       )}
       {/* Es la única pantalla donde esta justificación se lee: fuera de acá
@@ -1077,7 +1077,7 @@ function OTDetail({
       {o.cierre_justificacion && (
         <div>
           <p className="text-xs text-slate-500 font-medium mb-0.5">Por qué se cerró antes del inicio</p>
-          <p className="text-sm text-slate-800">{o.cierre_justificacion}</p>
+          <p className="text-sm text-slate-800 whitespace-pre-wrap">{o.cierre_justificacion}</p>
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">

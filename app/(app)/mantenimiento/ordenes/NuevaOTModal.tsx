@@ -258,7 +258,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
       return;
     }
     // Y después, con otro verbo: acá los datos están y lo que no cierra es lo
-    // que dicen entre ellos —una fecha de fin o de cierre anterior al inicio—.
+    // que dicen entre ellos —una fecha de fin anterior al inicio—.
     // La misma función que corre la ruta, que hasta hoy era la única que la
     // corría: el formulario mandaba la orden y se enteraba por un 400.
     if (contradicciones.length > 0) {

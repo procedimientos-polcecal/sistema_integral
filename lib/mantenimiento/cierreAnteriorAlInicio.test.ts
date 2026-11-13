@@ -106,6 +106,37 @@ describe("que justificacion se guarda", () => {
   });
 });
 
+// El cuerpo de un POST o un PATCH no tiene tipo garantizado: lo que llegue como
+// numero u objeto no puede reventar ni colarse por una puerta y salir por otra.
+describe("lo que llega sin ser texto", () => {
+  it("una fecha que no es texto no revienta", () => {
+    expect(() => elCierreEsAnteriorAlInicio(5 as never, "2026-11-06")).not.toThrow();
+    expect(elCierreEsAnteriorAlInicio(5 as never, "2026-11-06")).toBe(false);
+    expect(() => elCierreCambio({} as never, "2026-11-06")).not.toThrow();
+  });
+  // Lo que pasa el faltante tiene que ser exactamente lo que se guarda: si
+  // no, queda una OT con el cierre adelantado y la columna vacia.
+  it("lo que pasa el faltante es lo que se guarda, para cualquier tipo", () => {
+    const casos: unknown[] = [{ a: 1 }, 12345678901234567890, ["Se rompio antes"], true];
+    for (const texto of casos) {
+      const falta = loQueFaltaPorElCierreAdelantado({
+        fecha_cierre: "2026-11-04", fecha_ejecucion: "2026-11-06",
+        cierre_justificacion: texto as never,
+      });
+      const guardada = laJustificacionQueSeGuarda("2026-11-04", "2026-11-06", texto);
+      if (falta.length === 0) expect(guardada).not.toBeNull();
+    }
+  });
+  it("un objeto que pasa el faltante no deja la columna vacia", () => {
+    const texto = { a: 1 };
+    expect(loQueFaltaPorElCierreAdelantado({
+      fecha_cierre: "2026-11-04", fecha_ejecucion: "2026-11-06",
+      cierre_justificacion: texto as never,
+    })).toEqual([]);
+    expect(laJustificacionQueSeGuarda("2026-11-04", "2026-11-06", texto)).toBe("[object Object]");
+  });
+});
+
 describe("el texto de la celda de observaciones", () => {
   it("lleva el prefijo fijo, para reconocerla de un vistazo", () => {
     expect(observacionDelCierreAdelantado("Se rompio antes", null))

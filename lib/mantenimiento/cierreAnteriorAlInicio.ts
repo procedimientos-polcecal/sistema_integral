@@ -51,15 +51,21 @@ const PREFIJO_EN_LA_PLANILLA = "Cerrada antes del inicio: ";
  * Sólo el día. Las dos son columnas `date` y llegan como «AAAA-MM-DD», pero si
  * una viniera con hora, comparar textos de distinto largo da un resultado y no
  * un error: «2026-11-06» queda menor que «2026-11-06T00:00:00Z» y el mismo día
- * pasaría por distinto. Son fechas ISO, así que como texto quedan en orden; es
- * como ya desempata dos cierres `cuaderno/generar/route.ts`.
+ * pasaría por distinto. Son fechas ISO, así que como texto quedan en orden;
+ * `cuaderno/generar/route.ts` también compara dos cierres como texto, aunque los
+ * mira enteros y no recortados.
+ *
+ * Coacciona con `String()` porque lo que llega en un cuerpo no tiene tipo
+ * garantizado: un número en `fecha_cierre` reventaba con un 500 en el `.slice()`
+ * donde tenía que haber un 400. Está acá y no en el borde para que las dos rutas
+ * coincidan por construcción.
  */
-const dia = (f: string | null | undefined): string => (f ?? "").slice(0, 10);
+const dia = (f: unknown): string => String(f ?? "").slice(0, 10);
 
 /** Si el cierre cae antes del inicio. Sin alguna de las dos no hay qué comparar. */
 export function elCierreEsAnteriorAlInicio(
-  cierre: string | null | undefined,
-  inicio: string | null | undefined,
+  cierre: unknown,
+  inicio: unknown,
 ): boolean {
   const c = dia(cierre);
   const i = dia(inicio);
@@ -75,8 +81,8 @@ export function elCierreEsAnteriorAlInicio(
  * cerrada antes de su inicio tendría que justificarla de nuevo cada vez.
  */
 export function elCierreCambio(
-  nuevo: string | null | undefined,
-  guardado: string | null | undefined,
+  nuevo: unknown,
+  guardado: unknown,
 ): boolean {
   return dia(nuevo) !== dia(guardado);
 }
@@ -119,7 +125,10 @@ export function laJustificacionQueSeGuarda(
   texto: unknown,
 ): string | null {
   if (!elCierreEsAnteriorAlInicio(cierre, inicio)) return null;
-  const t = typeof texto === "string" ? texto.trim() : "";
+  // Coacciona igual que `justificacionQueExplica`: lo que pasa el faltante tiene
+  // que ser exactamente lo que se guarda, o queda una OT con el cierre adelantado
+  // y la columna vacía.
+  const t = String(texto ?? "").trim();
   return t === "" ? null : t;
 }
 

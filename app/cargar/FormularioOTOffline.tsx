@@ -189,7 +189,7 @@ export default function FormularioOTOffline({
       return;
     }
     // Y después, con otro verbo: acá los datos están y lo que no cierra es lo
-    // que dicen entre ellos —una fecha de fin o de cierre anterior al inicio—.
+    // que dicen entre ellos —una fecha de fin anterior al inicio—.
     // Vale el mismo argumento de arriba y con más fuerza: un 400 por esto es
     // definitivo para la cola, o sea una carga parada por algo que se podía
     // decir en el momento, con la pantalla delante.
@@ -455,7 +455,6 @@ export default function FormularioOTOffline({
             onChange={(e) => f("cierre_justificacion", e.target.value)}
             disabled={deshabilitado}
             className="input min-h-20"
-            required
           />
         </F>
       )}

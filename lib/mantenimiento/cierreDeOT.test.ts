@@ -291,7 +291,7 @@ describe("lo que impide cerrar una orden", () => {
 
   /** Una justificacion no vuelve valido lo que ya era valido: sigue sin opinar. */
   it("con el cierre despues del inicio no opina, haya justificacion o no", () => {
-    expect(loQueImpideCerrar("2026-11-04", "2026-11-06", "lo que sea")).toEqual([]);
+    expect(loQueImpideCerrar("2026-11-04", "2026-11-06", "x")).toEqual([]);
   });
 });
 
