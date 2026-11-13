@@ -4,9 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdminMantenimiento } from "@/lib/mantenimiento/auth";
 import { esFechaIso, hoyEnArgentina, semanaDe } from "@/lib/core/fechas";
 import { traerTodo } from "@/lib/core/paginado";
+import { turnoDeLaPersona } from "@/lib/mantenimiento/referenciaDelTaller";
 import {
-  turnoDelElectricista,
-  turnoDelGrupo,
   type Grupo,
   type Oficio,
   type Referencia,
@@ -246,12 +245,12 @@ export async function GET(request: Request) {
       if (yaAsignados.has(clave)) continue; // vigencias que se superponen: no debería pasar
 
       const pisada = pisadasPorDia.get(clave);
-      const delCiclo =
-        persona.oficio === "electricista"
-          ? turnoDelElectricista(ref, lunes, persona.empleadoId)
-          : persona.grupo
-            ? turnoDelGrupo(ref, lunes, persona.grupo)
-            : null;
+      // Compartida con el parte diario (`lib/mantenimiento/referenciaDelTaller.ts`):
+      // qué turno le toca a alguien no puede contestarse distinto en dos
+      // pantallas. Lo que sigue estando dos veces es **la búsqueda de cuál
+      // referencia rige** —acá en dos consultas, allá como función pura sobre
+      // todas las filas—, y las dos tienen que dar lo mismo.
+      const delCiclo = turnoDeLaPersona(ref, lunes, persona);
 
       const turno = pisada ?? delCiclo;
       if (!turno) {

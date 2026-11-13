@@ -1,8 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
 import { TURNOS, comoSeLeeElTurno } from "@/lib/produccion/turnos";
+import {
+  repartirPorTurno,
+  type PersonaParaElParte,
+  type TurnoDelParte,
+} from "@/lib/mantenimiento/operariosDelParte";
 import {
   diaMesAnio, filasDelParte, paginasDelParte, pieDeHoja,
   type ItemDelPlan,
@@ -49,9 +55,15 @@ import {
 export default function ParteDiarioClient({
   plan,
   items,
+  gente,
+  puedeEditar,
 }: {
   plan: { id: string; fecha: string; titulo: string | null };
   items: ItemDelPlan[];
+  /** El taller vigente el día del plan, con el turno que el ciclo le da. */
+  gente: PersonaParaElParte[];
+  /** Nivel de edición en Mantenimiento: decide si se dibuja el alta, no si puede. */
+  puedeEditar: boolean;
 }) {
   /*
    * Arrancan todas tildadas: quien entra viene de un plan que ya armó, así que
@@ -59,8 +71,79 @@ export default function ParteDiarioClient({
    * revés obligaría a tildar treinta casillas para el caso de siempre.
    */
   const [elegidos, setElegidos] = useState<Set<string>>(() => new Set(items.map((i) => i.id)));
-  const [turno, setTurno] = useState<string>("12_20");
-  const [operario, setOperario] = useState("");
+  const [turno, setTurno] = useState<TurnoDelParte>("12_20");
+
+  // Los que ya están anotados en esta hoja, traídos de la base.
+  const [anotados, setAnotados] = useState<{ empleadoId: string; nombre: string }[]>([]);
+  const [cargandoOperarios, setCargandoOperarios] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [errorOperarios, setErrorOperarios] = useState("");
+
+  /*
+   * Cambiar el turno cambia la hoja, y cada hoja tiene su gente: hay que volver
+   * a pedir. `useCargar` descarta la respuesta que llega tarde — mover el
+   * selector dos veces seguidas dispara dos pedidos y sin eso la pantalla
+   * podría quedar mostrando el equipo del turno anterior sin ningún indicio.
+   */
+  const recargarOperarios = useCargar(async (vigente) => {
+    setCargandoOperarios(true);
+    setErrorOperarios("");
+    try {
+      const r = await fetch(`/api/mantenimiento/planificacion/${plan.id}/operarios?turno=${turno}`);
+      const cuerpo = await r.json().catch(() => null);
+      if (!vigente()) return;
+      if (!r.ok) setErrorOperarios(cuerpo?.error ?? "No se pudo traer quiénes trabajaron.");
+      else setAnotados(cuerpo?.data ?? []);
+    } catch {
+      if (!vigente()) return;
+      setErrorOperarios("No se pudo traer quiénes trabajaron. Revisá la conexión.");
+    }
+    setCargandoOperarios(false);
+  }, [plan.id, turno]);
+
+  const { delTurno, losDemas } = repartirPorTurno(
+    // Quien ya está anotado no se vuelve a ofrecer: elegirlo de nuevo no haría
+    // nada —el guardado es idempotente— pero verlo en la lista hace dudar.
+    gente.filter((p) => !anotados.some((a) => a.empleadoId === p.empleadoId)),
+    turno
+  );
+
+  async function sumar(empleadoId: string) {
+    setGuardando(true);
+    setErrorOperarios("");
+    try {
+      const r = await fetch(`/api/mantenimiento/planificacion/${plan.id}/operarios`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ turno, empleadoId }),
+      });
+      if (!r.ok) {
+        const cuerpo = await r.json().catch(() => null);
+        setErrorOperarios(cuerpo?.error ?? "No se pudo anotar a esa persona.");
+      } else recargarOperarios();
+    } catch {
+      setErrorOperarios("No se pudo anotar a esa persona. Revisá la conexión.");
+    }
+    setGuardando(false);
+  }
+
+  async function sacar(empleadoId: string) {
+    setGuardando(true);
+    setErrorOperarios("");
+    try {
+      const r = await fetch(
+        `/api/mantenimiento/planificacion/${plan.id}/operarios?turno=${turno}&empleadoId=${encodeURIComponent(empleadoId)}`,
+        { method: "DELETE" }
+      );
+      if (!r.ok) {
+        const cuerpo = await r.json().catch(() => null);
+        setErrorOperarios(cuerpo?.error ?? "No se pudo sacar a esa persona.");
+      } else recargarOperarios();
+    } catch {
+      setErrorOperarios("No se pudo sacar a esa persona. Revisá la conexión.");
+    }
+    setGuardando(false);
+  }
 
   const { dia, mes, anio } = diaMesAnio(plan.fecha);
   const hojas = paginasDelParte(filasDelParte(items, elegidos));
@@ -147,20 +230,95 @@ export default function ParteDiarioClient({
           </button>
         </div>
 
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="space-y-1">
-            <label className="block text-xs font-medium text-slate-600">Turno</label>
-            <Select value={turno} onChange={(e) => setTurno(e.target.value)} className="input">
-              {TURNOS.map((t) => (
-                <option key={t} value={t}>{comoSeLeeElTurno(t)}</option>
+        <div className="mb-4 space-y-1">
+          <label className="block text-xs font-medium text-slate-600">Turno</label>
+          <Select value={turno} onChange={(e) => setTurno(e.target.value as TurnoDelParte)} className="input">
+            {TURNOS.map((t) => (
+              <option key={t} value={t}>{comoSeLeeElTurno(t)}</option>
+            ))}
+            {/*
+              «Todo el día» no está en `TURNOS` de Producción a propósito: ahí
+              son los dos cortes del parte de fábrica, y meterlo adentro
+              volvería a mezclar dos vocabularios. Acá es una opción más de esta
+              hoja, y del otro lado se guarda como su propio turno.
+            */}
+            <option value="todo_el_dia">Todo el día</option>
+          </Select>
+        </div>
+
+        {/*
+          Los operarios de ESTA hoja. Se guardan de a uno contra la base y no
+          hay botón de guardar: cada clic es un pedido, así que no hay forma de
+          armar la lista y perderla al cerrar, que es justo lo que pasaba con el
+          campo de texto que esto reemplaza.
+        */}
+        <div className="mb-4 space-y-2 border-t border-slate-100 pt-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-xs font-medium text-slate-600">
+              Quiénes trabajaron {turno === "todo_el_dia" ? "ese día" : `de ${comoSeLeeElTurno(turno as (typeof TURNOS)[number])}`}
+            </p>
+            {cargandoOperarios && <span className="text-xs text-slate-400">Cargando…</span>}
+          </div>
+
+          {errorOperarios && (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorOperarios}</p>
+          )}
+
+          {anotados.length > 0 ? (
+            <ul className="flex flex-wrap gap-2">
+              {anotados.map((p) => (
+                <li key={p.empleadoId}
+                  className="flex items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-1 text-sm text-slate-800">
+                  {p.nombre}
+                  {puedeEditar && (
+                    <button type="button" onClick={() => void sacar(p.empleadoId)} disabled={guardando}
+                      aria-label={`Sacar a ${p.nombre}`}
+                      className="text-slate-400 hover:text-red-700">×</button>
+                  )}
+                </li>
               ))}
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="block text-xs font-medium text-slate-600">Op.</label>
-            <input value={operario} onChange={(e) => setOperario(e.target.value)}
-              className="input" placeholder="Se puede dejar en blanco" />
-          </div>
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-500">Todavía no hay nadie anotado.</p>
+          )}
+
+          {puedeEditar && (
+            <div>
+              <label htmlFor="sumar-operario" className="mb-1 block text-xs text-slate-500">
+                Sumar a alguien del taller
+              </label>
+              <Select id="sumar-operario" value="" onChange={(e) => e.target.value && void sumar(e.target.value)}
+                className="input" disabled={guardando}>
+                <option value="">Elegir…</option>
+                {/*
+                  Dos grupos: primero los del turno elegido y el resto después,
+                  separados. El turno SUGIERE y no filtra — se confirmó que el
+                  electricista de 8 a 16, que no tiene hoja propia, igual puede
+                  figurar en cualquiera de las dos, así que esconderlo sería el
+                  error caro: nadie lo buscaría en una lista que no lo tiene.
+                */}
+                {delTurno.length > 0 && (
+                  <optgroup label={`Del turno de ${comoSeLeeElTurno(turno as (typeof TURNOS)[number])}`}>
+                    {delTurno.map((p) => (
+                      <option key={p.empleadoId} value={p.empleadoId}>{p.nombre}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {losDemas.length > 0 && (
+                  <optgroup label={delTurno.length > 0 ? "Los demás del taller" : "El taller"}>
+                    {losDemas.map((p) => (
+                      <option key={p.empleadoId} value={p.empleadoId}>{p.nombre}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </Select>
+              {gente.length === 0 && (
+                <p className="mt-1 text-xs text-slate-500">
+                  El padrón del taller está vacío: se carga en Programación, en «El taller».
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between border-t border-slate-100 pt-3">
@@ -226,7 +384,7 @@ export default function ParteDiarioClient({
 
           <div style={{ display: "flex", gap: 24, margin: "8px 0 6px", fontSize: 11 }}>
             <span><strong>Turno</strong> {comoSeLeeElTurno(turno as (typeof TURNOS)[number])}</span>
-            <span style={{ flex: 1 }}><strong>Op.:</strong> {operario}</span>
+            <span style={{ flex: 1 }}><strong>Op.:</strong> {anotados.map((p) => p.nombre).join(" · ")}</span>
           </div>
 
           <table className="pd-tabla">
