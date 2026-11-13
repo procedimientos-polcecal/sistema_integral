@@ -70,6 +70,85 @@ no por purismo: `cerrada_el` ya alimentó el informe del mes. La pantalla tampoc
 la ofrece — el desplegable se dibuja con `sePuedePasarDe`, la misma función que
 la ruta usa para rechazar.
 
+## Cargar el padrón desde un Excel
+
+`/ventas/crm/clientes` → **Importar Excel**. Existe porque el padrón no empieza
+vacío: cuando esto se estrene va a haber una lista en la computadora de alguien,
+y cargar trescientos clientes de a uno no se hace.
+
+### Las columnas
+
+Se buscan **por el nombre del encabezado y nunca por la letra**, así que el
+orden no importa, las columnas de más se ignoran y las que faltan se nombran.
+El nombre se compara sin acentos, sin mayúsculas y sin espacios de más, porque
+quien arma la planilla escribe «Razón Social», «RAZON SOCIAL» o «razon social».
+**La primera fila es el encabezado** y los datos arrancan en la segunda.
+
+| Columna | ¿Obligatoria? | Qué acepta | También se acepta como |
+|---|---|---|---|
+| Razón social | **Sí** | El nombre de la empresa | Cliente, Empresa, Nombre |
+| Nombre de fantasía | no | Cómo se la conoce | Fantasía |
+| CUIT | no | Con guiones o sin ellos | CUIT/CUIL, C.U.I.T. |
+| Estado | no | Prospecto, Activo o Inactivo. Vacío es Prospecto | Situación |
+| Localidad | no | Texto libre | Ciudad |
+| Provincia | no | Texto libre | — |
+| Rubro | no | A qué se dedica | Actividad |
+| Teléfono | no | Entra como está escrito | Tel, Celular |
+| Correo | no | Un correo | Email, E-mail, Mail |
+| Sitio web | no | Texto libre | Web, Página web, Sitio |
+| Origen | no | Referido, feria, llamó… | De dónde salió, Procedencia |
+| Vendedor | no | Nombre y apellido de un usuario del SdG | Quién lo atiende, Responsable |
+| Notas | no | Texto libre | Observaciones, Comentarios |
+
+**Sólo la razón social es obligatoria**, igual que en el alta a mano y por el
+mismo motivo: un prospecto nace de un llamado donde lo único claro es el nombre
+de la empresa. Pedir más termina en que la lista no se arma.
+
+La plantilla se baja desde el mismo modal y **sus encabezados salen de
+`COLUMNAS`**, el mismo arreglo contra el que el importador reconoce las
+columnas: la plantilla no puede quedar diciendo una cosa y el lector aceptando
+otra. Trae una fila de ejemplo obviamente falsa, para poder borrarla sin dudar.
+
+### Cuatro cosas que no se deducen del código
+
+**Nada se escribe hasta que alguien confirma.** La ruta que previsualiza
+(`/api/ventas/clientes/importar`) **no inserta**, y la que escribe es otra. Que
+sean dos rutas y no un `?dry_run=0` es deliberado: un parámetro que se manda mal
+carga trescientos clientes, y no hay forma de equivocarse llamando a una ruta
+que no inserta.
+
+**La importación no pisa nada.** Un cliente que ya está se informa y se saltea;
+nunca se actualiza. El Excel es una carga puntual y no un espejo —la misma
+distinción que CLAUDE.md hace entre RRHH y las planillas de Sheets—, así que no
+tiene autoridad para corregir lo que alguien ya cargó en el sistema. Eso además
+la vuelve **idempotente**: volver a subir el mismo archivo no crea nada, que es
+lo que hace seguro reintentar después de un corte.
+
+**«Ya está» se decide por CUIT cuando lo hay, y por razón social cuando no.** El
+segundo caso tiene un límite que conviene conocer: dos empresas distintas con el
+mismo nombre y sin CUIT se leen como la misma, y la segunda queda sin entrar.
+Es el lado seguro del error — una fila que no entró se ve en la pantalla y se
+carga a mano; dos fichas del mismo cliente no se ven nunca, y a partir de ahí
+las actividades de una no aparecen en la otra.
+
+**Nada se descarta en silencio.** Lo que no se puede usar tal cual sale como
+aviso diciendo qué decía la celda: un CUIT que no cierra entra igual, un correo
+que no es correo deja el campo vacío y lo dice, un estado que no se reconoce cae
+en Prospecto y lo dice. El **vendedor es la excepción que confirma la regla del
+repo**: se cruza por nombre exacto o queda sin asignar, porque enlazar al que se
+le parece no se nota nunca y el que tenía que atender al cliente no lo ve.
+
+### Permisos y topes
+
+Importar es de `edicion`, igual que cargar un cliente a mano: nunca sobrescribe,
+así que no hace falta más. **Si el archivo trae columna Vendedor con nombres que
+se reconocen, pide `admin`**, porque asignar vendedor ya era de `admin` en la
+ficha — el mensaje dice que se puede sacar esa columna e importar igual.
+
+El tope es de 2000 filas por confirmación y 4 MB de archivo. Ninguno es técnico:
+un archivo más grande que eso es casi siempre el archivo equivocado, y es mejor
+que falle diciendo el número a que entre.
+
 ## Permisos
 
 | Nivel | Puede |

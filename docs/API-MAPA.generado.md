@@ -4,7 +4,7 @@
 > Lo escrito a mano —para qué sirve cada módulo, cómo está armada una ruta y
 > las trampas— está en [API.md](API.md). Acá sólo hay lo que sale del código.
 
-Al 2026-11-13: **300 rutas** y **469 handlers** en 25 carpetas.
+Al 2026-11-13: **304 rutas** y **473 handlers** en 25 carpetas.
 
 ## Cómo leer la columna «guarda»
 
@@ -42,8 +42,8 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | secreto del cron | 18 |
 | secreto propio | 3 |
 | token contra la base | 1 |
-| permiso de módulo | 151 |
-| sesión | 71 |
+| permiso de módulo | 154 |
+| sesión | 72 |
 | el proxy | 56 |
 | **ABIERTA** | 0 |
 
@@ -83,12 +83,13 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 |---|---|---|---|---|
 | `/api/buscar` | GET | sesión | `choferes`, `empleados`, `equipos`, `vehiculos` | — |
 
-## calidad (12)
+## calidad (13)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
 | `/api/calidad/carbonilleros` | GET, POST | sesión | `calidad_carbonilleros`, `calidad_odoo_sin_reconocer` | — |
 | `/api/calidad/conteos` | GET, POST | permiso de módulo · `puedeEditarCalidad` | `calidad_conteos`, `calidad_movimientos` | — |
+| `/api/calidad/ensayos/curva/export` | POST | permiso de módulo · `nivelCalidadDe` | `calidad_ensayos_productos` | — |
 | `/api/calidad/ensayos/limites` | POST, DELETE | sesión | `calidad_ensayos_limites` | — |
 | `/api/calidad/ensayos/muestras/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarCalidad` | `calidad_ensayos_muestras`, `calidad_ensayos_retenidos` | — |
 | `/api/calidad/ensayos/muestras` | POST | permiso de módulo · `puedeEditarCalidad` | `calidad_ensayos_muestras`, `calidad_ensayos_retenidos` | — |
@@ -459,13 +460,16 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/trituracion/partes` | GET, POST, DELETE | permiso de módulo · `puedeEditarTrituracion` | `trituracion_partes`, `trituracion_plantas` | — |
 | `/api/trituracion/plantas` | GET, PATCH | sesión | `trituracion_plantas` | — |
 
-## ventas (8)
+## ventas (11)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
 | `/api/ventas/actividades/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarVentas` | `ventas_actividades` | zod |
 | `/api/ventas/actividades` | GET, POST | permiso de módulo · `puedeEditarVentas` | `ventas_actividades` | paginado · zod |
 | `/api/ventas/clientes/[id]` | GET, PATCH, DELETE | permiso de módulo · `puedeEditarVentas` | `usuarios`, `ventas_actividades`, `ventas_clientes`, `ventas_contactos`, `ventas_oportunidades` | audita · zod |
+| `/api/ventas/clientes/importar/confirmar` | POST | permiso de módulo · `puedeEditarVentas` | `ventas_clientes` | zod · 120s |
+| `/api/ventas/clientes/importar/plantilla` | GET | sesión | — | — |
+| `/api/ventas/clientes/importar` | POST | permiso de módulo · `puedeEditarVentas` | `usuarios`, `ventas_clientes` | paginado · 120s |
 | `/api/ventas/clientes` | GET, POST | permiso de módulo · `puedeEditarVentas` | `ventas_actividades`, `ventas_clientes` | paginado · zod |
 | `/api/ventas/contactos/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarVentas` | `ventas_contactos` | zod |
 | `/api/ventas/contactos` | POST | permiso de módulo · `puedeEditarVentas` | `ventas_contactos` | zod |
@@ -497,6 +501,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/buscar` | `lib/supabase/server` |
 | `/api/calidad/carbonilleros` | `lib/calidad/auth`, `lib/calidad/consultas`, `lib/calidad/types`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
 | `/api/calidad/conteos` | `lib/calidad/auth`, `lib/calidad/consultas`, `lib/calidad/conteos`, `lib/calidad/espejo`, `lib/calidad/types`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
+| `/api/calidad/ensayos/curva/export` | `lib/calidad/auth`, `lib/calidad/ensayos/consultas`, `lib/calidad/ensayos/hojaDeLaCurva`, `lib/calidad/ensayos/imagenesDeLaHoja`, `lib/core/sesion`, `lib/core/xlsxExport`, `lib/supabase/server` |
 | `/api/calidad/ensayos/limites` | `lib/calidad/auth`, `lib/calidad/ensayos/cuerpoDeLaMuestra`, `lib/calidad/ensayos/types`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
 | `/api/calidad/ensayos/muestras/[id]` | `lib/calidad/auth`, `lib/calidad/ensayos/cuerpoDeLaMuestra`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
 | `/api/calidad/ensayos/muestras` | `lib/calidad/auth`, `lib/calidad/ensayos/cuerpoDeLaMuestra`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
@@ -774,6 +779,9 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/ventas/actividades/[id]` | `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos` |
 | `/api/ventas/actividades` | `lib/core/paginado`, `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos` |
 | `/api/ventas/clientes/[id]` | `lib/core/auditoria`, `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos` |
+| `/api/ventas/clientes/importar/confirmar` | `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth` |
+| `/api/ventas/clientes/importar/plantilla` | `lib/core/xlsxExport`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/importarClientes` |
+| `/api/ventas/clientes/importar` | `lib/core/cuit`, `lib/core/excel`, `lib/core/paginado`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/importarClientes` |
 | `/api/ventas/clientes` | `lib/core/paginado`, `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos` |
 | `/api/ventas/contactos/[id]` | `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos` |
 | `/api/ventas/contactos` | `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos` |

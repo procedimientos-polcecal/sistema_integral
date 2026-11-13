@@ -11,6 +11,7 @@ import {
 import { ESTADOS_DE_CLIENTE, comoFecha, estadoDeCliente } from "@/lib/ventas/crm/formato";
 import FichaDeCliente, { type Cliente } from "./FichaDeCliente";
 import NuevoClienteModal from "./NuevoClienteModal";
+import ImportarClientesModal from "./ImportarClientesModal";
 
 /**
  * La lista de clientes, con su semáforo, y la puerta a cada ficha.
@@ -77,6 +78,7 @@ export default function ClientesClient({
   );
   const [abierto, setAbierto] = useState<string | null>(clienteInicial);
   const [creando, setCreando] = useState(false);
+  const [importando, setImportando] = useState(false);
 
   const ultima = useMemo(() => ultimaActividadPorCliente(actividades), [actividades]);
 
@@ -136,9 +138,17 @@ export default function ClientesClient({
           </p>
         </div>
         {puedeEditar && (
-          <button type="button" onClick={() => setCreando(true)} className="btn-primary text-sm">
-            Nuevo cliente
-          </button>
+          <div className="flex gap-2">
+            {/* Importar va antes que «Nuevo cliente» y en secundario: es lo que
+                se hace una vez, al empezar, y el alta de a uno es lo de todos
+                los días. El primario tiene que ser lo frecuente. */}
+            <button type="button" onClick={() => setImportando(true)} className="btn-secondary text-sm">
+              Importar Excel
+            </button>
+            <button type="button" onClick={() => setCreando(true)} className="btn-primary text-sm">
+              Nuevo cliente
+            </button>
+          </div>
         )}
       </div>
 
@@ -260,6 +270,8 @@ export default function ClientesClient({
           onBorrado={sacar}
         />
       )}
+
+      {importando && <ImportarClientesModal onCerrar={() => setImportando(false)} />}
 
       {creando && (
         <NuevoClienteModal
