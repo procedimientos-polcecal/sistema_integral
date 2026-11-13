@@ -16,6 +16,19 @@
  * Los números 1 a 44 son los de la planilla (`numero` conserva el N° de origen);
  * las condiciones cargadas desde el sistema empiezan en el 46.
  *
+ * **HAY DOS FORMAS DE QUE LA ADVERTENCIA SE VAYA, y la segunda no se adivina:**
+ *
+ *   1. **Corregir la fecha** desde la ficha: el valor guardado deja de ser el
+ *      dudoso y la advertencia se apaga sola.
+ *   2. **Confirmar que la fecha estaba bien**: no cambia ningún dato, así que
+ *      nada la apaga. Se hace **borrando la entrada de `DUDOSAS`**. Si no se
+ *      borra, la ficha sigue diciendo «sin confirmar y no se corrigió» para
+ *      siempre, y eso pasa a ser falso.
+ *
+ * **La tabla vive en dos lugares** —`CLAUDE.md` y acá— y nada las ata: se
+ * mueven juntas. Sacar una fila de la una sin la otra deja a una de las dos
+ * mintiendo.
+ *
  * Son conjeturas sobre el dato de otro y **ninguna está confirmada con quien
  * armó el `21-10-26.xlsm`**: los textos lo dicen. La del N° 6 es la más floja
  * de las cinco y el texto lo dice aparte.
@@ -36,7 +49,7 @@ const DUDOSAS: { numero: number; detectada_el: string; texto: string }[] = [
     numero: 7,
     detectada_el: "2026-01-10",
     texto:
-      "Fecha en duda: viene del Excel y dice 10/01/2026, la única de enero entre 43 de octubre. " +
+      "Fecha en duda: viene del Excel y dice 10/01/2026, la única de enero. " +
       "Parece 01/10 leído con el mes y el día al revés. " +
       SIN_CONFIRMAR,
   },

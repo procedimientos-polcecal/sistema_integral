@@ -47,7 +47,7 @@ const INFO_DE_LA_EVALUACION =
   "Con un solo puntaje sin elegir no hay nivel. Evalúa quien tiene nivel admin en Seguridad e Higiene, y los administradores del sistema lo tienen siempre.";
 
 const INFO_DE_LA_FECHA_MAXIMA =
-  "La condición vence el día después de esta fecha, no ese mismo día. Sin fecha máxima no puede vencer nunca, y por eso cuenta como «sin asignar».";
+  "La condición vence el día después de esta fecha, no ese mismo día. Sin fecha máxima no puede vencer nunca, y por eso cuenta como «sin asignar». Una condición con fecha de ejecución tampoco figura nunca como vencida.";
 
 /**
  * El texto de una opción cabe en el desplegable recortado; entero va debajo, en

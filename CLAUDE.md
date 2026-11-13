@@ -482,6 +482,15 @@ Nada de esto se corrigió: son conjeturas sobre el dato de otro. **Acción:
 confirmarlo con quien armó el `21-10-26.xlsm`** y corregir desde la ficha. Los
 37 sin sector son la otra decisión de datos que queda pendiente del usuario.
 
+**Desde el 13/11/2026 la ficha de cada una de las cinco lo muestra** (un `(i)`
+junto a «Detectada el», de `lib/seguridadHigiene/fechaDudosa.ts`). Qué hacer
+según lo que conteste quien armó la planilla: **si la fecha estaba mal**, se
+corrige desde la ficha y el aviso se apaga solo; **si la fecha estaba bien**,
+no cambia ningún dato y nada lo apaga: hay que **borrar esa entrada de
+`DUDOSAS`** en `fechaDudosa.ts` (y su fila de la tabla de arriba), o la ficha
+sigue diciendo «sin confirmar» para siempre. La tabla vive en los dos lugares y
+se mueve junta.
+
 Cinco reglas que costaron caro, y que valen para las cuatro:
 
 - **Toda ruta que toque un campo que se exporta tiene que exportar**, y si no
