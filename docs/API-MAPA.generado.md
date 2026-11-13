@@ -42,8 +42,8 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | secreto del cron | 18 |
 | secreto propio | 3 |
 | token contra la base | 1 |
-| permiso de módulo | 154 |
-| sesión | 72 |
+| permiso de módulo | 198 |
+| sesión | 28 |
 | el proxy | 56 |
 | **ABIERTA** | 0 |
 
@@ -87,63 +87,63 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
-| `/api/calidad/carbonilleros` | GET, POST | sesión | `calidad_carbonilleros`, `calidad_odoo_sin_reconocer` | — |
-| `/api/calidad/conteos` | GET, POST | permiso de módulo · `puedeEditarCalidad` | `calidad_conteos`, `calidad_movimientos` | — |
+| `/api/calidad/carbonilleros` | GET, POST | permiso de módulo · `tieneAccesoCalidad` | `calidad_carbonilleros`, `calidad_odoo_sin_reconocer` | — |
+| `/api/calidad/conteos` | GET, POST | permiso de módulo · `tieneAccesoCalidad` | `calidad_conteos`, `calidad_movimientos` | — |
 | `/api/calidad/ensayos/curva/export` | POST | permiso de módulo · `nivelCalidadDe` | `calidad_ensayos_productos` | — |
-| `/api/calidad/ensayos/limites` | POST, DELETE | sesión | `calidad_ensayos_limites` | — |
+| `/api/calidad/ensayos/limites` | POST, DELETE | permiso de módulo · `esAdminCalidad` | `calidad_ensayos_limites` | — |
 | `/api/calidad/ensayos/muestras/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarCalidad` | `calidad_ensayos_muestras`, `calidad_ensayos_retenidos` | — |
 | `/api/calidad/ensayos/muestras` | POST | permiso de módulo · `puedeEditarCalidad` | `calidad_ensayos_muestras`, `calidad_ensayos_retenidos` | — |
-| `/api/calidad/ensayos/productos` | POST, PATCH | sesión | `calidad_ensayos_productos` | — |
+| `/api/calidad/ensayos/productos` | POST, PATCH | permiso de módulo · `esAdminCalidad` | `calidad_ensayos_productos` | — |
 | `/api/calidad/envases/movimientos` | POST | permiso de módulo · `puedeEditarCalidad` | `calidad_envases_articulos`, `calidad_envases_movimientos` | — |
-| `/api/calidad/envases/sync` | POST | sesión | — | — |
+| `/api/calidad/envases/sync` | POST | permiso de módulo · `tieneAccesoCalidad` | — | — |
 | `/api/calidad/movimientos/[id]` | PATCH | permiso de módulo · `puedeEditarCalidad` | `calidad_movimientos` | — |
 | `/api/calidad/movimientos` | POST | permiso de módulo · `puedeEditarCalidad` | `calidad_movimientos` | — |
-| `/api/calidad/productos` | GET, POST | sesión | `calidad_odoo_sin_reconocer`, `calidad_productos_odoo` | — |
+| `/api/calidad/productos` | GET, POST | permiso de módulo · `tieneAccesoCalidad` | `calidad_odoo_sin_reconocer`, `calidad_productos_odoo` | — |
 | `/api/calidad/sincronizar` | POST | permiso de módulo · `puedeEditarCalidad` | — | admin · 300s |
 
 ## cantera (18)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
-| `/api/cantera/acarreo/sync` | POST | sesión | — | — |
-| `/api/cantera/acarreos` | GET, PATCH | permiso de módulo · `puedeEditarCantera` | `cantera_acarreos` | — |
+| `/api/cantera/acarreo/sync` | POST | permiso de módulo · `tieneAccesoCantera` | — | — |
+| `/api/cantera/acarreos` | GET, PATCH | permiso de módulo · `tieneAccesoCantera` | `cantera_acarreos` | — |
 | `/api/cantera/bochones/[codigo]/conciliacion` | GET, PATCH | permiso de módulo · `puedeFacturarCantera` | `cantera_bochones` | — |
-| `/api/cantera/bochones/[codigo]` | GET, PATCH, DELETE | permiso de módulo · `puedeEditarCantera` | `cantera_bochones` | — |
+| `/api/cantera/bochones/[codigo]` | GET, PATCH, DELETE | permiso de módulo · `tieneAccesoCantera` | `cantera_bochones` | — |
 | `/api/cantera/bochones` | POST | permiso de módulo · `puedeEditarCantera` | `cantera_bochones` | — |
-| `/api/cantera/contratistas` | POST, DELETE | sesión | `cantera_contratistas` | — |
+| `/api/cantera/contratistas` | POST, DELETE | permiso de módulo · `esAdminCantera` | `cantera_contratistas` | — |
 | `/api/cantera/cubicacion/material` | PATCH | permiso de módulo · `puedeEditarCantera` | `cantera_cubicaciones_material` | — |
-| `/api/cantera/cubicacion` | GET, PATCH | permiso de módulo · `puedeEditarCantera` | `cantera_cubicaciones` | — |
-| `/api/cantera/destape` | GET, POST, PATCH, DELETE | permiso de módulo · `puedeEditarCantera` | `cantera_acarreos`, `cantera_destape`, `cantera_fleteros` | — |
-| `/api/cantera/finanzas` | POST, DELETE | sesión | `cantera_finanzas` | — |
-| `/api/cantera/fleteros` | GET, POST, PATCH | sesión | `cantera_fleteros` | — |
-| `/api/cantera/informes/export` | GET | sesión | — | — |
-| `/api/cantera/insumos` | GET, POST, PATCH | sesión | `cantera_insumos` | — |
-| `/api/cantera/tarifas-acarreo` | GET, POST | sesión | `cantera_tarifas_acarreo` | — |
+| `/api/cantera/cubicacion` | GET, PATCH | permiso de módulo · `tieneAccesoCantera` | `cantera_cubicaciones` | — |
+| `/api/cantera/destape` | GET, POST, PATCH, DELETE | permiso de módulo · `tieneAccesoCantera` | `cantera_acarreos`, `cantera_destape`, `cantera_fleteros` | — |
+| `/api/cantera/finanzas` | POST, DELETE | permiso de módulo · `esAdminCantera` | `cantera_finanzas` | — |
+| `/api/cantera/fleteros` | GET, POST, PATCH | permiso de módulo · `tieneAccesoCantera` | `cantera_fleteros` | — |
+| `/api/cantera/informes/export` | GET | permiso de módulo · `tieneAccesoCantera` | — | — |
+| `/api/cantera/insumos` | GET, POST, PATCH | permiso de módulo · `tieneAccesoCantera` | `cantera_insumos` | — |
+| `/api/cantera/tarifas-acarreo` | GET, POST | permiso de módulo · `tieneAccesoCantera` | `cantera_tarifas_acarreo` | — |
 | `/api/cantera/voladuras/[codigo]/conciliacion` | GET, PATCH | permiso de módulo · `puedeFacturarCantera` | `cantera_voladuras` | — |
-| `/api/cantera/voladuras/[codigo]` | GET, PATCH, DELETE | permiso de módulo · `puedeEditarCantera` | `cantera_consumos`, `cantera_voladuras` | — |
+| `/api/cantera/voladuras/[codigo]` | GET, PATCH, DELETE | permiso de módulo · `tieneAccesoCantera` | `cantera_consumos`, `cantera_voladuras` | — |
 | `/api/cantera/voladuras` | POST | permiso de módulo · `puedeEditarCantera` | `cantera_voladuras` | — |
-| `/api/cantera/yacimientos` | GET, POST, PATCH | sesión | `cantera_yacimientos` | — |
+| `/api/cantera/yacimientos` | GET, POST, PATCH | permiso de módulo · `tieneAccesoCantera` | `cantera_yacimientos` | — |
 
 ## compras (26)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
-| `/api/compras/ajustes` | PATCH | sesión | `compras_ajustes` | zod |
-| `/api/compras/aprobadores-os` | POST, DELETE | permiso de módulo · `puedeQuitarDeLaListaDeOS` | `os_aprobadores` | admin |
-| `/api/compras/aprobadores` | POST, PUT, DELETE | permiso de módulo · `puedeQuitarDeLaLista` | `compras_aprobadores` | admin |
+| `/api/compras/ajustes` | PATCH | permiso de módulo · `esAdminCompras` | `compras_ajustes` | zod |
+| `/api/compras/aprobadores-os` | POST, DELETE | permiso de módulo · `esAdminCompras` | `os_aprobadores` | admin |
+| `/api/compras/aprobadores` | POST, PUT, DELETE | permiso de módulo · `esAdminCompras` | `compras_aprobadores` | admin |
 | `/api/compras/comparativas` | GET | permiso de módulo · `puedeEditarCompras` | — | — |
 | `/api/compras/comparativas/vincular` | POST | permiso de módulo · `puedeEditarCompras` | `compras_cotizaciones`, `compras_requerimientos`, `proveedores` | admin · 300s |
 | `/api/compras/cotizaciones/[id]/elegir` | POST | permiso de módulo · `puedeAprobarLaCompra` | `compras_cotizaciones`, `compras_historial`, `compras_requerimientos`, `usuarios` | admin |
 | `/api/compras/cotizaciones/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarCompras` | `compras_cotizaciones` | admin |
 | `/api/compras/mi-area` | GET | sesión | `usuario_areas_compras` | — |
-| `/api/compras/odoo/pendientes` | GET, POST | sesión | `compras_odoo_ordenes`, `compras_requerimientos` | admin · 60s |
+| `/api/compras/odoo/pendientes` | GET, POST | permiso de módulo · `tieneAccesoCompras` | `compras_odoo_ordenes`, `compras_requerimientos` | admin · 60s |
 | `/api/compras/proveedores/[id]` | PATCH | permiso de módulo · `puedeEditarCompras` | `proveedores` | admin |
-| `/api/compras/proveedores/importar` | POST | sesión | `proveedores` | admin · 300s |
+| `/api/compras/proveedores/importar` | POST | permiso de módulo · `esAdminCompras` | `proveedores` | admin · 300s |
 | `/api/compras/proveedores` | POST | permiso de módulo · `puedeEditarCompras` | `proveedores` | admin |
 | `/api/compras/requerimientos/[id]/comparativa` | POST | permiso de módulo · `puedeEditarCompras` | `compras_cotizaciones`, `compras_requerimientos`, `proveedores` | admin |
 | `/api/compras/requerimientos/[id]/cotizaciones` | POST | permiso de módulo · `puedeEditarCompras` | `compras_cotizaciones`, `compras_requerimientos` | admin · planilla |
-| `/api/compras/requerimientos/[id]/odoo/estado` | GET, POST | permiso de módulo · `puedeEditarCompras` | `compras_odoo_ordenes`, `compras_requerimientos` | admin · 60s |
-| `/api/compras/requerimientos/[id]/odoo/pdf` | GET | sesión | `compras_odoo_ordenes` | admin · 60s |
+| `/api/compras/requerimientos/[id]/odoo/estado` | GET, POST | permiso de módulo · `tieneAccesoCompras` | `compras_odoo_ordenes`, `compras_requerimientos` | admin · 60s |
+| `/api/compras/requerimientos/[id]/odoo/pdf` | GET | permiso de módulo · `tieneAccesoCompras` | `compras_odoo_ordenes` | admin · 60s |
 | `/api/compras/requerimientos/[id]/odoo` | GET, POST | permiso de módulo · `puedeEditarCompras` | — | admin · 60s |
 | `/api/compras/requerimientos/[id]` | PATCH, DELETE | permiso de módulo · `puedeAprobarLaCompra` | `compras_cotizaciones`, `compras_historial`, `compras_requerimientos`, `usuarios` | admin · audita |
 | `/api/compras/requerimientos` | POST, GET | permiso de módulo · `puedeEditarCompras` | `compras_historial`, `compras_requerimientos`, `equipos`, `usuarios` | admin · 120s |
@@ -182,14 +182,14 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
-| `/api/despacho/importar` | POST | sesión | `despacho_ordenes_carga` | admin |
+| `/api/despacho/importar` | POST | permiso de módulo · `esAdminDespacho` | `despacho_ordenes_carga` | admin |
 | `/api/despacho/ordenes/[id]` | PATCH | permiso de módulo · `puedeEditarDespacho` | `despacho_ordenes_carga` | — |
 | `/api/despacho/ordenes` | POST | permiso de módulo · `puedeEditarDespacho` | `despacho_ordenes_carga` | — |
-| `/api/despacho/productos` | GET, POST, PATCH | sesión | `productos` | — |
+| `/api/despacho/productos` | GET, POST, PATCH | permiso de módulo · `tieneAccesoDespacho` | `productos` | — |
 | `/api/despacho/recepciones/[id]` | PATCH | permiso de módulo · `puedeEditarDespacho` | `despacho_recepcion_proveedores`, `despacho_recepciones`, `proveedores`, `usuarios` | admin · audita |
-| `/api/despacho/recepciones/proveedores` | PUT | sesión | `despacho_recepcion_proveedores` | — |
-| `/api/despacho/recepciones` | GET, POST | permiso de módulo · `puedeEditarDespacho` | `despacho_recepcion_proveedores`, `despacho_recepciones` | — |
-| `/api/despacho/remitos` | GET | sesión | — | — |
+| `/api/despacho/recepciones/proveedores` | PUT | permiso de módulo · `esAdminDespacho` | `despacho_recepcion_proveedores` | — |
+| `/api/despacho/recepciones` | GET, POST | permiso de módulo · `tieneAccesoDespacho` | `despacho_recepcion_proveedores`, `despacho_recepciones` | — |
+| `/api/despacho/remitos` | GET | permiso de módulo · `tieneAccesoDespacho` | — | — |
 
 ## disponibilidad (2)
 
@@ -202,13 +202,13 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
-| `/api/facturacion/correo` | GET, PATCH | permiso de módulo · `puedeEditarFacturacion` | `facturacion_correo` | admin |
+| `/api/facturacion/correo` | GET, PATCH | permiso de módulo · `tieneAccesoFacturacion` | `facturacion_correo` | admin |
 | `/api/facturacion/correo/webhook` | POST | secreto propio · `FACTURACION_CORREO_SECRET` | `empresas`, `facturacion_correo` | admin · 120s |
-| `/api/facturacion/facturas/[id]/lineas` | GET, PATCH | permiso de módulo · `puedeEditarFacturacion` | `compras_producto_odoo`, `compras_requerimientos`, `compras_ubicaciones`, `equipos`, `facturas_proveedor`, `facturas_proveedor_lineas` | admin |
-| `/api/facturacion/facturas/[id]/odoo/borrador` | GET, POST, PUT | permiso de módulo · `puedeConfirmarEnOdoo` | `facturas_proveedor`, `usuarios` | admin · audita |
+| `/api/facturacion/facturas/[id]/lineas` | GET, PATCH | permiso de módulo · `tieneAccesoFacturacion` | `compras_producto_odoo`, `compras_requerimientos`, `compras_ubicaciones`, `equipos`, `facturas_proveedor`, `facturas_proveedor_lineas` | admin |
+| `/api/facturacion/facturas/[id]/odoo/borrador` | GET, POST, PUT | permiso de módulo · `tieneAccesoFacturacion` | `facturas_proveedor`, `usuarios` | admin · audita |
 | `/api/facturacion/facturas/[id]/odoo` | GET, POST, PATCH | permiso de módulo · `puedeEditarFacturacion` | `facturas_proveedor` | admin |
-| `/api/facturacion/facturas/[id]` | GET, PATCH | permiso de módulo · `puedeEditarFacturacion` | `compras_requerimientos`, `facturas_proveedor`, `proveedores` | admin |
-| `/api/facturacion/facturas` | GET, POST | permiso de módulo · `puedeEditarFacturacion` | `compras_producto_odoo`, `compras_requerimientos`, `empresas`, `facturas_proveedor`, `facturas_proveedor_lineas` | admin · 120s |
+| `/api/facturacion/facturas/[id]` | GET, PATCH | permiso de módulo · `tieneAccesoFacturacion` | `compras_requerimientos`, `facturas_proveedor`, `proveedores` | admin |
+| `/api/facturacion/facturas` | GET, POST | permiso de módulo · `tieneAccesoFacturacion` | `compras_producto_odoo`, `compras_requerimientos`, `empresas`, `facturas_proveedor`, `facturas_proveedor_lineas` | admin · 120s |
 | `/api/facturacion/odoo/sincronizar` | POST | permiso de módulo · `puedeEditarFacturacion` | — | admin · 300s |
 
 ## home (3)
@@ -223,20 +223,20 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
-| `/api/inventario/articulos/[id]` | PATCH | sesión | `inventario_articulos` | admin |
+| `/api/inventario/articulos/[id]` | PATCH | permiso de módulo · `esAdminInventario` | `inventario_articulos` | admin |
 | `/api/inventario/articulos` | GET | sesión | `compras_requerimientos`, `inventario_articulos` | paginado |
 | `/api/inventario/lista/[id]` | PATCH | permiso de módulo · `puedeEditarInventario` | — | admin |
 | `/api/inventario/lista` | POST | permiso de módulo · `puedeEditarInventario` | — | admin |
 | `/api/inventario/movimientos` | POST | permiso de módulo · `puedeEditarInventario` | `inventario_articulos`, `inventario_destinos`, `inventario_equipos`, `inventario_movimientos`, `inventario_solicitantes`, `proveedores`, `usuarios` | admin · audita |
 | `/api/inventario/reservas-taller-vial/[id]` | POST, DELETE | permiso de módulo · `puedeEditarInventario` | `taller_vial_reparaciones`, `taller_vial_repuestos_asignados`, `taller_vial_services` | — |
-| `/api/inventario/reservas-taller-vial` | GET | sesión | `equipos`, `inventario_articulos`, `taller_vial_reparaciones`, `taller_vial_repuestos_asignados`, `taller_vial_services` | — |
-| `/api/inventario/sync` | POST | sesión | — | — |
+| `/api/inventario/reservas-taller-vial` | GET | permiso de módulo · `tieneAccesoInventario` | `equipos`, `inventario_articulos`, `taller_vial_reparaciones`, `taller_vial_repuestos_asignados`, `taller_vial_services` | — |
+| `/api/inventario/sync` | POST | permiso de módulo · `tieneAccesoInventario` | — | — |
 
 ## mantenimiento (60)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
-| `/api/mantenimiento/ausencias` | GET, POST, PATCH, DELETE | sesión | `ausencias`, `liquidaciones`, `mant_personal_taller`, `usuarios` | admin · audita |
+| `/api/mantenimiento/ausencias` | GET, POST, PATCH, DELETE | permiso de módulo · `esAdminMantenimiento` | `ausencias`, `liquidaciones`, `mant_personal_taller`, `usuarios` | admin · audita |
 | `/api/mantenimiento/avisos/desestimar` | POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `avisos`, `usuarios` | admin |
 | `/api/mantenimiento/avisos/enlazar` | GET, POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `avisos`, `ordenes_trabajo` | admin |
 | `/api/mantenimiento/avisos` | POST | sesión | `avisos`, `compras_areas`, `usuario_areas_compras`, `usuarios` | admin · planilla |
@@ -263,7 +263,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/mantenimiento/fotos` | POST | sesión | `usuarios` | admin · 120s |
 | `/api/mantenimiento/inventario` | GET, POST | sesión | `inventario_articulos` | zod |
 | `/api/mantenimiento/mtbf` | GET | permiso de módulo · `puedeVerMantenimiento` | — | — |
-| `/api/mantenimiento/operarios` | GET, POST, DELETE | sesión | `operarios` | admin |
+| `/api/mantenimiento/operarios` | GET, POST, DELETE | permiso de módulo · `esAdminMantenimiento` | `operarios` | admin |
 | `/api/mantenimiento/ordenes-servicio` | GET, PATCH | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_servicio` | admin · planilla |
 | `/api/mantenimiento/ordenes-servicio/sync` | POST | permiso de módulo · `puedeEditarMantenimiento` | — | 300s |
 | `/api/mantenimiento/ordenes/[id]/calendario` | GET, POST | permiso de módulo · `puedeEditarMantenimiento` | `agenda_eventos`, `agenda_invitados`, `ordenes_trabajo` | admin · zod |
@@ -279,23 +279,23 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/mantenimiento/ordenes/sync` | POST | permiso de módulo · `puedeEditarMantenimiento` | — | 300s |
 | `/api/mantenimiento/partes-contratista/generar` | POST | permiso de módulo · `puedeEditarMantenimiento` | `equipos`, `mant_partes_contratista_renglones`, `ordenes_trabajo`, `proveedores`, `sectores` | admin · 300s |
 | `/api/mantenimiento/partes-contratista` | GET, POST, PUT, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `mant_contratista_lugares`, `mant_partes_contratista`, `mant_partes_contratista_renglones` | admin · paginado |
-| `/api/mantenimiento/personal` | GET, POST, PATCH, DELETE | sesión | `mant_personal_taller`, `usuarios` | admin · audita |
+| `/api/mantenimiento/personal` | GET, POST, PATCH, DELETE | permiso de módulo · `esAdminMantenimiento` | `mant_personal_taller`, `usuarios` | admin · audita |
 | `/api/mantenimiento/planificacion/[id]/calendario` | POST | permiso de módulo · `puedeEditarMantenimiento` | `agenda_eventos`, `agenda_invitados`, `ordenes_trabajo`, `planificacion_diaria`, `planificacion_diaria_items` | admin · zod · 300s |
 | `/api/mantenimiento/planificacion/[id]/operarios` | GET, POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `planificacion_diaria_operarios` | — |
 | `/api/mantenimiento/planificacion/[id]` | GET, PATCH, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `planificacion_diaria`, `planificacion_diaria_items` | — |
 | `/api/mantenimiento/planificacion` | GET, POST | permiso de módulo · `puedeEditarMantenimiento` | `planificacion_diaria` | — |
 | `/api/mantenimiento/produccion` | GET, PUT | permiso de módulo · `puedeEditarMantenimiento` | `produccion_semanal` | admin |
-| `/api/mantenimiento/programacion/pisadas` | POST, DELETE | sesión | `mant_personal_taller`, `mant_programacion_pisadas` | admin |
-| `/api/mantenimiento/programacion/referencia` | GET, POST, PUT | sesión | `empleados`, `mant_personal_taller`, `mant_programacion_referencia`, `usuarios` | admin · audita · paginado |
-| `/api/mantenimiento/programacion` | GET | sesión | `ausencias`, `francos`, `mant_personal_taller`, `mant_programacion_pisadas`, `mant_programacion_referencia` | admin |
+| `/api/mantenimiento/programacion/pisadas` | POST, DELETE | permiso de módulo · `esAdminMantenimiento` | `mant_personal_taller`, `mant_programacion_pisadas` | admin |
+| `/api/mantenimiento/programacion/referencia` | GET, POST, PUT | permiso de módulo · `esAdminMantenimiento` | `empleados`, `mant_personal_taller`, `mant_programacion_referencia`, `usuarios` | admin · audita · paginado |
+| `/api/mantenimiento/programacion` | GET | permiso de módulo · `esAdminMantenimiento` | `ausencias`, `francos`, `mant_personal_taller`, `mant_programacion_pisadas`, `mant_programacion_referencia` | admin |
 | `/api/mantenimiento/proveedores` | GET, POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `proveedores` | admin |
 | `/api/mantenimiento/proveedores/sueltos` | GET, POST | permiso de módulo · `puedeVerMantenimiento` | `proveedores` | admin |
 | `/api/mantenimiento/razones-postergacion` | GET, PATCH | permiso de módulo · `puedeVerMantenimiento` | `mant_razones_de_postergacion` | admin |
 | `/api/mantenimiento/sectores/status` | PATCH | permiso de módulo · `puedeEditarMantenimiento` | `sectores`, `sectores_status_log` | admin |
 | `/api/mantenimiento/sheets/webhook` | POST | secreto propio · `SHEETS_WEBHOOK_SECRET` | — | 300s |
 | `/api/mantenimiento/tareas-preventivas` | GET, POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `equipos_componentes`, `mant_tareas_preventivas`, `ordenes_trabajo` | admin |
-| `/api/mantenimiento/tarifa-hora` | GET, POST, DELETE | sesión | `mantenimiento_tarifas_hora` | admin |
-| `/api/mantenimiento/tipos` | GET, PATCH, POST | sesión | `equipos_tipos` | admin |
+| `/api/mantenimiento/tarifa-hora` | GET, POST, DELETE | permiso de módulo · `esAdminMantenimiento` | `mantenimiento_tarifas_hora` | admin |
+| `/api/mantenimiento/tipos` | GET, PATCH, POST | permiso de módulo · `esAdminMantenimiento` | `equipos_tipos` | admin |
 
 ## mensajes (3)
 
@@ -327,7 +327,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/produccion/molinos/paradas` | POST, PATCH, DELETE | permiso de módulo · `puedeEditarProduccion` | `produccion_molino_paradas` | zod |
 | `/api/produccion/partes` | POST | permiso de módulo · `puedeEditarProduccion` | `empleados`, `produccion_deposito`, `produccion_despachos`, `produccion_partes`, `produccion_renglones_papel` | admin |
 | `/api/produccion/planilla/reintentar` | POST | permiso de módulo · `puedeEditarProduccion` | `produccion_partes` | admin |
-| `/api/produccion/productos` | GET, POST, PATCH, PUT | sesión | `produccion_renglon_productos`, `produccion_renglones_papel` | admin |
+| `/api/produccion/productos` | GET, POST, PATCH, PUT | permiso de módulo · `tieneAccesoProduccion` | `produccion_renglon_productos`, `produccion_renglones_papel` | admin |
 
 ## push (1)
 
@@ -397,11 +397,11 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/rrhh/dashboard/resumen-hoy` | GET | el proxy | — | — |
 | `/api/rrhh/dashboard/top-ausencias` | GET | el proxy | `calculos_diarios` | — |
 | `/api/rrhh/dashboard/top-tardanzas` | GET | el proxy | `calculos_diarios` | — |
-| `/api/rrhh/empleados/[id]` | GET, PUT, DELETE | sesión | `ausencias`, `calculos_diarios`, `empleados`, `fichadas`, `francos`, `liquidaciones`, `rrhh_empleados_datos`, `vacaciones` | admin · zod |
-| `/api/rrhh/empleados/import/confirm` | POST | sesión | `empleados`, `empresas`, `rrhh_empleados_datos`, `sectores` | admin |
-| `/api/rrhh/empleados/import/preview-sheet` | POST | sesión | — | — |
-| `/api/rrhh/empleados/import/preview` | POST | sesión | — | — |
-| `/api/rrhh/empleados` | POST | sesión | `empleados`, `rrhh_empleados_datos` | admin |
+| `/api/rrhh/empleados/[id]` | GET, PUT, DELETE | permiso de módulo · `esAdminRrhh` | `ausencias`, `calculos_diarios`, `empleados`, `fichadas`, `francos`, `liquidaciones`, `rrhh_empleados_datos`, `vacaciones` | admin · zod |
+| `/api/rrhh/empleados/import/confirm` | POST | permiso de módulo · `esAdminRrhh` | `empleados`, `empresas`, `rrhh_empleados_datos`, `sectores` | admin |
+| `/api/rrhh/empleados/import/preview-sheet` | POST | permiso de módulo · `esAdminRrhh` | — | — |
+| `/api/rrhh/empleados/import/preview` | POST | permiso de módulo · `esAdminRrhh` | — | — |
+| `/api/rrhh/empleados` | POST | permiso de módulo · `esAdminRrhh` | `empleados`, `rrhh_empleados_datos` | admin |
 | `/api/rrhh/feriados/[id]` | DELETE | permiso de módulo · `es_admin_check` | `feriados` | — |
 | `/api/rrhh/feriados` | GET, POST | permiso de módulo · `es_admin_check` | `feriados` | — |
 | `/api/rrhh/fichadas/[id]` | PUT, DELETE | sesión | `fichadas` | — |
@@ -443,38 +443,38 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
-| `/api/taller-vial/cargas` | GET, POST | permiso de módulo · `puedeEditarTallerVial` | `equipos`, `taller_vial_cargas` | — |
-| `/api/taller-vial/estados` | GET, POST | permiso de módulo · `puedeEditarTallerVial` | `equipos`, `taller_vial_estados_diarios` | — |
-| `/api/taller-vial/informes/export` | GET | sesión | — | — |
-| `/api/taller-vial/inventario` | GET | sesión | `equipos`, `inventario_articulos` | — |
-| `/api/taller-vial/reparaciones` | GET, POST, DELETE | permiso de módulo · `puedeEditarTallerVial` | `taller_vial_reparaciones` | — |
+| `/api/taller-vial/cargas` | GET, POST | permiso de módulo · `tieneAccesoTallerVial` | `equipos`, `taller_vial_cargas` | — |
+| `/api/taller-vial/estados` | GET, POST | permiso de módulo · `tieneAccesoTallerVial` | `equipos`, `taller_vial_estados_diarios` | — |
+| `/api/taller-vial/informes/export` | GET | permiso de módulo · `tieneAccesoTallerVial` | — | — |
+| `/api/taller-vial/inventario` | GET | permiso de módulo · `tieneAccesoTallerVial` | `equipos`, `inventario_articulos` | — |
+| `/api/taller-vial/reparaciones` | GET, POST, DELETE | permiso de módulo · `tieneAccesoTallerVial` | `taller_vial_reparaciones` | — |
 | `/api/taller-vial/repuestos` | GET, POST, DELETE | permiso de módulo · `puedeEditarTallerVial` | `inventario_articulos`, `taller_vial_repuestos_asignados` | — |
-| `/api/taller-vial/services` | GET, POST, DELETE | permiso de módulo · `puedeEditarTallerVial` | `taller_vial_services` | — |
-| `/api/taller-vial/sync` | POST | sesión | — | 60s |
+| `/api/taller-vial/services` | GET, POST, DELETE | permiso de módulo · `tieneAccesoTallerVial` | `taller_vial_services` | — |
+| `/api/taller-vial/sync` | POST | permiso de módulo · `tieneAccesoTallerVial` | — | 60s |
 
 ## trituracion (3)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
-| `/api/trituracion/informes/export` | GET | sesión | — | — |
-| `/api/trituracion/partes` | GET, POST, DELETE | permiso de módulo · `puedeEditarTrituracion` | `trituracion_partes`, `trituracion_plantas` | — |
-| `/api/trituracion/plantas` | GET, PATCH | sesión | `trituracion_plantas` | — |
+| `/api/trituracion/informes/export` | GET | permiso de módulo · `tieneAccesoTrituracion` | — | — |
+| `/api/trituracion/partes` | GET, POST, DELETE | permiso de módulo · `tieneAccesoTrituracion` | `trituracion_partes`, `trituracion_plantas` | — |
+| `/api/trituracion/plantas` | GET, PATCH | permiso de módulo · `esAdminTrituracion` | `trituracion_plantas` | — |
 
 ## ventas (11)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
 | `/api/ventas/actividades/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarVentas` | `ventas_actividades` | zod |
-| `/api/ventas/actividades` | GET, POST | permiso de módulo · `puedeEditarVentas` | `ventas_actividades` | paginado · zod |
-| `/api/ventas/clientes/[id]` | GET, PATCH, DELETE | permiso de módulo · `puedeEditarVentas` | `usuarios`, `ventas_actividades`, `ventas_clientes`, `ventas_contactos`, `ventas_oportunidades` | audita · zod |
+| `/api/ventas/actividades` | GET, POST | permiso de módulo · `tieneAccesoVentas` | `ventas_actividades` | paginado · zod |
+| `/api/ventas/clientes/[id]` | GET, PATCH, DELETE | permiso de módulo · `tieneAccesoVentas` | `usuarios`, `ventas_actividades`, `ventas_clientes`, `ventas_contactos`, `ventas_oportunidades` | audita · zod |
 | `/api/ventas/clientes/importar/confirmar` | POST | permiso de módulo · `puedeEditarVentas` | `ventas_clientes` | zod · 120s |
-| `/api/ventas/clientes/importar/plantilla` | GET | sesión | — | — |
+| `/api/ventas/clientes/importar/plantilla` | GET | permiso de módulo · `tieneAccesoVentas` | — | — |
 | `/api/ventas/clientes/importar` | POST | permiso de módulo · `puedeEditarVentas` | `usuarios`, `ventas_clientes` | paginado · 120s |
-| `/api/ventas/clientes` | GET, POST | permiso de módulo · `puedeEditarVentas` | `ventas_actividades`, `ventas_clientes` | paginado · zod |
+| `/api/ventas/clientes` | GET, POST | permiso de módulo · `tieneAccesoVentas` | `ventas_actividades`, `ventas_clientes` | paginado · zod |
 | `/api/ventas/contactos/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarVentas` | `ventas_contactos` | zod |
 | `/api/ventas/contactos` | POST | permiso de módulo · `puedeEditarVentas` | `ventas_contactos` | zod |
 | `/api/ventas/oportunidades/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarVentas` | `ventas_oportunidades` | audita · zod |
-| `/api/ventas/oportunidades` | GET, POST | permiso de módulo · `puedeEditarVentas` | `ventas_oportunidades` | paginado · zod |
+| `/api/ventas/oportunidades` | GET, POST | permiso de módulo · `tieneAccesoVentas` | `ventas_oportunidades` | paginado · zod |
 
 ## De qué módulos de `lib/` depende cada ruta
 

@@ -99,6 +99,46 @@ describe("guardaDe", () => {
     expect(guarda.detalle).toBe("puedeEditarMantenimiento");
   });
 
+  /**
+   * Las dos familias que el detector no conocía hasta el 13/11/2026. A varios
+   * módulos les alcanzan solas —una ruta que sólo lee pide `tieneAccesoX()` y
+   * nada más—, y sin esto el mapa decía «sesión» de 44 rutas en 11 módulos que
+   * sí piden permiso de módulo.
+   */
+  it("`tieneAccesoX()` sola es un permiso y no una sesión", () => {
+    // `app/api/cantera/fleteros/route.ts` y otras 43 el día que se midió.
+    const fuente = `
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+      if (!(await tieneAccesoCantera(supabase, user.id))) {
+        return NextResponse.json({ error: "..." }, { status: 403 });
+      }
+    `;
+    const guarda = guardaDe(fuente);
+    expect(guarda.clase).toBe("permiso");
+    expect(guarda.detalle).toBe("tieneAccesoCantera");
+  });
+
+  it("`esAdminX()` sola también", () => {
+    const fuente = `if (!(await esAdminVentas(supabase, user.id))) return noAutorizado();`;
+    const guarda = guardaDe(fuente);
+    expect(guarda.clase).toBe("permiso");
+    expect(guarda.detalle).toBe("esAdminVentas");
+  });
+
+  /**
+   * El `\s*\(` de la expresión exige la llamada: importar la función y no
+   * usarla no alcanza. Es lo que evita que un `import` suelto marque como
+   * protegida una ruta que no comprueba nada.
+   */
+  it("importar la función sin llamarla no cuenta como guarda", () => {
+    const fuente = `
+      import { tieneAccesoVentas } from "@/lib/ventas/auth";
+      export async function GET() { return Response.json({}); }
+    `;
+    expect(guardaDe(fuente).clase).toBe("sin-guarda");
+  });
+
   it("sin ninguna de las cuatro lo dice, en vez de suponer que está protegida", () => {
     // Es el caso que hay que poder encontrar: el silencio no es una guarda.
     expect(guardaDe("export async function GET() { return Response.json({}); }").clase).toBe(
