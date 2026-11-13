@@ -50,6 +50,10 @@
  *   - Un `className` armado en pedazos o en una variable: si `fixed` y `inset-0`
  *     no están en la misma línea (o el `position` y el `inset` del `style` a más
  *     de tres líneas), no lo junta.
+ *   - Todo lo que no sea `.tsx`: sólo recorre `app/` y `components/` y sólo abre
+ *     archivos `.tsx`. Una capa escrita a mano en un `.ts`, `.jsx` o `.js`, o en
+ *     cualquier otra carpeta (`lib/`), es invisible. Hoy no hay ninguna; el
+ *     chequeo no lo garantiza.
  *   - Un modal que no tapa la pantalla: un panel `fixed right-0 w-96`, una hoja
  *     anclada abajo, un `<dialog>`. Tampoco los ve.
  *   - Qué hay adentro de la capa. Una excepción declarada abajo está perdonada
