@@ -153,3 +153,31 @@ export function Modal({
     document.body,
   );
 }
+
+/**
+ * El pie de un formulario dentro del `Modal`: los botones, pegados abajo.
+ *
+ * El cuerpo del modal es el que scrollea, así que sin esto «Cancelar» se va al
+ * fondo de un formulario largo. Vive acá y no en cada formulario porque **repite
+ * el padding del cuerpo** (`px-5 pb-5`): los márgenes negativos lo compensan para
+ * que el pie llegue de borde a borde, y si ese padding cambia hay un solo lugar
+ * donde corregirlo. Tiene que ser hijo directo del cuerpo (o del `<form>` que lo
+ * llena) para que `sticky` encuentre el contenedor que scrollea.
+ *
+ * `className` suma la disposición de los botones (`flex justify-end gap-2`).
+ */
+export function PieDeModal({
+  children,
+  className = "flex justify-end gap-2",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`sticky bottom-0 -mx-5 -mb-5 border-t border-slate-200 bg-white px-5 pb-5 pt-3 ${className}`}
+    >
+      {children}
+    </div>
+  );
+}

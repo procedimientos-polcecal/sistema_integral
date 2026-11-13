@@ -35,6 +35,7 @@ import {
 import { paginaDeArranque } from "@/lib/core/filtrosUrl";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 import { useCargar } from "@/lib/core/useCargar";
+import { Modal } from "@/components/Modal";
 
 const POR_PAGINA = 50;
 
@@ -793,21 +794,13 @@ export default function RequerimientosClient({
           botón avanzaba a ciegas, sin avisar ni dejar cargar nada, mientras la
           bandeja ni siquiera lo ofrecía. */}
       {avanzando?.estado_compra === "PARA_COMPRAR" && (
-        <div
-          onClick={() => setAvanzando(null)}
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="mt-20 w-full max-w-lg rounded-xl bg-white shadow-xl"
-          >
-            <div className="border-b border-slate-200 px-6 py-4">
-              <h2 className="text-lg font-bold text-slate-900">Aprobar la compra</h2>
-              <p className="text-sm text-slate-500">
+        // El fondo, la X y Escape salen conservando; sólo «Cancelar» (el de
+        // `AprobarSinComparativa`) tira. Todavía no hay borrador, así que hoy los
+        // dos cierran el diálogo.
+        <Modal titulo="Aprobar la compra" alSalir={() => setAvanzando(null)}>
+              <p className="-mt-2 mb-4 text-sm text-slate-500">
                 RI {avanzando.nro_ri} · {avanzando.descripcion}
               </p>
-            </div>
-            <div className="px-6 py-5">
               <AprobarSinComparativa
                 proveedores={proveedores}
                 presupuestosSinMirar={resumenes[avanzando.id]?.cuantos ?? 0}
@@ -818,9 +811,7 @@ export default function RequerimientosClient({
                 }}
                 onCancelar={() => setAvanzando(null)}
               />
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {avanzando && avanzando.estado_compra !== "PARA_COMPRAR" && (

@@ -6,6 +6,7 @@ import { SIGUIENTE_ESTADO, COMPRA_LABELS } from "@/lib/compras/constants";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 import SelectorProveedor from "../SelectorProveedor";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 type Persona = { id: string; nombre: string; apellido: string; alias: string | null };
 
@@ -116,19 +117,12 @@ export default function ModalAvanzar({
   }
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
-    >
-      <div onClick={(e) => e.stopPropagation()} className="mt-20 w-full max-w-md rounded-xl bg-white shadow-xl">
-        <div className="border-b border-slate-200 px-6 py-4">
-          <h2 className="text-lg font-bold text-slate-900">
-            {esComparativa ? "Comparativa lista" : "Registrar el pedido"}
-          </h2>
-          <p className="text-sm text-slate-500">RI {r.nro_ri} · {r.descripcion}</p>
-        </div>
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onClose`.
+    <Modal titulo={esComparativa ? "Comparativa lista" : "Registrar el pedido"} alSalir={onClose}>
+        <div className="space-y-4">
+          <p className="-mt-2 text-sm text-slate-500">RI {r.nro_ri} · {r.descripcion}</p>
 
-        <div className="space-y-4 px-6 py-5">
           {esComparativa ? (
             <>
               {hayPresupuestos ? (
@@ -289,7 +283,9 @@ export default function ModalAvanzar({
             </>
           )}
 
-          <div className="flex justify-end gap-2">
+          {/* Pegados al pie: «Cancelar» y
+              el botón de avanzar siempre están a mano. */}
+          <PieDeModal>
             <button
               onClick={onClose}
               disabled={guardando}
@@ -304,9 +300,8 @@ export default function ModalAvanzar({
             >
               {guardando ? "Guardando…" : `Pasar a ${COMPRA_LABELS[destino].label}`}
             </button>
-          </div>
+          </PieDeModal>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

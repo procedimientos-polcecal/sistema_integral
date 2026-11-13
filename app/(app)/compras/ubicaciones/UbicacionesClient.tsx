@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useConfirm } from "@/components/ConfirmProvider";
 import type { UbicacionCompras } from "@/lib/compras/types";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 const TIPOS = ["planta", "taller", "equipo", "oficina", "otra"] as const;
 
@@ -333,15 +334,10 @@ function ModalUbicacion({
   }
 
   return (
-    <div onClick={onClose} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4">
-      <div onClick={(e) => e.stopPropagation()} className="mt-16 w-full max-w-lg rounded-xl bg-white shadow-xl">
-        <div className="border-b border-slate-200 px-6 py-4">
-          <h2 className="text-lg font-bold text-slate-900">
-            {ubicacion ? "Editar ubicación" : "Nueva ubicación"}
-          </h2>
-        </div>
-
-        <form onSubmit={enviar} className="space-y-4 px-6 py-5">
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onClose`.
+    <Modal titulo={ubicacion ? "Editar ubicación" : "Nueva ubicación"} alSalir={onClose}>
+        <form onSubmit={enviar} className="space-y-4">
           <Campo label="Nombre" requerido>
             <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={nombre} onChange={(e) => setNombre(e.target.value)} required autoFocus />
@@ -392,7 +388,7 @@ function ModalUbicacion({
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
           )}
 
-          <div className="flex justify-end gap-2">
+          <PieDeModal>
             <button type="button" onClick={onClose} disabled={guardando}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
               Cancelar
@@ -401,10 +397,9 @@ function ModalUbicacion({
               className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50">
               {guardando ? "Guardando…" : "Guardar"}
             </button>
-          </div>
+          </PieDeModal>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -450,17 +445,15 @@ function ModalFusion({
   const destino = candidatas.find((c) => c.id === destinoId);
 
   return (
-    <div onClick={onClose} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4">
-      <div onClick={(e) => e.stopPropagation()} className="mt-24 w-full max-w-lg rounded-xl bg-white shadow-xl">
-        <div className="border-b border-slate-200 px-6 py-4">
-          <h2 className="text-lg font-bold text-slate-900">Fusionar «{origen.nombre}»</h2>
-          <p className="text-sm text-slate-500">
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onClose`.
+    <Modal titulo={`Fusionar «${origen.nombre}»`} alSalir={onClose}>
+        <div className="space-y-4">
+          <p className="-mt-2 text-sm text-slate-500">
             Sus {usos} requerimiento{usos === 1 ? "" : "s"} pasan a la ubicación que elijas,
             y «{origen.nombre}» se elimina.
           </p>
-        </div>
 
-        <div className="space-y-4 px-6 py-5">
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
               Conservar esta ubicación
@@ -488,7 +481,7 @@ function ModalFusion({
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
           )}
 
-          <div className="flex justify-end gap-2">
+          <PieDeModal>
             <button onClick={onClose} disabled={procesando}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
               Cancelar
@@ -497,10 +490,9 @@ function ModalFusion({
               className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50">
               {procesando ? "Fusionando…" : "Fusionar"}
             </button>
-          </div>
+          </PieDeModal>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
