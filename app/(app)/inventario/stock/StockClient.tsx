@@ -7,9 +7,10 @@ import {
   leerFiltrosDeStock, escribirFiltrosDeStock,
 } from "@/lib/inventario/filtrosUrl";
 import {
-  altaDeReposicion, avisoDePedidoAbierto,
+  altaDeReposicion, avisoDePedidoAbierto, QUE_ES_UN_PEDIDO_EN_CURSO,
   type AltaDeReposicion, type RiAbierto,
 } from "@/lib/inventario/reponer";
+import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import TraerDeLaPlanilla from "../TraerDeLaPlanilla";
@@ -111,7 +112,10 @@ export default function StockClient({
   return (
     <div className="mx-auto max-w-3xl space-y-4 md:p-6">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Stock</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold text-slate-900">Stock</h1>
+          <InfoTip text="Muestra como máximo 50 artículos activos por orden de código, también con «Sólo lo que falta»: para llegar a otro, buscalo. El código se busca por el principio y la descripción por cualquier parte del texto. El número grande es el stock de la última lectura de la planilla: un movimiento cargado acá lo mueve enseguida, y la próxima lectura vuelve a poner el de la planilla." />
+        </div>
         <p className="text-sm text-slate-500">
           Lo que hay en el pañol, según la última lectura de la planilla.
         </p>
@@ -144,14 +148,18 @@ export default function StockClient({
         autoFocus
       />
 
-      <label className="flex w-fit items-center gap-2 text-sm text-slate-600">
-        <input
-          type="checkbox"
-          checked={soloFaltantes}
-          onChange={(e) => setSoloFaltantes(e.target.checked)}
-        />
-        Sólo lo que falta
-      </label>
+      {/* El (i) va afuera del `<label>`: adentro, tocarlo marcaría la casilla. */}
+      <div className="flex w-fit items-center gap-2">
+        <label className="flex w-fit items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={soloFaltantes}
+            onChange={(e) => setSoloFaltantes(e.target.checked)}
+          />
+          Sólo lo que falta
+        </label>
+        <InfoTip text="Falta un artículo cuando su stock está por debajo del stock de seguridad; «Faltan N» es la diferencia. Un 0 en «seguridad» puede ser un mínimo de 0 o una celda vacía de la planilla, que se lee como 0: esos artículos no figuran como faltantes, salvo que su stock sea negativo." />
+      </div>
 
       {cargando ? (
         <p className="py-10 text-center text-sm text-slate-400">Buscando…</p>
@@ -209,6 +217,8 @@ export default function StockClient({
                         </Link>
                         {a.riAbierto.diasDelRi === 0 ? ", hoy" : `, hace ${a.riAbierto.diasDelRi} días`}
                         {a.riAbierto.cuantosAbiertos > 1 && ` · ${a.riAbierto.cuantosAbiertos} abiertos`}
+                        {" "}
+                        <InfoTip text={QUE_ES_UN_PEDIDO_EN_CURSO} />
                       </span>
                     )}
                   </div>

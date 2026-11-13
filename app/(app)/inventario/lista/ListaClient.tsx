@@ -9,6 +9,7 @@ import {
 } from "@/lib/inventario/filtrosUrl";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 interface Solicitante {
   id: string;
@@ -112,10 +113,14 @@ export default function ListaClient({
         </div>
       )}
 
-      <label className="flex items-center gap-2 text-sm text-slate-600">
-        <input type="checkbox" checked={verInactivos} onChange={(e) => setVerInactivos(e.target.checked)} />
-        Ver también los dados de baja
-      </label>
+      {/* El (i) va afuera del `<label>`: adentro, tocarlo marcaría la casilla. */}
+      <div className="flex w-fit items-center gap-2">
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" checked={verInactivos} onChange={(e) => setVerInactivos(e.target.checked)} />
+          Ver también los dados de baja
+        </label>
+        <InfoTip text="Dar de baja no borra a nadie: lo saca del desplegable del formulario de movimientos, y los movimientos viejos siguen con su nombre. Si la planilla lo sigue trayendo, el sistema lo sigue reconociendo. Vale igual para los destinos." />
+      </div>
 
       {/* ── Quién retira ──────────────────────────────────────── */}
       <section className="overflow-hidden card">
@@ -137,8 +142,8 @@ export default function ListaClient({
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-2 text-left">Nombre</th>
-                <th className="px-4 py-2 text-left">Destino habitual</th>
-                <th className="px-4 py-2 text-left">Empleado</th>
+                <th className="px-4 py-2 text-left">Destino habitual<InfoTip className="ml-1 normal-case tracking-normal" text="Es el destino que el formulario de movimientos propone cuando esa persona retira; quien carga lo puede cambiar en el momento. Sin destino, el movimiento queda sin sector salvo que se elija uno." /></th>
+                <th className="px-4 py-2 text-left">Empleado<InfoTip className="ml-1 normal-case tracking-normal" text="Se engancha solo con el padrón de empleados, comparando apellido y nombre en cualquiera de los dos órdenes, en cada sincronización y al agregar a alguien. Sólo se toca a los que están sueltos: un enlace ya hecho no se rehace. «Sin enganchar» puede ser alguien que no es empleado (un contratista, REGULADOR) o un nombre escrito distinto allá y acá." /></th>
                 <th className="px-4 py-2"></th>
               </tr>
             </thead>

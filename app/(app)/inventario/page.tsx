@@ -94,7 +94,10 @@ export default async function InventarioDashboardPage() {
         {/* ── Faltantes ── */}
         <section className="card p-4">
           <div className="flex items-center justify-between">
-            <h2 className="section-title">Con faltante</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="section-title">Con faltante</h2>
+              <InfoTip text="Los 6 artículos con mayor diferencia contra su stock de seguridad, no los más urgentes. Tener faltante es una referencia y no una cola de trabajo: lo cumple cerca de la mitad del catálogo y la mayoría lleva meses sin moverse. Lo que conviene pedir, porque además tiene consumo reciente, está en Para reponer." />
+            </div>
             <Link href="/inventario/stock?faltantes=1" className="text-xs text-slate-500 underline">Ver todos →</Link>
           </div>
           {!faltantes || faltantes.length === 0 ? (

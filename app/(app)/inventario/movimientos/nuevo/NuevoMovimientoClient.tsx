@@ -6,6 +6,7 @@ import { loQueFalta, sectorDelMovimiento, stockQueQueda, avisoDeStockNegativo } 
 import TraerDeLaPlanilla from "../../TraerDeLaPlanilla";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 interface Articulo {
   id: string;
@@ -318,6 +319,7 @@ export default function NuevoMovimientoClient({
             <p className={`text-sm ${avisoNegativo ? "text-red-600" : "text-slate-600"}`}>
               Queda en <strong>{quedaEn}</strong>
               {avisoNegativo && " — el stock quedaría negativo"}
+              <InfoTip className="ml-1" text="Es una cuenta con el stock que esta pantalla tiene cargado —el de la última lectura de la planilla más lo cargado desde el sistema—, que puede estar viejo si alguien movió el artículo después. Al registrar, el sistema recalcula con el stock real y avisa si queda negativo, pero lo registra igual." />
             </p>
           )}
 

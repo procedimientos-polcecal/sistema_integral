@@ -12,6 +12,7 @@ import {
 import TraerDeLaPlanilla from "../TraerDeLaPlanilla";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import Desplegable from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 interface Movimiento {
   id: string;
@@ -217,10 +218,10 @@ export default function MovimientosClient({
                 <th className="px-3 py-2 text-left">Código</th>
                 <th className="px-3 py-2 text-left">Tipo</th>
                 <th className="px-3 py-2 text-right">Cantidad</th>
-                <th className="px-3 py-2 text-right">Queda</th>
+                <th className="px-3 py-2 text-right">Queda<InfoTip className="ml-1 normal-case tracking-normal" text="El saldo que calcula la planilla en esa fila: es una fórmula suya y el sistema no la escribe nunca. En un movimiento cargado desde el sistema arranca con la cuenta del propio sistema, y la próxima lectura de la planilla la reemplaza por la de ella." /></th>
                 <th className="px-3 py-2 text-left">Quién</th>
-                <th className="px-3 py-2 text-left">Sector</th>
-                <th className="px-3 py-2 text-left">RI</th>
+                <th className="px-3 py-2 text-left">Sector<InfoTip className="ml-1 normal-case tracking-normal" text="Muestra el texto de la planilla: a dónde va el material o qué oficio lo retira (MECÁNICO, LUBRICADOR). El filtro «Cualquier sector» sólo encuentra los movimientos cuyo destino se reconoció como un sector del sistema; los demás están en la tabla pero no salen al filtrar." /></th>
+                <th className="px-3 py-2 text-left">RI<InfoTip className="ml-1 normal-case tracking-normal" text="Número del requerimiento de Compras (RI) al que corresponde la fila, tal como lo escribe la columna A de la planilla; la mayoría de las filas no lo tiene. Si ese pedido existe en Compras queda enlazado y su ficha lo muestra en «Entró al pañol», pero no lo marca como recibido: puede haber llegado sólo una parte. Acá se ve sólo el número." /></th>
                 <th className="px-3 py-2 text-left">Origen</th>
               </tr>
             </thead>
