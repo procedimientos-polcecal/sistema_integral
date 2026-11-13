@@ -122,9 +122,31 @@ async function leerJson(res: Response): Promise<CuerpoDeLaRuta> {
 
 export default function HiloDeMensajes({
   tipo, id, aclaracion, alCambiarElBorrador, abiertoAlMontar = false,
+  textoInicial = "", mencionesIniciales,
 }: {
   tipo: TipoDeEntidad;
   id: string;
+  /**
+   * Con qué texto arranca el campo. Lo usa el reclamo de Compras, que abre el
+   * hilo con la pregunta ya redactada.
+   *
+   * **Es un borrador y no un formulario**: quien reclama lo edita antes de
+   * enviar, y ahí es donde entra el contexto que el sistema no sabe —que esa
+   * pieza traba una OT, que la obra arranca el lunes—.
+   *
+   * Se lee una sola vez, al montar, igual que `abiertoAlMontar`.
+   */
+  textoInicial?: string;
+  /**
+   * A quiénes dejar marcados de entrada. Mismo caso: el reclamo mencionaría a
+   * los de Compras sin que haya que elegirlos de una lista de quince.
+   *
+   * **No hace falta filtrarlos acá.** `elegidos`, más abajo, ya cruza lo
+   * marcado contra la lista que devolvió el servidor y descarta lo que no
+   * está: alguien a quien le sacaron el módulo entre que se armó esta llamada
+   * y que llegó la lista no puede trabar el envío de nadie.
+   */
+  mencionesIniciales?: string[];
   /**
    * Lo que este hilo **no** es en la pantalla donde se monta: la OT tiene una
    * justificación que va a la planilla y un mensaje no. Lo escribe quien monta el
@@ -269,8 +291,8 @@ export default function HiloDeMensajes({
   }, [tipo]);
 
   // ── Lo que se está escribiendo ─────────────────────────────────────────────
-  const [texto, setTexto] = useState("");
-  const [mencionados, setMencionados] = useState<string[]>([]);
+  const [texto, setTexto] = useState(textoInicial);
+  const [mencionados, setMencionados] = useState<string[]>(mencionesIniciales ?? []);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
   const [resumen, setResumen] = useState<ResumenDelEnvio | null>(null);
