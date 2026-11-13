@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
 import { mallasDesdeTexto } from "@/lib/calidad/ensayos/mallas";
@@ -84,6 +85,7 @@ export default function ProductosClient({ productos }: { productos: ProductoDeEn
           Lo que el laboratorio muestrea, y el juego de tamices que la pantalla de carga propone.
           No es el catálogo de productos del sistema: acá <em>Filler 1</em> y <em>Filler 2</em> son
           el mismo material en dos líneas.
+          <InfoTip className="ml-1" text="Las mallas de cada producto no sólo se proponen al cargar: deciden qué columnas de acumulado muestra el listado. Con la #325 el producto es fino y muestra #50, #100, #200 y #325; sin ella, sólo la #200. Cambiarlas cambia el listado y no la curva, que usa las mallas que midió cada muestra." />
         </p>
       </div>
 

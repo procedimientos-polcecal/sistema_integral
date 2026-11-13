@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import { useRouter } from "next/navigation";
 import type { Carbonillero } from "@/lib/calidad/types";
 import Select from "@/components/Select";
@@ -231,7 +232,10 @@ export default function CarbonillerosClient({
             <tr>
               <th className="px-3 py-2">Código</th>
               <th className="px-3 py-2">Nombre en la planilla</th>
-              <th className="px-3 py-2">Carbón</th>
+              <th className="px-3 py-2">
+                Carbón
+                <InfoTip className="ml-1 normal-case tracking-normal" text="El tipo de carbón se declara una vez por carbonillero y es lo único que no se deduce de ningún lado: sale del carbonillero y nunca del producto, porque Membranex, el único residual, también factura con el mismo producto que usan los vegetales. Una entrada toma el tipo de acá." />
+              </th>
               <th className="px-3 py-2">Partner de Odoo</th>
               <th className="px-3 py-2">En el núcleo</th>
               <th className="px-3 py-2" />

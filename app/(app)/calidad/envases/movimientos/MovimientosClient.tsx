@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import { useRouter } from "next/navigation";
 import { comoSeLee } from "@/lib/core/fechas";
 import Select from "@/components/Select";
@@ -227,8 +228,14 @@ export default function MovimientosClient({
               <th className="px-3 py-2">Artículo</th>
               <th className="px-3 py-2 text-right">Entra</th>
               <th className="px-3 py-2 text-right">Sale</th>
-              <th className="px-3 py-2 text-right">Rotura</th>
-              <th className="px-3 py-2 text-right">Despacho</th>
+              <th className="px-3 py-2 text-right">
+                Rotura
+                <InfoTip className="ml-1" text="Se guarda pero no descuenta stock, igual que en la planilla. No sale de «Sale»: son números independientes." />
+              </th>
+              <th className="px-3 py-2 text-right">
+                Despacho
+                <InfoTip className="ml-1" text="Se guarda pero no descuenta stock, igual que en la planilla. No se deriva de «Sale»: puede haber un despacho con la salida en cero." />
+              </th>
               <th className="px-3 py-2">Observación</th>
             </tr>
           </thead>

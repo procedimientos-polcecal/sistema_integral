@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import Link from "next/link";
 import TraerDeLaPlanilla from "./TraerDeLaPlanilla";
 import { faltantesPorGrupo } from "@/lib/calidad/envases/seguridad";
@@ -124,7 +125,10 @@ export default function StockClient({
             <tr>
               <th className="px-3 py-2">Código</th>
               <th className="px-3 py-2">Descripción</th>
-              <th className="px-3 py-2 text-right">Stock</th>
+              <th className="px-3 py-2 text-right">
+                Stock
+                <InfoTip className="ml-1" text="Es el stock que calculó la planilla con una fórmula sobre el kardex: el SdG lo lee, no lo calcula. Un movimiento cargado acá que no llegó a la planilla no existe: la próxima lectura trae el número sin él." />
+              </th>
               <th className="px-3 py-2 text-right">Seguridad</th>
               <th className="px-3 py-2 text-right">Falta</th>
             </tr>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
 import type { Determinacion, Limite, ProductoDeEnsayo } from "@/lib/calidad/ensayos/types";
@@ -146,7 +147,10 @@ export default function LimitesClient({
       )}
 
       <section className="space-y-2 rounded border border-slate-200 bg-slate-50 p-3">
-        <h2 className="text-sm font-semibold text-slate-700">Agregar un límite</h2>
+        <h2 className="text-sm font-semibold text-slate-700">
+          Agregar un límite
+          <InfoTip className="ml-1" text="Retenido y acumulado de una misma malla son dos límites distintos: un retenido bien con el acumulado alto es un problema de clasificación y no de molienda. Los números van en la unidad de salida: por ciento de 0 a 100, y g/l para el peso volumétrico." />
+        </h2>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
           <Select
             value={determinacion}

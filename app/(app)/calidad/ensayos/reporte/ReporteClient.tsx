@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import { useRouter } from "next/navigation";
 import {
   comoSeEscribe,
@@ -176,6 +177,7 @@ export default function ReporteClient({ reporte }: { reporte: Reporte }) {
                     ? ` en ${reporte.tablas.length} tablas, una por juego de tamices.`
                     : "."
                 }`}
+            <InfoTip className="ml-1" text="Cada columna es una muestra y no un promedio: dos despachos del mismo día salen como dos columnas, porque promediarlos esconde que una se fue. Un guión es que no se midió, no que dio cero." />
           </p>
         </div>
 

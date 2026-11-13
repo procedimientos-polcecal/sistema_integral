@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
@@ -236,6 +237,7 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
         <p className="text-xs text-slate-500">
           Tamices de esta muestra. Apagá uno para sacarlo de las curvas, por ejemplo si se
           tamizó mal.
+          <InfoTip className="ml-1" text="Son los tamices que midió esta muestra, no los que declara su producto: si falta uno que el producto suele medir, la curva no lo avisa y se ve completa. Al 05/11/2026, 19 de 79 muestras con granulometría habían medido un juego distinto del de su producto." />
         </p>
         <div className="flex flex-wrap gap-1.5">
           {curva.mallas.map((malla) => {
@@ -275,6 +277,7 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
             <p className="text-xs text-slate-500">
               La tabla y los tres gráficos, con los tamices que dejaste prendidos.
             </p>
+            <InfoTip text="Los gráficos van como foto: si después corregís un número de la tabla en Excel, el dibujo sigue mostrando el anterior. Está pensado para Excel de escritorio; en Google Sheets la imagen puede no llegar y no se probó. Si apagaste tamices, la nota del acumulado viaja en la hoja." />
           </div>
           {falloLaDescarga !== null && (
             <p role="alert" className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

@@ -103,3 +103,114 @@ sumar uno, que sea sobre algo que éstos no dicen.
   el spec del semáforo dice 42% de los abiertos. No se contradicen —son otro
   universo cada uno—, pero ninguno de los dos números se puso en un `(i)` porque
   envejecen y cada uno necesita su fecha.
+
+## Calidad
+
+Son tres frentes (carbonilla, envases y ensayos) más el histórico, y los
+documentos son `docs/CALIDAD.md`, `docs/CALIDAD-ENVASES.md`,
+`docs/CALIDAD-ENSAYOS.md` y `docs/CALIDAD-HISTORICO.md`. Ninguna pantalla lleva un
+`(i)` de pantalla: las 18 ya tenían subtítulo. Todo lo de abajo es de número.
+
+Un número de columna lleva su `(i)` en el `<th>`; donde el teléfono muestra una
+tarjeta con la misma etiqueta (listado de Ensayos, Indicadores) el `(i)` va también
+ahí. Las demás tablas de Calidad no tienen tarjetas: en el teléfono son la misma
+tabla con scroll.
+
+### Carbonilla
+
+| Dónde | Texto | De dónde salió |
+|---|---|---|
+| `/calidad/carbonilla` · cuadro «Total» | Es vegetal más residual, calculado, y no la columna TOTAL de la planilla, que desde la fila 386 quedó 0,450 t por encima. Mandan los saldos por tipo. | `lib/calidad/movimientos.ts:81,114` (`total` despejado) y su docstring; `docs/CALIDAD.md`, «El `TOTAL` de la planilla está 0,450 t arriba» |
+| `/calidad/carbonilla` · junto a «Odoo leído» | El botón lee primero la planilla (lo que mueve el saldo) y después controla contra Odoo; la fecha de al lado es la del **control** y no la de la lectura de la planilla; una fila vaciada en la planilla no se borra sola. | `app/api/calidad/sincronizar/route.ts` (docstring y orden de los pasos); `carbonilla/page.tsx` lee `carbonilla-odoo`; `docs/CALIDAD.md`, «La secuencia de la corrida» y «Una fila que se vacía NO se relee» |
+| `/calidad/carbonilla` y `/calidad/movimientos` · columna «Vegetal» | Vegetal y Residual son el saldo después de ese movimiento y no sus toneladas; dentro de un día vale el del cierre. | Docstring de `saldoCorrido()`, `lib/calidad/movimientos.ts:125-131` |
+| `/calidad/movimientos` · columna «Total» | Igual que el cuadro: calculado, no es el TOTAL de la planilla. | Las mismas dos fuentes que el cuadro |
+| `/calidad/carbonilla` y `/calidad/movimientos` · columna «Origen» | «Importado» es lo leído de la planilla y desde el 13/10/2026 es el camino normal, no sólo la carga inicial; «Odoo» son filas de antes; «Balanza» la recepción de Despacho; «A mano» lo cargado en pantalla. | `lib/calidad/desdeLaPlanilla.ts:376` (la lectura deja `origen = importacion`); `desdeLaRecepcion.ts:109`; `app/api/calidad/movimientos/route.ts:71`; `docs/CALIDAD.md`, «La planilla manda, y Odoo controla» |
+| `/calidad/carbonilleros` · columna «Carbón» | El tipo se declara una vez por carbonillero y sale de él y nunca del producto (Membranex factura con el mismo producto que los vegetales); una entrada toma el tipo de acá. | `docs/CALIDAD.md`, «El tipo de carbón sale del proveedor y nunca del producto»; `lib/calidad/importar.ts:135` |
+
+### Conciliación con Odoo
+
+| Dónde | Texto | De dónde salió |
+|---|---|---|
+| `/calidad/conciliacion` · «N líneas leídas de Odoo · sin desvíos» | Qué líneas son (órdenes confirmadas, carbonilleros declarados y activos, creadas en 30 días) y que con **0 líneas leídas no se comparó nada**: «sin desvíos» ahí no es «todo bien». | `lib/calidad/sincronizar.ts:59,82-89` (dos `return vacio` antes de comparar) |
+| `/calidad/conciliacion` · «N camiones sin orden de compra» | Se aparea con una orden del **mismo proveedor** a no más de dos días; sólo camiones de carbonilleros declarados y activos de los últimos 30 días. | Docstring de `DIAS_DE_GRACIA` y de `desviosContraOdoo()`, `lib/calidad/conciliacion.ts:14-22,70-80`; `sincronizar.ts` (filtro de `camiones`) |
+| `/calidad/conciliacion` · «N camiones con otra cantidad» | Se compara con la orden del mismo proveedor más parecida en cantidad, cada orden se usa una vez, y menos de 5 kg es el mismo número. | `lib/calidad/conciliacion.ts:24-25,86-96` |
+
+### Envases
+
+| Dónde | Texto | De dónde salió |
+|---|---|---|
+| `/calidad/envases` · columna «Stock» | Es el que calculó la planilla (fórmula sobre el kardex), el SdG lo lee; un movimiento cargado acá que no llegó allá no existe, y la próxima lectura trae el número sin él. | `docs/CALIDAD-ENVASES.md`, párrafo «acá manda la planilla»; docstring de `lib/calidad/envases/espejo.ts` y de `envases/StockClient.tsx` |
+| `/calidad/envases/movimientos` · columnas «Rotura» y «Despacho» | Se guardan y no descuentan stock, igual que la planilla; no se derivan de «Sale» (puede haber despacho con la salida en cero). | `docs/CALIDAD-ENVASES.md`, «`ROTURA` y `DESPACHO` se guardan y no descuentan stock» |
+
+### Ensayos
+
+| Dónde | Texto | De dónde salió |
+|---|---|---|
+| `/calidad/ensayos` · subtítulo, tras «fuera de límite» | Qué quiere decir rojo, ámbar y el guión, y que los límites son por producto: uno sin límites no se marca nunca aunque otros sí. | Docstring de `Celda` (`EnsayosClient.tsx`); `docs/CALIDAD-ENSAYOS.md`, «Tres cosas se muestran en vez de recortarse» y «Los límites nacen vacíos»; `limites.ts:79` (`delProducto`) |
+| `/calidad/ensayos` · columna «Acumulado (%)» (y su etiqueta en el teléfono) | Cuántas columnas se llenan lo decide el producto (con la #325 declarada, las cuatro; si no, sólo #200); en blanco es «no va» o «no se midió» y nunca cae a la malla de al lado; el #200 de un Filler suma tres tamices y el de un Calcio ocho. | `lib/calidad/ensayos/granulometria.ts:64-114`; `docs/CALIDAD-ENSAYOS.md`, «Cuántos tamices muestra el listado» |
+| `/calidad/ensayos` · columna «P. vol. (g/l)» (y teléfono) | Gramos × 1000 ÷ volumen del recipiente; el volumen es un dato de cada muestra, propuesto en 330 cc. | `lib/calidad/ensayos/determinaciones.ts`, docstring de `pesoVolumetrico()`; `docs/CALIDAD-ENSAYOS.md`, «La decisión que sale de ahí» |
+| `/calidad/ensayos` · columna «Cal útil (%)» (y teléfono) | ml × 0,037 ÷ peso de la muestra titulada; el peso se guarda y viene propuesto en 3 g. | `determinaciones.ts`, `CAL_UTIL_POR_ML` y docstring de `calUtilVial()` |
+| Formulario de muestra (`/nueva` y `/[id]`) · títulos «Peso volumétrico», «Cal útil vial» y «Granulometría» | Las dos fórmulas y sus valores propuestos; en granulometría, que se cargan gramos y el % lo calcula el sistema sin guardarlo. | Las mismas funciones; docstring de `granulometria()` (`granulometria.ts:3-14`) |
+| `/calidad/ensayos/indicadores` · columna «Fuera» y «Fuera de límite» (y la tarjeta del teléfono) | Cuenta muestras fuera de un límite cargado; un 0 no es «todo bien», es «nada marcado contra lo que nadie cargó». | `limites.ts` (docstring del módulo y `delProducto`); `docs/CALIDAD-ENSAYOS.md`, «Los límites nacen vacíos» |
+| `/calidad/ensayos/curva` · «Tamices de esta muestra» | Los chips son lo que **midió** la muestra y no lo que declara el producto: si falta uno, la curva no lo avisa (al 05/11/2026, 19 de 79 muestras). | `docs/CALIDAD-ENSAYOS.md`, «Dos riesgos asumidos», riesgo 2 |
+| `/calidad/ensayos/curva` · junto a «Bajar Excel» | Los gráficos van como foto y no atados a la tabla; pensado para Excel de escritorio, en Google Sheets puede no llegar la imagen y no se probó. | `docs/CALIDAD-ENSAYOS.md`, «El pasante y el Excel de la curva» |
+| `/calidad/ensayos/reporte` · subtítulo | Una columna por muestra y nunca un promedio; el guión es «no se midió». | `docs/CALIDAD-ENSAYOS.md`, «El reporte del día»; docstring de `comoSeEscribe()` en `reporte.ts:224` |
+| `/calidad/ensayos/limites` · «Agregar un límite» | Retenido y acumulado de una malla son dos límites; los valores van en la unidad de salida (0 a 100 y g/l). | Comentario de `evaluarMuestra()` en `limites.ts`; `docs/CALIDAD-ENSAYOS.md`, «La única excepción es `calidad_ensayos_limites`» y «Los límites nacen vacíos» |
+| `/calidad/ensayos/productos` · subtítulo | Las mallas del producto no sólo se proponen al cargar: deciden las columnas del listado; la curva no las usa. | `granulometria.ts:64-114`; `docs/CALIDAD-ENSAYOS.md`, «Cuántos tamices muestra el listado» y riesgo 2 de la curva |
+
+### Histórico
+
+| Dónde | Texto | De dónde salió |
+|---|---|---|
+| `/calidad/historico` · columna «Valor» | La escala es la lectura del sistema y no del laboratorio, y si se equivoca se corrige la etiqueta y no el número; que una fila no esté en ámbar **no prueba** que su escala esté bien; el peso volumétrico viejo puede traer 1 % de error. | `docs/CALIDAD-HISTORICO.md`, «Lo único que hay que saber antes de tocarlo», «La aritmética no valida la escala» y «Riesgos asumidos» |
+
+### Lo que no se escribió, y dónde se buscó
+
+- **La tarjeta «Stock» de Envases en `/calidad` (tablero) cuenta con una
+  columna en desuso, y eso es un defecto y no un hueco de explicación.**
+  `calidad/page.tsx:141-145` cuenta `faltante > 0` por artículo, y la migración
+  `20261013133904_envases_stock_de_seguridad_por_grupo.sql` marca esa columna
+  «EN DESUSO desde el 13/10/2026: compara contra el stock de la propia fila y el
+  mínimo es del grupo». La pantalla de stock usa `faltantesPorGrupo()`, así que
+  las dos pueden decir números distintos de «bajo el mínimo». **No se explicó ni
+  se tocó**: un `(i)` ahí defendería un número que el propio repo declara malo.
+  Quien lo arregle tiene que contar grupos con `faltantesPorGrupo()`.
+- **«Productos de Odoo»: pantalla y documento dicen algo que el código ya no
+  hace.** `ProductosClient.tsx` («no entraron al stock») y `CALIDAD.md`, «La lista
+  blanca de productos» («es lo que hace que una línea entre al stock») son de
+  antes del 13/10/2026. Hoy la lista sólo la lee `lib/calidad/sincronizar.ts` (el
+  control contra Odoo): la lectura de la planilla (`desdeLaPlanilla.ts`) no la
+  consulta. Manda el código; no se escribió `(i)`.
+- **Conciliación: si Odoo contesta sin líneas, el control devuelve vacío sin
+  comparar** (`sincronizar.ts:89`), así que los camiones del libro no salen como
+  «sin orden». El `(i)` lo dice porque está en el código, pero la causa de fondo
+  —¿debería devolver todos los camiones como sin orden?— es una decisión que no
+  está escrita en ningún lado.
+- **Ninguna pantalla muestra cuándo se leyó la planilla de carbonilla**, que es
+  lo que mueve el saldo: la fecha visible es la del control contra Odoo
+  (`carbonilla-odoo`). El `(i)` lo aclara, pero lo correcto sería mostrar la otra
+  (`carbonilla-planilla`). Se buscó en `carbonilla/page.tsx` y en
+  `StockClient.tsx`.
+- **Los saldos «Vegetal» y «Residual» (tarjetas) y los números del tablero**
+  van en `KpiCard`, que tiene `overflow-hidden` y un `transform` al pasar el
+  mouse: el globo `fixed` se recortaría. Los comentarios traen cifras sobre el
+  consumo (224 de 256 días, 32 sin consumo) pero sin documento que las respalde
+  más allá del comentario. Qué respalda hoy al saldo (el `CALIDAD.md` dice que
+  nació igualado a la planilla, «no verificado», y que el conteo físico lo
+  pondría sobre una medición) **no se sabe si sigue así**: no se escribió.
+- **El pasante y la «foto» de los gráficos de la curva.** Los títulos de los tres
+  paneles se fotografían con `html2canvas` para el Excel, así que un `(i)` ahí
+  entraría en la imagen. Que el pasante herede lo de apagar tamices (no recalcula
+  y puede dar negativo) está en el documento, pero la pantalla sólo lo dice del
+  acumulado.
+- **Humedad (listado).** Su fórmula es la del documento pero no hay supuesto
+  detrás —a diferencia de peso volumétrico y cal útil—, así que se dejó sin `(i)`.
+- **Ya dicho en pantalla, no se repite:** el mínimo y el faltante por grupo en el
+  stock de envases (párrafo al pie), las dos aclaraciones del informe por período
+  de envases, el promedio con su `n` en Indicadores, la escala de cada valor del
+  histórico, las filas en ámbar y la humedad como fracción en la vista de
+  planilla.
+- **Cifras con fecha que no se pusieron:** «27 de 362» filas del histórico y los
+  conteos del oráculo envejecen con cada reimportación; el `(i)` de «Valor» dice
+  «una minoría». Las únicas cifras que quedaron llevan su fecha (la de la curva)
+  o son del método (0,037; 330 cc; 3 g).
