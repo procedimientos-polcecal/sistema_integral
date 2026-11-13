@@ -61,6 +61,35 @@ export async function traerMuestras(
 }
 
 /**
+ * Todas las muestras de **un producto**, de la más nueva a la más vieja, para
+ * elegir una en la pantalla de la curva granulométrica.
+ *
+ * **Sin ventana de fechas, a diferencia de `traerMuestras()`.** La pantalla
+ * acepta la muestra en la URL para poder mandarla por chat: con una ventana, un
+ * enlace de octubre dibujaría bien su curva mientras esa muestra no aparece en
+ * la lista, y quien lo abre no puede saber cuál es la que está mirando. Hoy son
+ * pocas por producto, pero el Excel que esto reemplaza traía 623 de tres años,
+ * así que va con `traerTodo()` igual que las demás.
+ *
+ * Trae sólo lo que la lista necesita (id, fecha y observaciones): los
+ * retenidos de la muestra elegida se piden aparte, con `traerMuestra()`.
+ */
+export async function traerMuestrasDeProducto(
+  supabase: SupabaseClient,
+  productoId: string
+): Promise<Pick<Muestra, "id" | "fecha" | "observaciones">[]> {
+  return traerTodo<Pick<Muestra, "id" | "fecha" | "observaciones">>((desde, hasta) =>
+    supabase
+      .from("calidad_ensayos_muestras")
+      .select("id, fecha, observaciones")
+      .eq("producto_id", productoId)
+      .order("fecha", { ascending: false })
+      .order("cargado_en", { ascending: false })
+      .range(desde, hasta)
+  );
+}
+
+/**
  * Las muestras de **un solo día**, para el reporte.
  *
  * Es una consulta aparte y no `traerMuestras` filtrado después: pedir un día de

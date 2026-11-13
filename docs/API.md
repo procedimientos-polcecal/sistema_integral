@@ -2,13 +2,13 @@
 
 Qué función cumplen, con qué están conectadas y cómo funcionan.
 
-**Esto se escribe a mano. El inventario no**: la lista de las 282 rutas —con sus
+**Esto se escribe a mano. El inventario no**: la lista de las 285 rutas —con sus
 métodos, su guarda, sus tablas y de qué módulos de `lib/` depende cada una—
 vive en [API-MAPA.generado.md](API-MAPA.generado.md) y la escribe
 `npm run mapa-de-apis`. El corte entre los dos documentos es **quién puede
 saberlo**: lo que sale del código va allá, lo que hay que haber vivido va acá.
 
-Esa división no es prolijidad. Una lista de 282 rutas escrita a mano queda
+Esa división no es prolijidad. Una lista de 285 rutas escrita a mano queda
 desactualizada la semana que viene, y entonces pasa lo peor: alguien la lee y
 le cree. Lo que no puede generarse —para qué sirve un módulo, por qué una ruta
 escribe primero en la planilla— no envejece igual, porque son decisiones y no
@@ -24,7 +24,7 @@ enlaza, no se los repite.
 
 Todas son Route Handlers de Next (`app/api/**/route.ts`), y casi todas hacen
 las mismas siete cosas en el mismo orden. Conocer ese orden es la mitad de
-poder leer cualquiera de las 282.
+poder leer cualquiera de las 285.
 
 1. **Pedir la sesión.** `createClient()` de `lib/supabase/server` y
    `auth.getUser()`. Sin usuario, 401. (O `usuarioActual()` de
@@ -48,7 +48,7 @@ Los pasos 5, 6 y 7 son los que tienen trampa, y cada uno tiene su regla en
 
 ### El cliente admin es una decisión de permisos
 
-**105 de las 282 rutas usan `createAdminClient()`.** Ese cliente usa la service
+**108 de las 285 rutas usan `createAdminClient()`.** Ese cliente usa la service
 role key: **RLS no corre**. Lo que decide quién ve qué deja de ser la base y
 pasa a ser la ruta.
 
@@ -204,6 +204,7 @@ en su documento, enlazado desde [CLAUDE.md](../CLAUDE.md).
 | `seguridad-higiene` | 5 | Condiciones inseguras detectadas en planta |
 | `produccion` | 5 | El parte de fábrica por turno y los molinos desde el robot |
 | `agenda` | 5 | Eventos propios y el espejo con Google Calendar |
+| `mensajes` | 3 | Transversal: los hilos de mensajes pegados a un registro y las menciones de cada uno. Ver abajo |
 | `trituracion` | 3 | Partes de las plantas de trituración |
 | `odoo` | 3 | Lo que el SdG le pregunta o le postea al Odoo del grupo |
 | `home` | 3 | Los avisos de la campana del inicio |
@@ -212,6 +213,46 @@ en su documento, enlazado desde [CLAUDE.md](../CLAUDE.md).
 | `mi-cuenta` | 1 | Lo que cada uno puede cambiar de lo suyo |
 | `buscar` | 1 | La búsqueda global |
 | `asistente` | 1 | El asistente que consulta la base en castellano |
+
+### `mensajes`: tres rutas, cinco handlers, ningún módulo
+
+Es la única carpeta que **no pertenece a un módulo**: la mensajería interna es
+transversal, como Agenda y Disponibilidad, y por eso el detalle está acá y no
+en el documento de un módulo. El diseño está en
+[el spec](superpowers/specs/2026-11-11-mensajeria-interna-design.md).
+
+| Handler | Qué hace |
+|---|---|
+| `GET /api/mensajes?tipo=&id=` | El hilo de un registro, del más nuevo al más viejo, con el autor y el estado del aviso de cada mención. **No marca nada como leído**, pero sí dice cuántas sin leer tiene acá quien pregunta (`mis_menciones_sin_leer`), que es lo único que la pantalla no puede contar sola: no conoce su propio id |
+| `POST /api/mensajes` | Escribe un mensaje. Guarda el mensaje, después las menciones, y recién entonces manda los correos, en un `after()` |
+| `GET /api/mensajes/destinatarios?tipo=` | A quién se puede mencionar en ese tipo de registro, y si el correo está configurado. Devuelve `tiene_correo`, nunca la dirección |
+| `GET /api/mensajes/mios` | Las menciones propias sin leer, para la bandeja |
+| `PATCH /api/mensajes/mios` | Marca como leídas las menciones propias de un hilo. Lo llama la pantalla **cuando alguien abre el hilo**, no el GET: desde el 12/11/2026 el hilo arranca plegado en una barra, y plegado nadie lo vio |
+
+Cómo está conectada, en cuatro hechos que no se deducen de un archivo suelto:
+
+- **No hay tabla de hilos.** Un hilo *es* el par `(entidad_tipo, entidad_id)`, y
+  `entidad_id` **no tiene foreign key**: a propósito, para que un hilo pueda
+  pegarse a tres tablas distintas. La consecuencia es que la base no puede
+  contestar quién puede ver un registro, y por eso **el permiso lo pone la
+  ruta**, con `ENTIDADES[tipo].puedeVerlo` de `lib/mensajes/entidades.ts`. Las
+  tres leen con el cliente admin (sin él, `usuarios` sólo devuelve la fila
+  propia y todos los autores saldrían en blanco).
+- **`puedeVerlo` tiene que espejar la policy de SELECT de la tabla destino.** Es
+  un contrato entre dos archivos que nada comprueba: si una tabla afloja su
+  policy y el registro no se actualiza, el hilo queda más cerrado que el
+  registro; al revés, se abre un agujero. Hoy un requerimiento lo ven los
+  catorce (`puedeVerlo: () => true`) porque la migración 018 dejó así su SELECT,
+  y no es un descuido.
+- **Las dos cadenas de `select()` que traen el autor llevan el FK explícito**
+  (`autor:usuarios!mensajes_creado_por_fkey(...)`). `mensajes_menciones` abre un
+  segundo camino de `mensajes` a `usuarios`, así que `autor:usuarios(...)` a
+  secas es ambiguo y PostgREST contesta **300 PGRST201**. Ningún test de este
+  repo lo atrapa: las rutas no tienen tests y el embebido se resuelve del otro
+  lado del cable.
+- **El aviso es un correo y no un push**, y no pasa por
+  `avisarAQuienDecide()`: ver la fila de la mensajería en
+  [CLAUDE.md](../CLAUDE.md).
 
 ---
 

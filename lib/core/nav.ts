@@ -127,6 +127,9 @@ export const NAV: NavItem[] = [
       { label: "MTBF", href: "/mantenimiento/mtbf", modulo: "mantenimiento" },
       { label: "Avisos", href: "/mantenimiento/avisos", modulo: "mantenimiento" },
       { label: "Órdenes de trabajo", href: "/mantenimiento/ordenes", modulo: "mantenimiento" },
+      // Debajo de las órdenes porque sale de ellas: el catálogo se propone con
+      // lo que esas órdenes dicen que ya se viene haciendo.
+      { label: "Tareas preventivas", href: "/mantenimiento/tareas-preventivas", modulo: "mantenimiento" },
       /*
        * ACÁ VIVÍA «Cargar sin señal», Y SE SACÓ EL 02/11/2026.
        *
@@ -324,6 +327,7 @@ export const NAV: NavItem[] = [
           { label: "Las muestras", href: "/calidad/ensayos", modulo: "calidad" },
           { label: "Cargar muestra", href: "/calidad/ensayos/nueva", modulo: "calidad" },
           { label: "Indicadores", href: "/calidad/ensayos/indicadores", modulo: "calidad" },
+          { label: "Curva granulométrica", href: "/calidad/ensayos/curva", modulo: "calidad" },
           { label: "Reporte del día", href: "/calidad/ensayos/reporte", modulo: "calidad" },
           { label: "Productos", href: "/calidad/ensayos/productos", modulo: "calidad", soloAdmin: true },
           { label: "Límites", href: "/calidad/ensayos/limites", modulo: "calidad", soloAdmin: true },
@@ -431,6 +435,11 @@ export const NAV: NavItem[] = [
   // mal no compromete nada; decidir qué se hace con eso —generar la OT,
   // desestimarlo— sí, y eso queda adentro del módulo.
   { label: "Mis avisos", href: "/mis-avisos" },
+  // Sin `modulo`, por lo mismo: a alguien lo mencionan en una condición insegura
+  // o en un requerimiento sin tener ese módulo, y la bandeja no puede depender
+  // de uno. **No se llama «Avisos»** por la razón de «Disponibilidad» (abajo):
+  // esa palabra ya tiene dos significados.
+  { label: "Mis menciones", href: "/mis-menciones" },
   // Sin `modulo`, por lo mismo: quién no viene y qué día lo necesita saber quien
   // arma un turno o pide un camión, tenga o no RRHH. El motivo no sale en
   // ninguna de las dos pestañas; qué se ve del ausentismo lo decide la ruta.

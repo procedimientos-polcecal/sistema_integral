@@ -6,6 +6,8 @@ const fila = (p: Partial<FilaDeVista> & { id: string }): FilaDeVista => ({
   equipmentId: p.id,
   fallas: 3,
   mtbf: 100,
+  mttr: 3,
+  reparacionesContables: 3,
   confiabilidades: [0.9, 0.7],
   ultima: "2026-10-01",
   porEspecialidad: [],
@@ -125,5 +127,35 @@ describe("la direccion al tocar un encabezado", () => {
   it("las columnas de texto arrancan alfabeticas", () => {
     expect(siguienteOrden(asc("mtbf"), "equipo").ascendente).toBe(true);
     expect(siguienteOrden(asc("mtbf"), "sector").ascendente).toBe(true);
+  });
+});
+
+/**
+ * El MTTR se ve igual que el MTBF —una columna numerica alineada a la
+ * derecha— y se ordena al reves: en el MTBF lo peor es el numero mas chico y
+ * acá es el mas grande. Es el unico par de columnas del listado donde pasa.
+ */
+describe("la columna de MTTR", () => {
+  it("su valor es el mttr de la fila", () => {
+    expect(valorDe(fila({ id: "a", mttr: 5.5 }), "mttr")).toBe(5.5);
+  });
+
+  it("arranca mostrando el que mas tarda", () => {
+    expect(siguienteOrden(asc("mtbf"), "mttr")).toEqual({ columna: "mttr", ascendente: false });
+  });
+
+  it("al reves que el MTBF, que arranca por el que menos aguanta", () => {
+    expect(siguienteOrden(desc("mttr"), "mtbf")).toEqual({ columna: "mtbf", ascendente: true });
+  });
+
+  /** Un equipo sin promedio no es ni el mejor ni el peor: es uno del que no se sabe. */
+  it("los que no tienen promedio van al final en los dos sentidos", () => {
+    const filas = [
+      fila({ id: "sin", mttr: null, fallas: 1 }),
+      fila({ id: "lento", mttr: 10 }),
+      fila({ id: "rapido", mttr: 1 }),
+    ];
+    expect(ids(ordenar(filas, desc("mttr")))).toEqual(["lento", "rapido", "sin"]);
+    expect(ids(ordenar(filas, asc("mttr")))).toEqual(["rapido", "lento", "sin"]);
   });
 });

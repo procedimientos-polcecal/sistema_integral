@@ -202,6 +202,22 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
   const cierraAlCrearse = estadoSegunElCierre(form.fecha_cierre, form.estado) === "REALIZADO"
     && Boolean(form.fecha_cierre.trim());
 
+  /**
+   * Lo que el formulario dice y se contradice, **calculado en cada render**.
+   *
+   * Se pidió que la alerta salte apenas estén las dos fechas y no recién al
+   * guardar, y por eso vive acá y no adentro de `submit`. Es una función pura
+   * de `form`, así que no necesita estado propio ni un efecto: un `useEffect`
+   * con `setState` sería un segundo render para guardar algo que ya se sabe,
+   * que es lo que marca `react-hooks/set-state-in-effect`.
+   *
+   * `loQueSeContradice` **se calla mientras falte la fecha de inicio**, así
+   * que esto no grita mientras se completa el formulario: aparece recién
+   * cuando las dos están y no cierran. De eso depende que la alerta sea una
+   * alerta y no un cartel que está siempre.
+   */
+  const contradicciones = loQueSeContradice(form);
+
   const filteredEquip = form.sector_id
     ? equipos.filter((e: any) => e.sector_id === form.sector_id)
     : equipos;
@@ -221,9 +237,8 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     // que dicen entre ellos —una fecha de fin o de cierre anterior al inicio—.
     // La misma función que corre la ruta, que hasta hoy era la única que la
     // corría: el formulario mandaba la orden y se enteraba por un 400.
-    const contradice = loQueSeContradice(form);
-    if (contradice.length > 0) {
-      setError(`No se puede guardar porque ${contradice.join(", ")}.`);
+    if (contradicciones.length > 0) {
+      setError(`No se puede guardar porque ${contradicciones.join(", ")}.`);
       return;
     }
     setSaving(true); setError(""); setResultado(null);
@@ -427,6 +442,18 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               <input type="date" value={form.fecha_cierre} min={form.fecha_ejecucion || undefined} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
             </F>
           </div>
+
+          {/* ── LA ALERTA, EN EL MOMENTO Y NO AL GUARDAR ───────────────────
+              Pegada a las fechas, que es donde está mirando quien las acaba de
+              completar: el cartel de error de este modal vive abajo de todo,
+              al lado de los botones, y en un teléfono eso son dos pantallas.
+              Los dos dicen la misma frase a propósito — éste cuando pasa, y
+              aquél si alguien aprieta guardar igual. */}
+          {contradicciones.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+              No se puede guardar porque {contradicciones.join(", ")}.
+            </div>
+          )}
 
           {/* Debajo de la fecha de cierre y no arriba: es ella la que lo hace
               aparecer, y en un teléfono una sección que se abre más arriba

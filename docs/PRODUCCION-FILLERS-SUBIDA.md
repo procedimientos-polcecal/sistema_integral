@@ -30,8 +30,8 @@ tocarla y probablemente no tenga salida a internet.
 ## Qué se sube, y qué de eso se lee
 
 **No son lo mismo, y confundirlos es la trampa de esta parte.** Desde el
-04/11/2026 la tarea sube **cinco** carpetas de `\\server\EXTERIOR`, y el SdG
-lee **dos**. Las otras tres se suben para dejar de perder el dato, no porque
+05/11/2026 la tarea sube **seis** carpetas de `\\server\EXTERIOR`, y el SdG
+lee **dos**. Las otras cuatro se suben para dejar de perder el dato, no porque
 haya algo que importar:
 
 | Carpeta del servidor | Sube como | ¿El SdG la lee? | Qué trae |
@@ -41,6 +41,7 @@ haya algo que importar:
 | `Planta 02` | `Planta 02 AAAA-MM-DD.zip` | no | un PC Robot, pero su CSV es otra cosa |
 | `Hornos` | `Hornos AAAA-MM-DD.zip` | no | 18 planillas mensuales respaldadas a diario |
 | `Porteria` | `Porteria AAAA-MM-DD.zip` | no | el escritorio completo de esa PC |
+| `Pesadas Balanza` | **doce** `Pesadas Balanza DAT000000NN.CSV` | no | la balanza, un CSV por camión |
 
 Lo que hay que saber de cada una de las tres que no se leen, medido el
 04/11/2026:
@@ -55,6 +56,21 @@ Lo que hay que saber de cada una de las tres que no se leen, medido el
   hoy va en 566, así que en algún momento lo pusieron a cero con un desfasaje
   —una resta a través de ese salto da horas que no existieron—. Leerlo es un
   diseño, no un prefijo más en `produccion_molinos`.
+
+  **Y es el único origen que lleva `ignorar`, por algo que costó un archivo.**
+  Ese robot deja **dos clases de zip** en la misma carpeta: el bueno —
+  `PLANTA 02 AAAA-MM-DD HH;MM;SS.zip`, con `DAT001.CSV` adentro, ~21 KB— y
+  otro al arrancar —`PLANTA 02 - INICIO …` o `- AL INICIAR …`— de **868
+  bytes**, que no tiene el CSV sino cuatro `.txt` sueltos de 0 a 16 bytes
+  (`NUEVO ARHICOV.txt`, `DATOS PLANTA 2 - copia.txt`…). El 11/11/2026 el
+  basura se escribió a las 10:49, después del bueno de las 09:30; el subidor
+  elige el más nuevo, y al día siguiente **pisó en Drive el archivo bueno de
+  21.155 bytes con uno de 868**. Lo único que lo delató fue el número en el
+  log, que nadie mira.
+  Ahora hay dos defensas y las dos hacen falta: `ignorar` saca a esos zips de
+  la elección —va **por origen y nunca global**, porque en Hornos los
+  `- INICIO` sí traen las dieciocho planillas—, y la red de seguridad de abajo
+  cubre el caso que nadie previó.
 - **`Hornos` no es un robot**: cada zip trae dieciocho `.xlsx` mensuales
   (`202611-HORNOS NOVIEMBRE 2026.xlsx` y los anteriores). 1,1 MB por copia.
   Exporta más de una vez por día y con el nombre cambiando —se vio
@@ -71,6 +87,29 @@ Lo que hay que saber de cada una de las tres que no se leen, medido el
   subidor sube una por día, son ~10,5 MB diarios a la unidad compartida —unos
   3,8 GB al año—: si eso llega a importar, lo que corresponde es subir esas
   cinco planillas y no el escritorio.
+
+- **`Pesadas Balanza` es la única que no son zips, y la única que se sube
+  entera.** Son doce `DAT000000NN.CSV` sueltos. Cada uno es **un camión**: la
+  segunda columna numérica es su tara y no cambia dentro del archivo (11300,
+  7580, 8640, 6660…), y cada uno arranca en agosto o septiembre y llega a hoy.
+  O sea que **son acumulativos igual que un zip, pero uno por vehículo**, y por
+  eso el subidor los sube los doce: quedarse con el más nuevo subiría un camión
+  y perdería once. Eso es lo que hace `"carpetaEntera": true` en la
+  configuración. El destino conserva el nombre del archivo y **no** lleva fecha
+  —`Pesadas Balanza DAT00000010.CSV`—, así que el de mañana reemplaza al de
+  hoy y la carpeta de Drive tiene un archivo por camión y no uno por camión por
+  día; con fecha, en un año habría 4.380 archivos diciendo casi lo mismo.
+
+  Lo que hay que saber antes de usar `carpetaEntera` para otra cosa: **vale
+  sólo si cada archivo acumula lo suyo.** Una carpeta donde cada archivo sea el
+  dato de un día y nunca se reescriba no entra acá — ahí un día que falle se
+  pierde para siempre, y la defensa sería una cola, que es justamente lo que
+  este script no tiene y no conviene que tenga.
+
+  Y el dato en sí **no es nuevo para el SdG**: las pesadas ya entran a
+  `cantera_pesadas` desde la pestaña «Datos» de la planilla de balanza
+  (`app/api/cantera/acarreo/sync`). Esto es el export crudo del equipo, que se
+  guarda por si esa planilla se rompe, no una segunda fuente para leer.
 
 **Lo que está muerto y por qué no está en la lista.** `Datos Cal viva` tiene
 cuatro zips del 30/07/2026 que pesan **22 bytes cada uno**, que es el tamaño
@@ -305,7 +344,7 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
-Arranca **subiendo**, sin esperar a las 09:30, y después corre todos los días a
+Arranca **subiendo**, sin esperar a las 22:00, y después corre todos los días a
 esa hora. Mirar que los dos archivos aparezcan en la carpeta de Drive.
 
 ## Lo que hay que saber de esta instalación
@@ -317,7 +356,7 @@ esa hora. Mirar que los dos archivos aparezcan en la carpeta de Drive.
   importa: aunque el script tuviera un error, no puede tocar la carpeta del
   robot. Lo único que sabe hacer con ella es leer.
 - **La zona horaria del contenedor es la que decide a qué hora sube.**
-  `--diario 09:30` compara contra la hora local del proceso, y la imagen trae
+  `--diario 22:00` compara contra la hora local del proceso, y la imagen trae
   `TZ=America/Argentina/Buenos_Aires`. Si alguien la cambia, cambia la hora de
   la subida.
 - **La imagen es `node:22-slim` y no `alpine`** justamente por eso: alpine trae
@@ -364,7 +403,7 @@ resultado `0` y saltó los dos archivos que ya estaban subidos — la idempotenc
 comprobada en la instalación real y no sólo en el script.
 
 **Esa notebook no es el destino final.** Sirve para que esto empiece a correr
-hoy, pero el trabajo es diario a las 09:30 y una notebook se cierra y se lleva.
+hoy, pero el trabajo es diario a las 22:00 y una notebook se cierra y se lleva.
 Mudar esto a la máquina definitiva es copiar la carpeta, los tres archivos de
 configuración y el XML.
 
@@ -406,14 +445,14 @@ dependencias: es un archivo suelto, no hace falta el repo ni `npm install`.
      ejecuta nada con la máquina a batería**. En una notebook eso significa que
      no corre la mitad de los días, y no avisa. Es el tipo de falla que se
      descubre un mes después mirando por qué faltan datos.
-   - **`StartWhenAvailable=true`.** Si la máquina estaba apagada a las 09:30,
+   - **`StartWhenAvailable=true`.** Si la máquina estaba apagada a las 22:00,
      corre cuando vuelve. Sale gratis porque la subida es idempotente.
    - **`RestartOnFailure`**, tres reintentos cada 15 minutos, para cuando la red
      todavía no está lista al arrancar.
 
    Y dos cosas sobre la cuenta:
 
-   - **`/st 09:30`** es hora local, media hora después de que el robot exporta.
+   - **`/st 22:00`** es hora local, después de que exportaron todos los robots.
      No antes: el archivo todavía no existe.
    - El XML usa **`LogonType=InteractiveToken`**, o sea que corre **sólo con la
      sesión iniciada**. Es lo único posible cuando la cuenta de Windows no
@@ -440,9 +479,33 @@ dependencias: es un archivo suelto, no hace falta el repo ni `npm install`.
 
 ---
 
+# Las tres horas están encadenadas
+
+Desde el 12/11/2026, y a pedido, este frente corre así:
+
+| Hora (Argentina) | Qué pasa | Dónde se cambia |
+|---|---|---|
+| **21:00** | el robot genera el export del día | en el PC Robot, no en este repo |
+| **22:00** | la tarea sube los zips a Drive | `-Hora` de `instalar.ps1`, o la tarea en el Programador |
+| **07:00** (10:00 UTC) | el SdG los importa | el `schedule` de `vercel.json` |
+
+Antes eran 09:00, 09:30 y 10:00.
+
+**Lo que hay que saber antes de mover una sola: desalinearlas no rompe nada y
+nada lo dice.** Si la importación se adelanta a antes de la subida, entra el
+zip de anteayer y `estaObsoleto` igual da que está al día, porque mide 24 horas
+contra el `modifiedTime` de Drive —la hora de la **subida**— y no contra la
+hora del export del robot, que es lo que de verdad envejece. Las dos reglas
+que hay que conservar son que la importación quede **después** de la subida y
+**antes** de que alguien abra la pantalla a la mañana.
+
+(Y la subida a las 22:00 tiene un beneficio aparte que la de las 09:30 no
+tenía: a las 09:30 la subida de Planta 02 quedaba **empatada** con su propio
+export de las 09:30:37, una carrera que a veces se perdía.)
+
 # Cómo se comprueba que sigue andando
 
-Tres lugares, de más barato a más caro:
+Cuatro lugares, de más barato a más caro:
 
 - **El log.** `docker compose logs` en la variante con contenedor —ya rota, 10
   MB por 3 archivos— o el archivo `.log` en la variante con tarea programada.
@@ -454,7 +517,54 @@ Tres lugares, de más barato a más caro:
 - **El SdG.** Es el control que de verdad importa, porque es el único que mira
   el resultado y no el intento: si el archivo más nuevo de un molino tiene más
   de un día, la importación lo dice. Una tarea que dejó de correr se nota del
-  lado del sistema aunque nadie abra ningún log.
+  lado del sistema aunque nadie abra ningún log. Pero sólo ve los **dos
+  fillers**: los otros cuatro orígenes no los importa nadie, así que ahí este
+  control no existe.
+- **`node historial.mjs`**, que es el que cubre ese hueco. Compara, día por
+  día, lo que el servidor tiene contra lo que está en Drive, para los seis
+  orígenes. Con `--detalle` lista cada día que falta.
+
+**Y lo que ese informe dice NO es "falta subir eso".** Es la parte que hay que
+entender antes de leerlo, porque confundirla lleva a subir 73 MB sin agregar
+un solo dato. Los seis orígenes **acumulan**, así que el archivo de hoy
+contiene lo de los días que faltan. Medido el 11/11/2026:
+
+| Origen | La prueba |
+|---|---|
+| Filler 1 | el zip del 15/09 (que no está en Drive) y el del 11/11 (que sí) arrancan los dos en `26/2/2026;15:21;1201`, y el segundo tiene **5.390 líneas contra 4.129** |
+| Hornos | su planilla de noviembre pasó de **58.713 a 63.746 bytes** en veinte zips, sin bajar nunca |
+| Portería | `PLANILLA PESAJES.xlsx`, de **130.872 a 130.909**, igual |
+
+Entonces un día faltante no cuesta el dato: cuesta **la foto**. No se puede
+saber cómo se veía una planilla el 07/11, y el subidor nunca prometió eso. Lo
+que sí hay que mirar del informe son dos cosas:
+
+- **`ROMPE`**, que sale sólo cuando el archivo **más nuevo** de un origen no
+  está en Drive. Ése es el único caso en que el dato de verdad no llegó.
+- **La racha de días seguidos**, que no dice nada del dato pero sí de la
+  máquina: tres o cuatro días seguidos es la notebook quedándose sin red o
+  apagada, que es exactamente lo que pasó entre el 07 y el 10/11/2026 —dos
+  días sin correr y dos corriendo con los seis orígenes en
+  `UNKNOWN: unknown error, scandir`— y que el log, solo, no deja ver: **una
+  corrida que no ocurrió no escribe ninguna línea.**
+
+# Un archivo más chico no pisa al que ya está
+
+De que todo acumule se sigue algo que conviene tener escrito: **estos archivos
+sólo crecen**. Así que uno que encogió no es un dato nuevo — es el origen roto,
+truncado o reemplazado por otra cosa.
+
+Desde el 12/11/2026 el subidor **se niega** a reemplazar un archivo de Drive
+por uno más chico, y lo cuenta como **fallo** y no como aviso: el "último
+resultado" de la tarea programada pasa a `0x1`, que es lo que hace que alguien
+se entere. `--permitir-encoger` lo levanta, para el día que de verdad haya que
+hacerlo.
+
+Es la misma defensa que `laPlanillaEncogio` de
+[lib/core/sheets.ts](../lib/core/sheets.ts), por el mismo motivo y después del
+mismo susto. Y es la red de seguridad **genérica**: `ignorar` resuelve el caso
+conocido de Planta 02, pero esto cubre el que nadie previó —un zip truncado de
+Filler 1, por ejemplo, que sí tendría consecuencias porque el SdG lo importa—.
 
 # Qué pasa si un día falla
 

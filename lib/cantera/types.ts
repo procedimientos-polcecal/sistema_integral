@@ -215,6 +215,22 @@ export interface DestapeDB {
   acarreo_id: string | null;
 }
 
+/** Una fila de `cantera_cubicaciones_material`: el cierre mensual de C1+C3 para un material. */
+export interface CubicacionMaterialDB {
+  id: string;
+  mes: string;
+  material: "Chocolata" | "Caliza";
+  /** Lo medido en las canteras (yacimiento). */
+  existencia_final: number;
+  /** Lo medido en galpones y acopios por triturar. Null: sin medir. */
+  existencia_acopio: number | null;
+  observaciones: string | null;
+  cargado_por: string | null;
+  cargado_en: string;
+  actualizado_por: string | null;
+  actualizado_en: string | null;
+}
+
 /** Una fila de `cantera_cubicaciones`: el cierre mensual de un yacimiento. */
 export interface CubicacionDB {
   id: string;

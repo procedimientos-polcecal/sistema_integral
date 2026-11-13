@@ -8,6 +8,7 @@ import ComponentesYRepuestos from "./ComponentesYRepuestos";
 import CostoDelEquipo, { type CostoDelEquipoProps } from "./CostoDelEquipo";
 import ConfiabilidadDelEquipo, { type ConfiabilidadProps } from "./ConfiabilidadDelEquipo";
 import FallasDelEquipo from "./FallasDelEquipo";
+import CicloDeOT, { type CicloDeLaFicha } from "./CicloDeOT";
 import type { FallaContada } from "@/lib/mantenimiento/fallas";
 import Select from "@/components/Select";
 import { comoSeLee } from "@/lib/core/fechas";
@@ -51,11 +52,12 @@ function nombreCompleto(u: { nombre?: string; apellido?: string } | null | undef
   return `${u.nombre ?? ""} ${u.apellido ?? ""}`.trim() || "—";
 }
 
-export default function EquipoDetalle({ equipo, sectores, historial, canEdit, costo, confiabilidad, fallas }: {
+export default function EquipoDetalle({ equipo, sectores, historial, canEdit, costo, confiabilidad, fallas, ciclo }: {
   equipo: any;
   sectores: any[];
   historial: any[];
   canEdit: boolean;
+  ciclo: CicloDeLaFicha | null;
   costo: Omit<CostoDelEquipoProps, "equipoId">;
   confiabilidad: ConfiabilidadProps;
   fallas: FallaContada[];
@@ -294,6 +296,8 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
       <ConfiabilidadDelEquipo {...confiabilidad} />
 
       <FallasDelEquipo fallas={fallas} />
+
+      {ciclo && <CicloDeOT ciclo={ciclo} puedeEditar={canEdit} />}
 
       {historial.length > 0 && (
         <section>

@@ -4,10 +4,16 @@ import { FILTRO_FALTA_ALGO } from "@/lib/seguridadHigiene/condicion";
 import { corteDeFotosAtascadas } from "@/lib/seguridadHigiene/respaldoDeFotos";
 import { puedeAprobarCompras } from "@/lib/compras/auth";
 import type { Modulo, Rol, UsuarioModulo } from "@/lib/core/types";
+import {
+  sospechasDeCambio, type CicloVigilado, type Sospecha,
+} from "@/lib/mantenimiento/sospechaDeCambio";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { filtrarDescartadas, type Notificacion } from "./notificaciones";
-import { avisosDeConteos, avisosDeRitmo, type ConteosParaAvisos } from "./avisos";
-import { contarDivergenciasSinVer, leerLaSaludDeLaAgenda } from "@/lib/agenda/avisosDeLaAgenda";
+import { avisosDeCiclos, avisosDeConteos, avisosDeRitmo, avisosDeSalud, type ConteosParaAvisos } from "./avisos";
+import { contarDivergenciasSinVer } from "@/lib/agenda/avisosDeLaAgenda";
+import { leerLaSalud, type SaludDelSistema } from "@/lib/core/saludDeLasSincronizaciones";
+import { contarMencionesSinLeer } from "@/lib/mensajes/menciones";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ritmoPorModulo } from "./ritmo";
 import { traerRitmo, sinClasificarDelUltimoDiaHabil, equiposTallerVialSinService } from "./consultas";
 
@@ -44,14 +50,14 @@ export interface QuienMira {
  * a filtrar por fila, tiene que hacer lo mismo.
  *
  * `opciones.usuarioId` es **de quién se cuenta la Agenda**; sin él la Agenda no
- * entra (la foto diaria es de todos y no la lleva). `opciones.saludDeLaAgenda`
- * dice si se calcula el aviso de salud, que es del sistema y sólo le llega a
- * `admin_sistema`: es para no pagar las dos lecturas por cada persona del cron.
+ * entra (la foto diaria es de todos y no la lleva). `opciones.saludDelSistema`
+ * dice si se leen las sincronizaciones, que son del sistema y sólo le llegan a
+ * `admin_sistema`: es para no pagar esa lectura por cada persona del cron.
  */
 async function avisosDeLosModulos(
   supabase: SupabaseClient,
   modulos: Modulo[],
-  opciones: { usuarioId?: string; saludDeLaAgenda?: boolean } = {}
+  opciones: { usuarioId?: string; saludDelSistema?: boolean } = {}
 ): Promise<Notificacion[]> {
   const tiene = (m: Modulo) => modulos.includes(m);
   const hoy = hoyEnArgentina();
@@ -75,7 +81,7 @@ async function avisosDeLosModulos(
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
     tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar, filasRitmo,
-    agendaDivergencias, saludDeLaAgenda,
+    agendaDivergencias, salud, mensajesMencionesSinLeer,
   ] = await Promise.all([
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
     contarSiTiene("mantenimiento", () => head("ordenes_trabajo").eq("estado", "ATRASADO")),
@@ -140,10 +146,17 @@ async function avisosDeLosModulos(
     // de quien mira, no del sistema. Es la primera entrada de la lista así.
     // Ver `agendaDivergencias` en `avisos.ts`.
     opciones.usuarioId ? contarDivergenciasSinVer(supabase, opciones.usuarioId) : Promise.resolve(0),
-    // Tampoco por módulo: es de la salud del cron. Ver `agendaPasosCaidos`.
-    opciones.saludDeLaAgenda
-      ? leerLaSaludDeLaAgenda(supabase)
-      : Promise.resolve({ caidos: 0, sinComprobar: false, corridas: [] }),
+    // Tampoco por módulo: es la salud de las sincronizaciones de todo el
+    // sistema. Ver `avisosDeSalud`. Sin pedirla, sale una salud vacía —que no es
+    // `sinComprobar`: no se intentó mirar, así que no hay nada que declarar.
+    opciones.saludDelSistema
+      ? leerLaSalud(supabase)
+      : Promise.resolve<SaludDelSistema>({ caidas: [], sinDeclarar: [], sinComprobar: false, corridas: [] }),
+    // Tampoco por módulo y también de quien mira: las menciones sin leer. Va con
+    // el cliente admin aunque acá llegue el de la sesión, porque `puedeVerlo` lee
+    // los permisos de la persona nombrada y con la sesión `usuarios` sólo deja
+    // leer la fila propia. Ver `mensajesMencionesSinLeer` en `avisos.ts`.
+    opciones.usuarioId ? contarMencionesSinLeer(createAdminClient(), opciones.usuarioId) : Promise.resolve(0),
   ]);
 
   const conteos: Partial<ConteosParaAvisos> = {
@@ -154,11 +167,69 @@ async function avisosDeLosModulos(
     trituracionSinPlanilla,
     tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar,
     agendaDivergencias,
-    agendaPasosCaidos: saludDeLaAgenda.caidos,
-    agendaSaludSinComprobar: saludDeLaAgenda.sinComprobar ? 1 : 0,
+    mensajesMencionesSinLeer,
   };
 
-  return [...avisosDeConteos(conteos), ...avisosDeRitmo(ritmoPorModulo(filasRitmo), modulos)];
+  // La salud va al final: es de `admin_sistema` y no desplaza en la campana a
+  // los avisos de los módulos, que son de todos y se leen primero.
+  //
+  // **El push la reordena, y es a propósito**: ahí se nombran tres y el resto
+  // se resume, así que «al final» quiere decir «en el "y N más"» — los lunes,
+  // con la lista larga de totales, eso dejaba a la salud fuera del mensaje
+  // todas las semanas. Lo hace `saludPrimero` en `./resumenDeAvisos.ts`, que es
+  // la superficie que recorta; acá el orden es el de la lista entera.
+  return [
+    ...avisosDeConteos(conteos),
+    ...avisosDeRitmo(ritmoPorModulo(filasRitmo), modulos),
+    ...avisosDeCiclos(tiene("mantenimiento") ? await lasSospechasDeLosCiclos(supabase) : []),
+    ...avisosDeSalud(salud),
+  ];
+}
+
+/**
+ * Los ciclos encadenados cuya pieza parece haberse cambiado sin avisarles.
+ *
+ * Va aparte del `Promise.all` de arriba porque **son dos consultas encadenadas
+ * y la segunda depende de la primera**: sin ciclos arrancados no hay nada que
+ * preguntar, y hoy hay cuatro en toda la planta. Meterla allá costaría una
+ * lectura de órdenes cerradas a todo el que abra el inicio, para nada.
+ *
+ * El corte por `desde` es lo que hace que esto no se vuelva ruido: sólo mira lo
+ * cerrado después del último trabajo conocido de cada ciclo. Sin él serían 56
+ * el primer día — ver `sospechaDeCambio.ts`.
+ */
+async function lasSospechasDeLosCiclos(
+  supabase: SupabaseClient
+): Promise<Sospecha[]> {
+  const { data } = await supabase
+    .from("mant_ciclos_de_ot")
+    .select("id, equipment_id, desde, equipos:equipment_id(code), hija:tarea_hija_id(componente)")
+    .eq("activo", true)
+    .not("desde", "is", null);
+
+  const ciclos: CicloVigilado[] = (data ?? []).flatMap((c) => {
+    const equipo = (c.equipos as unknown as { code: string | null } | null)?.code;
+    const componente = (c.hija as unknown as { componente: string } | null)?.componente;
+    if (!equipo || !componente) return [];
+    return [{
+      id: c.id, equipment_id: c.equipment_id, equipo,
+      desde: c.desde, componente,
+    }];
+  });
+
+  if (ciclos.length === 0) return [];
+
+  // Lo cerrado en esos equipos desde la fecha más vieja de todos los ciclos.
+  // El filtro fino —cada ciclo contra su propio `desde`— lo hace la función
+  // pura; acá sólo se acota el bulto que viaja.
+  const masVieja = ciclos.map((c) => c.desde!).sort()[0];
+  const { data: cerradas } = await supabase
+    .from("ordenes_trabajo")
+    .select("ot_number, equipment_id, descripcion, fecha_cierre, ciclo_id")
+    .in("equipment_id", ciclos.map((c) => c.equipment_id))
+    .gt("fecha_cierre", masVieja);
+
+  return sospechasDeCambio(ciclos, cerradas ?? []);
 }
 
 /**
@@ -178,8 +249,8 @@ export async function avisosDeTodoElSistema(
 ): Promise<Notificacion[]> {
   // Sin `usuarioId`: la Agenda de una persona no entra en una foto que es de
   // todos. Con la salud sí: ésa es del sistema y la foto la recuerda como a
-  // cualquier otra, de modo que el resumen avisa el día que pasa de 0 a algo.
-  return avisosDeLosModulos(supabase, [...MODULOS_ORDEN], { saludDeLaAgenda: true });
+  // cualquier otra, de modo que el resumen avisa el día que un recurso cae.
+  return avisosDeLosModulos(supabase, [...MODULOS_ORDEN], { saludDelSistema: true });
 }
 
 /**
@@ -196,7 +267,8 @@ export async function avisosDeTodoElSistema(
  * condición insegura lo puede hacer el `admin` de Seguridad e Higiene. Sale sin
  * consulta, porque los grants ya vienen en `QuienMira`.
  *
- * Y `administraElSistema` es el rol pelado, por un solo aviso: ver abajo.
+ * Y `administraElSistema` es el rol pelado: lo piden las fotos sin respaldar y
+ * todos los avisos de salud, que se arreglan tocando Vercel y las credenciales.
  */
 export interface QuePuedeAtender {
   apruebaCompras: boolean;
@@ -223,20 +295,32 @@ const DE_UNA_LISTA: Record<string, keyof QuePuedeAtender> = {
    * recibiéndolo; lo que se saca es a los demás.
    */
   "syh-fotos-sin-respaldar": "administraElSistema",
-  /*
-   * Lo mismo, y por lo mismo: que un canal de Google no se renueve o que el cron
-   * no corra lo arregla quien toca las credenciales y las variables de Vercel.
-   * Mandado a quien sólo usa la Agenda sería un push sobre algo que no puede
-   * hacer nada. (`agenda-divergencias`, en cambio, no está acá: es de cada uno y
-   * ya llega sólo a quien le toca, por su propio conteo.)
-   */
-  "agenda-pasos-caidos": "administraElSistema",
-  // Que no se pueda ni mirar la salud también es de quien toca la infraestructura.
-  "agenda-salud-sin-comprobar": "administraElSistema",
+  // `agenda-divergencias` **no está acá**: es de cada uno y ya llega sólo a
+  // quien le toca, por su propio conteo.
 };
 
 /**
+ * Lo mismo que `DE_UNA_LISTA`, pero **por prefijo**, porque esos ids no se
+ * pueden teclear: hay uno por recurso del registro de salud
+ * (`salud-${modulo}/${recurso}`) y la lista crece sola cuando alguien declara
+ * uno nuevo.
+ *
+ * El porqué es el de `syh-fotos-sin-respaldar`: que una sincronización falle, o
+ * que el cron deje de correr, **lo arregla quien toca las credenciales y las
+ * variables de Vercel**, que es `admin_sistema`. Mandárselo a quien sólo usa el
+ * módulo sería un push diario sobre algo que no puede hacer nada — el patrón de
+ * `compras-por-aprobar` que este repo ya midió (6 personas, 3 sin poder
+ * aprobar) y que termina en que alguien apaga las notificaciones.
+ */
+const POR_PREFIJO: { prefijo: string; puede: keyof QuePuedeAtender }[] = [
+  { prefijo: "salud-", puede: "administraElSistema" },
+];
+
+/**
  * Saca los avisos que esta persona no puede atender.
+ *
+ * Mira dos reglas: `DE_UNA_LISTA`, tecleada por id exacto, y `POR_PREFIJO`,
+ * para las familias de avisos cuyos ids son dinámicos y no se pueden teclear.
  *
  * **Esto no es repartir por rol.** Lo que se mira es quién puede **hacer** lo
  * que el aviso pide, y eso es de dos clases: una **lista de responsables** que
@@ -262,7 +346,7 @@ export function sinLoQueNoPuedeAtender(
   puede: QuePuedeAtender
 ): Notificacion[] {
   return avisos.filter((a) => {
-    const lista = DE_UNA_LISTA[a.id];
+    const lista = DE_UNA_LISTA[a.id] ?? POR_PREFIJO.find((p) => a.id.startsWith(p.prefijo))?.puede;
     return lista === undefined || puede[lista];
   });
 }
@@ -278,7 +362,7 @@ export async function avisosDeUsuario(
   const [avisos, descartes, apruebaCompras] = await Promise.all([
     avisosDeLosModulos(supabase, modulosVisibles(quien.rol, quien.grants), {
       usuarioId: quien.id,
-      saludDeLaAgenda: quien.rol === "admin_sistema",
+      saludDelSistema: quien.rol === "admin_sistema",
     }),
     supabase
       .from("notificaciones_descartes")

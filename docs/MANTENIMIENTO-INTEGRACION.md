@@ -679,6 +679,37 @@ columnas, así que hay que ensancharla a 24 y poner `OBSERVACIÓN PREVIA` en `X1
 Hasta que esté, la nota se guarda igual y la pantalla avisa que no llegó a la
 planilla con lo que haya dicho Google.
 
+### Y abajo hay otra caja de texto que **no** es esto (11/11/2026)
+
+Desde la mensajería interna, en la pantalla de la OT conviven **dos cosas que se
+escriben igual y no son lo mismo**, una debajo de la otra. Confundirlas es el
+error fácil, así que acá está cuál es cuál:
+
+| | «Por qué no se hizo» | El hilo de mensajes |
+|---|---|---|
+| Qué dice | por qué esta orden sigue abierta | lo que se habla sobre la orden |
+| Dónde vive | `ordenes_trabajo_notas` | `mensajes` + `mensajes_menciones` |
+| **A la planilla** | **sí, la última va a la columna X** | **no, a ninguna** |
+| Avisa a alguien | no | sí: al mencionado le sale un correo con el texto adentro |
+| Quién la puede escribir | quien puede editar la OT | **cualquiera que pueda abrir la pantalla** — ver y escribir son lo mismo, así que no depende de `canEdit` |
+
+De ahí salen las dos consecuencias que importan:
+
+- **Un mensaje no reemplaza a una justificación.** Explicar en el hilo por qué
+  la orden está parada deja la columna X vacía, y quien mira la planilla —que es
+  quien no entra al sistema— no se entera de nada. Eso es exactamente la
+  divergencia que no avisa de la que habla CLAUDE.md.
+- **Una justificación no reemplaza a un mensaje.** La nota no le llega a nadie:
+  si hay que avisarle a alguien, es una mención.
+
+La pantalla lo dice con el `aclaracion` de `<HiloDeMensajes>`
+(`app/(app)/mantenimiento/ordenes/OrdenesClient.tsx`), y el texto cambia según
+si esa orden pide justificación. Está escrito también acá porque un renglón de
+JSX no es donde alguien va a buscarlo seis meses después. El resto de la
+mensajería —cómo se decide quién puede ver un hilo, por qué el aviso es un
+correo— está en [el spec](superpowers/specs/2026-11-11-mensajeria-interna-design.md)
+y resumido en la fila de CLAUDE.md.
+
 ## Iniciar una OT pregunta por el equipo
 
 Pasar una OT a "en proceso" quiere decir que alguien va a intervenir la máquina.
@@ -2643,6 +2674,66 @@ de mentira creado y limpiado para eso: la cabecera se actualiza, los dos
 renglones viejos se borran y entran los dos nuevos, y con un renglón enlazado a
 una OT la guarda cuenta 1 y las dos rutas se niegan.
 
+## El MTTR: cuánto tarda en volver (11/11/2026)
+
+El indicador que el [spec del MTBF](superpowers/specs/2026-10-16-mantenimiento-mtbf-design.md)
+dejó anotado en «lo que no es» —«los datos están… queda anotado, no se hace
+acá»—. Vive en [lib/mantenimiento/mttr.ts](../lib/mantenimiento/mttr.ts) y se
+lee al lado del MTBF, en la ficha del equipo y como columna del listado
+`/mantenimiento/mtbf`.
+
+**MTTR = horas de reparación / cantidad de reparaciones**, sobre la **misma
+ventana, el mismo tipo de orden y la misma fecha** que el MTBF: los mismos 365
+días, las mismas correctivas, el mismo `fecha_ejecucion`. No es una
+coincidencia sino el punto: los dos números se leen en la misma línea, y si
+cubrieran períodos distintos nada lo avisaría. `fechaDeFalla` es una sola
+función y la usan los dos, y hay un test que lo fija.
+
+Cinco cosas que no se deducen del código:
+
+- **`horas` es cuánto duró el trabajo, no horas-hombre, y eso ya estaba
+  verificado**: lo midió `costoEquipo.ts`, que necesitaba lo contrario
+  —multiplicarlo por la gente—. Las órdenes con tres operarios tienen la misma
+  mediana que las de uno, 3 horas, cuando serían el triple si ya vinieran
+  multiplicadas. Sin ese dato este indicador no se podía calcular.
+- **Las de contratista no entran, y es la mitad del diseño.** Ahí `horas` deja
+  de ser duración y pasa a ser lo que el tercero factura; la prueba es
+  aritmética: la **OT 2064 tiene 415 horas entre el 20 y el 29 de junio**,
+  nueve días de calendario, que son 216 horas de reloj. Medido el 11/11/2026,
+  el precio de mezclarlas: **3,3 h** de MTTR de planta contando sólo las
+  propias contra **5,5 h** mezclado, y las de contratista solas dan **26,9 h**.
+  Y el ranking se da vuelta: con ellas adentro **los dos primeros puestos son
+  «Edificio»** —PO-C1 con 84,8 h y PO-A1 con 49 h—, el equipo comodín al que se
+  imputa lo que no tiene máquina. Sin ellas, los primeros son la Cadena de
+  arrastre 6 y el Molino de bolas. El criterio de «es de un tercero» es **que
+  `contratista` tenga texto**, el mismo que ya usaba `costoEquipo.ts`.
+- **No es tiempo de parada de la máquina**, y eso va en texto visible y no en
+  un tooltip, igual que el aviso de días de calendario del MTBF
+  (`HORAS_DE_TRABAJO` en `mtbfVista.ts`). Tampoco se puede sacar del
+  calendario: `fecha_cierre - fecha_ejecucion` da **0 en 750 de 811**
+  correctivas cerradas de la ventana, porque el cierre se carga el mismo día
+  que se registra el trabajo.
+- **Las cuatro cuentas cierran, y eso es lo que lo hace auditable.** El
+  resultado trae `afuera` con los tres motivos de descarte, y la suma da las
+  correctivas de la ventana: medido con la lectura real, **555 contables + 89
+  de contratista + 330 sin horas + 5 sin equipo = 979**. Hay un test que lo
+  fija. Si una orden se contara en dos motivos, o en ninguno, la suma lo diría.
+- **El promedio se publica desde 3 reparaciones** (`MINIMO_REPARACIONES`): con
+  una, «el promedio» es esa orden. El equipo aparece igual, con su cuenta y sin
+  número, que es lo que hace el MTBF cuando no llega al piso de días
+  observados. De los 119 equipos con alguna reparación propia en la ventana,
+  **47 llegan a tres**.
+
+Dos detalles de la pantalla: la columna de MTTR **se ordena al revés que la de
+MTBF** —acá lo peor es el número más alto— y es el único par del listado donde
+pasa; y la ficha nombra **la reparación más larga con su número de OT**, porque
+un MTTR alto casi siempre es una orden larga y no un equipo lento.
+
+Y una lectura menos: `indicadoresDeLaPlanta()` calcula los dos sobre **una sola
+lectura** de las correctivas. `mtbfDeLaPlanta()` sigue existiendo porque
+`/api/mantenimiento/mtbf` devuelve ese objeto tal cual y el tablero lo consume
+por ahí.
+
 ## Un trabajo no se cierra antes de empezar (05/11/2026)
 
 Se pidió una alerta que impida poner la fecha de cierre antes de la de inicio.
@@ -2691,6 +2782,188 @@ El `min` de los `<input type="date">` —en los dos formularios de alta y en el
 modal de registrar— es la primera defensa y **no** la regla: deja en gris los
 días anteriores, pero se saltea tipeando y en el teléfono depende del
 navegador. Quien decide es la función, en la pantalla y en el servidor.
+
+**Y la alerta salta en el momento, no al guardar** (05/11/2026, a pedido). Las
+tres pantallas calculan la regla **durante el render** —no en un efecto con
+`setState`, que sería un segundo render para guardar algo que ya se sabe— y
+muestran el cartel rojo **pegado a las fechas**, que es donde está mirando
+quien las acaba de completar: en los dos modales el cartel de error vive abajo
+de todo, al lado de los botones, y en un teléfono eso son dos pantallas.
+
+Tres cosas de esa decisión que no se deducen del código:
+
+- **No grita mientras se completa.** `loQueSeContradice` se calla si falta la
+  fecha de inicio, así que la alerta aparece recién cuando las dos están y no
+  cierran. De eso depende que sea una alerta y no un cartel que está siempre.
+- **El botón de guardar sigue habilitado.** Deshabilitarlo dejaría el porqué
+  arriba y el botón mudo abajo; apretarlo repite la misma frase donde la
+  persona está mirando, y el guardado igual no pasa —lo frena el submit y, si
+  llegara, el servidor—. Los dos textos son el mismo a propósito.
+- **Va debajo de la grilla y no adentro de la celda** en el modal de registrar:
+  esa grilla es de dos columnas y el mensaje, que nombra las dos fechas
+  enteras, entraba partido en pedazos de 150 px.
+
+## El catálogo de tareas preventivas (12/11/2026)
+
+El motor de planes periódicos tiene **un plan cargado** y, al mismo tiempo, el
+**59,9 % de las OT del último año son PROGRAMADO** (1.455 contra 973
+correctivas). El preventivo se hace en volumen y se escribe a mano una orden
+por vez. El diseño, con todo lo medido, está en
+[el spec](superpowers/specs/2026-11-12-mantenimiento-catalogo-de-tareas-preventivas-design.md);
+acá lo que hay que saber antes de tocarlo:
+
+- **Una tarea es una acción sobre un componente.** La acción es vocabulario
+  nuevo (`ACCIONES_PREVENTIVAS`, seis entradas en
+  [lib/mantenimiento/tareasPreventivas.ts](../lib/mantenimiento/tareasPreventivas.ts))
+  y sale de los datos. El componente **no se inventa**: sale de
+  `equipos_componentes`.
+- **Y ahí está el hallazgo que desmintió el diseño inicial.** Se dio por
+  sentado que el objeto ya estaba resuelto —43 nombres curados— y la primera
+  corrida dio **156 de 1.465 órdenes (11 %)** con acción + componente. Las dos
+  listas hablan idiomas distintos: el catálogo nombra piezas de relevamiento
+  («Raspador / limpiador cinta», «Masa excéntrica») y las órdenes nombran lo
+  que se toca ese día. **Péndulos, grillas, rodamientos y correas no existen
+  como componente**, y son el segundo, tercero y cuarto objeto más frecuente de
+  todo el preventivo.
+- Por eso lo más accionable que imprime `npm run catalogo-de-tareas` no es el
+  catálogo sino **qué le falta a `equipos_componentes`**.
+- **Eso se completó el mismo día, y sin inventar nada**: qué equipo tiene qué
+  componente sale del historial, porque cada OT que nombra «péndulos» ya viene
+  con su `equipment_id`. `scripts/componentes-desde-las-ot.mts` agregó **91
+  filas** y la cobertura pasó de **156 órdenes (11 %) a 278 (19 %)**, y las
+  tareas de 26 a 46. Las filas llevan `componente_id` con prefijo
+  **`COMP-OT-`** justamente para poder sacarlas: `delete from
+  public.equipos_componentes where componente_id like 'COMP-OT-%'`. El script
+  **no escribe si no le pasan `--aplicar`**.
+- Lo que NO se puede hacer desde el sistema sigue siendo lo mismo: **inventar
+  un componente que ninguna OT nombra**. Un componente así no cuelga de ningún
+  equipo y la tarea aparecería en el lugar que no es.
+- **El 19 % de las PROGRAMADO no es preventivo**: 281 son reparación, obra o
+  soldadura. `ACCIONES_CORRECTIVAS` las reconoce **para contarlas, no para
+  reclasificar la OT**. Sin esa distinción, el «54 % con acción reconocida»
+  haría creer que hay 793 tareas preventivas donde hay 512.
+- El intervalo de cada tarea es **la mediana de los huecos y no el promedio**,
+  con menos de tres fechas no se opina, y dos órdenes del mismo día no son dos
+  repeticiones.
+
+**La pantalla para confirmar el catálogo está hecha desde el 12/11/2026**:
+`/mantenimiento/tareas-preventivas`, con la migración
+`20261112101003_mantenimiento_tareas_preventivas_confirmadas.sql`. Lo que hay
+que saber antes de tocarla: **sólo se guarda la decisión, nunca la propuesta**
+—se recalcula del historial en cada lectura—; **descartar escribe una fila**,
+porque sin ella la tarea vuelve mañana y la lista no se termina nunca; la clave
+natural es **(equipo, acción, componente)** y la ruta hace upsert sobre ella; y
+el **ritmo medido y el período decidido son dos columnas**, porque que no
+coincidan es información. Confirmar **todavía no genera ninguna orden**, y eso
+está escrito arriba de la pantalla.
+
+**La etapa de la propuesta no escribe nada y no lleva migración.** El orden de lo que sigue
+importa y está en el spec: primero que alguien de planta complete los
+componentes que faltan, después confirmar el catálogo, y recién ahí la tabla y
+el enganche con el motor de planes. Al revés da una tabla que cubre el 11 % del
+preventivo y la sensación de que el problema está resuelto.
+
+## Las OT encadenadas: el ciclo de martillos (12/11/2026)
+
+Una OT que al cerrarse genera la siguiente. Una **madre** arranca el ciclo, de
+su cierre nace una **hija** que se repite x veces, y después de la última vuelve
+la madre. El primer —y único— caso cargado:
+
+> **Cambio de martillos** → **Rotación de martillos** × 3 → Cambio de martillos → …
+
+en PO-C1-04 (Hidratación, cada 3 días), PY-B1-06 (Filler 2, 6), PY-A1-05
+(Filler 1, 6) y PY-C1-03 (Planta 0-2 mm, 10). **Filler 3 (PY-D1-03) hace el
+mismo ciclo y quedó afuera a pedido**, así que no es un olvido.
+
+El diseño está en
+[el spec](superpowers/specs/2026-11-12-mantenimiento-ot-encadenadas-design.md) y
+el plan en [su plan](superpowers/plans/2026-11-12-mantenimiento-ot-encadenadas.md).
+
+### Lo que no se deduce del código
+
+**1. El estado son dos campos y un corte, y el corte es todo.**
+`mant_ciclos_de_ot.desde` es la fecha del último trabajo **hecho** y
+`vuelta_desde` qué vuelta era ése. **Sólo cuentan las OT del ciclo creadas en
+`desde` o después.**
+
+Sin ese corte esto se rompe de la peor manera posible, y vale saber cómo porque
+la primera versión del diseño lo tenía así: el estado se derivaba de «la última
+OT con `ciclo_id`» y el botón de reinicio suspendía la hija que esperaba. Pero
+entonces la última pasaba a ser la hija **anterior, ya cerrada**, y la corrida
+siguiente volvía a crear exactamente la orden recién suspendida, fechada sobre
+un cierre viejo —o sea nacida atrasada— sobre martillos recién cambiados. Es,
+palabra por palabra, lo que quien pidió esto nombró como su única razón para
+dejar de confiar: «que genere OT sobre martillos que ya se cambiaron». El
+mecanismo que existía para evitar el anti-objetivo lo producía.
+
+**El corte lo mueven tres puntas y nada más**: la madre al cerrarse
+(`elCorteQueSigue`), el botón de reinicio y la carga inicial. Las hijas no:
+quedan dentro del rango y la decisión ya las lee bien. Por eso una madre cerrada
+devuelve `esperar` y no `crear` — **sin alguien que mueva el corte, el ciclo se
+detiene para siempre después del primer cambio**.
+
+**2. La cara es la vuelta más uno, y eso lo confirmaron los datos.** La
+rotación n lleva el martillo a la cara n+1, porque entra nuevo en la 1ª. No es
+una convención elegida: de las 248 OT de martillos de estos cuatro equipos,
+**63 nombran la cara en el texto libre y aparecen la 2ª, la 3ª y la 4ª — nunca
+la 1ª y nunca una 5ª**. Un juego que entra nuevo, se rota tres veces y se
+cambia. Esa coincidencia entre lo que dijo la gente y lo que dicen los datos es
+lo que hace que `repeticiones` = 3 no sea una conjetura.
+
+**3. El ciclo apunta a `mant_tareas_preventivas` y no guarda los nombres.** Ese
+catálogo —de la misma fecha, otra sesión— ya es donde vive «Rotación de
+Martillos en PO-C1-04 cada 3 días», y **existe para generar OT**. El día que
+alguien lo enganche al generador, estas cuatro máquinas recibirían la rotación
+dos veces en la planilla que mira la planta. Con la FK eso se contesta con un
+join; sin ella habría que cruzarlas por texto, que es lo que los dos diseños
+prohíben. Por lo mismo, el «cada cuántos días» **no se guarda en el ciclo**: es
+el `periodo_dias` de la tarea hija.
+
+**Si estás escribiendo ese enganche: una tarea referenciada por un ciclo activo
+no se genera por plan.**
+
+### Las tres capas contra el anti-objetivo
+
+El botón solo no alcanza **porque depende de que alguien se acuerde de
+apretarlo**.
+
+1. **El botón «Se cambiaron los martillos»**, en la ficha del equipo. Si la OT
+   viva es una hija, queda SUSPENDIDA y sale del ciclo. Si es la **madre**, no
+   se toca y se explica: el trabajo existió, y cerrarla desde un botón sería el
+   sistema registrando trabajo ajeno en las columnas M y K del master.
+2. **El aviso que pregunta sin decidir** (`mant-ciclo-sospechoso-<equipo>`).
+   Es la única parte de todo esto que mira el texto de una descripción, y mirarlo
+   se puede porque **no decide**: un falso positivo cuesta una pregunta, uno que
+   no detecta deja todo como estaba.
+3. **La OT dice en qué se basa**: «Rotación de martillos — a 3ª cara (2 de 3).
+   Martillos cambiados el 23/10/2026». Es la que de verdad protege y no cuesta
+   nada: si los cambiaron el 05/11, quien abre la orden lo ve sin tener que
+   confiar en el estado interno de nada.
+
+### Por qué vive en el cron y no en el botón de cerrar
+
+Porque **las OT se cierran en la planilla**: de las 248 medidas, **225 ni
+siquiera nacieron en el sistema** (`app_created = false`). Un enganche en la
+ruta PATCH vería una minoría de los cierres. Es una reconciliación —`ciclos` en
+`SINCRONIZACIONES`, después de `ordenes` sí o sí— y la idempotencia la da el
+dato: si la última del ciclo está abierta no se hace nada.
+
+### Qué falta para que esto genere algo
+
+**Los cuatro ciclos nacen con `desde` y `vuelta_desde` en null, y así no generan
+ninguna OT.** El punto de arranque lo carga una persona desde la ficha de cada
+equipo, y es el único dato del mecanismo que no sale de otro dato.
+
+Se intentó deducirlo y no da: contando rotaciones cerradas desde el último
+cambio, **dos de los cuatro equipos dan 6 rotaciones de un ciclo de 3**, porque
+el texto libre mezcla rotaciones con revisiones («Revisión de rompedora y ver si
+es necesario rotar martillos»). La cara que el texto nombra sí sirve —la OT 3067
+del 11/11/2026 dice «a 4ta cara»— pero no todas la nombran.
+
+Y ojo con esto: **un ciclo sin arrancar no genera ninguna OT, así que nada se
+atrasa y `mant-atrasadas` no puede verlo.** Se informa en el resultado de cada
+corrida (`sin_arrancar`) y la ficha del equipo lo dice con todas las letras,
+pero si nadie carga esas cuatro fechas la función queda desplegada y dormida.
 
 ## Los datos: qué está y qué no
 

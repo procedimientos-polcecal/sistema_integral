@@ -128,6 +128,7 @@ export default function CondicionesClient({
   puedeEditar,
   esAdmin,
   ordenInicial,
+  condicionInicial = null,
 }: Catalogos & {
   filtrosIniciales: FiltrosDeGestion;
   ordenInicial: OrdenDeColumna;
@@ -135,11 +136,41 @@ export default function CondicionesClient({
   hoy: string;
   puedeEditar: boolean;
   esAdmin: boolean;
+  /**
+   * El `?condicion=<id>` de la URL: la ficha que se abre al cargar. Es adonde
+   * lleva el correo de una mención, y llega como texto sin validar —quién dice
+   * si existe es la lista de acá abajo, que ya las tiene todas—.
+   */
+  condicionInicial?: string | null;
 }) {
   const [filas, setFilas] = useState(condicionesIniciales);
   const [filtros, setFiltros] = useState<FiltrosDeGestion>(filtrosIniciales);
   const [orden, setOrden] = useState<OrdenDeColumna>(ordenInicial);
-  const [abierta, setAbierta] = useState<string | null>(null);
+  // Arranca en el `?condicion=` del enlace. Llegar aquí con la ficha abierta y
+  // no con la lista es lo que hace que el correo de una mención sirva: la
+  // pantalla no tiene buscador y las condiciones se ordenan por número
+  // descendente, así que «buscá la N° 7» era pedirle a alguien que recorriera
+  // 44 filas. Que el parámetro desaparezca de la barra lo hace solo el efecto
+  // de abajo, que reescribe la URL desde los filtros: recargar entonces no
+  // vuelve a abrir una ficha que ya se cerró, igual que en Mis pedidos. Y la
+  // ficha que abre el enlace llega con la conversación desplegada, que es lo
+  // que termina de cumplir lo que el correo promete (`vinoPorElEnlace`).
+  const [abierta, setAbierta] = useState<string | null>(condicionInicial);
+  // Si la ficha que está abierta se abrió **por el enlace del correo** y no desde
+  // la lista. Es lo único que distingue las dos cosas, y hace falta porque la
+  // conversación de la ficha arranca plegada salvo que se haya venido por ella:
+  // el correo de una mención manda acá, así que ahí el hilo se despliega solo
+  // —abrirlo es además lo que marca la mención como leída—. No alcanza con
+  // comparar contra `condicionInicial`: cerrar la ficha y volver a abrir la
+  // misma desde la lista ya no es llegar por el enlace.
+  const [vinoPorElEnlace, setVinoPorElEnlace] = useState(condicionInicial !== null);
+
+  /** Abrir una ficha desde la lista: a esa se llega a mirarla, no a conversar. */
+  function abrirDesdeLaLista(id: string) {
+    setAbierta(id);
+    setVinoPorElEnlace(false);
+  }
+
   /** Si está abierto el alta. */
   const [cargando, setCargando] = useState(false);
 
@@ -210,6 +241,14 @@ export default function CondicionesClient({
   }
   const fichaAbierta = abierta ? (filas.find((c) => c.id === abierta) ?? null) : null;
 
+  // El enlace de un correo puede traer un id que ya no está —la condición se
+  // borró— o uno mal escrito. Sin esto, la pantalla mostraba la lista como si
+  // el enlace no hubiera dicho nada, y quien venía de un aviso se quedaba
+  // buscando. No distingue las dos causas, y es a propósito: desde acá se ven
+  // iguales, y afirmar cuál fue sería inventar.
+  const elEnlaceNoLlego =
+    condicionInicial !== null && !filas.some((c) => c.id === condicionInicial);
+
   function poner<K extends keyof FiltrosDeGestion>(campo: K, valor: FiltrosDeGestion[K]) {
     setFiltros((f) => ({ ...f, [campo]: valor }));
   }
@@ -260,6 +299,13 @@ export default function CondicionesClient({
           </button>
         )}
       </div>
+
+      {elEnlaceNoLlego && (
+        <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          El enlace llevaba a una condición insegura que no está en la lista: puede que la hayan
+          borrado, o que el enlace esté mal. Lo que se habló sigue en su hilo.
+        </p>
+      )}
 
       {/* Lo que hay para hacer, antes que nada. */}
       <div className="flex flex-wrap gap-2">
@@ -403,7 +449,7 @@ export default function CondicionesClient({
                   <tr
                     key={c.id}
                     className="cursor-pointer align-top hover:bg-slate-50"
-                    onClick={() => setAbierta(c.id)}
+                    onClick={() => abrirDesdeLaLista(c.id)}
                   >
                     <td className="px-3 py-2">
                       <button
@@ -411,7 +457,7 @@ export default function CondicionesClient({
                         className="font-semibold text-slate-900 underline"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setAbierta(c.id);
+                          abrirDesdeLaLista(c.id);
                         }}
                       >
                         {c.numero}
@@ -454,7 +500,7 @@ export default function CondicionesClient({
               <li key={c.id}>
                 <button
                   type="button"
-                  onClick={() => setAbierta(c.id)}
+                  onClick={() => abrirDesdeLaLista(c.id)}
                   className="block w-full space-y-1.5 rounded border border-slate-200 bg-white p-3 text-left"
                 >
                   <span className="flex items-center justify-between gap-2">
@@ -512,7 +558,8 @@ export default function CondicionesClient({
           puedeEditar={puedeEditar}
           esAdmin={esAdmin}
           onGuardada={guardada}
-          onCerrar={() => setAbierta(null)}
+          onCerrar={() => { setAbierta(null); setVinoPorElEnlace(false); }}
+          conversacionAbierta={vinoPorElEnlace}
         />
       )}
     </div>

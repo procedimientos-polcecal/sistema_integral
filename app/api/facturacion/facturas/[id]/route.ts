@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { sePuedeAprenderElCuit } from "@/lib/facturacion/aprenderElCuit";
 import { puedeEditarFacturacion, tieneAccesoFacturacion } from "@/lib/facturacion/auth";
 import type { EstadoDeFactura } from "@/lib/facturacion/types";
 
@@ -138,5 +139,64 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "No existe esa factura" }, { status: 404 });
   }
 
-  return NextResponse.json({ factura });
+  /*
+   * ── Y, si lo pidieron, se le guarda el CUIT al proveedor ──
+   *
+   * El padrón tiene 311 proveedores sin CUIT y sin CUIT no se engancha nada
+   * solo. El dato ya pasa por acá —cada factura trae el del emisor, firmado por
+   * ARCA— y hasta ahora nadie lo escribía: el alta dejaba el aviso «cargáselo
+   * para que se enganche sola la próxima» y ahí terminaba.
+   *
+   * **Va detrás de un pedido explícito y no del `proveedor_id` a secas.**
+   * Vincular una factura a un proveedor y cambiarle el CUIT al padrón son dos
+   * cosas distintas, y la segunda toca un catálogo que comparten todos los
+   * módulos: hacerla de prepo cada vez que alguien vincula sería escribir en
+   * el núcleo sin que nadie lo haya pedido.
+   *
+   * Si no se puede, **la factura igual quedó vinculada** y se devuelve el
+   * motivo. Al revés —fallar el PATCH entero porque el CUIT no se pudo
+   * aprender— perdería lo que sí se hizo.
+   */
+  let cuitAprendido: string | null = null;
+  let avisoDelCuit: string | null = null;
+
+  if (b?.aprenderElCuit === true && cambios.proveedor_id) {
+    const proveedorId = cambios.proveedor_id as string;
+
+    const { data: elegido } = await supabase
+      .from("proveedores")
+      .select("cuit")
+      .eq("id", proveedorId)
+      .maybeSingle();
+
+    const { data: otros } = await supabase
+      .from("proveedores")
+      .select("cuit")
+      .not("cuit", "is", null)
+      .neq("id", proveedorId);
+
+    const veredicto = sePuedeAprenderElCuit({
+      cuitDeLaFactura: factura.cuit_emisor as string | null,
+      cuitDelProveedor: (elegido?.cuit as string | null) ?? null,
+      cuitsDeOtrosProveedores: (otros ?? []).map((o) => (o.cuit as string | null) ?? ""),
+    });
+
+    if (!veredicto.se) {
+      avisoDelCuit = veredicto.porque;
+    } else {
+      const { error: errorCuit } = await supabase
+        .from("proveedores")
+        .update({ cuit: veredicto.cuit })
+        .eq("id", proveedorId);
+
+      if (errorCuit) avisoDelCuit = `No se pudo guardar el CUIT: ${errorCuit.message}`;
+      else cuitAprendido = veredicto.cuit;
+    }
+  }
+
+  return NextResponse.json({
+    factura,
+    ...(cuitAprendido ? { cuitAprendido } : {}),
+    ...(avisoDelCuit ? { avisoDelCuit } : {}),
+  });
 }

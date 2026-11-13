@@ -144,7 +144,26 @@ describe("loQueSeMovio con avisos que son de una persona", () => {
     ]);
   });
 
+  it("las menciones sin leer tampoco: son de una persona", () => {
+    expect(loQueSeMovio([aviso("mensajes-menciones-sin-leer", 2)], new Map())).toEqual([]);
+  });
+
+  /*
+   * El contraste: los de salud son del sistema —no dependen de quién mira— así
+   * que la foto los recuerda y el movimiento los ve. Es el día que ese recurso
+   * cae, que es cuando hay que enterarse.
+   */
   it("el de salud, que es del sistema, sí sale cuando sube", () => {
-    expect(loQueSeMovio([aviso("agenda-pasos-caidos", 1)], new Map([["agenda-pasos-caidos", 0]]))).toHaveLength(1);
+    expect(loQueSeMovio([aviso("salud-agenda/canales", 1)], new Map([["salud-agenda/canales", 0]]))).toHaveLength(1);
+  });
+
+  /*
+   * Menos uno: la cantidad de `salud-sin-comprobar` **es el día** y no un
+   * conteo, así que sube sola todas las noches. Comparada contra la foto sería
+   * una novedad diaria y eterna — el mensaje que se repite, que es lo que
+   * enseña a apagar las notificaciones.
+   */
+  it("el de «no se pudo comprobar» no sale por movimiento aunque su número suba", () => {
+    expect(loQueSeMovio([aviso("salud-sin-comprobar", 20_400)], new Map([["salud-sin-comprobar", 20_399]]))).toEqual([]);
   });
 });

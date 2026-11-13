@@ -9,10 +9,17 @@
 
       1. comprueba Node
       2. comprueba que este el JSON de la cuenta de servicio
-      3. escribe `subir-zips.config.json` con las rutas de ESTA maquina
-      4. comprueba que se vean las carpetas del servidor
+      3. comprueba que se vean las carpetas del servidor
+      4. escribe `subir-zips.config.json` con las rutas de ESTA maquina
       5. corre una prueba EN SECO, que no sube nada
       6. recien si esa prueba sale bien, registra la tarea programada
+      7. y la vuelve a leer del Programador, para contestar la unica pregunta
+         que importa: ¿quedo instalada, y a que hora corre?
+
+    La ventana NO se cierra sola al terminar, ni cuando sale bien ni cuando
+    falla: espera una tecla. Con "Ejecutar con PowerShell" se cerraba de
+    inmediato y se perdia justo el mensaje que explicaba el error. Se saltea
+    con -SinPausa.
 
     El orden importa y es la unica decision de diseno de este archivo: una
     tarea instalada que no puede funcionar es peor que ninguna, porque se
@@ -21,14 +28,22 @@
 
     Opciones:
       -Probar        hace todo menos registrar la tarea. Para ver si andaria.
-      -Hora 09:30    a que hora corre. Por defecto 09:30, media hora despues
-                     de que el robot exporta. Antes no existe el archivo.
+      -Hora 22:00    a que hora corre. Por defecto 22:00, a pedido y porque es
+                     la hora que menos se pelea con los robots: para entonces
+                     ya exportaron todos (Hornos 04:20, Filler 09:00, Planta 02
+                     09:30, Porteria cada hora). Correr a las 09:30 dejaba la
+                     subida de Planta 02 EMPATADA con su export de las
+                     09:30:37, que es una carrera que a veces se pierde.
+                     OJO si se cambia: el cron del SdG lee Drive a las 13:00
+                     UTC (10:00 de Argentina), asi que con 22:00 lee lo que se
+                     subio la NOCHE ANTERIOR. Ver docs/PRODUCCION-FILLERS-SUBIDA.md.
       -Servidor      el nombre UNC del servidor. Por defecto "server".
 #>
 
 param(
   [switch]$Probar,
-  [string]$Hora = "09:30",
+  [switch]$SinPausa,
+  [string]$Hora = "22:00",
   [string]$Servidor = "server"
 )
 
@@ -44,7 +59,29 @@ $CARPETA_DRIVE = "0AH83x2YPTJdbUk9PVA"   # la unidad compartida "PC Robot"
 function Paso($n, $texto) { Write-Host "`n[$n] $texto" -ForegroundColor Cyan }
 function Bien($texto)     { Write-Host "    OK  $texto" -ForegroundColor Green }
 function Mal($texto)      { Write-Host "    --  $texto" -ForegroundColor Red }
-function Cortar($texto)   { Mal $texto; Write-Host ""; exit 1 }
+
+<#
+    Deja la ventana abierta hasta que alguien apriete una tecla.
+
+    Esto NO es cosmetico y por eso esta en todas las salidas, tambien en las
+    que fallan. Con "Ejecutar con PowerShell" del boton derecho, la ventana se
+    cierra sola en cuanto el script termina: el que corrio el instalador no
+    llega a leer si salio bien, y si salio mal pierde justamente el mensaje que
+    dice por que. Un instalador que explica sus errores y despues los borra de
+    la pantalla no explica nada.
+
+    Se salta con -SinPausa, para cuando esto lo llame otro script. Y el
+    Read-Host va en try/catch porque en una sesion sin consola —una tarea
+    programada, un pipe— tirar ahi seria cambiar un final limpio por un error.
+#>
+function Pausar {
+  if ($SinPausa) { return }
+  Write-Host ""
+  Write-Host "Apreta una tecla para cerrar..." -ForegroundColor DarkGray
+  try { $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") } catch { }
+}
+
+function Cortar($texto)   { Mal $texto; Write-Host ""; Pausar; exit 1 }
 
 Write-Host "Instalador de la subida de zips del PC Robot" -ForegroundColor White
 Write-Host "Carpeta: $Aca"
@@ -95,13 +132,24 @@ Paso 3 "Las carpetas del servidor"
 #   Planta 02            tambien es un PC Robot, pero su CSV es un horimetro
 #                        por hora y SIN kilos, asi que el SdG todavia no sabe
 #                        leerlo. Se sube igual para no seguir perdiendo el dato.
+#                        Lleva `ignorar` porque ese robot deja DOS clases de
+#                        zip: el bueno (con DAT001.CSV, ~21 KB) y uno de 868
+#                        bytes al arrancar, con cuatro .txt sueltos y sin el
+#                        CSV. El 12/11/2026 ese piso al bueno en Drive, porque
+#                        el subidor elige el mas nuevo y el basura salio
+#                        despues. El filtro va POR ORIGEN y no global: en
+#                        Hornos los `- INICIO` si traen las 18 planillas.
 #   Hornos               no es un robot: son 18 planillas mensuales que alguien
 #                        respalda todos los dias. Se guarda, no se lee.
 #   Porteria             tampoco: es el respaldo del escritorio completo de esa
 #                        PC. Son ~10 MB por dia y adentro viajan dos
 #                        OfficeSetup.exe. Lo util son las planillas de pesaje.
+#   Pesadas Balanza      el unico que NO son zips: doce DAT000000NN.CSV, uno
+#                        por camion, cada uno acumulando desde agosto. Por eso
+#                        lleva carpetaEntera = $true: quedarse con el mas nuevo
+#                        subiria un camion y perderia once.
 #
-# Las tres ultimas se guardan y no se leen: ver la nota del mismo tema en
+# Las cuatro ultimas se guardan y no se leen: ver la nota del mismo tema en
 # lib/produccion/molinos/drive.ts, que es lo que evita que el diagnostico
 # diario del SdG se llene de avisos por ellas.
 #
@@ -111,11 +159,12 @@ Paso 3 "Las carpetas del servidor"
 # programada todos los dias por algo que nadie lee. Un rojo permanente es un
 # rojo que se deja de mirar, y el dia que falle un Filler no lo va a ver nadie.
 $origenes = @(
-  @{ nombre = "Filler 1";  carpeta = "\\$Servidor\EXTERIOR\Filler1";   obligatorio = $true  },
-  @{ nombre = "Filler 2";  carpeta = "\\$Servidor\EXTERIOR\Filler2";   obligatorio = $true  },
-  @{ nombre = "Planta 02"; carpeta = "\\$Servidor\EXTERIOR\Planta 02"; obligatorio = $false },
-  @{ nombre = "Hornos";    carpeta = "\\$Servidor\EXTERIOR\Hornos";    obligatorio = $false },
-  @{ nombre = "Porteria";  carpeta = "\\$Servidor\EXTERIOR\Porteria";  obligatorio = $false }
+  @{ nombre = "Filler 1";        carpeta = "\\$Servidor\EXTERIOR\Filler1";         obligatorio = $true  },
+  @{ nombre = "Filler 2";        carpeta = "\\$Servidor\EXTERIOR\Filler2";         obligatorio = $true  },
+  @{ nombre = "Planta 02";       carpeta = "\\$Servidor\EXTERIOR\Planta 02";       obligatorio = $false; ignorar = " - (INICIO|AL INICIAR) " },
+  @{ nombre = "Hornos";          carpeta = "\\$Servidor\EXTERIOR\Hornos";          obligatorio = $false },
+  @{ nombre = "Porteria";        carpeta = "\\$Servidor\EXTERIOR\Porteria";        obligatorio = $false },
+  @{ nombre = "Pesadas Balanza"; carpeta = "\\$Servidor\EXTERIOR\Pesadas Balanza"; obligatorio = $false; carpetaEntera = $true }
 )
 
 $incluidos = @()
@@ -132,10 +181,15 @@ foreach ($o in $origenes) {
     Write-Host "    llama distinto, corre esto con  -Servidor <nombre>." -ForegroundColor Yellow
     Cortar "Sin acceso a las carpetas de los fillers no hay nada que subir."
   }
-  $zips = @(Get-ChildItem -LiteralPath $o.carpeta -Filter *.zip -ErrorAction SilentlyContinue)
-  $ult = $zips | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-  $cuando = if ($ult) { $ult.LastWriteTime.ToString("yyyy-MM-dd HH:mm") } else { "sin zips" }
-  Bien ("{0,-10} {1,4} zips, el ultimo {2}" -f $o.nombre, $zips.Count, $cuando)
+  # Se cuenta lo que ese origen va a subir de verdad y no siempre los .zip: en
+  # la balanza no hay ninguno, y "0 zips" al lado de un OK parece una carpeta
+  # vacia cuando en realidad tiene los doce archivos que importan.
+  $patron = if ($o.carpetaEntera) { "*" } else { "*.zip" }
+  $hay = @(Get-ChildItem -LiteralPath $o.carpeta -Filter $patron -File -ErrorAction SilentlyContinue)
+  $ult = $hay | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  $cuando = if ($ult) { $ult.LastWriteTime.ToString("yyyy-MM-dd HH:mm") } else { "vacia" }
+  $que = if ($o.carpetaEntera) { "archivos" } else { "zips" }
+  Bien ("{0,-16} {1,4} {2,-9} el ultimo {3}" -f $o.nombre, $hay.Count, $que, $cuando)
   $incluidos += $o
 }
 
@@ -147,7 +201,15 @@ $log    = Join-Path $Aca "subir-zips.log"
 $contenido = [ordered]@{
   credencial   = $credencial
   carpetaDrive = $CARPETA_DRIVE
-  origenes     = @($incluidos | ForEach-Object { [ordered]@{ nombre = $_.nombre; carpeta = $_.carpeta } })
+  # `carpetaEntera` se escribe solo cuando es verdadera: el subidor lo lee como
+  # ausente-es-falso, y un `"carpetaEntera": false` en cinco de seis origenes
+  # invita a creer que es una opcion que hay que decidir cada vez.
+  origenes     = @($incluidos | ForEach-Object {
+    $o = [ordered]@{ nombre = $_.nombre; carpeta = $_.carpeta }
+    if ($_.carpetaEntera) { $o.carpetaEntera = $true }
+    if ($_.ignorar) { $o.ignorar = $_.ignorar }
+    $o
+  })
   log          = $log
 }
 # Se escribe con WriteAllText y un UTF8Encoding($false) y NO con
@@ -172,6 +234,7 @@ Bien "la prueba paso"
 if ($Probar) {
   Write-Host "`n-Probar: llegue hasta aca y no registro la tarea." -ForegroundColor Yellow
   Write-Host "Corre esto mismo sin -Probar para instalarla.`n"
+  Pausar
   exit 0
 }
 
@@ -236,6 +299,29 @@ Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue
 if ($LASTEXITCODE -ne 0) { Cortar "No se pudo registrar la tarea: $r" }
 Bien "registrada, corre todos los dias a las $Hora"
 
+# ── 7. Leerla de vuelta ────────────────────────────────────────────────────
+# Se vuelve a preguntar por la tarea en vez de confiar en que `schtasks
+# /create` devolvio 0. No es desconfianza del comando: es que la pregunta que
+# se hace el que corrio esto es "¿quedo instalada?", y la unica respuesta que
+# vale es la del Programador, no la del instalador diciendo que le parece que
+# si. Ademas imprime la proxima ejecucion, que es lo que hay que mirar para
+# saber si la hora quedo como se queria.
+Paso 7 "Comprobarla en el Programador"
+$q = & schtasks /query /tn $NOMBRE_TAREA /fo LIST /v 2>&1
+if ($LASTEXITCODE -ne 0) {
+  Cortar "schtasks /create dijo que si, pero la tarea no aparece al consultarla. No quedo instalada."
+}
+# El nombre del campo cambia con el idioma de Windows, asi que se busca por las
+# dos formas en vez de por una: en ingles no diria "Hora proxima ejecucion".
+#
+# Y los acentos van como `.` a proposito. `schtasks` escribe con la codepage de
+# la consola, que no es la que PowerShell usa para leerlo, asi que "próxima"
+# puede llegar como "prxima" o "pr?xima": buscar el texto con tilde no matchea
+# y el paso queda diciendo "la tarea existe" sin la hora, que era justo el dato
+# por el que se agrego. Comprobado el 12/11/2026, fallaba con el acento puesto.
+$proxima = $q | Select-String -Pattern "Hora pr.xima ejecuci.n|Next Run Time" | Select-Object -First 1
+if ($proxima) { Bien ($proxima.Line.Trim()) } else { Bien "la tarea existe en el Programador" }
+
 # ── Cierre ─────────────────────────────────────────────────────────────────
 Write-Host "`nListo.`n" -ForegroundColor Green
 Write-Host "  Probarla ahora:   schtasks /run /tn `"$NOMBRE_TAREA`""
@@ -249,3 +335,4 @@ Write-Host "    tenga contrasena se puede pasar a modo desatendido."
 Write-Host "  - Si un dia falla no se pierde nada: el zip del robot es"
 Write-Host "    acumulativo y el del dia siguiente trae todo igual."
 Write-Host ""
+Pausar

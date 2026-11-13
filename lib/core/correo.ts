@@ -17,10 +17,28 @@
  *
  * ## Devuelve qué pasó en vez de lanzar
  *
- * Mismo molde que `lib/core/webpush.ts`, que es el hermano de esto. Quien
- * llama son las dos rutas de alta, en el camino de rechazar una carga: lo que
- * la ruta le debe a la persona es la respuesta sobre su carga, y un problema
- * del correo no puede cambiarla.
+ * Devuelve `{ estado, detalle? }`. El `estado` es lo que decide quien llama; el
+ * `detalle` es **lo que contestó el Apps Script, sin traducir ni resumir**, y
+ * existe porque un fallo que sólo dice «fallo» no distingue un dominio
+ * rechazado de un secreto mal puesto de un cupo agotado de un script caído:
+ * quien lo guarda (la mensajería lo anota en la mención) necesita el texto
+ * real. Lo mismo va a los registros del servidor con `console.error`.
+ *
+ * Mismo molde que `lib/core/webpush.ts`, que es el hermano de esto.
+ *
+ * ## QUIÉN LLAMA, Y POR QUÉ NO SON TODOS IGUALES
+ *
+ * Dos familias, y la segunda llegó después (11/11/2026):
+ *
+ * 1. **`lib/mantenimiento/avisarDeLaCarga.ts`**, en el camino de rechazar una
+ *    carga. Lo que la ruta le debe a la persona es la respuesta sobre su carga,
+ *    y un problema del correo no puede cambiarla. Ahí **no hay nadie mirando**:
+ *    el correo sólo se intenta para una carga que mandó el teléfono con la app
+ *    cerrada, así que la respuesta se la lleva el service worker.
+ * 2. **`app/api/mensajes/route.ts`**, el aviso de una mención. Ahí sí hay
+ *    alguien mirando —acaba de apretar «Enviar»— y el `detalle` **no se tira**:
+ *    se guarda en `mensajes_menciones.aviso_fallo` y la pantalla lo muestra al
+ *    releer el hilo. Es la razón por la que `detalle` existe.
  *
  * ## POR QUÉ UN `console.error` ALCANZA ACÁ
  *
@@ -29,10 +47,14 @@
  * a preguntar. Esa regla existe porque una escritura que no llega a la planilla
  * crea una divergencia que no avisa. Acá no hay divergencia: la carga sigue
  * parada, visible en `/cargar` y contada por la barra del layout. Un correo que
- * no sale degrada al estado anterior a esto, nada más. Y decírselo a alguien en
- * la respuesta sería inútil, porque por diseño **no hay nadie mirando** cuando
- * esto pasa: el correo sólo se intenta para una carga que mandó el teléfono con
- * la app cerrada, así que la respuesta se la lleva el service worker.
+ * no sale degrada al estado anterior a esto, nada más.
+ *
+ * **Pero eso vale para la familia 1 y no para las dos.** El `console.error` es
+ * todo lo que queda cuando la carga rechazada no avisa, y para la mensajería es
+ * sólo el registro del servidor: lo que de verdad le dice a la persona que el
+ * aviso no salió es el `aviso_fallo` que guarda esa ruta. Si aparece un tercer
+ * llamador, la pregunta a contestar es a cuál de las dos familias pertenece —si
+ * hay alguien a quien decirle—, y no si el `console.error` alcanza.
  */
 
 /**
@@ -63,6 +85,16 @@ export function estaConfigurado(): boolean {
 
 export type ResultadoDelCorreo = "enviado" | "sin-configurar" | "fallo";
 
+export interface RespuestaDelCorreo {
+  estado: ResultadoDelCorreo;
+  /**
+   * Sólo con `estado: "fallo"`: lo que dijo el servicio, tal cual (el cuerpo
+   * que contestó el Apps Script, recortado a 500 caracteres, o el mensaje de
+   * la excepción si ni siquiera contestó).
+   */
+  detalle?: string;
+}
+
 export interface Mensaje {
   /** A quién. El Apps Script sólo acepta direcciones de los dominios de la empresa. */
   para: string;
@@ -70,14 +102,14 @@ export interface Mensaje {
   cuerpo: string;
 }
 
-export async function enviarCorreo(mensaje: Mensaje): Promise<ResultadoDelCorreo> {
+export async function enviarCorreo(mensaje: Mensaje): Promise<RespuestaDelCorreo> {
   const url = process.env.SDG_CORREO_URL;
   const secreto = process.env.SDG_CORREO_SECRET;
 
   // Sin configurar **no se intenta y no se loguea**. Entre el deploy de esto y
   // el día que alguien publique el script va a pasar tiempo, y un error por
   // cada carga rechazada sería ruido diario sobre algo que nadie pidió todavía.
-  if (!url || !secreto) return "sin-configurar";
+  if (!url || !secreto) return { estado: "sin-configurar" };
 
   try {
     const respuesta = await fetch(url, {
@@ -100,15 +132,18 @@ export async function enviarCorreo(mensaje: Mensaje): Promise<ResultadoDelCorreo
       // de inicio de sesión si la implementación quedó restringida.
     }
 
-    if (resuelto?.ok === true) return "enviado";
+    if (resuelto?.ok === true) return { estado: "enviado" };
 
     // Lo que contestó, sin traducir: es lo único que después va a permitir
     // distinguir un secreto mal puesto de un dominio no permitido de un cupo
     // agotado.
-    console.error("correo: lo rechazó el Apps Script", respuesta.status, dijo.slice(0, 500));
-    return "fallo";
+    const loQueDijo = dijo.slice(0, 500);
+    console.error("correo: lo rechazó el Apps Script", respuesta.status, loQueDijo);
+    // Con el cuerpo vacío no hay nada que copiar: queda al menos el status.
+    return { estado: "fallo", detalle: loQueDijo || `HTTP ${respuesta.status}, sin cuerpo` };
   } catch (e) {
-    console.error("correo: no se pudo llamar al Apps Script", (e as Error)?.message ?? e);
-    return "fallo";
+    const detalle = String((e as Error)?.message ?? e);
+    console.error("correo: no se pudo llamar al Apps Script", detalle);
+    return { estado: "fallo", detalle };
   }
 }
