@@ -201,14 +201,50 @@ Por lo mismo `ventas` entra a `FUENTES_POR_MODULO` de `lib/home/ritmo.ts` **con
 la lista vacía**: el CRM no tiene una carga periódica que pueda atrasarse. Que
 pasen cinco días sin registrar una actividad puede ser una semana tranquila.
 
+## Cómo se comprueba que quedó bien aplicado
+
+```bash
+npx tsx scripts/probar-el-crm.mts              # sólo lee
+npx tsx scripts/probar-el-crm.mts --escribir   # además hace un ida y vuelta
+```
+
+Existe porque **el editor SQL de Supabase dice «Success» igual cuando algo quedó
+a medias**: un `create table if not exists` sobre una tabla que ya estaba no
+agrega las columnas nuevas, y una policy escrita sin envolver su función no
+rompe nada y no avisa. Lo que hay que poder contestar después de correr las
+migraciones no es «¿dio error?» sino «¿quedó lo que la migración dice?».
+
+Sin la bandera no toca nada. Con `--escribir` crea un cliente marcado, ejercita
+los `check`, el trigger de `actualizado_en` y las dos cascadas, y **borra todo
+lo que creó**, también si algo falla en el medio: se guarda los ids y borra por
+id, así que nunca toca una fila que no haya creado él.
+
+**Si las llamadas de las policies están envueltas no lo contesta este script
+sino `node scripts/simular-rls.mjs`**, que las mira todas. La primera versión
+traía su propia expresión regular y daba las dieciséis mal: Postgres no guarda
+el texto como se escribió sino normalizado —`( SELECT tiene_acceso_ventas() AS
+tiene_acceso_ventas)`, en mayúsculas y con alias—, así que una expresión en
+minúsculas acusa a código que está bien.
+
 ## Lo que falta antes de usarlo
 
-1. **Aplicar las dos migraciones**, en orden y en dos pasadas:
-   `20261112105021_ventas_enum_del_modulo.sql` primero, confirmado, y recién
-   después `20261112105023_ventas_crm_schema.sql`. Un valor de enum nuevo no se
-   puede usar en la misma transacción en que se agrega (55P04).
-2. **Conceder el módulo** desde `/administracion/usuarios`. Hasta que alguien lo
-   tenga, las cuatro pantallas redirigen a la portada.
-3. **Abrirlas en un navegador.** Todo está detrás del login, así que ninguna se
-   vio corriendo: lo que se verificó son los tests, `tsc`, el build y los dos
-   escaneos (responsive y exportaciones).
+Las dos migraciones **ya se aplicaron el 13/11/2026**, y se comprobó contra la
+base: las cinco tablas, el valor del enum, las tres funciones de permiso, las
+dieciséis policies con RLS encendida, los cinco triggers, los `check` de etapa,
+moneda y próximo paso, el `unique` del CUIT, las dos cascadas y el importador de
+Excel leyendo un archivo de verdad. `simular-rls.mjs` da OK sobre las 336
+policies del repo.
+
+Queda:
+
+1. **Conceder el módulo** desde `/administracion/usuarios`. Al 13/11/2026 lo
+   tiene una persona, con nivel `edicion`.
+2. **Abrir las pantallas en un navegador.** Todo está detrás del login, así que
+   ninguna se vio corriendo: lo verificado es el esquema, los tests, `tsc`, el
+   build y los dos escaneos (responsive y exportaciones).
+3. **Si molestan los números**, las pruebas del ida y vuelta consumieron
+   identidades: las secuencias quedaron en 4 y 6, así que el primer cliente real
+   va a ser el N° 5 y la primera oportunidad la N° 7. Es cosmético —un número de
+   identidad no promete no tener huecos— y con las tablas vacías se reinicia
+   con `select setval('ventas_clientes_numero_seq', 1, false);` y lo mismo para
+   `ventas_oportunidades_numero_seq`.
