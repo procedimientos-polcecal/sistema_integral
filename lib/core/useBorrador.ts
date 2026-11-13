@@ -38,6 +38,26 @@ import {
  * segundo falla el modal queda abierto con el error y lo cargado tiene que
  * seguir ahí.
  *
+ * `TIRAR` Y `ASENTAR` SON DOS FINALES DISTINTOS, Y ELEGIR MAL REVIERTE DATOS
+ *
+ * Los dos vacían el borrador; la diferencia es **contra qué queda comparándose
+ * el formulario después**.
+ *
+ * - `tirar()` vuelve a «cómo nació»: lo escrito se descarta y la pantalla
+ *   muestra otra vez lo que decía el registro al abrir. Es lo que quiere el
+ *   botón negativo, y también el guardado que **cierra** el formulario, porque
+ *   al reabrirlo se monta de nuevo y «cómo nació» se vuelve a leer del registro
+ *   ya actualizado.
+ * - `asentar()` hace que **lo que está en pantalla pase a ser cómo nació**: no
+ *   cambia nada de lo que se ve, deja el formulario sin tocar y el borrador
+ *   vacío. Es para el guardado que **deja el formulario abierto**.
+ *
+ * Usar `tirar()` donde iba `asentar()` no se ve como un error: la pantalla
+ * vuelve sola a los valores de antes de editar, y si alguien no lo nota y
+ * aprieta «Guardar» otra vez, **le manda al servidor los valores viejos encima
+ * de lo que acababa de guardar**. Pasó en `DetalleOS`, donde el modal queda
+ * abierto después del PATCH y la OS que le llega por props nunca se resincroniza.
+ *
  * QUÉ ENTRA EN `inicial` Y QUÉ NO
  *
  * Sólo los campos del formulario. `guardando`, el error, la foto elegida y las
@@ -55,7 +75,20 @@ import {
  * `inicial` se congela en el primer render, como el `useState` al que reemplaza:
  * es «cómo nació el formulario», que es contra lo que se compara para saber si
  * se tocó algo. Si llega un objeto nuevo en cada render —un literal escrito en el
- * JSX— no pasa nada: se usa el del principio.
+ * JSX— no pasa nada: se usa el del principio. **Lo único que lo mueve es
+ * `asentar()`.**
+ *
+ * DÓNDE SE LLAMA, QUE NO ES UN DETALLE DE ESTILO
+ *
+ * El hook tiene que vivir en el componente que **se monta y se desmonta con el
+ * formulario**, no en la pantalla que lo contiene. Si vive arriba, «cómo nació»
+ * queda congelado para toda la visita a la página: se guarda un cambio, el
+ * registro de abajo se actualiza, y el formulario sigue comparándose contra el
+ * valor viejo. En `EquipoDetalle` eso dejaba el modal reabriendo con el estado
+ * **anterior** preseleccionado, con «Confirmar» habilitado y el cartel de «ya
+ * está en ese estado» apagado: un clic revertía el equipo. Por eso ese modal es
+ * hoy su propio componente. Si un formulario nuevo no puede montarse por
+ * apertura, no uses el hook arriba: sacá el cuerpo del modal a un componente.
  *
  * Es de cliente a propósito (`"use client"`): el almacén de borradores es un
  * `Map` de módulo, que durante un render de servidor sería el mismo para todos
@@ -64,15 +97,21 @@ import {
 export function useBorrador<T extends object>(
   clave: string,
   inicial: T,
-): { valores: T; cambiar: (parcial: Partial<T>) => void; tocado: boolean; tirar: () => void } {
+): {
+  valores: T;
+  cambiar: (parcial: Partial<T>) => void;
+  tocado: boolean;
+  tirar: () => void;
+  asentar: () => void;
+} {
   // Cómo nació el formulario, congelado en el primer render: un `inicial` nuevo
-  // en cada render movería la vara contra la que se mide «tocado».
+  // en cada render movería la vara contra la que se mide «tocado». Lo único que
+  // lo mueve es `asentar()`.
   //
   // Va en `useState` y no en `useRef` porque **se lee durante el render** —de
   // ahí salen `valores` y `tocado`—, y un ref leído en el render es justo lo que
-  // marca `react-hooks/refs`: el componente no se entera si cambia. Un estado
-  // que nadie actualiza es exactamente un valor congelado que sí se puede leer.
-  const [comoNacio] = useState(inicial);
+  // marca `react-hooks/refs`: el componente no se entera si cambia.
+  const [comoNacio, setComoNacio] = useState(inicial);
 
   // El borrador se lee una sola vez, al montar, y de ahí en más manda la
   // pantalla. Releerlo pisaría lo que se está tipeando.
@@ -110,10 +149,20 @@ export function useBorrador<T extends object>(
     setTocado({});
   }, [clave]);
 
+  // Lo que está en pantalla pasa a ser «cómo nació»: no se ve ningún cambio, el
+  // formulario queda sin tocar y el borrador vacío. Los dos `set` entran en el
+  // mismo lote, así que `valores` no parpadea en el medio.
+  const asentar = useCallback(() => {
+    tirarBorrador(clave);
+    setComoNacio(valores);
+    setTocado({});
+  }, [clave, valores]);
+
   return {
     valores,
     cambiar,
     tocado: hayAlgoEscrito(comoNacio, valores),
     tirar,
+    asentar,
   };
 }

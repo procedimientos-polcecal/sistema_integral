@@ -79,18 +79,6 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
   }, [equipo.id]);
 
   const [statusModal, setStatusModal] = useState(false);
-  /*
-   * El cambio de estado del equipo: a cuál y por qué. Recordado por equipo
-   * mientras la app esté abierta, y nace en el estado que el equipo ya tiene,
-   * así que abrir y cerrar sin elegir nada no cuenta como tocado.
-   */
-  const { valores, cambiar, tocado, tirar } = useBorrador(
-    claveDelBorrador("mantenimiento-estado-del-equipo", { tipo: "equipo", id: equipo.id }),
-    { newStatus: equipo.status as string, reason: "" },
-  );
-  const { newStatus, reason } = valores;
-  const [statusSaving, setStatusSaving] = useState(false);
-  const [statusError, setStatusError]   = useState("");
 
   const [form, setForm] = useState({
     name:        equipo.name,
@@ -107,35 +95,6 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function openStatusModal() {
-    // Sin limpiar: si quedó algo a medio escribir de antes, vuelve a aparecer
-    // —que es para lo que existe el borrador—. Lo descarta «Cancelar».
-    setStatusError("");
-    setStatusModal(true);
-  }
-
-  const requiresReason = REQUIRES_REASON.has(newStatus);
-
-  async function saveStatus() {
-    if (requiresReason && !reason.trim()) {
-      setStatusError("Ingresá una justificación para este cambio.");
-      return;
-    }
-    setStatusSaving(true);
-    setStatusError("");
-    const res = await fetch(`/api/mantenimiento/equipos/${equipo.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "change_status", new_status: newStatus, reason }),
-    });
-    const data = await res.json();
-    if (!res.ok) { setStatusError(data.error ?? "Error al actualizar"); setStatusSaving(false); return; }
-    setStatusSaving(false);
-    // Recién con el estado cambiado no hay nada que recordar.
-    tirar();
-    setStatusModal(false);
-    router.refresh();
-  }
 
   async function save() {
     setSaving(true);
@@ -187,7 +146,7 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
 
           {canEdit ? (
             <button
-              onClick={openStatusModal}
+              onClick={() => setStatusModal(true)}
               className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition-all hover:opacity-80"
               style={{ color: meta.color, background: meta.bg, borderColor: meta.border }}
               title="Cambiar estado"
@@ -389,81 +348,11 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
       <CostoDelEquipo equipoId={equipo.id} {...costo} />
 
       {statusModal && (
-        // El fondo, la X y Escape salen conservando: el estado elegido y la
-        // justificación quedan y aparecen igual al volver a abrir. Sólo
-        // «Cancelar» tira.
-        <Modal
-          titulo={`Cambiar estado — ${equipo.code}`}
-          alSalir={() => setStatusModal(false)}
-          tocado={tocado}
-          ancho="chico"
-        >
-          <div className="space-y-4">
-            <div className="space-y-2">
-              {STATUS_OPTIONS.map((opt) => {
-                const m = STATUS_META[opt.value];
-                const selected = newStatus === opt.value;
-                return (
-                  <button key={opt.value}
-                    onClick={() => { cambiar({ newStatus: opt.value }); setStatusError(""); }}
-                    className="w-full flex items-center gap-3 rounded-xl border-2 px-4 py-2.5 text-sm font-medium text-left transition-all"
-                    style={{
-                      borderColor: selected ? m.color : "#E2E8F0",
-                      background:  selected ? m.bg : "#fff",
-                      color:       selected ? m.color : "#475569",
-                    }}>
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: m.dot }} />
-                    {opt.label}
-                    {selected && (
-                      <svg className="w-4 h-4 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {requiresReason && (
-              <div className="space-y-1">
-                <label className="block text-xs font-medium text-slate-600">
-                  Justificación <span className="text-red-500">*</span>
-                  <span className="font-normal text-slate-400 ml-1">— requerida para este estado</span>
-                </label>
-                <textarea
-                  value={reason}
-                  onChange={(e) => { cambiar({ reason: e.target.value }); setStatusError(""); }}
-                  rows={3}
-                  className="input resize-none w-full"
-                  placeholder="Ej: Falla en rodamiento, esperando repuesto..."
-                />
-              </div>
-            )}
-
-            {newStatus === equipo.status && (
-              <p className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
-                El equipo ya se encuentra en este estado.
-              </p>
-            )}
-
-            {statusError && <p className="text-sm text-red-600">{statusError}</p>}
-
-            <PieDeModal className="flex gap-2">
-              <button
-                onClick={saveStatus}
-                disabled={statusSaving || newStatus === equipo.status}
-                className="btn-primary disabled:opacity-50"
-              >
-                {statusSaving ? "Guardando..." : "Confirmar"}
-              </button>
-              {/* El único que tira. */}
-              <button onClick={() => { tirar(); setStatusModal(false); }}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-                Cancelar
-              </button>
-            </PieDeModal>
-          </div>
-        </Modal>
+        <CambiarEstadoDelEquipo
+          equipo={equipo}
+          alCerrar={() => setStatusModal(false)}
+          alCambiado={() => { setStatusModal(false); router.refresh(); }}
+        />
       )}
     </div>
   );
@@ -486,5 +375,139 @@ function Field({ label, required, children }: { label: string; required?: boolea
       </label>
       {children}
     </div>
+  );
+}
+
+/**
+ * Cambiar el estado de un equipo, con su justificación.
+ *
+ * **Es su propio componente porque se monta en cada apertura**, y eso no es
+ * prolijidad: `useBorrador` congela «cómo nació el formulario» en el primer
+ * render. Viviendo en `EquipoDetalle` —que no se desmonta— esa vara quedaba
+ * clavada en el estado que el equipo tenía al entrar a la página. Después de un
+ * cambio, `router.refresh()` actualiza `equipo` sin remontar el cliente, así que
+ * reabrir el modal preseleccionaba el estado **anterior**: el cartel de «ya se
+ * encuentra en este estado» no salía, «Confirmar» quedaba habilitado y un clic
+ * revertía el equipo con la justificación vacía. Montándose por apertura, cada
+ * vez lee el estado que el equipo tiene ahora.
+ *
+ * El borrador sobrevive igual al desmontar —vive en un `Map` de módulo—, así que
+ * salir por el fondo y volver a entrar sigue trayendo lo que se había escrito.
+ */
+function CambiarEstadoDelEquipo({ equipo, alCerrar, alCambiado }: {
+  equipo: { id: string; code: string; status: string };
+  alCerrar: () => void;
+  alCambiado: () => void;
+}) {
+  /*
+   * El cambio de estado: a cuál y por qué. Recordado por equipo mientras la app
+   * esté abierta, y nace en el estado que el equipo tiene **en esta apertura**,
+   * así que abrir y cerrar sin elegir nada no cuenta como tocado.
+   */
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-estado-del-equipo", { tipo: "equipo", id: equipo.id }),
+    { newStatus: equipo.status as string, reason: "" },
+  );
+  const { newStatus, reason } = valores;
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusError, setStatusError]   = useState("");
+
+  const requiresReason = REQUIRES_REASON.has(newStatus);
+
+  async function saveStatus() {
+    if (requiresReason && !reason.trim()) {
+      setStatusError("Ingresá una justificación para este cambio.");
+      return;
+    }
+    setStatusSaving(true);
+    setStatusError("");
+    const res = await fetch(`/api/mantenimiento/equipos/${equipo.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "change_status", new_status: newStatus, reason }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setStatusError(data.error ?? "Error al actualizar"); setStatusSaving(false); return; }
+    setStatusSaving(false);
+    // Recién con el estado cambiado no hay nada que recordar. `tirar()` y no
+    // `asentar()` porque el modal se cierra: la próxima apertura vuelve a leer
+    // el estado del equipo, que para entonces es el nuevo.
+    tirar();
+    alCambiado();
+  }
+
+  return (
+    <Modal
+      titulo={`Cambiar estado — ${equipo.code}`}
+      alSalir={alCerrar}
+      tocado={tocado}
+      ancho="chico"
+    >
+      <div className="space-y-4">
+        <div className="space-y-2">
+          {STATUS_OPTIONS.map((opt) => {
+            const m = STATUS_META[opt.value];
+            const selected = newStatus === opt.value;
+            return (
+              <button key={opt.value}
+                onClick={() => { cambiar({ newStatus: opt.value }); setStatusError(""); }}
+                className="w-full flex items-center gap-3 rounded-xl border-2 px-4 py-2.5 text-sm font-medium text-left transition-all"
+                style={{
+                  borderColor: selected ? m.color : "#E2E8F0",
+                  background:  selected ? m.bg : "#fff",
+                  color:       selected ? m.color : "#475569",
+                }}>
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: m.dot }} />
+                {opt.label}
+                {selected && (
+                  <svg className="w-4 h-4 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {requiresReason && (
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-slate-600">
+              Justificación <span className="text-red-500">*</span>
+              <span className="font-normal text-slate-400 ml-1">— requerida para este estado</span>
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => { cambiar({ reason: e.target.value }); setStatusError(""); }}
+              rows={3}
+              className="input resize-none w-full"
+              placeholder="Ej: Falla en rodamiento, esperando repuesto..."
+            />
+          </div>
+        )}
+
+        {newStatus === equipo.status && (
+          <p className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
+            El equipo ya se encuentra en este estado.
+          </p>
+        )}
+
+        {statusError && <p className="text-sm text-red-600">{statusError}</p>}
+
+        <PieDeModal className="flex gap-2">
+          <button
+            onClick={saveStatus}
+            disabled={statusSaving || newStatus === equipo.status}
+            className="btn-primary disabled:opacity-50"
+          >
+            {statusSaving ? "Guardando..." : "Confirmar"}
+          </button>
+          {/* El único que tira. */}
+          <button onClick={() => { tirar(); alCerrar(); }}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+            Cancelar
+          </button>
+        </PieDeModal>
+      </div>
+    </Modal>
   );
 }

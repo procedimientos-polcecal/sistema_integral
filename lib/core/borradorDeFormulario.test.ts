@@ -155,3 +155,36 @@ describe("conElBorrador", () => {
     expect(conElBorrador({ nota: "algo" }, { nota: "" })).toEqual({ nota: "" });
   });
 });
+
+/*
+ * Los dos finales de un formulario, que es lo que decide `tirar()` o
+ * `asentar()` en `useBorrador`. El hook no se testea —es de pantalla—, pero la
+ * vara contra la que queda comparándose el formulario después sí, y es lo
+ * único que separa un guardado bueno de una reversión silenciosa.
+ */
+describe("después de guardar: contra qué queda comparándose el formulario", () => {
+  const comoNacio = { estado: "", proveedor: "ACME", observaciones: "" };
+  const guardado = { estado: "PEDIDO", proveedor: "ACME", observaciones: "" };
+
+  it("volver a «cómo nació» con el formulario abierto revierte lo que se acaba de guardar", () => {
+    // Esto es `tirar()`: el borrador queda vacío y la pantalla vuelve a lo que
+    // decía la OS al abrirla. En un modal que **no** se cierra al guardar, eso
+    // deja «Sin estado» en pantalla después de haber guardado «PEDIDO», y un
+    // segundo Guardar lo manda encima.
+    expect(conElBorrador(comoNacio, {})).toEqual(comoNacio);
+    expect(conElBorrador(comoNacio, {}).estado).not.toBe(guardado.estado);
+  });
+
+  it("asentar lo guardado no cambia la pantalla y deja el formulario sin tocar", () => {
+    expect(conElBorrador(guardado, {})).toEqual(guardado);
+    expect(hayAlgoEscrito(guardado, conElBorrador(guardado, {}))).toBe(false);
+  });
+
+  it("y lo que se toque después se mide contra lo guardado, no contra lo de antes de editar", () => {
+    // Con la vara vieja, volver a poner «PEDIDO» no contaría como un cambio
+    // —ya estaba en el borrador— y el formulario figuraría tocado sin estarlo.
+    expect(soloLoTocado(guardado, { ...guardado, observaciones: "llegó" }))
+      .toEqual({ observaciones: "llegó" });
+    expect(soloLoTocado(guardado, { ...guardado })).toEqual({});
+  });
+});

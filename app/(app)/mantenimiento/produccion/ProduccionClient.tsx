@@ -135,9 +135,16 @@ export default function ProduccionClient({
     [planes]
   );
 
-  /** Guarda el plan entero del sector: es como está guardado en la base. */
-  async function guardar(sectorId: string, plan: Plan) {
-    if (!puedeEditar) return;
+  /**
+   * Guarda el plan entero del sector: es como está guardado en la base.
+   *
+   * Devuelve **si entró**, y eso no es cosmético: de acá sale si el borrador de
+   * la celda se puede tirar. Antes no devolvía nada, así que el editor lo tiraba
+   * al apretar «Guardar» y un PUT que fallaba se llevaba lo cargado dejando sólo
+   * un cartel rojo en la pantalla de atrás.
+   */
+  async function guardar(sectorId: string, plan: Plan): Promise<boolean> {
+    if (!puedeEditar) return false;
     setGuardando(sectorId);
     setError("");
 
@@ -150,18 +157,29 @@ export default function ProduccionClient({
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "No se pudo guardar.");
+      return false;
     }
+    return true;
   }
 
-  /** Cambia el plan en pantalla; `persistir` en false es para escribir en un input. */
-  function cambiar(sectorId: string, parche: Partial<Plan>, persistir = true) {
+  /**
+   * Cambia el plan en pantalla; `persistir` en false es para escribir en un
+   * input. Devuelve si quedó guardado: sin persistir es `true` porque no había
+   * nada que guardar, y quien no lo mire no cambia de comportamiento.
+   */
+  async function cambiar(
+    sectorId: string, parche: Partial<Plan>, persistir = true,
+  ): Promise<boolean> {
     const plan = { ...planDe(sectorId), ...parche };
     setPlanes((p) => ({ ...p, [sectorId]: plan }));
-    if (persistir) guardar(sectorId, plan);
+    return persistir ? guardar(sectorId, plan) : true;
   }
 
-  function guardarDia(estado: EstadoProduccion, turnos: string, motivo: string) {
-    if (!editando) return;
+  /** Devuelve si el día quedó guardado: el editor tira su borrador sólo con eso. */
+  async function guardarDia(
+    estado: EstadoProduccion, turnos: string, motivo: string,
+  ): Promise<boolean> {
+    if (!editando) return false;
     const { sectorId, dia } = editando;
     const plan = planDe(sectorId);
 
@@ -169,8 +187,11 @@ export default function ProduccionClient({
     const turnosArr = [...plan.turnos]; turnosArr[dia] = turnos;
     const motivos = [...plan.motivos]; motivos[dia] = motivo;
 
-    cambiar(sectorId, { days, turnos: turnosArr, motivos });
+    // El editor se cierra igual —eso es de antes— y por eso importa lo que
+    // devuelve: lo que no entró se queda en el borrador y vuelve a aparecer al
+    // abrir esa celda, en vez de perderse con un cartel en la pantalla de atrás.
     setEditando(null);
+    return cambiar(sectorId, { days, turnos: turnosArr, motivos });
   }
 
   function moverSemana(semanas: number) {
@@ -506,7 +527,8 @@ function EditorDeDia({
   estado: EstadoProduccion;
   turnos: string;
   motivo: string;
-  onGuardar: (estado: EstadoProduccion, turnos: string, motivo: string) => void;
+  /** Devuelve si entró: el borrador se tira sólo cuando sí. */
+  onGuardar: (estado: EstadoProduccion, turnos: string, motivo: string) => Promise<boolean>;
   onCerrar: () => void;
 }) {
   /*
@@ -593,7 +615,7 @@ function EditorDeDia({
 
         <PieDeModal className="flex gap-2">
           <button
-            onClick={() => { tirar(); onGuardar(est, tur, mot); }}
+            onClick={async () => { if (await onGuardar(est, tur, mot)) tirar(); }}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
           >Guardar</button>
           {/* El único que tira. */}

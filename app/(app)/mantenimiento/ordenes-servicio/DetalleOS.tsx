@@ -60,7 +60,7 @@ export default function DetalleOS({
     observaciones: orden.observaciones ?? "",
     motivoRechazo: orden.motivo_rechazo ?? "",
   });
-  const { valores, cambiar, tocado, tirar } = useBorrador(
+  const { valores, cambiar, tocado, tirar, asentar } = useBorrador(
     claveDelBorrador("mantenimiento-seguimiento-os", { tipo: "os", id: orden.id }),
     DE_LA_OS,
   );
@@ -108,9 +108,15 @@ export default function DetalleOS({
     if (!res.ok) { setError(body.error ?? "No se pudo guardar."); return; }
     // La app ya guardó; la planilla es best-effort y su problema se muestra.
     if (body.planilla_error) setError(`Guardado, pero no se pudo escribir en la planilla: ${body.planilla_error}`);
-    // Recién con el guardado en verde no hay nada que recordar: un fallo deja el
-    // modal abierto con el error y lo escrito en su lugar.
-    tirar();
+    // `asentar()` y **no `tirar()`**, que es la diferencia que acá revierte
+    // datos: este modal no se cierra al guardar y la OS que le llega por props
+    // es una foto que nadie resincroniza (`OrdenesServicioClient` la guarda en
+    // `abierta`, y `onCambio` es sólo un `router.refresh()`). Con `tirar()` la
+    // pantalla volvía a lo de antes de editar —«Sin estado» después de haber
+    // guardado «PEDIDO»— y un segundo «Guardar» mandaba los valores viejos
+    // encima. Asentar deja en pantalla lo que se guardó y el formulario sin
+    // tocar. Un fallo sale por el `return` de arriba, con lo escrito en su lugar.
+    asentar();
     onCambio();
   }
 

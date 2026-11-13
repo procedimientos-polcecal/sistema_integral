@@ -68,3 +68,28 @@ export function loQueFaltaParaPostergar(p: LoQuePideLaPostergacion): string[] {
 
   return falta;
 }
+
+/**
+ * Qué guardar cuando alguien elige una razón en el desplegable.
+ *
+ * **`null` quiere decir «no lo tocó nadie»**, y por eso no alcanza con guardar
+ * el código elegido. El desplegable nace mostrando la primera razón de la
+ * configuración —que llega del servidor **después** de montar el modal, así que
+ * no puede estar en el estado inicial—, y elegir a mano **esa misma** no cambia
+ * nada de lo que se ve. Si se guardara el código, el formulario pasaría a
+ * figurar tocado y salir preguntaría «¿descartar lo escrito?» sobre un
+ * formulario donde nadie escribió nada.
+ *
+ * Eso no es pulido: lo que se pidió fue que pregunte **cuando hay algo
+ * cargado**, y un cartel que salta cuando no debía es lo que enseña a pasarlo
+ * por alto la vez que sí importaba.
+ *
+ * `porOmision` es `undefined` mientras la configuración no llegó: ahí cualquier
+ * elección cuenta, porque no hay con qué comparar.
+ */
+export function laRazonQueSeGuarda(
+  codigo: string,
+  porOmision: string | undefined,
+): string | null {
+  return codigo === porOmision ? null : codigo;
+}

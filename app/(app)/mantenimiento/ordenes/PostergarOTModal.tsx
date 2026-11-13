@@ -5,7 +5,7 @@ import Select from "@/components/Select";
 import { Modal, PieDeModal } from "@/components/Modal";
 import { useBorrador } from "@/lib/core/useBorrador";
 import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
-import { MAXIMO_DE_DIAS } from "@/lib/mantenimiento/postergar";
+import { laRazonQueSeGuarda, MAXIMO_DE_DIAS } from "@/lib/mantenimiento/postergar";
 
 interface Razon {
   codigo: string;
@@ -86,9 +86,12 @@ export default function PostergarOTModal({
   const dias = valores.dias ?? String(razones.find((r) => r.codigo === razon)?.dias ?? "");
 
   // Cambiar de razón devuelve los días a los de la razón nueva: vuelven a quedar
-  // sin tocar, así que si se cambia otra vez siguen al desplegable.
+  // sin tocar, así que si se cambia otra vez siguen al desplegable. Y elegir a
+  // mano **la que ya estaba mostrada** no es tocar nada: se guarda `null`, o
+  // salir preguntaría «¿descartar lo escrito?» sobre un formulario intacto
+  // (`laRazonQueSeGuarda`, con el porqué).
   function elegirRazon(codigo: string) {
-    cambiar({ razon: codigo, dias: null });
+    cambiar({ razon: laRazonQueSeGuarda(codigo, razones[0]?.codigo), dias: null });
   }
 
   async function postergar() {

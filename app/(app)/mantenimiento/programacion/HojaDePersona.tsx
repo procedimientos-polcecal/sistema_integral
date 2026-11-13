@@ -111,17 +111,36 @@ export default function HojaDePersona({
   /**
    * Corre una acción con los botones apagados y deja el error a la vista si falla.
    *
+   * **`loCargado` no tiene valor por omisión a propósito**, y es lo que evita el
+   * bug que tuvo esta hoja: con un `tirar()` al final de todas las acciones,
+   * mover a alguien de turno —que no tiene nada que ver con los formularios—
+   * borraba el motivo que se estaba escribiendo en el panel de «Otra», sin una
+   * palabra. Los dos paneles comparten un solo borrador, así que cualquier
+   * acción que lo tire se lleva lo que se esté escribiendo en el otro.
+   *
+   * `"se-tira"` es para las acciones que **son** el formulario —anotar la falta,
+   * corregirla, sacarla—: lo que se cargó ya quedó guardado. `"se-queda"` es
+   * para las que pasan al lado —mover de turno, volver al ciclo—, que cierran la
+   * hoja igual, así que lo escrito vuelve a aparecer al reabrirla.
+   *
+   * Sin valor por omisión, la próxima acción que se agregue **no compila** hasta
+   * contestar la pregunta, que es la única defensa que esto puede tener: ningún
+   * test de este repo mira una pantalla.
+   *
    * El borrador se tira sólo si salió bien, y no al apretar: un error deja la
    * hoja abierta y lo escrito tiene que seguir donde estaba.
    */
-  async function hacer(accion: () => Promise<string | null>) {
+  async function hacer(
+    accion: () => Promise<string | null>,
+    loCargado: "se-tira" | "se-queda",
+  ) {
     if (enviando) return;
     setEnviando(true);
     setError(null);
     const e = await accion();
     setEnviando(false);
     if (e) { setError(e); return; }
-    tirar();
+    if (loCargado === "se-tira") tirar();
   }
 
   function anotar(tipo: string, obs: string | null) {
@@ -129,7 +148,7 @@ export default function HojaDePersona({
       setError("La fecha hasta no puede ser anterior al día de la falta");
       return;
     }
-    void hacer(() => alAnotar(persona.empleadoId, dia, hasta, tipo, obs));
+    void hacer(() => alAnotar(persona.empleadoId, dia, hasta, tipo, obs), "se-tira");
   }
 
   const turnoActual = asignacion?.turno;
@@ -257,7 +276,7 @@ export default function HojaDePersona({
                     <button type="button" className="btn-secondary flex-1" disabled={enviando} onClick={() => cambiar({ corrigiendo: true })}>
                       Corregir
                     </button>
-                    <button type="button" className="btn-danger flex-1" disabled={enviando} onClick={() => void hacer(() => alBorrar(propia))}>
+                    <button type="button" className="btn-danger flex-1" disabled={enviando} onClick={() => void hacer(() => alBorrar(propia), "se-tira")}>
                       Sacar
                     </button>
                   </div>
@@ -337,13 +356,15 @@ export default function HojaDePersona({
                         className="btn-primary flex-1"
                         disabled={enviando || sinCambios || (tipoNuevo === "OTRA" && !motivoNuevo.trim())}
                         onClick={() =>
-                          void hacer(() =>
-                            alCorregir(propia.id, {
-                              tipo: tipoNuevo,
-                              fechaDesde: desdeNuevo,
-                              fechaHasta: hastaNuevo,
-                              observaciones: motivoNuevo.trim() || null,
-                            })
+                          void hacer(
+                            () =>
+                              alCorregir(propia.id, {
+                                tipo: tipoNuevo,
+                                fechaDesde: desdeNuevo,
+                                fechaHasta: hastaNuevo,
+                                observaciones: motivoNuevo.trim() || null,
+                              }),
+                            "se-tira",
                           )
                         }
                       >
@@ -380,7 +401,7 @@ export default function HojaDePersona({
                           type="button"
                           disabled={enviando}
                           className="btn-secondary shrink-0"
-                          onClick={() => void hacer(() => alMover(c, dia, falta.turno))}
+                          onClick={() => void hacer(() => alMover(c, dia, falta.turno), "se-queda")}
                         >
                           Pasar a {TURNO_TEXTO[falta.turno]}
                         </button>
@@ -409,7 +430,7 @@ export default function HojaDePersona({
                   type="button"
                   disabled={enviando}
                   className="btn-secondary"
-                  onClick={() => void hacer(() => alMover(persona.empleadoId, dia, t))}
+                  onClick={() => void hacer(() => alMover(persona.empleadoId, dia, t), "se-queda")}
                 >
                   {TURNO_TEXTO[t]}
                 </button>
@@ -419,7 +440,7 @@ export default function HojaDePersona({
                   type="button"
                   disabled={enviando}
                   className="btn-ghost"
-                  onClick={() => void hacer(() => alVolverAlCiclo(persona.empleadoId, dia))}
+                  onClick={() => void hacer(() => alVolverAlCiclo(persona.empleadoId, dia), "se-queda")}
                 >
                   Volver al ciclo
                 </button>
@@ -434,7 +455,7 @@ export default function HojaDePersona({
             type="button"
             disabled={enviando}
             className="btn-ghost mt-2"
-            onClick={() => void hacer(() => alVolverAlCiclo(persona.empleadoId, dia))}
+            onClick={() => void hacer(() => alVolverAlCiclo(persona.empleadoId, dia), "se-queda")}
           >
             Volver al turno del ciclo
           </button>
