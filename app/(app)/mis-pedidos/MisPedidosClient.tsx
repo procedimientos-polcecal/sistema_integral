@@ -10,7 +10,8 @@ import {
   APROBACION_LABELS, COMPRA_LABELS, etiquetaPrioridad, fecha,
 } from "@/lib/compras/constants";
 import {
-  DIAS_VERDE, DIAS_AMARILLO, rangoDeColor, type ColorDelPedido,
+  DIAS_VERDE, DIAS_AMARILLO, rangoDeColor, colorDelPedido, diasEsperando,
+  esReclamable, textoDeEspera, type ColorDelPedido,
 } from "@/lib/compras/semaforo";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 
@@ -459,6 +460,7 @@ export default function MisPedidosClient({
                 {p.compras_areas?.nombre && <span>· {p.compras_areas.nombre}</span>}
                 <Solicitante pedido={p} mostrar={alcance === "todos"} />
                 <Chip {...etiquetaPrioridad(p.prioridad)} />
+                <PuntoDelSemaforo pedido={p} />
               </div>
 
               <BotonDeMensajes pedido={p} onAbrir={setConversacion} />
@@ -480,6 +482,7 @@ export default function MisPedidosClient({
                   <th className="px-3 py-2 text-left">Prioridad</th>
                   <th className="px-3 py-2 text-left">Aprobación</th>
                   <th className="px-3 py-2 text-left">Compra</th>
+                  <th className="px-3 py-2 text-left">Espera</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -524,6 +527,7 @@ export default function MisPedidosClient({
                     <td className="px-3 py-2"><Chip {...etiquetaPrioridad(p.prioridad)} /></td>
                     <td className="px-3 py-2"><Chip {...APROBACION_LABELS[p.estado_aprobacion]} /></td>
                     <td className="px-3 py-2"><Chip {...COMPRA_LABELS[p.estado_compra]} /></td>
+                    <td className="px-3 py-2 text-xs text-slate-500"><PuntoDelSemaforo pedido={p} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -627,6 +631,29 @@ function ChipDelSemaforo({
       <strong>{cantidad}</strong>
       <span className={activo ? "text-slate-200" : "text-slate-500"}>{etiqueta}</span>
     </button>
+  );
+}
+
+/**
+ * El punto del semáforo de un pedido, con los días que lleva esperando.
+ *
+ * **Un pedido que no espera a Compras no lleva punto**, ni gris ni de ningún
+ * color: ya está pedido, o lo frenó alguien, o se cerró. Se sigue listando
+ * igual — el semáforo es una capa sobre la lista de siempre y no un filtro
+ * que esconde cosas.
+ */
+function PuntoDelSemaforo({ pedido }: { pedido: RequerimientoConRelaciones }) {
+  if (!esReclamable(pedido)) return null;
+  const color = colorDelPedido(pedido.fecha, new Date());
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+      <span
+        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+        style={{ backgroundColor: COLORES[color] }}
+        aria-hidden="true"
+      />
+      <span>Esperando hace {textoDeEspera(diasEsperando(pedido.fecha, new Date()))}</span>
+    </span>
   );
 }
 

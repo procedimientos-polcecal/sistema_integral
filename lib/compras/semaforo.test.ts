@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  esReclamable, colorDelPedido, diasEsperando, rangoDeColor,
+  esReclamable, colorDelPedido, diasEsperando, rangoDeColor, textoDeEspera,
 } from "./semaforo";
 
 describe("esReclamable", () => {
@@ -84,4 +84,12 @@ describe("rangoDeColor", () => {
       if (r.hasta) expect(colorDelPedido(r.hasta, hoy)).toBe(color);
     }
   });
+});
+
+describe("textoDeEspera", () => {
+  it("dice los días", () => expect(textoDeEspera(53)).toBe("53 días"));
+  it("en singular con uno", () => expect(textoDeEspera(1)).toBe("1 día"));
+  it("hoy no son cero días", () => expect(textoDeEspera(0)).toBe("hoy"));
+  // Hay pedidos con la fecha adelantada: «-3 días» en pantalla se lee como un error.
+  it("una fecha futura tampoco cuenta días", () => expect(textoDeEspera(-3)).toBe("hoy"));
 });
