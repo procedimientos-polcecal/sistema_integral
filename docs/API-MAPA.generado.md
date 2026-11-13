@@ -4,7 +4,7 @@
 > Lo escrito a mano —para qué sirve cada módulo, cómo está armada una ruta y
 > las trampas— está en [API.md](API.md). Acá sólo hay lo que sale del código.
 
-Al 2026-11-12: **285 rutas** y **441 handlers** en 24 carpetas.
+Al 2026-11-13: **300 rutas** y **469 handlers** en 25 carpetas.
 
 ## Cómo leer la columna «guarda»
 
@@ -42,8 +42,8 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | secreto del cron | 18 |
 | secreto propio | 3 |
 | token contra la base | 1 |
-| permiso de módulo | 137 |
-| sesión | 70 |
+| permiso de módulo | 151 |
+| sesión | 71 |
 | el proxy | 56 |
 | **ABIERTA** | 0 |
 
@@ -100,7 +100,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/calidad/productos` | GET, POST | sesión | `calidad_odoo_sin_reconocer`, `calidad_productos_odoo` | — |
 | `/api/calidad/sincronizar` | POST | permiso de módulo · `puedeEditarCalidad` | — | admin · 300s |
 
-## cantera (17)
+## cantera (18)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
@@ -110,6 +110,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/cantera/bochones/[codigo]` | GET, PATCH, DELETE | permiso de módulo · `puedeEditarCantera` | `cantera_bochones` | — |
 | `/api/cantera/bochones` | POST | permiso de módulo · `puedeEditarCantera` | `cantera_bochones` | — |
 | `/api/cantera/contratistas` | POST, DELETE | sesión | `cantera_contratistas` | — |
+| `/api/cantera/cubicacion/material` | PATCH | permiso de módulo · `puedeEditarCantera` | `cantera_cubicaciones_material` | — |
 | `/api/cantera/cubicacion` | GET, PATCH | permiso de módulo · `puedeEditarCantera` | `cantera_cubicaciones` | — |
 | `/api/cantera/destape` | GET, POST, PATCH, DELETE | permiso de módulo · `puedeEditarCantera` | `cantera_acarreos`, `cantera_destape`, `cantera_fleteros` | — |
 | `/api/cantera/finanzas` | POST, DELETE | sesión | `cantera_finanzas` | — |
@@ -230,7 +231,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/inventario/reservas-taller-vial` | GET | sesión | `equipos`, `inventario_articulos`, `taller_vial_reparaciones`, `taller_vial_repuestos_asignados`, `taller_vial_services` | — |
 | `/api/inventario/sync` | POST | sesión | — | — |
 
-## mantenimiento (54)
+## mantenimiento (60)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
@@ -239,6 +240,9 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/mantenimiento/avisos/enlazar` | GET, POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `avisos`, `ordenes_trabajo` | admin |
 | `/api/mantenimiento/avisos` | POST | sesión | `avisos`, `compras_areas`, `usuario_areas_compras`, `usuarios` | admin · planilla |
 | `/api/mantenimiento/avisos/sync` | POST | permiso de módulo · `puedeEditarMantenimiento` | — | 300s |
+| `/api/mantenimiento/calendario` | GET | permiso de módulo · `puedeVerMantenimiento` | `ausencias`, `francos`, `mant_personal_taller`, `ordenes_trabajo` | admin · paginado |
+| `/api/mantenimiento/ciclos/[id]/reiniciar` | POST | permiso de módulo · `puedeEditarMantenimiento` | `mant_ciclos_de_ot`, `ordenes_trabajo`, `ordenes_trabajo_notas` | admin |
+| `/api/mantenimiento/ciclos/[id]` | PATCH | permiso de módulo · `puedeEditarMantenimiento` | `mant_ciclos_de_ot` | admin |
 | `/api/mantenimiento/comparativas` | GET, POST, PATCH, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_servicio`, `os_comparativas` | admin · planilla |
 | `/api/mantenimiento/comparativas/sync` | POST | permiso de módulo · `puedeEditarMantenimiento` | — | 300s |
 | `/api/mantenimiento/cuaderno/excel` | POST | permiso de módulo · `puedeEditarMantenimiento` | `equipos`, `mant_contratista_lugares`, `mant_cuadernos`, `mant_cuadernos_fotos`, `mant_cuadernos_renglones`, `sectores` | admin · paginado · 60s |
@@ -261,7 +265,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/mantenimiento/operarios` | GET, POST, DELETE | sesión | `operarios` | admin |
 | `/api/mantenimiento/ordenes-servicio` | GET, PATCH | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_servicio` | admin · planilla |
 | `/api/mantenimiento/ordenes-servicio/sync` | POST | permiso de módulo · `puedeEditarMantenimiento` | — | 300s |
-| `/api/mantenimiento/ordenes/[id]/calendario` | GET, POST | permiso de módulo · `puedeEditarMantenimiento` | `agenda_eventos`, `agenda_invitados`, `ordenes_trabajo`, `usuarios` | admin · zod |
+| `/api/mantenimiento/ordenes/[id]/calendario` | GET, POST | permiso de módulo · `puedeEditarMantenimiento` | `agenda_eventos`, `agenda_invitados`, `ordenes_trabajo` | admin · zod |
 | `/api/mantenimiento/ordenes/[id]/gut` | PATCH | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_trabajo` | admin · audita · zod |
 | `/api/mantenimiento/ordenes/[id]/notas` | GET, POST, DELETE | permiso de módulo · `puedeVerMantenimiento` | `ordenes_trabajo`, `ordenes_trabajo_notas` | admin |
 | `/api/mantenimiento/ordenes/[id]/postergar` | POST | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_trabajo`, `ordenes_trabajo_notas`, `usuarios` | admin · audita |
@@ -274,7 +278,9 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/mantenimiento/ordenes/sync` | POST | permiso de módulo · `puedeEditarMantenimiento` | — | 300s |
 | `/api/mantenimiento/partes-contratista/generar` | POST | permiso de módulo · `puedeEditarMantenimiento` | `equipos`, `mant_partes_contratista_renglones`, `ordenes_trabajo`, `proveedores`, `sectores` | admin · 300s |
 | `/api/mantenimiento/partes-contratista` | GET, POST, PUT, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `mant_contratista_lugares`, `mant_partes_contratista`, `mant_partes_contratista_renglones` | admin · paginado |
-| `/api/mantenimiento/personal` | GET, POST, PATCH | sesión | `mant_personal_taller` | admin |
+| `/api/mantenimiento/personal` | GET, POST, PATCH, DELETE | sesión | `mant_personal_taller`, `usuarios` | admin · audita |
+| `/api/mantenimiento/planificacion/[id]/calendario` | POST | permiso de módulo · `puedeEditarMantenimiento` | `agenda_eventos`, `agenda_invitados`, `ordenes_trabajo`, `planificacion_diaria`, `planificacion_diaria_items` | admin · zod · 300s |
+| `/api/mantenimiento/planificacion/[id]/operarios` | GET, POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `planificacion_diaria_operarios` | — |
 | `/api/mantenimiento/planificacion/[id]` | GET, PATCH, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `planificacion_diaria`, `planificacion_diaria_items` | — |
 | `/api/mantenimiento/planificacion` | GET, POST | permiso de módulo · `puedeEditarMantenimiento` | `planificacion_diaria` | — |
 | `/api/mantenimiento/produccion` | GET, PUT | permiso de módulo · `puedeEditarMantenimiento` | `produccion_semanal` | admin |
@@ -286,6 +292,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/mantenimiento/razones-postergacion` | GET, PATCH | permiso de módulo · `puedeVerMantenimiento` | `mant_razones_de_postergacion` | admin |
 | `/api/mantenimiento/sectores/status` | PATCH | permiso de módulo · `puedeEditarMantenimiento` | `sectores`, `sectores_status_log` | admin |
 | `/api/mantenimiento/sheets/webhook` | POST | secreto propio · `SHEETS_WEBHOOK_SECRET` | — | 300s |
+| `/api/mantenimiento/tareas-preventivas` | GET, POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `equipos_componentes`, `mant_tareas_preventivas`, `ordenes_trabajo` | admin |
 | `/api/mantenimiento/tarifa-hora` | GET, POST, DELETE | sesión | `mantenimiento_tarifas_hora` | admin |
 | `/api/mantenimiento/tipos` | GET, PATCH, POST | sesión | `equipos_tipos` | admin |
 
@@ -294,7 +301,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
 | `/api/mensajes/destinatarios` | GET | permiso de módulo · `puedeVerlo` | — | admin · zod |
-| `/api/mensajes/mios` | GET, PATCH | permiso de módulo · `puedeVerlo` | `mensajes_menciones` | admin · zod |
+| `/api/mensajes/mios` | GET, PATCH | sesión | `mensajes_menciones` | admin · zod |
 | `/api/mensajes` | GET, POST | permiso de módulo · `puedeVerlo` | `mensajes`, `mensajes_menciones`, `usuarios` | admin · zod · 60s |
 
 ## mi-cuenta (1)
@@ -351,7 +358,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/remises/mi-remis` | GET | sesión | `asientos`, `hojas_ruta`, `usuarios` | — |
 | `/api/remises/plan-semana/generar` | POST | el proxy | `remises_asistencia`, `remises_plan_semana` | — |
 | `/api/remises/plan-semana` | GET, POST | el proxy | `remises_plan_semana` | — |
-| `/api/remises/plan-semana/seleccionar-todos` | POST | el proxy | `empleados`, `remises_plan_semana` | — |
+| `/api/remises/plan-semana/seleccionar-todos` | POST | el proxy | `remises_empleados_datos`, `remises_plan_semana` | paginado |
 | `/api/remises/plantillas/[id]/aplicar` | POST | el proxy | `remises_plantillas` | — |
 | `/api/remises/plantillas/[id]` | DELETE | el proxy | `remises_plantillas` | — |
 | `/api/remises/plantillas` | GET, POST | el proxy | `hojas_ruta`, `remises_plantillas`, `remises_plantillas_grupos` | — |
@@ -452,6 +459,19 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/trituracion/partes` | GET, POST, DELETE | permiso de módulo · `puedeEditarTrituracion` | `trituracion_partes`, `trituracion_plantas` | — |
 | `/api/trituracion/plantas` | GET, PATCH | sesión | `trituracion_plantas` | — |
 
+## ventas (8)
+
+| Ruta | Métodos | Guarda | Tablas | Marcas |
+|---|---|---|---|---|
+| `/api/ventas/actividades/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarVentas` | `ventas_actividades` | zod |
+| `/api/ventas/actividades` | GET, POST | permiso de módulo · `puedeEditarVentas` | `ventas_actividades` | paginado · zod |
+| `/api/ventas/clientes/[id]` | GET, PATCH, DELETE | permiso de módulo · `puedeEditarVentas` | `usuarios`, `ventas_actividades`, `ventas_clientes`, `ventas_contactos`, `ventas_oportunidades` | audita · zod |
+| `/api/ventas/clientes` | GET, POST | permiso de módulo · `puedeEditarVentas` | `ventas_actividades`, `ventas_clientes` | paginado · zod |
+| `/api/ventas/contactos/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarVentas` | `ventas_contactos` | zod |
+| `/api/ventas/contactos` | POST | permiso de módulo · `puedeEditarVentas` | `ventas_contactos` | zod |
+| `/api/ventas/oportunidades/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarVentas` | `ventas_oportunidades` | audita · zod |
+| `/api/ventas/oportunidades` | GET, POST | permiso de módulo · `puedeEditarVentas` | `ventas_oportunidades` | paginado · zod |
+
 ## De qué módulos de `lib/` depende cada ruta
 
 La otra mitad de «con qué está conectada»: una ruta que no nombra ninguna
@@ -493,6 +513,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/cantera/bochones/[codigo]` | `lib/cantera/auth`, `lib/cantera/codigos`, `lib/cantera/consultas`, `lib/cantera/espejo`, `lib/cantera/numero`, `lib/core/cuerpo`, `lib/supabase/server` |
 | `/api/cantera/bochones` | `lib/cantera/auth`, `lib/cantera/codigos`, `lib/cantera/consultas`, `lib/core/cuerpo`, `lib/supabase/server` |
 | `/api/cantera/contratistas` | `lib/cantera/auth`, `lib/supabase/server` |
+| `/api/cantera/cubicacion/material` | `lib/cantera/auth`, `lib/cantera/cubicacionPorMaterial`, `lib/core/cuerpo`, `lib/supabase/server` |
 | `/api/cantera/cubicacion` | `lib/cantera/auth`, `lib/cantera/consultas`, `lib/cantera/numero`, `lib/core/cuerpo`, `lib/supabase/server` |
 | `/api/cantera/destape` | `lib/cantera/auth`, `lib/cantera/consultas`, `lib/cantera/destape`, `lib/cantera/numero`, `lib/core/cuerpo`, `lib/supabase/server` |
 | `/api/cantera/finanzas` | `lib/cantera/auth`, `lib/supabase/server` |
@@ -582,11 +603,14 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/mantenimiento/avisos/enlazar` | `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/mantenimiento/avisos`, `lib/mantenimiento/enlazarOtAlAviso`, `lib/mantenimiento/marcarElAviso`, `lib/mantenimiento/pendienteDelAviso`, `lib/mantenimiento/planillaDelAviso`, `lib/mantenimiento/reutilizarOT`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/avisos` | `lib/compras/areaDelUsuario`, `lib/core/fechas`, `lib/core/sheets`, `lib/mantenimiento/avisarDeLaCarga`, `lib/mantenimiento/avisos`, `lib/mantenimiento/claveDeCarga`, `lib/mantenimiento/enlaces`, `lib/mantenimiento/planilla`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/avisos/sync` | `lib/mantenimiento/auth`, `lib/mantenimiento/sincronizar`, `lib/supabase/server` |
+| `/api/mantenimiento/calendario` | `lib/core/fechas`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/calendarioDeOT`, `lib/mantenimiento/disponibilidad`, `lib/mantenimiento/genteDelDia`, `lib/mantenimiento/programacion`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/ciclos/[id]/reiniciar` | `lib/core/fechas`, `lib/mantenimiento/auth`, `lib/mantenimiento/cierreDeOT`, `lib/mantenimiento/notas`, `lib/mantenimiento/ordenes`, `lib/mantenimiento/pendienteDeLaOT`, `lib/mantenimiento/planillaDeOT`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/ciclos/[id]` | `lib/core/cuerpo`, `lib/mantenimiento/arranqueDelCiclo`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/comparativas` | `lib/core/fechas`, `lib/core/sheets`, `lib/mantenimiento/auth`, `lib/mantenimiento/comparativas`, `lib/mantenimiento/enlaces`, `lib/mantenimiento/planilla`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/comparativas/sync` | `lib/mantenimiento/auth`, `lib/mantenimiento/sincronizar`, `lib/supabase/server` |
 | `/api/mantenimiento/cuaderno/excel` | `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/cuadernoEnganche`, `lib/mantenimiento/cuadernoExcelArchivo`, `lib/mantenimiento/cuadernoOrigen`, `lib/mantenimiento/partesDeContratista`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/cuaderno/fotos` | `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/cuadernoEnganche`, `lib/mantenimiento/cuadernoLectura`, `lib/mantenimiento/cuadernoOrigen`, `lib/mantenimiento/partesDeContratista`, `lib/supabase/admin`, `lib/supabase/server` |
-| `/api/mantenimiento/cuaderno/generar` | `lib/core/cuerpo`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/cierreDeOT`, `lib/mantenimiento/cuadernoEstado`, `lib/mantenimiento/cuadernoGrupos`, `lib/mantenimiento/cuadernoOrden`, `lib/mantenimiento/formulario`, `lib/mantenimiento/ordenes`, `lib/mantenimiento/planillaDeOT`, `lib/mantenimiento/prioridad`, `lib/mantenimiento/reintentoDePendientes`, `lib/mantenimiento/sincronizar`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/cuaderno/generar` | `lib/agenda/alNacerLaOT`, `lib/core/cuerpo`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/cierreDeOT`, `lib/mantenimiento/cuadernoEstado`, `lib/mantenimiento/cuadernoGrupos`, `lib/mantenimiento/cuadernoOrden`, `lib/mantenimiento/formulario`, `lib/mantenimiento/ordenes`, `lib/mantenimiento/planillaDeOT`, `lib/mantenimiento/prioridad`, `lib/mantenimiento/reintentoDePendientes`, `lib/mantenimiento/sincronizar`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/cuaderno/renglones/[id]` | `lib/core/auditoria`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/cuadernoEstado`, `lib/mantenimiento/cuadernoGrupos`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/cuaderno/renglones` | `lib/core/cuerpo`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/cuadernoGrupos`, `lib/mantenimiento/partesDeContratista`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/cuaderno/repetidos` | `lib/core/cuerpo`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/cuadernoRepetidos`, `lib/supabase/admin`, `lib/supabase/server` |
@@ -604,7 +628,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/mantenimiento/operarios` | `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes-servicio` | `lib/compras/auth`, `lib/core/sheets`, `lib/mantenimiento/aprobacion`, `lib/mantenimiento/auth`, `lib/mantenimiento/denegacion`, `lib/mantenimiento/os`, `lib/mantenimiento/pendienteDeLaOS`, `lib/mantenimiento/planillaDeOS`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes-servicio/sync` | `lib/mantenimiento/auth`, `lib/mantenimiento/sincronizar`, `lib/supabase/server` |
-| `/api/mantenimiento/ordenes/[id]/calendario` | `lib/agenda/cargar`, `lib/agenda/duenoDeLaOT`, `lib/agenda/escribirEnGoogle`, `lib/agenda/evento`, `lib/agenda/invitados`, `lib/agenda/pedido`, `lib/agenda/sesion`, `lib/core/calendar`, `lib/core/validar`, `lib/mantenimiento/auth`, `lib/mantenimiento/programacion`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/ordenes/[id]/calendario` | `lib/agenda/duenoDeLaOT`, `lib/agenda/evento`, `lib/agenda/mandarLaOT`, `lib/agenda/pedido`, `lib/agenda/sesion`, `lib/core/calendar`, `lib/core/validar`, `lib/mantenimiento/auth`, `lib/mantenimiento/programacion`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/[id]/gut` | `lib/core/validar`, `lib/mantenimiento/auth`, `lib/mantenimiento/gut`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/[id]/notas` | `lib/mantenimiento/auth`, `lib/mantenimiento/notas`, `lib/mantenimiento/planillaDeOT`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/[id]/postergar` | `lib/core/auditoria`, `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/mantenimiento/formulario`, `lib/mantenimiento/notas`, `lib/mantenimiento/planillaDeOT`, `lib/mantenimiento/postergar`, `lib/supabase/admin`, `lib/supabase/server` |
@@ -613,26 +637,29 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/mantenimiento/ordenes/link` | `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/orden` | `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/reutilizar` | `lib/supabase/server` |
-| `/api/mantenimiento/ordenes` | `lib/core/cuerpo`, `lib/core/fechas`, `lib/core/paginado`, `lib/core/validar`, `lib/mantenimiento/altaDeOT`, `lib/mantenimiento/auth`, `lib/mantenimiento/avisarDeLaCarga`, `lib/mantenimiento/avisos`, `lib/mantenimiento/cierreDeOT`, `lib/mantenimiento/claveDeCarga`, `lib/mantenimiento/fallas`, `lib/mantenimiento/filtrosOt`, `lib/mantenimiento/formulario`, `lib/mantenimiento/gut`, `lib/mantenimiento/marcarElAviso`, `lib/mantenimiento/ordenes`, `lib/mantenimiento/pendienteDeLaOT`, `lib/mantenimiento/planillaDeOT`, `lib/mantenimiento/prioridad`, `lib/mantenimiento/reintentoDePendientes`, `lib/mantenimiento/repuestosDeLaOT`, `lib/mantenimiento/sincronizar`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/ordenes` | `lib/agenda/alNacerLaOT`, `lib/core/cuerpo`, `lib/core/fechas`, `lib/core/paginado`, `lib/core/validar`, `lib/mantenimiento/altaDeOT`, `lib/mantenimiento/auth`, `lib/mantenimiento/avisarDeLaCarga`, `lib/mantenimiento/avisos`, `lib/mantenimiento/cierreAnteriorAlInicio`, `lib/mantenimiento/cierreDeOT`, `lib/mantenimiento/claveDeCarga`, `lib/mantenimiento/fallas`, `lib/mantenimiento/filtrosOt`, `lib/mantenimiento/formulario`, `lib/mantenimiento/gut`, `lib/mantenimiento/marcarElAviso`, `lib/mantenimiento/ordenes`, `lib/mantenimiento/pendienteDeLaOT`, `lib/mantenimiento/planillaDeOT`, `lib/mantenimiento/prioridad`, `lib/mantenimiento/reintentoDePendientes`, `lib/mantenimiento/repuestosDeLaOT`, `lib/mantenimiento/sincronizar`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/sync` | `lib/mantenimiento/auth`, `lib/mantenimiento/sincronizar`, `lib/supabase/server` |
-| `/api/mantenimiento/partes-contratista/generar` | `lib/core/cuerpo`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/cierreDeOT`, `lib/mantenimiento/formulario`, `lib/mantenimiento/ordenes`, `lib/mantenimiento/partesDeContratista`, `lib/mantenimiento/planillaDeOT`, `lib/mantenimiento/prioridad`, `lib/mantenimiento/reintentoDePendientes`, `lib/mantenimiento/sincronizar`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/partes-contratista/generar` | `lib/agenda/alNacerLaOT`, `lib/core/cuerpo`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/cierreDeOT`, `lib/mantenimiento/formulario`, `lib/mantenimiento/ordenes`, `lib/mantenimiento/partesDeContratista`, `lib/mantenimiento/planillaDeOT`, `lib/mantenimiento/prioridad`, `lib/mantenimiento/reintentoDePendientes`, `lib/mantenimiento/sincronizar`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/partes-contratista` | `lib/core/cuerpo`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/partesDeContratista`, `lib/supabase/admin`, `lib/supabase/server` |
-| `/api/mantenimiento/personal` | `lib/core/fechas`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/personal` | `lib/core/auditoria`, `lib/core/fechas`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/planificacion/[id]/calendario` | `lib/agenda/evento`, `lib/agenda/mandarLaOT`, `lib/agenda/sesion`, `lib/core/fechas`, `lib/core/paginado`, `lib/core/validar`, `lib/mantenimiento/auth`, `lib/mantenimiento/planAlCalendario`, `lib/mantenimiento/programacion`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/planificacion/[id]/operarios` | `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/mantenimiento/operariosDelParte`, `lib/supabase/server` |
 | `/api/mantenimiento/planificacion/[id]` | `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/supabase/server` |
 | `/api/mantenimiento/planificacion` | `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/supabase/server` |
 | `/api/mantenimiento/produccion` | `lib/mantenimiento/auth`, `lib/mantenimiento/produccion`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/programacion/pisadas` | `lib/core/fechas`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/programacion/referencia` | `lib/core/auditoria`, `lib/core/cuerpo`, `lib/core/fechas`, `lib/mantenimiento/auth`, `lib/mantenimiento/disponibilidad`, `lib/mantenimiento/programacion`, `lib/supabase/admin`, `lib/supabase/server` |
-| `/api/mantenimiento/programacion` | `lib/core/fechas`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/disponibilidad`, `lib/mantenimiento/programacion`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/programacion` | `lib/core/fechas`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/disponibilidad`, `lib/mantenimiento/programacion`, `lib/mantenimiento/referenciaDelTaller`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/proveedores` | `lib/core/paginado`, `lib/core/proveedores`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/proveedores/sueltos` | `lib/core/paginado`, `lib/core/proveedores`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/razones-postergacion` | `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/mantenimiento/postergar`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/sectores/status` | `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/sheets/webhook` | `lib/mantenimiento/sincronizar` |
+| `/api/mantenimiento/tareas-preventivas` | `lib/core/cuerpo`, `lib/core/fechas`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/catalogoConfirmado`, `lib/mantenimiento/tareasPreventivas`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/tarifa-hora` | `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/tipos` | `lib/mantenimiento/auth`, `lib/mantenimiento/ficha`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mensajes/destinatarios` | `lib/core/correo`, `lib/core/validar`, `lib/mensajes/entidades`, `lib/mensajes/pedidos`, `lib/supabase/admin`, `lib/supabase/server` |
-| `/api/mensajes/mios` | `lib/core/mensajes`, `lib/core/paginado`, `lib/core/validar`, `lib/mensajes/avisos`, `lib/mensajes/entidades`, `lib/mensajes/pedidos`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mensajes/mios` | `lib/core/mensajes`, `lib/core/paginado`, `lib/core/validar`, `lib/mensajes/avisos`, `lib/mensajes/entidades`, `lib/mensajes/menciones`, `lib/mensajes/pedidos`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mensajes` | `lib/core/auth-links`, `lib/core/correo`, `lib/core/mensajes`, `lib/core/paginado`, `lib/core/validar`, `lib/mensajes/avisos`, `lib/mensajes/entidades`, `lib/mensajes/forma`, `lib/mensajes/pedidos`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mi-cuenta/password` | `lib/core/cuerpo`, `lib/supabase/server` |
 | `/api/odoo/ping` | `lib/core/route-utils`, `lib/odoo/client`, `lib/supabase/server` |
@@ -664,7 +691,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/remises/mi-remis` | `lib/core/fechas`, `lib/supabase/server` |
 | `/api/remises/plan-semana/generar` | `lib/core/cuerpo`, `lib/remises/generarRutas`, `lib/remises/route-utils`, `lib/supabase/server` |
 | `/api/remises/plan-semana` | `lib/core/cuerpo`, `lib/remises/route-utils`, `lib/supabase/server` |
-| `/api/remises/plan-semana/seleccionar-todos` | `lib/core/cuerpo`, `lib/remises/route-utils`, `lib/supabase/server` |
+| `/api/remises/plan-semana/seleccionar-todos` | `lib/core/cuerpo`, `lib/core/paginado`, `lib/remises/route-utils`, `lib/supabase/server` |
 | `/api/remises/plantillas/[id]/aplicar` | `lib/core/cuerpo`, `lib/remises/generarRutas`, `lib/remises/route-utils`, `lib/supabase/server` |
 | `/api/remises/plantillas/[id]` | `lib/remises/route-utils`, `lib/supabase/server` |
 | `/api/remises/plantillas` | `lib/core/cuerpo`, `lib/remises/route-utils`, `lib/supabase/server` |
@@ -744,3 +771,11 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/trituracion/informes/export` | `lib/supabase/server`, `lib/trituracion/auth`, `lib/trituracion/consultas`, `lib/trituracion/informeExcel`, `lib/trituracion/informeMensual` |
 | `/api/trituracion/partes` | `lib/supabase/server`, `lib/trituracion/auth`, `lib/trituracion/cantidades`, `lib/trituracion/consultas`, `lib/trituracion/espejo`, `lib/trituracion/vocabulario` |
 | `/api/trituracion/plantas` | `lib/supabase/server`, `lib/trituracion/auth`, `lib/trituracion/consultas` |
+| `/api/ventas/actividades/[id]` | `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos` |
+| `/api/ventas/actividades` | `lib/core/paginado`, `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos` |
+| `/api/ventas/clientes/[id]` | `lib/core/auditoria`, `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos` |
+| `/api/ventas/clientes` | `lib/core/paginado`, `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos` |
+| `/api/ventas/contactos/[id]` | `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos` |
+| `/api/ventas/contactos` | `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos` |
+| `/api/ventas/oportunidades/[id]` | `lib/core/fechas`, `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos`, `lib/ventas/crm/etapas` |
+| `/api/ventas/oportunidades` | `lib/core/fechas`, `lib/core/paginado`, `lib/core/validar`, `lib/supabase/server`, `lib/ventas/auth`, `lib/ventas/crm/cuerpos`, `lib/ventas/crm/etapas` |
