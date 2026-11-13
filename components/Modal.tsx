@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef } from "react";
+import { useCallback, useEffect, useId, useRef, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { useConfirm } from "@/components/ConfirmProvider";
 
 export interface ModalProps {
@@ -53,6 +54,10 @@ export function Modal({
   // Escape repetido o un toque en el fondo mientras el cartel está abierto no
   // tienen que apilar una segunda pregunta.
   const preguntando = useRef(false);
+  // El toque tiene que empezar Y terminar en el fondo (ver el overlay).
+  const empezoEnElFondo = useRef(false);
+  // Verdadero sólo en el cliente: en el servidor no hay `document.body`.
+  const montado = useSyncExternalStore(() => () => {}, () => true, () => false);
 
   const salir = useCallback(async () => {
     if (!tocado || soloLectura) {
@@ -65,7 +70,10 @@ export function Modal({
       const salgo = await confirm({
         title: "¿Salir del formulario?",
         message:
-          "Hay algo a medio cargar. Queda guardado como borrador y lo vas a encontrar al volver.",
+          // Sin prometer durabilidad: el borrador vive en memoria y recargar la
+          // página lo borra (lib/core/borradorDeFormulario.ts). Sólo se afirma
+          // lo que es cierto: si se vuelve a abrir en esta sesión, está igual.
+          "Hay algo a medio cargar. Si volvés a abrirlo, lo vas a encontrar como lo dejaste.",
         confirmText: "Salir",
         cancelText: "Seguir cargando",
       });
@@ -77,18 +85,37 @@ export function Modal({
 
   useEffect(() => {
     function alTeclear(e: KeyboardEvent) {
-      if (e.key === "Escape") void salir();
+      // Un hijo que ya usó la tecla —el `<Select>` cierra su lista con Escape y
+      // llama a `preventDefault`— no quiso decir «salí del formulario».
+      if (e.key === "Escape" && !e.defaultPrevented) void salir();
     }
     document.addEventListener("keydown", alTeclear);
     return () => document.removeEventListener("keydown", alTeclear);
   }, [salir]);
 
-  return (
+  if (!montado) return <></>;
+
+  // Portal a `body`: un `position: fixed` depende de los ancestros de cada
+  // pantalla (un `transform`, `filter` o `will-change` pasa a ser su bloque
+  // contenedor y el z-index queda atrapado en su contexto de apilado).
+  return createPortal(
     <div
-      // `pointerdown` y no `click`: arrastrar para seleccionar texto de un
-      // campo y soltar sobre el fondo genera un click ahí, y eso cerraba.
+      // Se sale al soltar y no al apoyar, y sólo si apoyar y soltar fueron en el
+      // fondo con el botón primario. Con `click` un arrastre para seleccionar
+      // texto soltado sobre el fondo cerraba; con `pointerdown` a secas lo
+      // cerraban el clic derecho y un swipe táctil que arranca en la zona oscura
+      // (el navegador todavía no sabe si es scroll: lo avisa con `pointercancel`).
       onPointerDown={(e) => {
-        if (e.target === e.currentTarget) void salir();
+        empezoEnElFondo.current =
+          e.target === e.currentTarget && e.button === 0 && e.isPrimary;
+      }}
+      onPointerCancel={() => { empezoEnElFondo.current = false; }}
+      onPointerUp={(e) => {
+        const cierra =
+          empezoEnElFondo.current &&
+          e.target === e.currentTarget && e.button === 0 && e.isPrimary;
+        empezoEnElFondo.current = false;
+        if (cierra) void salir();
       }}
       style={{
         position: "fixed", inset: 0, zIndex: 50,
@@ -122,6 +149,7 @@ export function Modal({
             largo se recorre sin que el título y la X se vayan. */}
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
