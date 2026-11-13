@@ -221,7 +221,7 @@ export default function ColaClient({
                 <th className="px-2 py-2 text-center">Inicio carga</th>
                 <th className="px-2 py-2 text-center">Fin carga</th>
                 <th className="px-2 py-2 text-center">Salida</th>
-                <th className="px-3 py-2 text-right">Carga<InfoTip className="ml-1 normal-case" text="Fin de carga menos inicio de carga, en minutos. «—» es que falta uno de los dos horarios, no que tardó cero. En rojo y con signo menos es un horario mal tipeado: no se corrige solo y ese tiempo no entra en el promedio. En la planilla esta cuenta es una fórmula suya y el sistema no la escribe." /></th>
+                <th className="px-3 py-2 text-right">Carga<InfoTip className="ml-1 normal-case" text="Fin de carga menos inicio de carga, en minutos. «—» es que falta uno de los dos horarios, no que tardó cero. En rojo y con signo menos es un horario mal tipeado: no se corrige solo y ese tiempo no entra en el promedio. El sistema no escribe esa columna de la planilla." /></th>
                 <th className="px-3 py-2 text-right">En predio<InfoTip className="ml-1 normal-case" text="Salida del predio menos entrada, en minutos; «—» si falta alguna de las dos. Un horario tipeado que cae más de 12 horas antes del anterior se toma como del día siguiente (un camión que entra 23:40 y sale 00:30). Si cae menos de 12 horas antes se lo deja negativo, en rojo, porque es un error de tipeo." /></th>
               </tr>
             </thead>

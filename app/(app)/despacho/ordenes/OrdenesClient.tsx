@@ -102,7 +102,7 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
         <div className="block">
           <div className="flex items-center">
             <label htmlFor="filtro-material" className="text-xs font-medium text-slate-700">Material</label>
-            <InfoTip className="ml-1" text="Material y envase no son datos de la orden: salen del catálogo de productos y, en las importadas de la planilla, de una tabla de equivalencias por texto. Al filtrar por cualquiera de los dos, las órdenes sin clasificar salen de la lista y de los promedios de arriba." />
+            <InfoTip className="ml-1" text="Material y envase no son datos de la orden: salen del catálogo de productos y, en las órdenes sin producto de Odoo (como las importadas de la planilla), de una tabla de equivalencias por texto. Al filtrar por cualquiera de los dos, las órdenes sin clasificar salen de la lista y de los promedios de arriba." />
           </div>
           <Select
             id="filtro-material"

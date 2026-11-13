@@ -89,7 +89,7 @@ export default async function DespachoDashboardPage() {
               <li className="flex items-center justify-between text-amber-700">
                 <span>
                   Sin cerrar de días anteriores
-                  <InfoTip className="ml-1" text="Suma las órdenes de carga de antes de hoy a las que nunca se les cargó la salida del predio y las recepciones de material de antes de hoy que todavía no tienen su orden de compra en Odoo. De las órdenes cuentan sólo las cargadas desde este sistema: las importadas de la planilla sin salida no entran, porque hoy nadie puede corregirlas." />
+                  <InfoTip className="ml-1" text="Suma las órdenes de carga de antes de hoy a las que nunca se les cargó la salida del predio y las recepciones de material de antes de hoy que todavía no tienen su orden de compra en Odoo. De las órdenes cuentan sólo las cargadas desde este sistema: las importadas de la planilla sin salida no entran, porque la planilla nunca tuvo esa salida." />
                 </span>
                 <span className="font-semibold">{sinCerrar}</span>
               </li>

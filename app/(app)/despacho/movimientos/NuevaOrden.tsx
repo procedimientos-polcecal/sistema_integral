@@ -181,7 +181,7 @@ export default function NuevaOrden({
                 </span>
               )}
             </label>
-            <InfoTip className="ml-1" text="Los remitos de salida de Odoo programados desde seis días antes del día que estás viendo hasta el día siguiente, sin los cancelados y en cualquier otro estado, también borrador y sin validar. Cuenta la fecha programada, no la de creación. Si un remito tiene varios productos, trae sólo el primero. Los que ya tienen orden quedan atenuados, con «ya tiene orden»." />
+            <InfoTip className="ml-1" text="Los remitos de salida de Odoo programados desde seis días antes del día que estás viendo hasta el día siguiente, sin los cancelados y en cualquier otro estado, también borrador y sin validar. Cuenta la fecha programada, no la de creación. Trae como máximo los 400 más nuevos, así que si hubiera más faltarían los más viejos. Si un remito tiene varios productos, trae sólo el primero. Los que ya tienen orden quedan atenuados, con «ya tiene orden»." />
           </div>
           <button
             onClick={onRefrescar}
