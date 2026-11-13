@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Select from "@/components/Select";
+import { Modal } from "@/components/Modal";
 import { sumarDias } from "@/lib/core/fechas";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import {
@@ -91,28 +92,15 @@ export default function HojaDePersona({
   const oficio = falta?.oficio ?? persona.oficio;
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 sm:items-center"
-      onClick={alCerrar}
-    >
-      <div
-        role="dialog"
-        aria-label={`Ausencia de ${persona.nombre}`}
-        onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:max-w-md sm:rounded-2xl"
-      >
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-base font-bold text-slate-900">{persona.nombre}</h2>
-            <p className="text-xs capitalize text-slate-500">
-              {OFICIO_TEXTO[oficio]}
-              {turnoActual && ` · ${TURNO_TEXTO[turnoActual]}`} · {diaLargo(dia)}
-            </p>
-          </div>
-          <button type="button" className="shrink-0 px-2 text-2xl leading-none text-slate-500" aria-label="Cerrar" onClick={alCerrar}>
-            ×
-          </button>
-        </div>
+    // Una hoja de acciones, no un formulario con Cancelar: cada toque anota o
+    // mueve al instante, y los dos «Cancelar» de adentro sólo pliegan la
+    // corrección, no cierran la hoja. Sale derecho por el fondo, la X y Escape.
+    <Modal titulo={persona.nombre} alSalir={alCerrar} soloLectura>
+      <div>
+        <p className="-mt-2 mb-3 text-xs capitalize text-slate-500">
+          {OFICIO_TEXTO[oficio]}
+          {turnoActual && ` · ${TURNO_TEXTO[turnoActual]}`} · {diaLargo(dia)}
+        </p>
 
         {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
 
@@ -377,7 +365,7 @@ export default function HojaDePersona({
           </button>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -7,6 +7,7 @@ import {
   type EstadoProduccion,
 } from "@/lib/mantenimiento/produccion";
 import { useCargar } from "@/lib/core/useCargar";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 /**
  * La grilla de producción: sectores por los siete días de una semana.
@@ -442,18 +443,11 @@ function PendientesDelSector({
   onCerrar: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div
-        className="max-h-[85vh] w-full max-w-md space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">Pendiente en {sector}</h2>
-            <p className="mt-0.5 text-xs text-slate-400">Para aprovechar la ventana de parada.</p>
-          </div>
-          <button onClick={onCerrar} className="text-xl leading-none text-slate-400 hover:text-slate-600">×</button>
-        </div>
+    // Un visor: una lista de lo pendiente, sin campos ni botón negativo. Sale
+    // derecho por el fondo, la X y Escape, y nunca va a preguntar.
+    <Modal titulo={`Pendiente en ${sector}`} alSalir={onCerrar} soloLectura>
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-400">Para aprovechar la ventana de parada.</p>
 
         <div>
           <p className="mb-1 text-xs font-semibold text-slate-500">Órdenes de trabajo ({ot.length})</p>
@@ -493,7 +487,7 @@ function PendientesDelSector({
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -522,12 +516,11 @@ function EditorDeDia({
     );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div>
-          <h2 className="text-base font-bold text-slate-900">{sector}</h2>
-          <p className="mt-0.5 text-xs text-slate-400">{dia}</p>
-        </div>
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onCerrar`.
+    <Modal titulo={sector} alSalir={onCerrar} ancho="chico">
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-400">{dia}</p>
 
         <div className="space-y-1">
           <label className="block text-xs font-medium text-slate-600">Estado</label>
@@ -583,7 +576,7 @@ function EditorDeDia({
           />
         </div>
 
-        <div className="flex gap-2 pt-1">
+        <PieDeModal className="flex gap-2">
           <button
             onClick={() => onGuardar(est, tur, mot)}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
@@ -592,8 +585,8 @@ function EditorDeDia({
             onClick={onCerrar}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >Cancelar</button>
-        </div>
+        </PieDeModal>
       </div>
-    </div>
+    </Modal>
   );
 }

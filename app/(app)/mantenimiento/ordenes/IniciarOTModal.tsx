@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 /**
  * Empezar una orden de trabajo.
@@ -89,12 +90,11 @@ export default function IniciarOTModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div>
-          <h2 className="text-base font-bold text-slate-900">Iniciar OT #{orden.ot_number ?? "—"}</h2>
-          <p className="mt-0.5 text-xs text-slate-400">{orden.equipo_raw ?? orden.descripcion ?? ""}</p>
-        </div>
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onCerrar`.
+    <Modal titulo={`Iniciar OT #${orden.ot_number ?? "—"}`} alSalir={onCerrar}>
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-400">{orden.equipo_raw ?? orden.descripcion ?? ""}</p>
 
         {estadoActual === null ? (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -157,7 +157,7 @@ export default function IniciarOTModal({
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <div className="flex gap-2 pt-1">
+        <PieDeModal className="flex gap-2">
           <button
             onClick={confirmar}
             disabled={guardando}
@@ -171,8 +171,8 @@ export default function IniciarOTModal({
           >
             Cancelar
           </button>
-        </div>
+        </PieDeModal>
       </div>
-    </div>
+    </Modal>
   );
 }

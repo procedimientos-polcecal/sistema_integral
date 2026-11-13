@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
 import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
@@ -292,18 +293,13 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto">
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl my-8">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900">Nueva Orden de Trabajo</h2>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <form onSubmit={submit} className="p-6 space-y-5">
+    <>
+      {/* El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía
+          no hay borrador, así que hoy los dos llaman a `onClose`. El formulario
+          es un `<form>` de verdad, y el pie va adentro: el botón «Crear OT» es
+          su submit. */}
+      <Modal titulo="Nueva Orden de Trabajo" alSalir={onClose} ancho="ancho">
+        <form onSubmit={submit} className="space-y-5">
           {/* Arriba de todo y no escondido entre los campos: es lo primero que
               se hace cuando se carga una tanda de órdenes del mismo día. */}
           <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-2">
@@ -579,19 +575,22 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           <CartelDelResultado tipo="orden" resultado={resultado} />
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <div className="flex gap-2 pt-1 border-t border-slate-100">
+          <PieDeModal className="flex gap-2">
             <button type="submit" disabled={saving}
-              className="btn-primary disabled:opacity-50">
+              className="btn-primary">
               {saving ? "Guardando..." : "Crear OT"}
             </button>
             <button type="button" onClick={onClose}
               className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               Cancelar
             </button>
-          </div>
+          </PieDeModal>
         </form>
-      </div>
+      </Modal>
 
+      {/* Hermano del modal y no hijo: así sus eventos no suben por el `<form>`
+          (un clic del calendario no puede disparar el `onSubmit`), y se monta
+          después, que es lo que lo pone arriba en la pila de Escape. */}
       {verCalendario && (
         <CalendarioDeFecha
           valor={form.fecha_ejecucion}
@@ -599,7 +598,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           onCerrar={() => setVerCalendario(false)}
         />
       )}
-    </div>
+    </>
   );
 }
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ESTADO_DE_STOCK, type Disponibilidad, type Insumo } from "@/lib/mantenimiento/stock";
 import { useCargar } from "@/lib/core/useCargar";
+import { Modal } from "@/components/Modal";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import { convienePedir, pedidoSugerido, type PedidoSugerido } from "@/lib/mantenimiento/pedirRepuesto";
@@ -124,20 +125,16 @@ export default function RepuestosOTModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div
-        className="max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">Repuestos que hacen falta</h2>
-            <p className="mt-0.5 text-xs text-slate-400">
-              OT #{orden.ot_number ?? "—"} · {orden.descripcion ?? ""}
-            </p>
-          </div>
-          <button onClick={onCerrar} className="text-xl leading-none text-slate-400 hover:text-slate-600">×</button>
-        </div>
+    <>
+      {/* Es una lista que se edita renglón por renglón, no un formulario con
+          Cancelar: no hay botón que tire nada, y el fondo, la X y Escape salen
+          igual. Lo único a medio escribir es el repuesto de «Agregar»; si eso
+          merece un cartel es decisión de cuando haya borrador. */}
+      <Modal titulo="Repuestos que hacen falta" alSalir={onCerrar}>
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-400">
+          OT #{orden.ot_number ?? "—"} · {orden.descripcion ?? ""}
+        </p>
 
         {/* Lo que dice la planilla, que es una sola línea de texto libre. */}
         {orden.repuesto && (
@@ -239,9 +236,12 @@ export default function RepuestosOTModal({
 
         {puedeEditar && <Agregar ordenId={orden.id} onAgregado={traer} onError={setError} />}
       </div>
+      </Modal>
 
       {/* El formulario de Compras, tal cual: uno solo para los dos lados, así
-          un campo que se agregue allá aparece acá sin que nadie se acuerde. */}
+          un campo que se agregue allá aparece acá sin que nadie se acuerde.
+          Hermano de este modal y no hijo: antes colgaba del fondo que cerraba
+          con `onClick`, y los clics subían por el árbol de React hasta ahí. */}
       {pidiendo && (
         <NuevoRequerimientoModal
           areas={areas}
@@ -258,7 +258,7 @@ export default function RepuestosOTModal({
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 

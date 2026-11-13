@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { instanteDeArgentina } from "@/lib/core/fechas";
 import FallaDeLaOT, { type LaFalla } from "@/components/FallaDeLaOT";
 import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
@@ -246,17 +247,17 @@ export default function RegistrarOTModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div
-        className="max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div>
-          <h2 className="text-base font-bold text-slate-900">Registrar el trabajo</h2>
-          <p className="mt-0.5 text-xs text-slate-400">
-            OT #{orden.ot_number ?? "—"} · {orden.equipo_raw ?? orden.descripcion ?? ""}
-          </p>
-        </div>
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onCerrar`. Acá empezó todo:
+    // el fondo cerraba sin preguntar y se perdían diecisiete campos. Con el aviso
+    // de la planilla en pantalla el trabajo ya quedó registrado, así que salir
+    // por cualquier lado es «Entendido» (`onRegistrada`) y no sólo ocultar: quien
+    // llama tiene que refrescar el listado.
+    <Modal titulo="Registrar el trabajo" alSalir={aviso ? onRegistrada : onCerrar}>
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-400">
+          OT #{orden.ot_number ?? "—"} · {orden.equipo_raw ?? orden.descripcion ?? ""}
+        </p>
 
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>
@@ -427,7 +428,7 @@ export default function RegistrarOTModal({
           {subiendo && <p className="text-xs text-slate-400">Subiendo…</p>}
         </Campo>
 
-        <div className="flex gap-2 pt-1">
+        <PieDeModal className="flex gap-2">
           <button
             onClick={guardar}
             disabled={guardando}
@@ -441,9 +442,9 @@ export default function RegistrarOTModal({
           >
             Cancelar
           </button>
-        </div>
+        </PieDeModal>
       </div>
-    </div>
+    </Modal>
   );
 }
 

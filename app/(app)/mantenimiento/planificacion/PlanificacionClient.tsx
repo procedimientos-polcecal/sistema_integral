@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 function nombreCompleto(u: { nombre?: string; apellido?: string } | null | undefined): string {
@@ -130,9 +131,9 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
       )}
 
       {showNew && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl space-y-4">
-            <h2 className="text-base font-bold text-slate-900">Nuevo plan de trabajo</h2>
+        // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+        // hay borrador, así que hoy los dos llaman a `setShowNew(false)`.
+        <Modal titulo="Nuevo plan de trabajo" alSalir={() => setShowNew(false)} ancho="chico">
             <form onSubmit={create} className="space-y-4">
               <div className="space-y-1">
                 <label className="block text-xs font-medium text-slate-600">Fecha <span className="text-red-500">*</span></label>
@@ -146,19 +147,18 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
                   className="input w-full" />
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
-              <div className="flex gap-2 pt-1">
+              <PieDeModal className="flex gap-2">
                 <button type="submit" disabled={saving}
-                  className="btn-primary disabled:opacity-50">
+                  className="btn-primary">
                   {saving ? "Creando..." : "Crear plan"}
                 </button>
                 <button type="button" onClick={() => setShowNew(false)}
                   className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
                   Cancelar
                 </button>
-              </div>
+              </PieDeModal>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

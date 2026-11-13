@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { AYUDA_GUT, ESCALAS_GUT, puntajeGut } from "@/lib/mantenimiento/gut";
 import InfoTip from "@/components/InfoTip";
 import PuntajeGut from "./PuntajeGut";
@@ -99,12 +100,11 @@ export default function PuntuarGutModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div>
-          <h2 className="text-base font-bold text-slate-900">Puntaje GUT · OT #{orden.ot_number ?? "—"}</h2>
-          <p className="mt-0.5 truncate text-xs text-slate-400">{orden.equipo_raw ?? orden.descripcion ?? ""}</p>
-        </div>
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onCerrar`.
+    <Modal titulo={`Puntaje GUT · OT #${orden.ot_number ?? "—"}`} alSalir={onCerrar}>
+      <div className="space-y-4">
+        <p className="-mt-2 truncate text-xs text-slate-400">{orden.equipo_raw ?? orden.descripcion ?? ""}</p>
 
         <div className="space-y-3">
           {CAMPOS.map(([campo, etiqueta, escala]) => (
@@ -143,7 +143,7 @@ export default function PuntuarGutModal({
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <div className="flex gap-2 pt-1">
+        <PieDeModal className="flex gap-2">
           <button
             onClick={guardar}
             disabled={guardando || !cambio}
@@ -157,8 +157,8 @@ export default function PuntuarGutModal({
           >
             Cancelar
           </button>
-        </div>
+        </PieDeModal>
       </div>
-    </div>
+    </Modal>
   );
 }

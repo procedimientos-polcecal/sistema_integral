@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { MAXIMO_DE_DIAS } from "@/lib/mantenimiento/postergar";
 
 interface Razon {
@@ -88,18 +89,15 @@ export default function PostergarOTModal({
   const falta = !razon || !justificacion.trim() || !Number.isInteger(Number(dias)) || Number(dias) <= 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl space-y-4">
-        <div>
-          <h2 className="text-base font-bold text-slate-900">
-            Postergar la OT <span className="font-mono text-sm text-slate-500">#{orden.ot_number}</span>
-          </h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            {orden.fecha_ejecucion
-              ? `Hoy está para el ${orden.fecha_ejecucion.split("-").reverse().join("/")}.`
-              : "Esta orden no tiene fecha de inicio."}
-          </p>
-        </div>
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onCerrar`.
+    <Modal titulo={`Postergar la OT #${orden.ot_number}`} alSalir={onCerrar}>
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-500">
+          {orden.fecha_ejecucion
+            ? `Hoy está para el ${orden.fecha_ejecucion.split("-").reverse().join("/")}.`
+            : "Esta orden no tiene fecha de inicio."}
+        </p>
 
         {razones.length === 0 ? (
           <p className="text-sm text-slate-500">
@@ -150,7 +148,7 @@ export default function PostergarOTModal({
           </div>
         )}
 
-        <div className="flex justify-end gap-2 pt-1">
+        <PieDeModal className="flex justify-end gap-2">
           <button onClick={onCerrar} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
             Cancelar
           </button>
@@ -161,8 +159,8 @@ export default function PostergarOTModal({
           >
             {guardando ? "Postergando…" : "Postergar"}
           </button>
-        </div>
+        </PieDeModal>
       </div>
-    </div>
+    </Modal>
   );
 }

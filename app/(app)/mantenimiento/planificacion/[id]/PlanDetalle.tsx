@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { claveDeOrdenGut } from "@/lib/mantenimiento/gut";
 import { INVITADOS_DE_UNA_OT } from "@/lib/agenda/evento";
@@ -365,17 +366,11 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
       )}
 
       {showAddOT && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl my-8">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-900">Agregar órdenes al plan</h2>
-              <button onClick={() => setShowAddOT(false)} className="p-1 text-slate-400 hover:text-slate-700">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-4 space-y-3">
+        // Un selector: lo único que se escribe es un filtro, y elegir una OT la
+        // suma al plan al instante. No hay nada que descartar, así que sale
+        // derecho por el fondo, la X y Escape y nunca va a preguntar.
+        <Modal titulo="Agregar órdenes al plan" alSalir={() => setShowAddOT(false)} soloLectura ancho="ancho">
+            <div className="space-y-3">
               <div className="flex gap-2">
                 <Select value={filterSector} onChange={e => setFilterSector(e.target.value)}
                   className="input flex-1 text-sm">
@@ -415,8 +410,7 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
                 })}
               </div>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {editItem && (
@@ -466,9 +460,10 @@ function EditItemModal({ item, usuarios, onSave, onClose }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl space-y-4">
-        <h2 className="text-sm font-bold text-slate-900">Asignar OT #{item.ot_number}</h2>
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onClose`.
+    <Modal titulo={`Asignar OT #${item.ot_number}`} alSalir={onClose} ancho="chico">
+      <div className="space-y-4">
         <p className="text-xs text-slate-500 -mt-2 leading-snug">{item.descripcion}</p>
         <form onSubmit={submit} className="space-y-3">
           <div className="space-y-1">
@@ -492,18 +487,18 @@ function EditItemModal({ item, usuarios, onSave, onClose }: {
               rows={2} className="input resize-none w-full"
               placeholder="Ej: Llevar llave 32, coordinar con calcinación..." />
           </div>
-          <div className="flex gap-2 pt-1">
+          <PieDeModal className="flex gap-2">
             <button type="submit" disabled={saving}
-              className="btn-primary disabled:opacity-50">
+              className="btn-primary">
               {saving ? "Guardando..." : "Guardar"}
             </button>
             <button type="button" onClick={onClose}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               Cancelar
             </button>
-          </div>
+          </PieDeModal>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }

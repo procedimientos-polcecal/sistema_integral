@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { comoSeLee } from "@/lib/core/fechas";
 import {
   INVITADOS_DE_UNA_OT, TURNOS_DEL_TALLER, esCorreo, fechaParaElCalendario, horarioDeLaOT,
@@ -156,18 +157,20 @@ export default function MandarAlCalendarioModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-full w-full max-w-md space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
-        <div>
-          <h2 className="text-base font-bold text-slate-900">
-            Mandar la OT <span className="font-mono text-sm text-slate-500">#{orden.ot_number}</span> al calendario
-          </h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            {fecha
-              ? `Va en la fecha de ejecución: ${comoSeLee(fecha)}.`
-              : "Esta orden no tiene fecha de ejecución."}
-          </p>
-        </div>
+    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
+    // hay borrador, así que hoy los dos llaman a `onCerrar`. Una vez mandada,
+    // salir por cualquier lado es «Cerrar» (`onMandada`): la orden ya está en el
+    // calendario y quien llama tiene que refrescar, no sólo ocultar la ventana.
+    <Modal
+      titulo={`Mandar la OT #${orden.ot_number} al calendario`}
+      alSalir={listo ? onMandada : onCerrar}
+    >
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-500">
+          {fecha
+            ? `Va en la fecha de ejecución: ${comoSeLee(fecha)}.`
+            : "Esta orden no tiene fecha de ejecución."}
+        </p>
 
         {listo ? (
           <>
@@ -190,11 +193,11 @@ export default function MandarAlCalendarioModal({
                 {listo.advertencia}
               </div>
             )}
-            <div className="flex justify-end pt-1">
+            <PieDeModal className="flex justify-end">
               <button onClick={onMandada} className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white">
                 Cerrar
               </button>
-            </div>
+            </PieDeModal>
           </>
         ) : (
           <>
@@ -309,7 +312,7 @@ export default function MandarAlCalendarioModal({
               </div>
             )}
 
-            <div className="flex justify-end gap-2 pt-1">
+            <PieDeModal className="flex justify-end gap-2">
               <button onClick={onCerrar} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
                 Cancelar
               </button>
@@ -320,10 +323,10 @@ export default function MandarAlCalendarioModal({
               >
                 {guardando ? "Mandando…" : "Mandar al calendario"}
               </button>
-            </div>
+            </PieDeModal>
           </>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

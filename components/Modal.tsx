@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { apilarModal, desapilarModal, esElModalDeArriba } from "@/lib/core/pilaDeModales";
 
 export interface ModalProps {
   titulo: string;
@@ -83,11 +84,27 @@ export function Modal({
     }
   }, [tocado, soloLectura, alSalir, confirm]);
 
+  // Un modal puede abrir otro desde adentro (el calendario dentro de «Nueva OT»)
+  // y los dos escuchan Escape en `document`: sin esto, una sola tecla cerraba los
+  // dos. Cada instancia se anota al montarse y se saca al desmontarse; sólo la de
+  // arriba responde (lib/core/pilaDeModales.ts).
+  const ficha = useRef<symbol | null>(null);
+  useEffect(() => {
+    const propia = apilarModal();
+    ficha.current = propia;
+    return () => {
+      desapilarModal(propia);
+      ficha.current = null;
+    };
+  }, []);
+
   useEffect(() => {
     function alTeclear(e: KeyboardEvent) {
       // Un hijo que ya usó la tecla —el `<Select>` cierra su lista con Escape y
       // llama a `preventDefault`— no quiso decir «salí del formulario».
-      if (e.key === "Escape" && !e.defaultPrevented) void salir();
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (!ficha.current || !esElModalDeArriba(ficha.current)) return;
+      void salir();
     }
     document.addEventListener("keydown", alTeclear);
     return () => document.removeEventListener("keydown", alTeclear);
