@@ -1,4 +1,5 @@
 import Link from "next/link";
+import InfoTip from "@/components/InfoTip";
 import type { ProblemaDeCarga, TipoDeProblemaDeCarga } from "@/lib/tallerVial/tablero";
 
 const ETIQUETA: Record<TipoDeProblemaDeCarga, string> = {
@@ -38,7 +39,10 @@ export default function CargasParaRevisar({ problemas }: { problemas: ProblemaDe
   return (
     <section className="card mt-4 p-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="font-semibold text-slate-900">Cargas para revisar ({problemas.length})</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-slate-900">Cargas para revisar ({problemas.length})</h2>
+          <InfoTip text="Sólo marca cuatro cosas: una fecha imposible (anterior a 2020 o posterior a mañana), una carga sin equipo reconocido, una lectura menor que la anterior y una lectura mayor que la siguiente. Las tres últimas se miran sólo en las cargas de los últimos 120 días; la fecha imposible, siempre. Entre las lecturas se marca la que no cuadra con el resto, no la vecina. Se ven 5 y las demás en el desplegable." />
+        </div>
         <Link href="/taller-vial/cargas" className="text-xs text-slate-500 underline">Ver cargas →</Link>
       </div>
       <p className="mt-1 text-xs text-slate-500">

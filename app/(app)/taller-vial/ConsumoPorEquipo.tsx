@@ -1,4 +1,5 @@
 import Link from "next/link";
+import InfoTip from "@/components/InfoTip";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 import { ETIQUETA_UNIDAD, unidadDeUso } from "@/lib/tallerVial/equipos";
 import { barraDeConsumo, type NivelDeConsumo } from "@/lib/tallerVial/tablero";
@@ -29,7 +30,10 @@ export default function ConsumoPorEquipo({ filas }: { filas: FilaDeConsumo[] }) 
   return (
     <section className="card mt-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold text-slate-900">Consumo del mes, por equipo</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-slate-900">Consumo del mes, por equipo</h2>
+          <InfoTip text="Litros del mes sobre lo trabajado en el mes (cada lectura menos la de la carga anterior con lectura), contra el promedio de los 6 meses anteriores del mismo equipo, que marca la raya. Verde hasta +10 %, ámbar hasta +25 %, rojo más. Todos los litros del mes cuentan, también los de una carga sin lectura. No es el aviso «Consume X % más» de arriba, que compara los últimos 30 días con los 150 anteriores." />
+        </div>
         <div className="flex items-center gap-3 text-xs text-slate-500">
           <span className="flex items-center gap-1"><span className="inline-block h-3 w-px bg-slate-700" /> Su promedio de meses anteriores</span>
           <Link href="/taller-vial/cargas" className="underline">Ver cargas →</Link>

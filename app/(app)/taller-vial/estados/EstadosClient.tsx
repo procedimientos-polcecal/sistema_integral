@@ -7,6 +7,7 @@ import { ETIQUETA_ESTADO, type EstadoDiario } from "@/lib/tallerVial/estados";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 import type { EstadoDiarioDB } from "@/lib/tallerVial/types";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 const ESTILO_ESTADO: Record<EstadoDiario, string> = {
   OPERATIVO: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -83,7 +84,10 @@ export default function EstadosClient({
     <div className="mx-auto max-w-4xl">
       <Link href="/taller-vial" className="text-xs text-slate-500 underline">← Taller Vial</Link>
       <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="page-header">Estado de los equipos</h1>
+        <div className="flex items-baseline gap-2">
+          <h1 className="page-header">Estado de los equipos</h1>
+          <InfoTip text="Muestra el último estado que se cargó de cada equipo, aunque no sea de hoy. Un equipo tiene un solo estado por día: volver a cargarlo ese día lo reemplaza. También se escribe en «HISTORIAL ESTADOS» de la planilla; si esa escritura falla queda un ⚠ y, como la planilla se lee cada diez minutos, lo que ya tenga cargado para ese equipo y ese día puede pisar tu cambio. El historial de abajo muestra sólo los 30 estados de fecha más reciente, de todos los equipos juntos." />
+        </div>
         <p className="page-subheader">Hoy: {hoy}</p>
       </div>
 

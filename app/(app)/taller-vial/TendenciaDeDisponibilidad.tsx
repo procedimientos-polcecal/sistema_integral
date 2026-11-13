@@ -1,4 +1,5 @@
 import Link from "next/link";
+import InfoTip from "@/components/InfoTip";
 import type { DisponibilidadDelMes } from "@/lib/tallerVial/tablero";
 
 const NOMBRE_MES = new Intl.DateTimeFormat("es-AR", { month: "short", timeZone: "UTC" });
@@ -19,7 +20,10 @@ export default function TendenciaDeDisponibilidad({ meses }: { meses: Disponibil
   return (
     <section className="card mt-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold text-slate-900">Disponibilidad de la flota, mes a mes</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-slate-900">Disponibilidad de la flota, mes a mes</h2>
+          <InfoTip text="Suma los días de toda la flota: un equipo con 3 días cargados pesa menos que uno con 30. «Operativo con fallas» y «Fuera de servicio» cuentan como no disponible, y un día sin estado no cuenta. El «Promedio flota» del informe mensual promedia los porcentajes de cada equipo, así que da otro número." />
+        </div>
         <Link href="/taller-vial/informes" className="text-xs text-slate-500 underline">Informe mensual →</Link>
       </div>
       <div className="mt-4 flex h-36 items-end gap-2">

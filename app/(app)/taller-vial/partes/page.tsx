@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { permisosTallerVialDe } from "@/lib/tallerVial/auth";
 import { traerPartesTallerVial } from "@/lib/tallerVial/consultas";
 import { diaEnArgentina } from "@/lib/core/fechas";
+import InfoTip from "@/components/InfoTip";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 
@@ -43,7 +44,12 @@ export default async function PartesTallerVialPage() {
           <thead>
             <tr className="bg-slate-100">
               {["Fecha", "Operario", "Equipo", "Sector", "Horario", "Horas", "Estado"].map((c) => (
-                <th key={c} className="px-3 py-2 text-left text-xs font-semibold text-slate-600">{c}</th>
+                <th key={c} className="px-3 py-2 text-left text-xs font-semibold text-slate-600">
+                  {c}
+                  {c === "Estado" && (
+                    <InfoTip className="ml-1" text="Un parte de destape («Destape D1», D6, C1 o C3) pasa a Destape de Cantera sólo si se reconoció el equipo, se reconoció el operario y las horas, de la hora de inicio a la de fin, son mayores que cero. Si falta cualquiera de las tres queda ⚠ y no se crea nada. Un parte ya importado no se vuelve a procesar: el ⚠ no desaparece aunque después se corrija el nombre." />
+                  )}
+                </th>
               ))}
             </tr>
           </thead>

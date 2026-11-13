@@ -1,3 +1,4 @@
+import InfoTip from "@/components/InfoTip";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 import { ETIQUETA_UNIDAD, unidadDeUso } from "@/lib/tallerVial/equipos";
 import { ETIQUETA_ESTADO } from "@/lib/tallerVial/estados";
@@ -31,7 +32,10 @@ function hace(dias: number): string {
 export default function TarjetasDeFlota({ tarjetas, equipos }: { tarjetas: TarjetaDeEquipo[]; equipos: EquipoTallerVial[] }) {
   return (
     <section className="mt-4">
-      <h2 className="font-semibold text-slate-900">La flota, hoy</h2>
+      <div className="flex items-center gap-2">
+        <h2 className="font-semibold text-slate-900">La flota, hoy</h2>
+        <InfoTip text="Cada tarjeta usa el último estado cargado de ese equipo. «En este estado» cuenta los días seguidos con ese estado hasta hoy, y un día sin registro no corta la racha. «Marca» es la última lectura de horómetro (hs) u odómetro (km) cargada con el combustible, sin contar los 0. «Últ. carga» es la carga más reciente, tenga lectura o no. Qué equipos se miden en km sale de una lista fija: sólo EM9 se confirmó con un dato real, el resto se asume." />
+      </div>
       <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {tarjetas.map((t) => {
           const equipo = equipos.find((e) => e.id === t.equipoId);
