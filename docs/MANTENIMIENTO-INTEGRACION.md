@@ -2797,6 +2797,114 @@ Tres cosas de esa decisión que no se deducen del código:
   esa grilla es de dos columnas y el mensaje, que nombra las dos fechas
   enteras, entraba partido en pedazos de 150 px.
 
+## El cierre anterior al inicio (12/11/2026)
+
+Una OT **se puede** cerrar con fecha anterior a su fecha de inicio, pero sólo si
+alguien dice por qué. La regla vive en
+[lib/mantenimiento/cierreAnteriorAlInicio.ts](../lib/mantenimiento/cierreAnteriorAlInicio.ts)
+y el texto lo valida `justificacionQueExplica()` del núcleo —el mismo filtro de
+no-respuestas con el que Compras deniega—, que rechaza «no», «x» y «prueba» y
+acepta «Duplicado». El diseño está en
+[el spec](superpowers/specs/2026-11-12-mantenimiento-cierre-anterior-al-inicio-design.md)
+y los pasos en [el plan](superpowers/plans/2026-11-12-mantenimiento-cierre-anterior-al-inicio.md).
+
+**Esto dio vuelta una regla de siete días antes, y sólo la mitad.** La sección
+de arriba —`loQueImpideCerrar`, 05/11/2026, a pedido— rechazaba con 400 **todos**
+estos casos. El 12/11/2026, también a pedido, **cede su segunda regla** cuando
+hay una justificación que explica. **La primera no cedió, y no por omisión:**
+una OT sin fecha de inicio sigue sin poder cerrarse, con justificación o sin
+ella, porque de esa fecha salen el atraso, el MTBF y la ventana del equipo, y no
+hay texto que haga calculable un intervalo sin un extremo. Las dos mediciones
+del 05/11 siguen escritas en el docstring de esa función y siguen siendo
+ciertas: lo que cambió no es el dato sino qué se hace con él.
+
+**Y el spec arrancó de una premisa falsa, que es lo que más conviene saber de
+toda esta historia.** Su sección «Qué se pide, y qué parte ya existe» dice que
+«hoy no hay ninguna regla que lo frene, en ningún lado», que `loQueSeContradice`
+no mira la fecha de cierre y que el PATCH no valida fechas. Las tres habían
+dejado de ser ciertas **siete días antes de escribirlo**, con la regla del
+05/11: la frase sobrevivió de haber leído el archivo en una rama anterior a ese
+commit. Con esa premisa en pie la función entera era inalcanzable —quien cargaba
+iba a ver a la vez el campo que pide el motivo y el cartel que decía que igual
+no se podía guardar—, y se descubrió a mitad de la rama. En total se corrigieron
+**cinco** afirmaciones de esa clase; otra decía que un cierre adelantado rompe
+el MTBF, que es falso: `fechaDeFalla` es `fecha_ejecucion` y ni el MTBF ni el
+MTTR leen `fecha_cierre`. La moraleja operativa es barata: **antes de escribir
+«hoy nada lo frena», mirar el historial del archivo.**
+
+**Lo que se perdió a propósito: el calendario en gris.** El `min` de los tres
+`<input type="date">` de cierre impedía elegir un día anterior al inicio, y eso
+también atajaba el dedo que erra por uno. Se sacó, porque ahora ese día es
+elegible. Lo reemplaza tener que escribir el motivo: la trampa de la fecha dada
+vuelta sigue existiendo, pero dejó de ser muda.
+
+**Lo medido el 12/11/2026 contra las 2.442 OT de producción**, que es lo que
+ordena las expectativas: de las **2.176 que tienen las dos fechas, 66 ya están
+así** —44 PROGRAMADO y 22 CORRECTIVO, o sea que el caso más frecuente no es el
+que motivó el pedido—, el adelanto típico es de **2 días** y 57 de las 66 caen
+dentro de la semana. Y **sólo 3 de las 66 entraron por la app**: las otras 63
+vinieron del formulario o de la planilla. O sea que **lo que entra por la
+planilla va a seguir cerrándose antes sin explicar nada**, porque ahí no hay
+dónde preguntar y la sincronización no corre ninguna de estas reglas — es la
+misma línea que ya tiene la fecha de fin, que también se controla sólo en el
+alta. Las 66 quedan en null a propósito: nadie escribió esa justificación, y
+rellenarla haría parecer explicado algo que no lo está.
+
+Seis cosas que no se deducen del código:
+
+1. **El PATCH compara contra la fecha guardada, no contra «vino el campo».**
+   `RegistrarOTModal` manda la fecha de cierre en **todos** sus guardados, así
+   que «vino la clave» sería siempre cierto y le pediría justificación a quien
+   sólo está corrigiendo las horas. Lo contesta `elCierreCambio`.
+2. **La celda W se compone desde la fila guardada y no desde el cuerpo del
+   pedido.** Por eso `repartirRegistroDeOT` manda `cierre_justificacion` al
+   `update` y **no** al `registro`: si viajara con el cuerpo, el segundo registro
+   de una OT —que no la trae— reescribiría la W sin el renglón «Cerrada antes
+   del inicio: …» y nadie se enteraría.
+3. **El drenaje de la cola arma la W con la justificación sola.** El registro se
+   rearma desde la fila y las observaciones no tienen columna propia en la base
+   desde la cual rearmarse, así que ese drenaje se lleva esa parte. Se acepta: la
+   alternativa era que la justificación de un alta no llegara nunca a la
+   planilla, porque la fila del master llega por `IMPORTRANGE` y tarda —de la K
+   en adelante, entre 3 y 53 horas medido el 21/10/2026—, así que la primera
+   escritura falla casi siempre. El dato no se pierde: las observaciones viven
+   en `mantenimientos_ejecuciones.observations`.
+4. **La columna se vacía cuando las fechas dejan de contradecirse.**
+   `laJustificacionQueSeGuarda` devuelve `null` si el cierre ya no es anterior al
+   inicio, y el disparador de la escritura en la planilla es «este PATCH tocó el
+   cierre» y no «vino la justificación». Dejarla llena sería que la ficha y la
+   planilla sigan diciendo «Cerrada antes del inicio» de una orden que ya no lo
+   está — el mismo argumento que ya estaba escrito en `celdaDeObservacionPrevia`.
+5. **El `select` de `exportarLoPendiente` es una lista de columnas escrita a
+   mano.** Si `cierre_justificacion` no está ahí, la cola rearma el registro sin
+   ella, la justificación de un alta **no llega nunca** a la planilla, y no falla
+   ni avisa nada: `loQueHayQueExportar` simplemente no ve la clave.
+6. **El orden de los dos chequeos está elegido a propósito, en las dos rutas y
+   en las tres pantallas: primero el faltante, después el impedimento.** Quien no
+   manda justificación tiene que leer «Falta cargar por qué se cerró antes de la
+   fecha de inicio», que nombra el campo que destraba el guardado, y no «No se
+   puede guardar porque…», que decía que no había nada que hacer — cierto
+   mientras valió la regla del 05/11 y falso desde el 12. En el PATCH
+   `loQueImpideCerrar` corría primero y hubo que moverlo: contestaba distinto
+   que el POST por el mismo hecho.
+
+**Y un cambio de comportamiento que nadie pidió, y que conviene saber.**
+«Registrar el trabajo» ahora precarga la fecha de cierre con la que la orden ya
+tiene; antes arrancaba siempre en **hoy**, así que reabrir una OT cerrada para
+corregirle las horas **le movía la fecha de cierre al día de hoy, en silencio**.
+También precarga la justificación guardada, y eso no es cosmético: sin ella ese
+mismo guardado mandaría el campo vacío y recibiría un 400, o borraría el motivo
+que había. Por eso el listado tiene que seguir trayendo `fecha_cierre` y
+`cierre_justificacion` — si dejara de hacerlo no habría un solo error de tipos.
+
+**El hueco que queda, dicho:** un PATCH que mueva **sólo** `fecha_ejecucion`
+hacia adelante no pasa por ninguno de los dos chequeos —los dos se disparan con
+`fecha_cierre` o `cierre_justificacion`—, así que dejaría una OT con el cierre
+anterior al inicio y sin justificación. Hoy no es alcanzable:
+`repartirRegistroDeOT` es lista blanca y `fecha_ejecucion` no está en ninguna de
+sus listas, y «Postergar» sólo se muestra en órdenes que no están REALIZADO. Es
+por dónde se rompe el día que alguien habilite editar esa fecha.
+
 ## El catálogo de tareas preventivas (12/11/2026)
 
 El motor de planes periódicos tiene **un plan cargado** y, al mismo tiempo, el
