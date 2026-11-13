@@ -92,10 +92,14 @@ export default function HojaDePersona({
   const oficio = falta?.oficio ?? persona.oficio;
 
   return (
-    // Una hoja de acciones, no un formulario con Cancelar: cada toque anota o
-    // mueve al instante, y los dos «Cancelar» de adentro sólo pliegan la
-    // corrección, no cierran la hoja. Sale derecho por el fondo, la X y Escape.
-    <Modal titulo={persona.nombre} alSalir={alCerrar} soloLectura>
+    // No es un visor, aunque casi todo se anote con un toque: tiene el motivo de
+    // «Otra», los tres campos de fecha y las observaciones de la corrección, que
+    // se pueden dejar a medio escribir. Por eso va **sin** `soloLectura`, que es
+    // la exclusión permanente de la pregunta al salir. No hay botón negativo del
+    // modal (los «Cancelar» de adentro sólo pliegan la corrección y no cierran la
+    // hoja), así que cuando haya borrador hay que decidir cómo se descarta. Hoy
+    // no pasa `tocado` y sale derecho por el fondo, la X y Escape.
+    <Modal titulo={persona.nombre} alSalir={alCerrar}>
       <div>
         <p className="-mt-2 mb-3 text-xs capitalize text-slate-500">
           {OFICIO_TEXTO[oficio]}
