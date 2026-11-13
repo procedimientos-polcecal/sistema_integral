@@ -87,6 +87,57 @@ describe("buscarEnInventario", () => {
       .toBe("sin_dato");
   });
 
+  /*
+   * HABER NO ES ALCANZAR, Y ÉSA ERA LA PREGUNTA QUE NO SE HACÍA.
+   *
+   * Reportado el 04/11/2026 probando el preview: la OT 2971 pedía 80 tuercas,
+   * el pañol tenía 61 y la pantalla decía «Hay» en verde. El estado se
+   * calculaba **sólo con el stock** —por eso el comentario de `estadoDe` decía
+   * que al mínimo «alcanza para este trabajo», que es justo lo que no se sabía—
+   * y nadie comparaba contra lo que la orden necesita. El resultado es el peor
+   * de los posibles: el sistema afirma en verde que está todo bien y el
+   * repuesto falta el día del trabajo.
+   */
+  it("avisa cuando hay, pero no alcanza para lo que la orden pide", () => {
+    const [r] = buscarEnInventario(
+      [{ codigo: "ROD-6206", nombre: "", cantidad: "6" }], inventario
+    );
+    expect(r.estado).toBe("no_alcanza");
+  });
+
+  it("si la cantidad entra justa, alcanza", () => {
+    expect(buscarEnInventario([{ codigo: "ROD-6206", nombre: "", cantidad: "4" }], inventario)[0].estado)
+      .toBe("hay");
+  });
+
+  /*
+   * La cantidad es texto libre porque la planilla lo es. Si de ahí no sale un
+   * número, **no se compara**: decir «no alcanza» sin saber cuánto hace falta
+   * es inventar, y es la misma cautela que `sin_dato`.
+   */
+  it("sin un número que comparar, se comporta como siempre", () => {
+    for (const cantidad of ["un juego", "", null, undefined]) {
+      expect(buscarEnInventario([{ codigo: "ROD-6206", nombre: "", cantidad }], inventario)[0].estado)
+        .toBe("hay");
+    }
+  });
+
+  /*
+   * Y el orden entre los estados: «no hay» y «no está» son más graves y ganan
+   * —no tiene sentido decir «no alcanza» de algo que no existe—, pero «no
+   * alcanza» le gana a «queda poco», que es el más blando de los tres y además
+   * el que afirma de más: «queda poco» dice que alcanza para este trabajo.
+   */
+  it("no hay le gana a no alcanza, y no alcanza le gana a queda poco", () => {
+    expect(buscarEnInventario([{ codigo: "COR-B75", nombre: "", cantidad: "9" }], inventario)[0].estado)
+      .toBe("no_hay");
+    expect(buscarEnInventario([{ codigo: "XX-999", nombre: "Algo raro", cantidad: "9" }], inventario)[0].estado)
+      .toBe("no_esta");
+    // RET-40: hay 1, el mínimo son 3 —«queda poco»— y se piden 2.
+    expect(buscarEnInventario([{ codigo: "RET-40", nombre: "", cantidad: "2" }], inventario)[0].estado)
+      .toBe("no_alcanza");
+  });
+
   it("distingue no estar en el inventario de no haber stock", () => {
     // Son cosas distintas: una se compra, la otra se busca en otro lado.
     const [r] = buscarEnInventario([{ codigo: "XX-999", nombre: "Algo raro" }], inventario);

@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
-import { permisosComprasDe, aprobadoresDeCompras, aprobadoresDeOS } from "@/lib/compras/auth";
+import {
+  permisosComprasDe, aprobadoresDeCompras, aprobadoresDeOS, consultadosDeCompras,
+} from "@/lib/compras/auth";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { cuentaDeServicio } from "@/lib/core/google";
 import { umbralDeMontoAlto } from "@/lib/compras/ajustes";
@@ -69,6 +71,12 @@ export default async function ConfiguracionPage() {
   // no en otra pantalla justamente para que se vea que son dos y no una.
   const aprobadoresOS = await aprobadoresDeOS(supabase);
 
+  // Y la tercera, que no decide nada: a quién se le avisa cuando Mantenimiento
+  // pregunta por un repuesto. Va al lado de las otras dos por lo mismo —son tres
+  // y no una—, y porque cuando la pregunta no interrumpe a nadie, lo que la
+  // pantalla de la OT le dice a quien preguntó es que la lista se arma acá.
+  const consultados = await consultadosDeCompras(supabase);
+
   // Con qué alias figura cada uno en el desplegable de la planilla.
   const { data: alias } = await supabase
     .from("compras_aprobadores")
@@ -102,6 +110,7 @@ export default async function ConfiguracionPage() {
       sincronizaciones={(sincronizaciones ?? []) as Sincronizacion[]}
       aprobadores={conAlias}
       aprobadoresOS={aprobadoresOS}
+      consultados={consultados}
       usuarios={usuarios ?? []}
       pendientes={pendientes ?? []}
       nuevosApp={nuevosApp ?? 0}

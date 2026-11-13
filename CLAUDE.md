@@ -45,6 +45,7 @@ código.
 | Compras | [docs/COMPRAS-ESTADO.md](docs/COMPRAS-ESTADO.md) · [COMPRAS.md](docs/COMPRAS.md) · [COMPRAS-SINCRONIZACION.md](docs/COMPRAS-SINCRONIZACION.md) — semáforo y reclamo (12/11): la sección `## El semáforo de pedidos y el reclamo` de COMPRAS.md · [spec](docs/superpowers/specs/2026-11-12-compras-semaforo-y-reclamo-design.md) · [plan](docs/superpowers/plans/2026-11-12-compras-semaforo-y-reclamo.md). Tres cosas que no se deducen del código: **`EN_ESPERA` queda afuera del conjunto reclamable** —9 de los 10 pedidos más viejos estaban ahí, frenados a propósito, y sin excluirlos el primer reclamo se contesta con «ése está en espera»—; **el destinatario sale del grant explícito de `usuario_modulos` y nunca de `nivelEnModulo()`**, que le da `admin` a todo `admin_sistema` y metería a quien tiene `lectura` explícita; y **el orden por defecto no cambia, pero al filtrar por color sí** —los 11 rojos de Mantenimiento caían en las páginas 5 a 15 y la página 1 no tenía un solo punto de color— |
 | Mantenimiento | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md) — GUT (21/10): la sección `## La matriz GUT` de ese documento y el [spec](docs/superpowers/specs/2026-10-21-mantenimiento-gut-design.md). Tres cosas que no se deducen del código: `gut_orden` es una columna generada y **no es el puntaje** (lleva el 27 de "sin puntaje" y el +1000 de las abiertas: imprimirla muestra 1027); el 27 está escrito en dos lugares, el `coalesce` de la migración y `lib/mantenimiento/gut.ts`, con un test que los ata; y el GUT **no se exporta a ninguna planilla** — MTBF: [spec](docs/superpowers/specs/2026-10-16-mantenimiento-mtbf-design.md) · [plan](docs/superpowers/plans/2026-10-16-mantenimiento-mtbf.md) — partes de contratista: [spec](docs/superpowers/specs/2026-10-20-mantenimiento-partes-de-contratista-design.md). Del 04/11/2026, lo mismo que el cuaderno de PIPARO y por el mismo pedido: **la descripción dice sólo la actividad** —contratista, quincena, horas y partes salían del texto porque tienen columna (N, K, O) o viven en el sistema— y la generación **drena su propia cola** para que esas columnas no lleguen vacías. Dos cosas medidas que evitan rehacer el análisis: **no hace falta denominador común** porque el grupo se arma por la actividad normalizada (0 de 19 OT tienen dos formas de escribirla), y **no hay costo que mandar a REPUESTO UTILIZADO** —no hay columna de costo, `materiales` está vacío en los 21 partes y `horas_50`/`horas_100` en cero—. Lo que se pierde, a propósito: los lugares con su número de parte salen de la planilla (siguen en `mant_partes_contratista_renglones`), y 13 de 19 órdenes quedan diciendo sólo «Limpieza», separadas por el sector —que es como ya se cargaban a mano— |
 | Mantenimiento — OT encadenadas | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## Las OT encadenadas` · [spec](docs/superpowers/specs/2026-11-12-mantenimiento-ot-encadenadas-design.md) · [plan](docs/superpowers/plans/2026-11-12-mantenimiento-ot-encadenadas.md). Una OT que al cerrarse genera la siguiente: cambio de martillos → rotación × 3 → cambio, en cuatro molinos y rompedoras. Tres cosas que no se deducen del código: **el estado son dos campos y un corte** —`desde` y `vuelta_desde`, y sólo cuentan las OT creadas en `desde` o después—, y sin ese corte reiniciar un ciclo vuelve a crear la orden recién suspendida sobre piezas nuevas, que es el anti-objetivo producido por el mecanismo que existía para evitarlo; **lo mueven tres puntas y nada más** (la madre al cerrarse, el botón de reinicio, la carga inicial), así que sin eso el ciclo se detiene para siempre después del primer cambio; y **la cara es la vuelta más uno**, que no es una convención elegida sino lo que dicen 63 de las 248 OT medidas —aparecen la 2ª, la 3ª y la 4ª, nunca la 1ª y nunca una 5ª—. El ciclo **apunta a `mant_tareas_preventivas`** en vez de copiar los nombres: el día que ese catálogo genere planes, una tarea que un ciclo maneja no se genera dos veces. Y los cuatro nacen **sin punto de arranque**: desde el 13/11/2026 **arrancan solos con el primer «Cambio de martillos» que se cierre a partir del día en que se configuraron**, que es la única parte del mecanismo donde el texto de una descripción decide algo —la versión anterior pedía cuatro fechas tipeadas, y un ciclo sin arrancar no genera órdenes, así que nada se atrasa y `mant-atrasadas` no puede avisarlo: se habría desplegado dormido—. **Mira hacia adelante y nunca hacia atrás**: arrancando del último cambio histórico, los cuatro nacían con su primera rotación atrasada 7, 21, 21 y 3 días, y Filler 2 —que está en 4ª cara— pediría rotar a la 2ª. Se ve sin esperar con `npx tsx scripts/que-haria-el-ciclo.mts` |
+| Mantenimiento — preguntarle a Compras por un repuesto | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## Preguntarle a Compras por un repuesto` · [spec](docs/superpowers/specs/2026-10-26-mantenimiento-preguntar-a-compras-design.md) · [plan](docs/superpowers/plans/2026-10-29-mantenimiento-preguntar-a-compras.md). Tres cosas que no se deducen del código: la conversación vive en `ordenes_trabajo_notas`, **la misma tabla que las justificaciones**, separada por `tipo` —así que para «por qué sigue abierta» hay que filtrar `tipo = 'JUSTIFICACION'`, porque la última fila puede ser una pregunta—; **«abierta» se calcula en TypeScript y nunca en SQL**, porque es una anti-unión que PostgREST no sabe expresar y escribirla allá sería una segunda definición separada de la que tiene los tests; y el conteo del resumen **lee con el cliente admin a propósito**, porque quien contesta está en Compras y no tiene Mantenimiento —medido: con su sesión la campana decía 0 sin error mientras el push decía 3— |
 | Mantenimiento — programación del taller | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## La programación semanal del taller` · [spec](docs/superpowers/specs/2026-10-22-mantenimiento-disponibilidad-y-turnos-design.md) · [plan](docs/superpowers/plans/2026-10-23-mantenimiento-programacion-del-taller.md). Dos cosas que no se deducen del código: el cuadro entero se repite a las **6** semanas y no a las 2 ni a las 3 —son dos ciclos, de período 2 y de período 3—, y `francos` **entra al cruce por `fecha_descanso` y nunca por `fecha_tomado`**. Son dos cosas distintas y confundirlas fue el bug: `fecha_tomado` es el día en que alguien apretó el botón —los 56 francos tomados de antes del 26/10/2026 caen en tres fechas, y cruzar ésa pintaría 35 huecos un lunes—, mientras que `fecha_descanso` es el día que la persona no viene, que se carga al marcarlo y suele estar adelante. Los 56 viejos quedaron con `fecha_descanso` en null y **no abren hueco**: el sistema no sabe cuándo descansaron y decirlo es mejor que inventarlo. **Dos fotos del mismo dato, y la vieja contaba otra cosa:** el 26/10/2026 eran 56 de 217 —los *tomados*, no el total—; el 04/11/2026 son 259 francos: **200 `PENDIENTE`**, que todavía no tienen día y es lo correcto (`estaDeFranco` pide `TOMADO` y la fecha exacta), y **59 `TOMADO`**, de los cuales **56 son los viejos sin fecha**, **1 se tomó el 02/11 con su día** y **2 se tomaron el 02/11 sin día**. Se sabe, entonces, sólo que **dos francos tomados el 02/11 quedaron sin día** (medido el 04/11/2026); **qué camino los escribió no se sabe**, y que lo distinga haberse creado y tomado el mismo día es **una conjetura de dos casos, sin confirmar**; no se arregló (el detalle está en la sección de la programación del taller de ese documento) |
 | Mantenimiento — el cuaderno de Piparo | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## El cuaderno de Piparo` · [spec](docs/superpowers/specs/2026-10-30-mantenimiento-cuaderno-de-piparo-design.md) · [plan](docs/superpowers/plans/2026-11-01-mantenimiento-cuaderno-de-piparo.md). Lo que no se deduce del código: **el modo de carga lo decide `proveedores.modo_de_carga`** y no el nombre ni un id —PIPARO en `cuaderno`, CANDIA en `parte_diario`—; **el costo vive en dos lugares que nadie ata** —`ordenes_trabajo.costo` y el texto de `REPUESTO UTILIZADO` en la planilla, donde 58 de las 380 OT de PIPARO ya traían el monto a mano— y **`costoEquipo.ts` no lo suma**, porque saltea toda OT con contratista; **septiembre de 2026 ya está cargado a mano** (29 OT, 28 el 01/09) y generarlo las duplica, así que hay un freno que se niega con un 409 y se levanta con `confirmar_duplicados`: **la primera prueba real no puede ser septiembre**; la columna I del master es derrame y no guarda lo que se le escribe, por eso al sumar horas a una OT existente se corrige en «Altas del sistema» (`corregirLaAlta`); `en_llave` **no es una columna**, y por eso una llave que nadie junta no se frena: el renglón que trae las 46 h sale solo como una OT de 46 h y los otros dos quedan pendientes; y **primero se juntan los renglones y después se confirma el sector**, porque confirmar saca al renglón de la propuesta de acumulación. Medido contra las diez fotos reales el 02/11/2026: el tier gratuito del AI Gateway **no incluye Sonnet 5** (403), así que se midió con `google/gemini-2.5-flash` y **eso no dice cómo lee el modelo que manda**; una página tardó 201 y 214 s en las dos corridas —el tope de la ruta es 240—, y un «= 18 Hs» salió como 1.845 horas sin ninguna marca —por eso `normalizarRenglones` marca dudoso todo renglón de más de 200 h, que es lo que ya no se pasa de largo. `AI_GATEWAY_API_KEY` tiene que estar en Vercel y `CUADERNO_MODELO` es opcional. **Un mes también puede entrar por un `.xlsx`** (03/11/2026), como alternativa a las fotos y no como otro modo: lo que dice de dónde vino no es una columna sino la extensión de la ruta (`esRutaDeExcel`). Procesa cinco columnas —**Tarea · Fecha Desde · Fecha Hasta · Hs · Precio ($)**, obligatorias sólo Tarea y Hs— y las busca **por el nombre del encabezado y no por la letra**, porque el mismo contenido ya se mudó de `K:O` a `A:E` en un día. **Una fila es una OT**: no hay nada que agrupar. El control es la fila de TOTALES contra la suma de las filas; si no da, los renglones entran igual y se dice la diferencia. `fecha_hasta` en null quiere decir «duró un día», no que falte. `lib/core/excel.ts` **no sirve** para leerlo porque aplana las celdas y pierde la diferencia entre un cero, una fórmula sin recalcular y un `#REF!`. Y dos cosas del 03/11/2026 que vinieron de ahí: **juntar no es el camino para generar una sola OT** —con el Excel 46 de 63 renglones salen solos, sin ningún grupo, y el único botón generaba los 46 de una—, así que la generación acepta `claves` y la barra de la selección tiene su propio botón; el filtro cae sobre **los grupos y no sobre los renglones**, o sea que elegir un renglón juntado saca su grupo entero y el cartel lo dice. Y **un renglón se puede sacar de la carga** (`cuaderno/renglones/[id]`, un `DELETE` aparte del que desagrupa), para la tarea que ya tiene su OT cargada a mano: borrar la fila **se audita con `borrar`**, y es el primer `borrar` que escribe una persona. Y del 03/11/2026, lo que hay que saber antes de tocar el texto de una OT: **la descripción dice sólo la tarea** —el contratista, la fecha de cierre y las horas tienen columna propia en el master (N, K, O) y desde una celda de prosa no se filtra ni se suma—, el costo sigue yendo en `REPUESTO UTILIZADO`, y **un grupo sale por su denominador común** (`cuadernoDescripcion.ts`): de los cinco grupos juntados de verdad, **cero tenían las tareas idénticas**, así que el plural cuenta como la misma palabra —pero «Nº1» y «Nº2» no se parecen nunca— y con menos de dos palabras en común se listan las tareas en vez de inventar un resumen. El problema de verdad ahí no era el texto sino que **esas columnas llegaban vacías**: el master recibe la fila por `IMPORTRANGE` y la generación lo intentaba a medio segundo de crear la orden. Medido el mismo día: 48 de 48 OT del cuaderno con K/M/N/O vacías contra **12 de 12 de `/api/mantenimiento/ordenes`, que sí reintenta, resueltas a los 21 s**. Ahora la generación drena con `after()`, **una pasada para toda la corrida** y con las esperas recortadas a lo que queda de `maxDuration` (`esperasQueEntran`) |
 | RRHH | [docs/RRHH-ACTUALIZACION.md](docs/RRHH-ACTUALIZACION.md) · marcaciones desde Lenox: [spec](docs/superpowers/specs/2026-10-07-rrhh-marcaciones-desde-lenox-design.md) · [plan](docs/superpowers/plans/2026-10-07-rrhh-marcaciones-desde-lenox.md) |
@@ -908,8 +909,10 @@ sin señal y cargar sin señal (sin empezar).
 
 **El tercer lado es el aviso al instante, y no se hereda: se pide a mano.**
 Desde el 18/10/2026, cuando algo queda esperando la decisión de una persona
-—hoy un requerimiento de compra y una orden de servicio— quien tiene que
-decidir recibe un push en el momento, sin esperar al resumen. Lo manda
+—hoy **tres** cosas: un requerimiento de compra, una orden de servicio y, desde
+el 31/10/2026, una pregunta de Mantenimiento a Compras por un repuesto que
+falta— quien tiene que decidir recibe un push en el momento, sin esperar al
+resumen. Lo manda
 `avisarAQuienDecide()` de [lib/core/avisoAlInstante.ts](lib/core/avisoAlInstante.ts),
 y lo importante es lo que **no** hace: **agregar un aviso a `lib/home/avisos.ts`
 no lo vuelve instantáneo**. Eso se decide ahí, a mano, y pasando las tres
@@ -972,10 +975,22 @@ la lista de los candidatos que **no** pasan el filtro y por qué — que es lo q
 permite decirle que no al próximo módulo que lo pida.
 
 **El payload de un push es plano: `{title, body, url}`.** Es el `Aviso` de
-[lib/core/webpush.ts](lib/core/webpush.ts) y lo mandan los **cuatro** emisores que
-hay —el resumen diario, el aviso al instante, el de Remises y, desde el
-03/11/2026, el de la divergencia de la Agenda—. La `url` va en
+[lib/core/webpush.ts](lib/core/webpush.ts) y lo mandan los **cinco** emisores que
+hay —el resumen diario, el aviso al instante, el de Remises, el aviso **a una
+sola persona nombrada** (31/10/2026,
+[lib/core/avisoAUnaPersona.ts](lib/core/avisoAUnaPersona.ts): Compras contestó
+tu consulta por un repuesto, y le llega sólo a quien preguntó) y el de la
+divergencia de la Agenda (03/11/2026)—. El número sale de contar quién llama a
+`enviarPush`, que es de donde se corrige éste: dos ramas distintas lo dejaron
+en «cuatro» el mismo día, cada una contando un cuarto distinto. La `url` va en
 el primer nivel, no adentro de un `data`.
+
+**El de una sola persona es el único que no le habla a una lista**: los demás
+salen a todos los aparatos de un conjunto de gente —los que ven un módulo, los
+que aprueban— y éste a los de **una** persona, decidida por quien lo llama. De
+ahí sus dos condiciones, que la función no puede tomar sola y por eso están en
+`aQuienAvisarDeLaRespuesta`: que haya a quién —`creado_por` es nullable— y que
+no sea quien acaba de escribir la respuesta.
 
 Esto parece un detalle y costó un mes de notificaciones que no llevaban a
 ningún lado: el handler de `push` de `public/sw.js` guardaba `data: data.data`,
@@ -1183,10 +1198,64 @@ MIRAR 0**: cualquier cosa que aparezca es de lo que uno acaba de escribir.
 ## Qué se testea
 
 Vitest sobre **funciones puras**: parseo de planillas, cálculos, permisos,
-filtros. Las rutas y las pantallas no tienen tests, así que la lógica que
-importa se saca de la ruta a `lib/` para poder probarla — es lo que hizo
-`repartirRegistroDeOT` después de que un campo se colara del lado equivocado sin
-que nada lo notara.
+filtros. La lógica que importa se saca de la ruta a `lib/` para poder probarla —
+es lo que hizo `repartirRegistroDeOT` después de que un campo se colara del lado
+equivocado sin que nada lo notara. **Ésa sigue siendo la estrategia y no
+cambió.**
+
+Lo que cambió entre el 30 y el 31/10/2026 es que dejó de ser cierto que *no
+haya* ni un test de ruta ni uno de pantalla: hay **tres de ruta y uno de
+pantalla**, y los cuatro existen por el mismo motivo, que es el único que los
+justifica — el **cableado**, que no se puede mover a `lib/` porque no es una
+regla sino la unión entre dos piezas que por separado están bien:
+
+- `lib/mantenimiento/rutaDeNotas.test.ts` y `lib/compras/rutaDeConsultas.test.ts`
+  — que lo que la regla rechaza **no se inserte, no escriba la planilla y no
+  avise**, la forma del `insert`, y que un push caído no voltee lo ya guardado.
+  `lib/` no lo ve: las reglas reciben datos y devuelven un veredicto, y que la
+  ruta le haga caso es otra cosa.
+- `lib/compras/rutaDeLaListaDeConsultados.test.ts` — que escriba
+  `compras_consultados` y **no** `compras_aprobadores`. Las dos tablas tienen la
+  misma forma y viven en secciones contiguas de la misma pantalla; confundirlas
+  no rompe nada y es el error que el diseño del 26/10/2026 existe para no
+  cometer. No hay nada que sacar a `lib/`: la ruta es una guardia, el nombre de
+  una tabla y la ausencia de una comprobación.
+- `lib/mantenimiento/historialDeLaOT.test.ts` — a qué entradas del historial se
+  les ofrece «Ya llegó». Se dibuja con `renderToStaticMarkup` en el entorno
+  node, sin jsdom y sin tocar la configuración de vitest. Sólo se mira el HTML
+  que sale, nunca los clics.
+
+**Ninguno es una plantilla**, y los cuatro lo dicen en su encabezado. La vara
+para el próximo es la misma: que la regla no se pueda sacar a `lib/`, no que
+probarla ahí sea incómodo. Y los cuatro usan el mismo Supabase de mentira,
+`lib/core/supabaseDeMentira.ts`, que aplica los filtros de verdad y **castiga
+las dos trampas de PostgREST**: corta en 1.000 filas y rechaza un `.in()` de más
+de 200 ids. Eso no es decorado — sin lo segundo, un `traerTodo` tapaba la falta
+de lotes y la mutación sobrevivía igual.
+
+**Y la parte que NO se prueba así, porque ya se intentó y falló:** que un
+`select` traiga las columnas que su consumidor necesita. Eso lo comprueba
+[lib/mantenimiento/selectsDeLasNotas.ts](lib/mantenimiento/selectsDeLasNotas.ts),
+que lee **el texto** de los archivos y exige que todo `select` sobre
+`ordenes_trabajo_notas` que nombre una columna de la conversación las traiga
+todas. Cubre las dos rutas y la tercera que nadie escribió.
+
+Vale la pena saber por qué existe, porque la lección es más general que esta
+tabla. La guarda era al principio una **lista de columnas escrita a mano en cada
+test de ruta**. Falló la segunda vez que se usó: a la de Compras le faltaba
+`creado_en`, así que sacar esa columna pasaba los 164 tests y mataba en silencio
+«la más vieja arriba», que es la razón declarada de esa pantalla. Una lista a
+mano que hay que acordarse de completar en cada ruta nueva no es una guarda: es
+el mismo olvido que viene a tapar, movido de lugar. Si aparece otra tabla con
+este problema, la respuesta es otro chequeo como ése y **no** otro test de ruta.
+
+Dos cosas suyas que no se deducen de leerlo. El disparador es **nombrar alguna
+columna de la conversación**, no «todo select»: con «todo select» el
+`select("id")` del DELETE y el de `laUltimaNota` lo dejaban rojo el primer día,
+y un chequeo siempre rojo no lo mira nadie — es la misma razón por la que el
+lint todavía no está en el CI. Y es un lector de cadenas, no un compilador: un
+`select` concatenado lo reporta como «no va literal» en vez de leerlo, que es la
+respuesta correcta según la regla de la casa, pero conviene saberlo.
 
 ## Commits
 

@@ -70,11 +70,18 @@ export const NOTAS: Record<string, string> = {
     "todo esto y se queda con una fila por recurso.",
 
   ordenes_trabajo_notas:
-    "**Por qué una OT todavía no se hizo**, con quién lo escribió y cuándo. Es un " +
-    "historial: no se edita y puede tener varias por orden, así que la última " +
-    "es la que vale. Ojo con confundirla: esto es de ANTES de hacer el " +
-    "trabajo. Lo que se encontró AL hacerlo lo escribe el registro de la " +
-    "ejecución, en otro lado.",
+    "**Por qué una OT todavía no se hizo, y la conversación con Compras por un " +
+    "repuesto que falta.** Son dos cosas en la misma tabla y las separa `tipo`: " +
+    "`JUSTIFICACION` (el default, y lo único que había antes del 31/10/2026), " +
+    "`PREGUNTA` y `RESPUESTA`. **Para 'por qué sigue abierta' filtrá " +
+    "`tipo = 'JUSTIFICACION'`**: sin eso, la última fila de una orden puede ser " +
+    "una pregunta a Compras y la justificación vigente queda tapada. De las " +
+    "justificaciones, la última es la que vale. " +
+    "Una `PREGUNTA` apunta al repuesto por `repuesto_id` y la contesta una " +
+    "`RESPUESTA` con `responde_a`; `responde_a` también lo usa una `PREGUNTA` " +
+    "cuando alguien insiste, y entonces la anterior queda superada. " +
+    "Ojo con confundirla: todo esto es de ANTES de hacer el trabajo. Lo que se " +
+    "encontró AL hacerlo lo escribe el registro de la ejecución, en otro lado.",
 
   ordenes_trabajo:
     "Las OT. Los campos de persona apuntan a `usuarios`, no a `empleados`. " +

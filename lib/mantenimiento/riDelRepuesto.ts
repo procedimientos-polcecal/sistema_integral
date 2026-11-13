@@ -65,12 +65,41 @@ export function estaEnVuelo(ri: RiPosible): boolean {
   return !COMPRA_TERMINADA.includes(String(ri.estado_compra ?? "").trim().toUpperCase());
 }
 
-/** Las palabras que sirven para comparar: las de tres letras o más. */
-const palabrasDe = (texto: string): string[] =>
-  norm(texto).split(" ").filter((p) => p.length >= 3);
-
-/** Si una palabra es un número de pieza: lleva un dígito, así que distingue. */
+/** Si una palabra es un número de pieza o una medida: lleva un dígito, así que distingue. */
 const tieneDigito = (p: string): boolean => /\d/.test(p);
+
+/**
+ * Las palabras que sirven para comparar.
+ *
+ * Dos reglas, y las dos se escribieron el 03/11/2026 arreglando el mismo bug.
+ *
+ * **La marca de pulgada separa, no pega.** `norm` saca el `°`, el `º` y el
+ * punto, pero no la comilla, y la gente la escribe de las dos formas: el
+ * inventario dice `BARRA ROSCADA 5/8 "` y el requerimiento `Barra roscada 5/8"`.
+ * Sin esto quedan las palabras `5/8` y `5/8"`, que no coinciden, y el RI 2230
+ * —en vuelo, sin código, así que el nombre era el único cruce— no aparecía.
+ * Medido ese día: de 2.244 RI, 302 llevan comilla; de 1.195 artículos activos,
+ * 227. No era de esa pieza.
+ *
+ * **Y un número corto cuenta aunque sea corto.** La regla vieja era «tres
+ * letras o más», que alcanzaba para tirar «de», «x» y «mm» — pero también
+ * tiraba el `2` de `BULON 1/2 - 2 "`, que es el largo del bulón. Mientras la
+ * comilla bloqueaba el cruce eso no se veía; al sacarla, empezaba a coincidir
+ * cualquier bulón de 1/2 con cualquier otro. Medido contra la base ese día,
+ * **ya pasaba hoy** en los casos donde la comilla no estorbaba: `BULON 1/2 - 2 "`
+ * daba igual que `BULON 3/8 - 1 1/2 "`, un codo de 2" que uno de 3/4" y un
+ * disco de corte de 4 1/2" que uno de 9". Los tres están fijados en el test.
+ *
+ * Por eso las dos correcciones van juntas y no una sola: sacar la comilla sin
+ * conservar los números cambia un falso negativo por un falso positivo, que es
+ * el peor de los dos —un «ya está pedido» que no es termina en que la pieza no
+ * se pide nunca—.
+ */
+const palabrasDe = (texto: string): string[] =>
+  norm(texto)
+    .replace(/["'”’″]/g, " ")
+    .split(" ")
+    .filter((p) => p.length >= 3 || tieneDigito(p));
 
 /**
  * Si dos descripciones nombran el mismo repuesto, con la cautela que hace falta.

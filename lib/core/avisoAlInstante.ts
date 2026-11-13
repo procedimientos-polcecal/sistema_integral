@@ -19,15 +19,23 @@ import { traerTodo } from "@/lib/core/paginado";
  * Un evento merece interrumpir si cumple **las tres**:
  *
  *   1. Hay una **persona nombrada** esperando: una lista concreta de usuarios
- *      —`compras_aprobadores`, `os_aprobadores`—, no "el módulo" ni "alguien
- *      del sector". Si no se puede decir a quién avisarle, es un cartel.
+ *      —`compras_aprobadores`, `os_aprobadores`, `compras_consultados`—, no "el
+ *      módulo" ni "alguien del sector". Si no se puede decir a quién avisarle,
+ *      es un cartel.
  *   2. **Nada avanza hasta que decida.** No es "miralo hoy": es "hasta que vos
  *      no digas, esto está parado".
  *   3. **Acaba de pasar.** El evento es la aparición. Un estado que lleva tres
  *      días igual no es noticia a ninguna hora, y ése es el trabajo del resumen.
  *
- * Hoy las cumplen dos cosas y nada más: un requerimiento de compra que nace
- * esperando aprobación, y una orden de servicio que nace esperando aprobación.
+ * Hoy las cumplen **tres** cosas y nada más: un requerimiento de compra que nace
+ * esperando aprobación, una orden de servicio que nace esperando aprobación, y
+ * —desde el 31/10/2026— una pregunta de Mantenimiento a Compras por un repuesto
+ * que falta, que va a `compras_consultados`.
+ *
+ * Esa tercera se agregó con una lista propia y no reusando `compras_aprobadores`,
+ * que es la decisión que más importa de las tres: medido el 26/10/2026, la de
+ * aprobadores tiene cuatro personas y sólo una es quien contesta. Reusarla
+ * repetía por el otro lado el error que `compras-por-aprobar` ya pagó.
  *
  * Los que NO pasan, para poder decirle que no al próximo:
  *
@@ -111,16 +119,54 @@ export interface ItemQueEspera {
   descripcion: string | null;
 }
 
-/** Cómo se llama en la frase lo que espera. */
+/** Cómo se llama en la frase lo que espera, y qué se le pide a quien la lee. */
 export interface NombreDeLoQueEspera {
   /** Con mayúscula y artículo, porque abre el título: "Un pedido". */
   singular: string;
   /** Sin número, que se antepone: "pedidos". */
   plural: string;
+  /**
+   * Lo que se le pide a quien lo lee, conjugado para que cierre el título:
+   * "espera tu aprobación" / "esperan tu aprobación".
+   *
+   * Lo pone quien llama y no esta función, porque no todo lo que espera, espera
+   * una aprobación: una pregunta de Mantenimiento a Compras espera una
+   * respuesta. Es obligatorio a propósito. Con un valor por defecto, el emisor
+   * que no lo pensara diría "aprobación" y nada se lo avisaría.
+   */
+  verbo: { singular: string; plural: string };
 }
 
-/** De qué lista salen los que pueden decidir. Son dos tablas distintas a propósito. */
-export type ListaDeAprobadores = "compras_aprobadores" | "os_aprobadores";
+/**
+ * Lo que dicen las dos notificaciones que ya salen —un pedido de compra y una
+ * orden de servicio—: las dos esperan que alguien apruebe.
+ *
+ * Es un solo objeto y no una frase escrita en cada emisor porque ningún test
+ * llama a los emisores (`avisarDeLosPedidosQueEsperan` y
+ * `sincronizarOrdenesDeServicio`; `grep` del 29/10/2026 sobre los `*.test.ts`).
+ * Escrita dos veces, una tilde que faltara en una de las copias no la vería
+ * nadie y saldría en producción. Escrita acá, la cubren los tests de
+ * `textoDeLaInterrupcion`, que comparan contra el texto literal.
+ */
+export const VERBO_DE_APROBACION: NombreDeLoQueEspera["verbo"] = {
+  singular: "espera tu aprobación",
+  plural: "esperan tu aprobación",
+};
+
+/**
+ * De qué lista salen los que pueden decidir. Son tablas distintas a propósito.
+ *
+ * `compras_consultados` no aprueba nada: son a quienes Mantenimiento les
+ * pregunta por un repuesto, y es una lista propia porque en la de aprobadores
+ * hay cuatro personas y contesta una (medido el 26/10/2026, en el encabezado de
+ * la migración `20261029082249`). Entra en este tipo y no en otro porque lo
+ * único que la función hace con la lista es leer `usuario_id`; lo que cambia de
+ * una a otra es qué se les dice, y eso va en `NombreDeLoQueEspera.verbo`.
+ */
+export type ListaDeAprobadores =
+  | "compras_aprobadores"
+  | "os_aprobadores"
+  | "compras_consultados";
 
 export interface ResultadoDelAviso {
   enviadas: number;
@@ -171,7 +217,7 @@ export function textoDeLaInterrupcion(
   if (items.length === 1) {
     const pidio = loQuePidio(items[0].descripcion);
     return {
-      title: `${nombre.singular} espera tu aprobación`,
+      title: `${nombre.singular} ${nombre.verbo.singular}`,
       body: pidio ? `${items[0].etiqueta} · ${pidio}` : items[0].etiqueta,
       url,
     };
@@ -186,7 +232,7 @@ export function textoDeLaInterrupcion(
         `${nombrados.slice(0, -1).join(", ")} y ${nombrados[nombrados.length - 1]}`;
 
   return {
-    title: `${items.length} ${nombre.plural} esperan tu aprobación`,
+    title: `${items.length} ${nombre.plural} ${nombre.verbo.plural}`,
     body: cuerpo,
     url,
   };

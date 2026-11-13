@@ -149,6 +149,20 @@ export const REGISTRO = {
       "devuelven 502 si falla. La sincronización borraría una cotización que " +
       "la planilla no tiene.",
   },
+  "app/api/compras/consultas/route.ts": {
+    estrategia: "pantalla",
+    porque:
+      "Escribe la misma columna X que la ruta de notas y por el mismo motivo: la " +
+      "respuesta de Compras ES la justificación vigente de por qué la OT sigue " +
+      "abierta. Vale el porqué de aquélla —`filaDeOrden` no lee esa columna, así " +
+      "que ninguna sincronización la puede pisar, y la conversación vive en " +
+      "`ordenes_trabajo_notas`—, y acá hay una razón más: quien contesta está en " +
+      "Compras y **no tiene Mantenimiento** (medido el 30/10/2026: el encargado " +
+      "tiene compras, inventario, facturación y remises), así que un pendiente " +
+      "anotado en la OT no lo vería ni lo podría drenar. Si Google falla, el " +
+      "motivo vuelve en `planilla_error` y la pantalla lo muestra: la respuesta " +
+      "ya quedó guardada y es lo que importa.",
+  },
   "app/api/mantenimiento/ordenes/[id]/notas/route.ts": {
     estrategia: "pantalla",
     porque:
