@@ -13,6 +13,7 @@ import {
 } from "@/lib/despacho/recepcion";
 import type { FilaDeRecepcion, ProveedorParaElAlta } from "./page";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * La balanza.
@@ -95,7 +96,10 @@ export default function RecepcionesClient({
     <div className="mx-auto max-w-5xl space-y-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Recepción de material</h1>
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-xl font-bold text-slate-900">Recepción de material</h1>
+            <InfoTip text="El estado se despeja de lo cargado, no se guarda: Esperando el bruto es sin peso bruto; Descargando, con bruto y sin tara; Lista para cerrar, con los dos pesos; Cerrada, que ya tiene su orden de compra en Odoo, aunque falte validar la recepción. El neto es bruto menos tara en toneladas, con dos decimales; si la tara es igual o mayor que el bruto no hay neto y se avisa en rojo." />
+          </div>
           <p className="text-sm text-slate-500">
             El camión en la balanza: bruto, descarga, tara. Al cerrar se crea la
             orden de compra en Odoo y se escribe la planilla.

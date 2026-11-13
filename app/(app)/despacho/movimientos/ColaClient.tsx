@@ -16,6 +16,7 @@ import {
 import type { EstadoDeOrden, HorarioDeOrden, RemitoDeOdoo } from "@/lib/despacho/types";
 import type { FilaDeCola } from "./page";
 import NuevaOrden from "./NuevaOrden";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * Movimientos diarios, en la PC de la balanza.
@@ -146,6 +147,7 @@ export default function ColaClient({
           <p className="text-sm text-slate-500">
             {comoSeLee(fecha)} · {filas.length} {filas.length === 1 ? "orden" : "órdenes"}
             {abiertas > 0 && ` · ${abiertas} sin cerrar`}
+            <InfoTip className="ml-1" text="El número de órdenes incluye las que quedaron sin cerrar de días anteriores a éste: van arriba, con su fecha en rojo. «Sin cerrar» cuenta las que no tienen la salida del predio, de este día y de los anteriores. De los días anteriores sólo se traen las cargadas desde este sistema, no las importadas de la planilla." />
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -214,13 +216,13 @@ export default function ColaClient({
                 <th className="px-3 py-2 text-left">Cliente</th>
                 <th className="px-3 py-2 text-left">Material</th>
                 <th className="px-3 py-2 text-right">Cantidad</th>
-                <th className="px-3 py-2 text-left">Estado</th>
+                <th className="px-3 py-2 text-left">Estado<InfoTip className="ml-1 normal-case" text="Hasta dónde llegó el camión: el último horario que tiene marcado, no el primero que falta. Esperando es ningún horario; En predio, la entrada; Cargando, el inicio de carga; Cargado, el fin de carga; Cerrada, la salida. «Hace…» cuenta desde ese horario hasta ahora. «Falta…» en rojo avisa de un horario anterior sin marcar." /></th>
                 <th className="px-2 py-2 text-center">Entrada</th>
                 <th className="px-2 py-2 text-center">Inicio carga</th>
                 <th className="px-2 py-2 text-center">Fin carga</th>
                 <th className="px-2 py-2 text-center">Salida</th>
-                <th className="px-3 py-2 text-right">Carga</th>
-                <th className="px-3 py-2 text-right">En predio</th>
+                <th className="px-3 py-2 text-right">Carga<InfoTip className="ml-1 normal-case" text="Fin de carga menos inicio de carga, en minutos. «—» es que falta uno de los dos horarios, no que tardó cero. En rojo y con signo menos es un horario mal tipeado: no se corrige solo y ese tiempo no entra en el promedio. En la planilla esta cuenta es una fórmula suya y el sistema no la escribe." /></th>
+                <th className="px-3 py-2 text-right">En predio<InfoTip className="ml-1 normal-case" text="Salida del predio menos entrada, en minutos; «—» si falta alguna de las dos. Un horario tipeado que cae más de 12 horas antes del anterior se toma como del día siguiente (un camión que entra 23:40 y sale 00:30). Si cae menos de 12 horas antes se lo deja negativo, en rojo, porque es un error de tipeo." /></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

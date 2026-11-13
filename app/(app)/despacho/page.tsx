@@ -87,7 +87,10 @@ export default async function DespachoDashboardPage() {
             </li>
             {sinCerrar > 0 && (
               <li className="flex items-center justify-between text-amber-700">
-                <span>Sin cerrar de días anteriores</span>
+                <span>
+                  Sin cerrar de días anteriores
+                  <InfoTip className="ml-1" text="Suma las órdenes de carga de antes de hoy a las que nunca se les cargó la salida del predio y las recepciones de material de antes de hoy que todavía no tienen su orden de compra en Odoo. De las órdenes cuentan sólo las cargadas desde este sistema: las importadas de la planilla sin salida no entran, porque hoy nadie puede corregirlas." />
+                </span>
                 <span className="font-semibold">{sinCerrar}</span>
               </li>
             )}
@@ -97,7 +100,10 @@ export default async function DespachoDashboardPage() {
         {/* ── Peores tiempos en predio, este mes ── */}
         <section className="card p-4">
           <div className="flex items-center justify-between">
-            <h2 className="section-title">Más tiempo en predio (mes)</h2>
+            <h2 className="section-title">
+              Más tiempo en predio (mes)
+              <InfoTip className="ml-1" text="Las cinco órdenes del mes, del día 1 a hoy, con más minutos entre la entrada y la salida del predio. No entran las que no tienen los dos horarios ni las que dan negativo, que son un horario mal tipeado. Abajo, «sin tiempo» cuenta esas mismas, y también las que todavía están en curso. La tarjeta «Prom. carga» de arriba aplica la misma regla al tiempo de carga." />
+            </h2>
             <Link href="/despacho/ordenes" className="text-xs text-slate-500 underline">Ver órdenes →</Link>
           </div>
           {indicadores.peoresEnPredio.length === 0 ? (
