@@ -4,18 +4,18 @@ Un ERP que unifica en una sola app lo que eran tres, sobre un núcleo de datos
 compartido. **Next.js 16 + Supabase, desplegado en Vercel.** En producción:
 https://www.polcecalpolysan.app
 
-Doce módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
+Trece módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
 **Compras**, **Inventario**, **Producción**, **Despacho**, **Facturación**,
-**Cantera**, **Calidad**, **Taller Vial**, **Trituración** y **Seguridad e
-Higiene**. Cada uno vive en `app/(app)/<modulo>`, `lib/<modulo>` y
+**Cantera**, **Calidad**, **Taller Vial**, **Trituración**, **Seguridad e
+Higiene** y **Ventas**. Cada uno vive en `app/(app)/<modulo>`, `lib/<modulo>` y
 `app/api/<modulo>`.
 
 El número y la lista salen de `MODULOS_ORDEN` en
-[lib/core/access.ts](lib/core/access.ts), que tiene trece entradas contando
+[lib/core/access.ts](lib/core/access.ts), que tiene catorce entradas contando
 `remises`: ahí está la cuenta de verdad, y de ahí se corrige ésta. Ya se
-separaron dos veces —decía «Diez» y listaba nueve, después «Once» y listaba
-diez sin Taller Vial ni Trituración—, así que si el número y los nombres no
-coinciden, el que manda es el archivo.
+separaron tres veces —decía «Diez» y listaba nueve, después «Once» y listaba
+diez sin Taller Vial ni Trituración, y después «Doce» sin Ventas—, así que si el
+número y los nombres no coinciden, el que manda es el archivo.
 
 **Producción y Calidad son dos cosas distintas y se confunden fácil**, porque las
 carga la misma gente: Producción es el parte de fábrica por turno, y Calidad es
@@ -57,6 +57,7 @@ código.
 | Calidad | envases: [docs/CALIDAD-ENVASES.md](docs/CALIDAD-ENVASES.md) · [spec](docs/superpowers/specs/2026-09-15-produccion-envases-design.md) · [plan](docs/superpowers/plans/2026-09-15-produccion-envases.md) — carbonilla: [docs/CALIDAD.md](docs/CALIDAD.md) · [spec](docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) · [plan](docs/superpowers/plans/2026-09-16-calidad-stock-de-carbonilla.md) · la planilla manda (13/10): [spec](docs/superpowers/specs/2026-10-13-calidad-la-planilla-manda-design.md) · [plan](docs/superpowers/plans/2026-10-13-calidad-la-planilla-manda.md) — ensayos: [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md) · [spec](docs/superpowers/specs/2026-10-06-calidad-ensayos-design.md) · [plan](docs/superpowers/plans/2026-10-06-calidad-ensayos.md) — histórico: [docs/CALIDAD-HISTORICO.md](docs/CALIDAD-HISTORICO.md) · [spec](docs/superpowers/specs/2026-10-29-calidad-historico-de-determinaciones-design.md) · [plan](docs/superpowers/plans/2026-10-29-calidad-historico-de-determinaciones.md). Lo que no se deduce del código: **el valor no está transformado** —`escala` es la lectura del sistema y no una propiedad del número—, y la aritmética que parece validarla alcanza a 27 de 362 filas — la curva de una muestra (05/11): la sección `## La curva de una muestra, y lo que no dice` de [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md) · [spec](docs/superpowers/specs/2026-11-05-calidad-curva-granulometrica-design.md) · [plan](docs/superpowers/plans/2026-11-05-calidad-curva-granulometrica.md). Dos riesgos asumidos que no se deducen del código: **apagar un tamiz no hace lo mismo en los dos gráficos** —en retenido saca el valor, en acumulado esconde el punto pero lo deja sumado en todos los de su derecha, y recalcular daría un número que nadie midió— y **el eje son las mallas que midió la muestra, sin aviso de las que el producto declara y faltan** (19 de 79 muestras midieron un juego distinto; la #325 está medida en 13 y declarada por ningún producto), al revés de `acumuladosDelListado()`. Tampoco dibuja los límites: hay 2 cargados en todo el sistema |
 | Facturación | [docs/FACTURACION.md](docs/FACTURACION.md) · [spec](docs/superpowers/specs/2026-09-04-facturacion-proveedores-odoo-design.md) |
 | Seguridad e Higiene | [spec](docs/superpowers/specs/2026-10-29-seguridad-e-higiene-design.md) · [plan](docs/superpowers/plans/2026-10-29-seguridad-e-higiene.md) — vive en `app/(app)/seguridad-higiene`, `lib/seguridadHigiene` y `app/api/seguridad-higiene` |
+| Ventas — CRM | [docs/VENTAS-CRM.md](docs/VENTAS-CRM.md) · [spec](docs/superpowers/specs/2026-11-12-ventas-crm-design.md) — vive en `app/(app)/ventas`, `lib/ventas` y `app/api/ventas`. **Lo primero, para quien lo retome: las dos migraciones no están aplicadas y ninguna pantalla se abrió en un navegador** (la sección «Lo que falta antes de usarlo» de ese documento). Cinco cosas que no se deducen del código: **el cliente no es el `res.partner` de Odoo y no se importa** —el CRM tiene además los prospectos, que no están allá; el enlace vive en `ventas_clientes_odoo`, lo hace una persona y por eso la ficha **todavía no muestra las cargas de Despacho**, que sólo se podrían cruzar contra `cliente_raw`, texto libre del remito—; **la probabilidad, «si está abierta» y «hace cuánto que no se toca a un cliente» no son columnas** y guardarlas permitiría una oportunidad «Ganada» con probabilidad 30, pero **`estado` sí lo es** porque prospecto/activo/inactivo es un juicio de quien vende y no un derivado; **los cortes del semáforo (30 y 60 días) y las probabilidades (10/25/50/75) son supuestos sin medir** —no hay histórico todavía—, y por eso el embudo muestra siempre el monto sin ponderar al lado y **el módulo no manda ningún aviso ni push**; **el monto no se convierte nunca** y el embudo suma por moneda; y **de una oportunidad cerrada no se vuelve**, porque `cerrada_el` ya alimentó el informe del mes. **Borrar un cliente se audita** con el verbo `borrar` y el registro va antes del borrado: se lleva en cascada sus contactos, sus oportunidades y todo su historial, y a diferencia del cuaderno de un contratista **acá no hay archivo de origen en ningún bucket** |
 | Asistente | [docs/ASISTENTE.md](docs/ASISTENTE.md) · [spec](docs/superpowers/specs/2026-09-16-asistente-design.md) |
 | Odoo | [docs/ODOO-INTEGRACION.md](docs/ODOO-INTEGRACION.md) |
 | Login y correos | [docs/AUTENTICACION.md](docs/AUTENTICACION.md) |
@@ -131,19 +132,32 @@ Antes de escribir una, leer las ocho trampas del
   `remises_empleados_datos.direccion`.
 - **Lo que no se deshace se audita.** Desde el 05/10/2026 hay una tabla
   `auditoria` en el núcleo y una función `auditar()` en
-  [lib/core/auditoria.ts](lib/core/auditoria.ts). Medido el 26/10/2026 con
-  `grep`: la llaman **nueve rutas y un ayudante compartido** (eran ocho hasta el
-  26/10/2026). Las nueve: postear un asiento en Odoo, mover los permisos de
-  un usuario, cerrar una liquidación, ajustar stock, aprobar o denegar una
-  compra, —desde la programación del taller— corregir o borrar una
-  ausencia **por las dos puntas** (`rrhh/ausencias/[id]` y
+  [lib/core/auditoria.ts](lib/core/auditoria.ts). Medido el 13/11/2026 con
+  `grep` **contra este árbol**: la llaman **catorce rutas y un ayudante
+  compartido** (eran nueve el 26/10/2026 y ocho antes; este renglón había
+  quedado en «nueve» mientras el árbol llegaba a catorce, que es justo lo que
+  vuelve insegura una cuenta escrita a mano). Las catorce: postear un asiento en
+  Odoo, mover los permisos de un usuario, cerrar una liquidación, ajustar stock,
+  aprobar o denegar una compra, —desde la programación del taller— corregir o
+  borrar una ausencia **por las dos puntas** (`rrhh/ausencias/[id]` y
   `mantenimiento/ausencias`) y cargar una semana de referencia
-  (`mantenimiento/programacion/referencia`), y **cerrar una recepción de
+  (`mantenimiento/programacion/referencia`), **cerrar una recepción de
   Despacho** (`despacho/recepciones/[id]`), que confirma la orden de compra y
-  **valida el remito en Odoo** — mueve stock de verdad y no se deshace. Esa
-  última faltaba: estaba al mismo nivel que postear un asiento y era la única
-  escritura irreversible a Odoo sin rastro de quién la hizo. Usa el verbo
-  `cerrar`, el mismo de la liquidación, para no necesitar una migración. El ayudante es
+  **valida el remito en Odoo** — mueve stock de verdad y no se deshace; esa
+  faltaba, estaba al mismo nivel que postear un asiento y era la única
+  escritura irreversible a Odoo sin rastro de quién la hizo, y usa el verbo
+  `cerrar`, el mismo de la liquidación, para no necesitar una migración. Y las
+  cinco que se sumaron después: sacar un renglón del cuaderno de un contratista
+  (`mantenimiento/cuaderno/renglones/[id]`), postergar una OT —que es `corregir`
+  su fecha de ejecución, con la justificación como motivo
+  (`mantenimiento/ordenes/[id]/postergar`)—, borrar una fila del padrón del
+  taller (`mantenimiento/personal`), corregir una condición insegura ya evaluada
+  o reabrirla (`seguridad-higiene/condiciones/[id]`) y **borrar un cliente del
+  CRM** (`ventas/clientes/[id]`, del 12/11/2026), que se lleva en cascada sus
+  contactos, sus oportunidades y todo su historial de conversaciones — y a
+  diferencia del renglón del cuaderno, acá **no hay archivo de origen en ningún
+  bucket**, así que la fila de `auditoria` es lo único que queda: por eso lleva
+  la razón social, el CUIT y cuántas filas colgaban. El ayudante es
   [lib/core/borradoDeEspejo.ts](lib/core/borradoDeEspejo.ts): ahí se
   registra el `borrar` de las sincronizaciones que espejan una planilla. Ese
   verbo lo escribía **sólo un proceso** hasta el 03/11/2026, cuando apareció el

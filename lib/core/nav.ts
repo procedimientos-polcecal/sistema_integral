@@ -426,6 +426,24 @@ export const NAV: NavItem[] = [
       { label: "Condiciones inseguras", href: "/seguridad-higiene/condiciones", modulo: "seguridad_higiene" },
     ],
   },
+  {
+    label: "Ventas",
+    href: "/ventas",
+    modulo: "ventas",
+    // La raíz es un tablero con una tarjeta por frente, y hoy hay uno solo: el
+    // CRM. Queda fuera de esta lista como en Calidad y Seguridad e Higiene.
+    //
+    // **Seguimiento va primero y antes que Clientes**, al revés de lo que
+    // parece: es la pantalla que se abre a la mañana para ver qué hay que hacer
+    // hoy, y la lista de clientes se busca durante, no al entrar. Un CRM cuya
+    // puerta es el padrón de clientes se convierte en una agenda de teléfonos.
+    children: [
+      { label: "Tablero", href: "/ventas", modulo: "ventas" },
+      { label: "Seguimiento", href: "/ventas/crm/seguimiento", modulo: "ventas" },
+      { label: "Clientes", href: "/ventas/crm/clientes", modulo: "ventas" },
+      { label: "Oportunidades", href: "/ventas/crm/oportunidades", modulo: "ventas" },
+    ],
+  },
   // Sin `modulo`: cualquier usuario del SdG puede pedir un material y seguir
   // sus propios pedidos, aunque no trabaje en Compras. Pedir no compromete
   // nada; aprobar y comprar sí, y eso queda dentro del módulo.
