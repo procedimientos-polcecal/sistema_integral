@@ -236,7 +236,7 @@ dibujarla nunca.
 
 - **`granulometria()` devuelve dos `problema` distintos y la pantalla los trata
   distinto.** «Falta el peso de la muestra tamizada» viene **sin mallas**: no
-  hay chips que armar, y mostrar una fila vacía con dos gráficos en blanco no
+  hay chips que armar, y mostrar una fila vacía con tres gráficos en blanco no
   diría por qué, así que se muestra sólo el texto. «Lo retenido supera el peso
   de la muestra» viene **con mallas y con puntos**: se avisa en ámbar y **se
   dibuja igual**, porque es una muestra que se puede mirar y que hay que

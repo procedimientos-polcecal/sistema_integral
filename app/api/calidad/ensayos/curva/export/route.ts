@@ -3,9 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
 import { nivelCalidadDe } from "@/lib/calidad/auth";
 import { traerMuestra } from "@/lib/calidad/ensayos/consultas";
-import { filasDeLaHoja } from "@/lib/calidad/ensayos/hojaDeLaCurva";
+import { filasDeLaHoja, leerApagadas } from "@/lib/calidad/ensayos/hojaDeLaCurva";
+import { colocarImagenes, medidasDelPng } from "@/lib/calidad/ensayos/imagenesDeLaHoja";
 import { xlsxConImagenesResponse } from "@/lib/core/xlsxExport";
-import type { ImagenDeLaHoja } from "@/lib/core/excel";
 
 /**
  * El Excel de la curva granulométrica de una muestra: la tabla y una foto de
@@ -49,57 +49,17 @@ const GRAFICOS = [
  */
 const MAXIMO_POR_IMAGEN = 1024 * 1024;
 
-/** Los primeros ocho bytes de todo PNG. */
-const FIRMA_PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-
-/** Ancho al que se escala cada imagen en la hoja, en píxeles: entra en una pantalla sin scroll. */
-const ANCHO_EN_LA_HOJA = 640;
-
-/** Alto de una fila de Excel por defecto, en píxeles. */
-const ALTO_DE_FILA = 20;
-
-/** Primera columna libre, 0-based: las cinco de la tabla son la A a la E. */
+/**
+ * Columna de la primera imagen, 0-based (A = 0). La tabla ocupa de la A a la E,
+ * la F queda de separador angosto y por eso las imágenes arrancan en la G, que
+ * es el índice 6.
+ */
 const COLUMNA_DE_LAS_IMAGENES = 6;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function problema(mensaje: string, status = 400) {
   return NextResponse.json({ error: mensaje }, { status });
-}
-
-/**
- * Ancho y alto de un PNG, leídos de su cabecera IHDR (bytes 16 a 23).
- * Devuelve `null` si el archivo no es un PNG o su cabecera no dice un tamaño.
- */
-function medidasDelPng(bytes: Buffer): { ancho: number; alto: number } | null {
-  if (bytes.length < 24) return null;
-  if (!FIRMA_PNG.every((b, i) => bytes[i] === b)) return null;
-  // Después de la firma viene siempre el trozo IHDR.
-  if (bytes.toString("ascii", 12, 16) !== "IHDR") return null;
-  const ancho = bytes.readUInt32BE(16);
-  const alto = bytes.readUInt32BE(20);
-  if (ancho === 0 || alto === 0) return null;
-  return { ancho, alto };
-}
-
-/** Los tamices apagados: un array JSON de números. Cualquier otra cosa, un problema que dice cuál. */
-function leerApagadas(crudo: FormDataEntryValue | null): number[] | { problema: string } {
-  if (crudo === null || crudo === "") return [];
-  if (typeof crudo !== "string") return { problema: "Las mallas apagadas tienen que ir como texto JSON." };
-
-  let valor: unknown;
-  try {
-    valor = JSON.parse(crudo);
-  } catch {
-    return { problema: "Las mallas apagadas no son un JSON válido." };
-  }
-  if (!Array.isArray(valor) || valor.length > 100) {
-    return { problema: "Las mallas apagadas tienen que ser una lista de números." };
-  }
-  if (!valor.every((m) => typeof m === "number" && Number.isFinite(m))) {
-    return { problema: "Las mallas apagadas tienen que ser números." };
-  }
-  return valor as number[];
 }
 
 export async function POST(request: Request) {
@@ -138,7 +98,7 @@ export async function POST(request: Request) {
       // Redondeado para arriba: un archivo que se pasó por diez bytes no puede
       // decir «pesa 1,0 MB y el máximo es 1».
       const mb = (Math.ceil((archivo.size / 1024 / 1024) * 10) / 10).toFixed(1).replace(".", ",");
-      return problema(`La imagen ${etiqueta} pesa ${mb} MB y el máximo es 1.`);
+      return problema(`La imagen ${etiqueta} pesa ${mb} MB y el máximo es 1 MB.`);
     }
     const png = Buffer.from(await archivo.arrayBuffer());
     const medidas = medidasDelPng(png);
@@ -171,14 +131,7 @@ export async function POST(request: Request) {
   // Las imágenes van a la derecha de la tabla y no debajo: debajo, la nota de
   // las mallas apagadas hace que la tabla mida distinto cada vez y la imagen
   // taparía su última fila.
-  let fila = 0;
-  const sobreLaHoja: ImagenDeLaHoja[] = imagenes.map(({ png, ancho, alto }) => {
-    const anchoFinal = ANCHO_EN_LA_HOJA;
-    const altoFinal = Math.round((alto * anchoFinal) / ancho);
-    const colocada = { png, fila, columna: COLUMNA_DE_LAS_IMAGENES, ancho: anchoFinal, alto: altoFinal };
-    fila += Math.ceil(altoFinal / ALTO_DE_FILA) + 1;
-    return colocada;
-  });
+  const sobreLaHoja = colocarImagenes(imagenes, COLUMNA_DE_LAS_IMAGENES);
 
   // El nombre del archivo no admite barras ni los demás separadores de ruta.
   const productoParaElNombre = nombreDelProducto.replace(/[\\/:*?"<>|]/g, "-");

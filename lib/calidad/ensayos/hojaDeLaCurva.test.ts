@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filasDeLaHoja } from "./hojaDeLaCurva";
+import { filasDeLaHoja, leerApagadas } from "./hojaDeLaCurva";
 
 /** La misma muestra de `Calcio 0-2` del 27/10/2026 que usa `curva.test.ts`. */
 const MUESTRA = {
@@ -62,6 +62,20 @@ describe("filasDeLaHoja", () => {
     expect(aTexto(filasDeLaHoja(MUESTRA, [325], ENCABEZADO))).not.toContain("ya incluyen");
   });
 
+  it("la nota concuerda con una apagada y con varias", () => {
+    const una = aTexto(filasDeLaHoja(MUESTRA, [20], ENCABEZADO));
+    expect(una).toContain("Nota: #20 está fuera del gráfico, pero las mallas que le siguen ya incluyen lo que ésa retuvo.");
+
+    const dos = aTexto(filasDeLaHoja(MUESTRA, [20, 50], ENCABEZADO));
+    expect(dos).toContain(
+      "Nota: #20 y #50 están fuera del gráfico, pero las mallas que les siguen ya incluyen lo que ésas retuvieron."
+    );
+
+    const tres = aTexto(filasDeLaHoja(MUESTRA, [10, 20, 50], ENCABEZADO));
+    expect(tres).toContain("Nota: #10, #20 y #50 están fuera del gráfico");
+    expect(tres).not.toContain("está fuera");
+  });
+
   it("el problema de la muestra viaja en la hoja, tal cual", () => {
     const filas = filasDeLaHoja({ ...MUESTRA, pesoMuestraG: 50 }, [], ENCABEZADO);
 
@@ -82,5 +96,42 @@ describe("filasDeLaHoja", () => {
     // Legible, no ISO: la lee una persona en Excel.
     expect(filas).toContainEqual(["Fecha", "27/10/2026"]);
     expect(filas).toContainEqual(["Peso de la muestra (g)", 100]);
+  });
+});
+
+describe("leerApagadas", () => {
+  it("sin campo o vacío, ninguna apagada", () => {
+    expect(leerApagadas(null)).toEqual([]);
+    expect(leerApagadas("")).toEqual([]);
+  });
+
+  it("lee un array de números", () => {
+    expect(leerApagadas("[20,50]")).toEqual([20, 50]);
+    expect(leerApagadas("[]")).toEqual([]);
+  });
+
+  it("un JSON malo dice que no es válido", () => {
+    expect(leerApagadas("[20,")).toEqual({ problema: "Las mallas apagadas no son un JSON válido." });
+  });
+
+  it("un JSON que no es un array es un problema", () => {
+    expect(leerApagadas('{"a":1}')).toHaveProperty("problema");
+    expect(leerApagadas("20")).toHaveProperty("problema");
+    expect(leerApagadas('"20"')).toHaveProperty("problema");
+  });
+
+  it("un array con cosas que no son números es un problema", () => {
+    expect(leerApagadas('[20,"50"]')).toHaveProperty("problema");
+    expect(leerApagadas("[20,null]")).toHaveProperty("problema");
+    expect(leerApagadas("[[20]]")).toHaveProperty("problema");
+  });
+
+  it("un array de más de cien es un problema", () => {
+    expect(leerApagadas(JSON.stringify(new Array(101).fill(1)))).toHaveProperty("problema");
+    expect(leerApagadas(JSON.stringify(new Array(100).fill(1)))).toHaveLength(100);
+  });
+
+  it("un archivo en lugar de texto es un problema", () => {
+    expect(leerApagadas(new File(["[]"], "x.json"))).toHaveProperty("problema");
   });
 });

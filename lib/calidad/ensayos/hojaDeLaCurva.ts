@@ -29,6 +29,51 @@ export interface EncabezadoDeLaHoja {
 const DENTRO = "Dentro";
 const FUERA = "Fuera";
 
+/** «#20», «#20 y #50», «#20, #50 y #100»: la enumeración como se lee, con su «y». */
+function enumerar(mallas: number[]): string {
+  const nombres = mallas.map((m) => `#${m}`);
+  if (nombres.length <= 1) return nombres.join("");
+  return `${nombres.slice(0, -1).join(", ")} y ${nombres[nombres.length - 1]}`;
+}
+
+/**
+ * La nota que explica el riesgo asumido de apagar un tamiz. Es la única
+ * explicación de todo el cuadro y viaja dentro de un documento que lee alguien
+ * de afuera, así que concuerda: «está… ésa retuvo» con una malla, «están…
+ * ésas retuvieron» con varias.
+ */
+function notaDelAcumulado(apagadas: number[]): string {
+  const una = apagadas.length === 1;
+  return (
+    `Nota: ${enumerar(apagadas)} ${una ? "está" : "están"} fuera del gráfico, pero las mallas que ` +
+    `le${una ? "" : "s"} siguen ya incluyen lo que ${una ? "ésa retuvo" : "ésas retuvieron"}. ` +
+    "El acumulado no se recalcula al apagar un tamiz."
+  );
+}
+
+/**
+ * Los tamices apagados que llegan del navegador en el formulario: un array JSON
+ * de números. Cualquier otra cosa, un problema que dice cuál.
+ */
+export function leerApagadas(crudo: FormDataEntryValue | null): number[] | { problema: string } {
+  if (crudo === null || crudo === "") return [];
+  if (typeof crudo !== "string") return { problema: "Las mallas apagadas tienen que ir como texto JSON." };
+
+  let valor: unknown;
+  try {
+    valor = JSON.parse(crudo);
+  } catch {
+    return { problema: "Las mallas apagadas no son un JSON válido." };
+  }
+  if (!Array.isArray(valor) || valor.length > 100) {
+    return { problema: "Las mallas apagadas tienen que ser una lista de números." };
+  }
+  if (!valor.every((m) => typeof m === "number" && Number.isFinite(m))) {
+    return { problema: "Las mallas apagadas tienen que ser números." };
+  }
+  return valor as number[];
+}
+
 export function filasDeLaHoja(
   ensayo: { pesoMuestraG: number | null; retenidos: { malla: number; retenido_g: number }[] },
   apagadas: number[],
@@ -55,14 +100,7 @@ export function filasDeLaHoja(
   }
 
   if (apagadasMedidas.length > 0) {
-    const cuales = apagadasMedidas.map((m) => `#${m}`).join(", ");
-    filas.push(
-      [],
-      [
-        `Nota: ${cuales} está fuera del gráfico, pero las mallas que le siguen ya incluyen lo que ésa retuvo. ` +
-          "El acumulado no se recalcula al apagar un tamiz.",
-      ]
-    );
+    filas.push([], [notaDelAcumulado(apagadasMedidas)]);
   }
 
   if (problema) filas.push([], [problema]);

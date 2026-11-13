@@ -144,7 +144,7 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
 
   // Con retenidos pero sin peso tamizado, `curvaDeLaMuestra` devuelve el
   // problema y **ninguna malla**: sin esto la pantalla mostraría una fila de
-  // chips vacía y dos gráficos en blanco sin decir por qué.
+  // chips vacía y tres gráficos en blanco sin decir por qué.
   if (curva.problema !== undefined && curva.mallas.length === 0) {
     return <Aviso>{curva.problema}</Aviso>;
   }
@@ -158,9 +158,11 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
    * Baja el Excel de la muestra: la tabla sale de la base y de acá viajan sólo
    * los tamices apagados y la foto de cada gráfico.
    *
-   * Cada foto sale a `scale: 2`, como el reporte: un gráfico de ~340 a ~700 px de
-   * ancho da un PNG de decenas de kilobytes, muy por debajo del megabyte por
-   * imagen que acepta la ruta. Si la ruta contesta con un 400, **se muestra el
+   * Cada foto sale a `scale: 4`: en la hoja la imagen mide 640 px de ancho y el
+   * informe se imprime, así que con `scale: 2` la densidad volvía a ser la de la
+   * pantalla (~100 dpi, blando). El ancho en la hoja no se toca: el alto sale
+   * del aspecto. El peso tiene que seguir bajo el megabyte por imagen que
+   * acepta la ruta. Si la ruta contesta con un 400, **se muestra el
    * mensaje que mandó**: es el que dice qué pasó.
    */
   async function bajarElExcel() {
@@ -169,7 +171,13 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
       { campo: "acumulado", nodo: panelAcumulado.current },
       { campo: "pasante", nodo: panelPasante.current },
     ];
-    if (paneles.some((p) => p.nodo === null)) {
+    // Los `ref` apuntan al `div` de afuera, que existe siempre que hay puntos:
+    // preguntar por ellos no dice nada. Lo que tarda son los chunks `dynamic` de
+    // recharts, y mientras cargan adentro hay un esqueleto gris. Recharts emite
+    // un `svg.recharts-surface` cuando dibujó, y eso es lo que se comprueba:
+    // sin esto, un clic en esa ventana sube tres rectángulos grises —PNG
+    // válidos— y el informe sale con la tabla bien y tres cuadros vacíos.
+    if (paneles.some((p) => !p.nodo?.querySelector("svg.recharts-surface"))) {
       setFalloLaDescarga("Los gráficos todavía se están dibujando: probá de nuevo en un momento.");
       return;
     }
@@ -183,7 +191,7 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
       formulario.append("apagadas", JSON.stringify(apagadas));
       for (const { campo, nodo } of paneles) {
         const lienzo = await html2canvas(nodo!, {
-          scale: 2,
+          scale: 4,
           backgroundColor: FONDO_DE_LA_FOTO,
           useCORS: true,
           logging: false,
