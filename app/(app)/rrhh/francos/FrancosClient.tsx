@@ -152,7 +152,7 @@ export default function FrancosClient() {
                 <th className="pb-2">
                   <span className="inline-flex items-center gap-1">
                     Estado
-                    <InfoTip text="Pendiente: sus horas no entran en la liquidación. Tomado: entran, pero en la planilla general del período de «Generado el» y no en el que lo marcaste: un franco ganado en octubre y tomado en noviembre va en la de octubre, cuando se vuelva a emitir." />
+                    <InfoTip text="Pendiente: sus horas no entran en la planilla general. Tomado: entran, pero en la del período de «Generado el» y no en el que lo marcaste: un franco ganado en octubre y tomado en noviembre va en la de octubre, cuando se vuelva a emitir." />
                   </span>
                 </th>
                 <th className="pb-2"></th>
