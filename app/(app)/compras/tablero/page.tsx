@@ -8,6 +8,7 @@ import KpiCard from "@/components/KpiCard";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import type { EstadoCompra } from "@/lib/compras/types";
+import InfoTip from "@/components/InfoTip";
 
 interface FilaResumen {
   estado_compra: EstadoCompra;
@@ -53,7 +54,7 @@ export default async function TableroPage() {
     <div className="space-y-4">
       <div>
         <div className="flex flex-wrap items-baseline gap-x-3">
-          <h1 className="text-xl font-bold text-slate-900">Tablero de compras</h1>
+          <div className="flex items-baseline gap-2"><h1 className="text-xl font-bold text-slate-900">Tablero de compras</h1><InfoTip text="Seguís los pedidos de compra desde que un área los carga hasta que llegan. Cada pedido pasa por la aprobación de gerencia y después por el circuito de Compras (comparativa, aprobación de la compra y pedido), y el tablero cuenta cuántos hay en cada estado." /></div>
           <UltimaSincronizacion
             cuando={sync?.created_at}
             ok={sync?.ok ?? true}

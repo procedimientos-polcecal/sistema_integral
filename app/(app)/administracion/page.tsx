@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { esAdminDelNucleo } from "@/lib/core/access";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * La portada de la pestaña. No tenía chequeo: las dos pantallas que enlaza sí
@@ -18,7 +19,7 @@ export default async function AdministracionPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-slate-900">Administración</h1>
+      <div className="flex items-baseline gap-2"><h1 className="text-2xl font-bold text-slate-900">Administración</h1><InfoTip text="Es de quien administra el SdG: quién entra, a qué módulos y con qué nivel, las empresas y sectores que comparten todos los módulos, y si las sincronizaciones con las planillas están andando." /></div>
       <ul className="space-y-2">
         <li>
           <Link className="text-blue-700 hover:underline" href="/administracion/usuarios">

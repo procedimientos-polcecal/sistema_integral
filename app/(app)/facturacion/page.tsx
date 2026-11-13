@@ -4,6 +4,7 @@ import KpiCard from "@/components/KpiCard";
 import { createClient } from "@/lib/supabase/server";
 import { hoyEnArgentina, rangoDelMes, sumarDias, comoSeLee } from "@/lib/core/fechas";
 import { nivelFacturacionDe } from "@/lib/facturacion/auth";
+import InfoTip from "@/components/InfoTip";
 
 const num = new Intl.NumberFormat("es-AR");
 const ars = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
@@ -48,7 +49,7 @@ export default async function FacturacionDashboardPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="page-header">Facturación</h1>
+        <div className="flex items-baseline gap-2"><h1 className="page-header">Facturación</h1><InfoTip text="Las facturas de proveedor entran por el buzón: el sistema lee el QR de ARCA y saca emisor, número, fecha e importe sin tipear nada. Desde ahí se deja el borrador en Odoo, y se puede revisar y confirmar sin salir del sistema." /></div>
         <Link href="/facturacion/buzon" className="btn-primary">Ir al buzón →</Link>
       </div>
 

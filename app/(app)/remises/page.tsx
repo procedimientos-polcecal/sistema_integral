@@ -3,6 +3,7 @@ import Link from "next/link";
 import KpiCard from "@/components/KpiCard";
 import { createClient } from "@/lib/supabase/server";
 import { hoyEnArgentina, comoSeLee } from "@/lib/core/fechas";
+import InfoTip from "@/components/InfoTip";
 
 const num = new Intl.NumberFormat("es-AR");
 
@@ -68,7 +69,7 @@ export default async function RemisesDashboardPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="page-header">Remises</h1>
+        <div className="flex items-baseline gap-2"><h1 className="page-header">Remises</h1><InfoTip text="Organiza el transporte en remis de los empleados entre su domicilio y la fábrica: quién tiene remis, quién está presente hoy y qué vehículos hay. Con eso se generan las hojas de ruta para imprimir o compartir. «Sin coordenadas» cuenta a los empleados cuya dirección todavía no está ubicada en el mapa." /></div>
         <Link href="/remises/hoy" className="btn-primary">Ir a Hoy →</Link>
       </div>
 

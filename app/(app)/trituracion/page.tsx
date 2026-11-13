@@ -8,6 +8,7 @@ import { resumenMensual, toneladasPorMaterial, ultimosMeses, type ParteParaResum
 import { COLOR_CLARO, COLORES_TRITURACION, type FilaEvolucion } from "./GraficosTrituracion";
 import { GraficoEvolucion, GraficoMateriales } from "./InicioGraficos";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import InfoTip from "@/components/InfoTip";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const pct = new Intl.NumberFormat("es-AR", { style: "percent", maximumFractionDigits: 0 });
@@ -121,7 +122,7 @@ export default async function TrituracionInicioPage({
   return (
     <div className="mx-auto max-w-5xl">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="page-header">Trituración</h1>
+        <div className="flex items-baseline gap-2"><h1 className="page-header">Trituración</h1><InfoTip text="Cargás el parte diario de cada planta y el sistema calcula la disponibilidad y arma el informe del mes. Manda el sistema: la planilla es un respaldo que se escribe desde acá, y «Partes sin exportar» cuenta los que todavía no llegaron." /></div>
         <div className="flex gap-2">
           {permisos.esAdmin && (
             <Link href="/trituracion/plantas" className="text-xs text-slate-500 underline">Plantas</Link>

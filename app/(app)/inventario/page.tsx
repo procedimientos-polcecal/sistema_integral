@@ -7,6 +7,7 @@ import { nivelInventarioDe } from "@/lib/inventario/auth";
 import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import { hoyEnArgentina, comoSeLee } from "@/lib/core/fechas";
 import TraerDeLaPlanilla from "./TraerDeLaPlanilla";
+import InfoTip from "@/components/InfoTip";
 
 const num = new Intl.NumberFormat("es-AR");
 
@@ -64,7 +65,7 @@ export default async function InventarioDashboardPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="page-header">Inventario</h1>
+        <div className="flex items-baseline gap-2"><h1 className="page-header">Inventario</h1><InfoTip text="Es el stock del almacén: cada artículo, cada entrada y salida que se carga, y lo que quedó por debajo del stock de seguridad. Se sincroniza con la planilla del almacén, y es la planilla la que manda: un movimiento que no llegó allá no existe." /></div>
         <div className="flex items-center gap-2">
           <TraerDeLaPlanilla sync={sync} />
           <Link href="/inventario/movimientos/nuevo" className="btn-primary">Cargar movimiento</Link>

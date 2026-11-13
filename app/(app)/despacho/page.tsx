@@ -12,6 +12,7 @@ import {
   traerRecepcionesAbiertasAnteriores,
 } from "@/lib/despacho/consultas";
 import { indicadoresDeOrdenes } from "@/lib/despacho/indicadores";
+import InfoTip from "@/components/InfoTip";
 
 const num = new Intl.NumberFormat("es-AR");
 
@@ -46,7 +47,7 @@ export default async function DespachoDashboardPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="page-header">Despacho</h1>
+        <div className="flex items-baseline gap-2"><h1 className="page-header">Despacho</h1><InfoTip text="Registrás el camión mientras está en el predio: administración pone qué se lleva al emitir el remito y la balanza marca los cuatro horarios en vivo. Reemplaza el talonario de órdenes de carga, y la planilla la escribe el sistema. También se cargan acá las recepciones de material." /></div>
         <Link href="/despacho/movimientos" className="btn-primary">Ir a Movimientos →</Link>
       </div>
 

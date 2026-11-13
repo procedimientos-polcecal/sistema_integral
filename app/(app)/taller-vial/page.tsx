@@ -16,6 +16,7 @@ import TarjetasDeFlota from "./TarjetasDeFlota";
 import CargasParaRevisar from "./CargasParaRevisar";
 import ConsumoPorEquipo, { type FilaDeConsumo } from "./ConsumoPorEquipo";
 import TendenciaDeDisponibilidad from "./TendenciaDeDisponibilidad";
+import InfoTip from "@/components/InfoTip";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -167,7 +168,7 @@ export default async function TallerVialInicioPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Taller Vial</h1>
+        <div className="flex items-baseline gap-2"><h1 className="text-xl font-semibold">Taller Vial</h1><InfoTip text="Sigue la flota de equipos viales: en qué estado está cada uno (operativo, fuera de servicio o con fallas), cuánto combustible cargó y cuándo le toca el próximo service. Desde acá cargás combustible y cambiás el estado de un equipo." /></div>
         <div className="flex flex-wrap gap-2">
           <Link href="/taller-vial/cargas" className="btn-primary">Cargar combustible</Link>
           <Link href="/taller-vial/estados" className="btn-primary">Cambiar estado de un equipo</Link>
