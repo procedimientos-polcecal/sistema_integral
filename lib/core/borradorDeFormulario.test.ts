@@ -180,6 +180,23 @@ describe("después de guardar: contra qué queda comparándose el formulario", (
     expect(hayAlgoEscrito(guardado, conElBorrador(guardado, {}))).toBe(false);
   });
 
+  // La pantalla no puede guardarse una copia del inicial al lado del borrador
+  // para que «Descartar» vuelva a ella: en cuanto la vara del hook se mueve
+  // —`asentar()`—, esa copia es la foto de antes de guardar. Pasó en `DetalleOS`.
+  it("descartar contra una vara vieja devuelve lo de antes de guardar y deja el formulario tocado", () => {
+    const comoAbrio = comoNacio;          // la copia congelada al montar
+    const varaDeAhora = guardado;         // la del hook, después de asentar
+
+    const loQueVuelve = conElBorrador(comoAbrio, {});
+    expect(loQueVuelve.estado).toBe("");                       // «Sin estado» otra vez
+    expect(loQueVuelve.estado).not.toBe(varaDeAhora.estado);
+    // Y queda tocado, así que el siguiente «Guardar» manda esto encima.
+    expect(hayAlgoEscrito(varaDeAhora, loQueVuelve)).toBe(true);
+
+    // Con una sola vara —la del hook— descartar deja el formulario intacto.
+    expect(hayAlgoEscrito(varaDeAhora, conElBorrador(varaDeAhora, {}))).toBe(false);
+  });
+
   it("y lo que se toque después se mide contra lo guardado, no contra lo de antes de editar", () => {
     // Con la vara vieja, volver a poner «PEDIDO» no contaría como un cambio
     // —ya estaba en el borrador— y el formulario figuraría tocado sin estarlo.

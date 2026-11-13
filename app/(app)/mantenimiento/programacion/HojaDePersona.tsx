@@ -66,6 +66,23 @@ export default function HojaDePersona({
   // borrador un valor que ya no es el inicial y la hoja seguiría figurando
   // tocada. Es un `useState` que nadie actualiza y no un `useRef` porque se lee
   // durante el render (`react-hooks/refs`).
+  //
+  // ── ESTA ES UNA SEGUNDA VARA, Y HAY UNA CONDICIÓN QUE LA MANTIENE SANA ────
+  //
+  // El borrador tiene la suya adentro («cómo nació»), así que acá hay dos. Son
+  // la misma mientras **nadie llame a `asentar()` en este archivo**: `asentar()`
+  // mueve la del hook a lo que está en pantalla y no toca ésta, y ahí los
+  // «Cancelar» empezarían a devolver los campos a lo de antes de guardar, con el
+  // formulario quedando tocado y el próximo guardado mandando lo viejo encima.
+  // Eso ya pasó en `DetalleOS`, que tenía esta misma forma; allá se arregló
+  // dejando una sola vara, y acá **no se puede**: los dos «Cancelar» revierten
+  // sólo su panel y `tirar()` se llevaría también lo que se esté escribiendo en
+  // el otro, que es justo el bug que esta hoja acaba de arreglar.
+  //
+  // Hoy la hoja termina siempre en `tirar()` y cierra, así que la condición se
+  // cumple. Si alguna acción pasa a dejar la hoja abierta después de guardar,
+  // **no alcanza con cambiarle el final**: hay que resolver antes cómo revierte
+  // un panel solo.
   const [INICIAL] = useState({
     hasta: dia,
     eligioOtra: false,

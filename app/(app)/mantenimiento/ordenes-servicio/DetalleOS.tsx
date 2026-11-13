@@ -51,18 +51,26 @@ export default function DetalleOS({
    * lado de «Guardar» hay ahora un «Descartar los cambios» que devuelve los seis
    * campos a lo que dice la OS, y aparece sólo si hay algo cambiado. Sin él,
    * salir ofrecería conservar y nada podría tirar.
+   *
+   * **Una sola vara, y por eso el inicial va escrito acá adentro.** Estos seis
+   * valores estaban antes en un `useState` congelado al lado del hook, y
+   * «Descartar» volvía a *ése*: como `asentar()` mueve la vara del hook y no la
+   * copia, después de guardar «PEDIDO» el botón devolvía los seis campos a la OS
+   * de **antes** de guardar, el formulario quedaba figurando tocado y el
+   * siguiente «Guardar» mandaba los valores viejos encima. Era el mismo defecto
+   * que `asentar()` vino a cerrar, entrando por la otra puerta. Con una sola
+   * vara no hay dos cosas que puedan separarse: quien descarta es `tirar()`.
    */
-  const [DE_LA_OS] = useState({
-    estado: orden.estado ?? "",
-    proveedor: orden.proveedor_elegido ?? "",
-    fechaPedido: orden.fecha_pedido ?? "",
-    fechaRealizacion: orden.fecha_realizacion ?? "",
-    observaciones: orden.observaciones ?? "",
-    motivoRechazo: orden.motivo_rechazo ?? "",
-  });
   const { valores, cambiar, tocado, tirar, asentar } = useBorrador(
     claveDelBorrador("mantenimiento-seguimiento-os", { tipo: "os", id: orden.id }),
-    DE_LA_OS,
+    {
+      estado: orden.estado ?? "",
+      proveedor: orden.proveedor_elegido ?? "",
+      fechaPedido: orden.fecha_pedido ?? "",
+      fechaRealizacion: orden.fecha_realizacion ?? "",
+      observaciones: orden.observaciones ?? "",
+      motivoRechazo: orden.motivo_rechazo ?? "",
+    },
   );
   const { estado, proveedor, fechaPedido, fechaRealizacion, observaciones, motivoRechazo } = valores;
 
@@ -162,7 +170,7 @@ export default function DetalleOS({
   return (
     // El fondo, la X y Escape salen conservando: lo cambiado y todavía no
     // guardado queda y aparece igual al volver a abrir esta OS. El que tira es
-    // el «Descartar los cambios» de abajo (ver el comentario de `DE_LA_OS`).
+    // el «Descartar los cambios» de abajo (ver el comentario del borrador).
     <Modal titulo={`OS #${orden.os_number ?? "—"}`} alSalir={onCerrar} tocado={tocado} ancho="ancho">
       <div className="space-y-5">
         <p className="-mt-2 text-xs text-slate-400">
@@ -279,12 +287,13 @@ export default function DetalleOS({
               >
                 {guardando ? "Guardando…" : "Guardar"}
               </button>
-              {/* El único que tira: devuelve los seis campos a lo que dice la
-                  OS. Aparece sólo con algo cambiado, porque un botón de
+              {/* El único que tira: devuelve los seis campos a la última vara
+                  —lo que decía la OS al abrir, o lo último que se guardó desde
+                  acá—. Aparece sólo con algo cambiado, porque un botón de
                   descartar al lado de un formulario intacto no descarta nada. */}
               {tocado && (
                 <button
-                  onClick={() => cambiar(DE_LA_OS)}
+                  onClick={tirar}
                   disabled={guardando}
                   className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 >

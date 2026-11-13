@@ -58,6 +58,22 @@ import {
  * de lo que acababa de guardar**. Pasó en `DetalleOS`, donde el modal queda
  * abierto después del PATCH y la OS que le llega por props nunca se resincroniza.
  *
+ * UNA SOLA VARA: NO GUARDES UNA COPIA DEL INICIAL AL LADO DEL HOOK
+ *
+ * La tentación es dejar el objeto inicial en un `useState` congelado para que el
+ * botón de descartar vuelva a él. **No**: `asentar()` mueve la vara del hook y
+ * no la copia, así que desde el primer guardado esa copia es la foto de antes de
+ * guardar, y «Descartar» la devuelve — con el formulario quedando tocado y el
+ * siguiente «Guardar» mandando lo viejo encima. Es el mismo defecto de arriba
+ * entrando por otra puerta, y `DetalleOS` lo tuvo las dos veces. Quien descarta
+ * es `tirar()`, que ya vuelve a la vara buena.
+ *
+ * La excepción es un formulario con **paneles que se descartan por separado**
+ * —`HojaDePersona`—, donde `tirar()` se llevaría también lo que se esté
+ * escribiendo en el otro panel. Ahí la copia es necesaria y lo que la mantiene
+ * sana es que en ese archivo **nadie llame a `asentar()`**; está anotado al lado
+ * de la copia, porque no hay nada que lo comprueba.
+ *
  * QUÉ ENTRA EN `inicial` Y QUÉ NO
  *
  * Sólo los campos del formulario. `guardando`, el error, la foto elegida y las
