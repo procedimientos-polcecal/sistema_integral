@@ -1583,11 +1583,17 @@ anotar qué hace falta no depende de saber si lo hay. Para conectarlo:
 Había que acordarse de apretar el botón en cada pantalla, y lo que se veía en el
 sistema era tan viejo como la última vez que alguien lo hizo.
 
-Ahora lo llaman dos relojes, igual que Compras: **GitHub Actions cada quince
-minutos**, que es la frecuencia real, y un **cron diario de Vercel** como red por
-si Actions falla. El cron vive en Actions y no en `vercel.json` porque el plan
-Hobby sólo admite crons diarios: poner una frecuencia mayor no degrada el cron,
-hace fallar el deploy entero.
+Ahora lo llama **un solo reloj: `vercel.json`, cada 10 minutos**. Hasta el
+05/11/2026 eran dos —Actions «cada quince minutos» y un cron diario de Vercel
+como red— y el motivo escrito era que el plan Hobby sólo admite crons diarios.
+**Las dos mitades de eso resultaron falsas**: el plan es Pro, y los quince
+minutos de Actions eran en los hechos **cada 4 a 8 horas**. El workflow
+`mantenimiento-sync.yml` conserva su disparo a mano y perdió el `schedule`.
+
+Para Mantenimiento esto importa más que para los otros, porque de esta
+sincronización cuelga el barrido que **mete las OT nuevas al calendario**: lo
+que antes tardaba hasta ocho horas en aparecerle a la gente, ahora tarda diez
+minutos.
 
 De paso se arregló un cron muerto: `vercel.json` llamaba todos los días a las 6
 a `/api/cron/sync`, una ruta que nunca existió en este repo —quedó copiada de la
@@ -3000,22 +3006,43 @@ ruta PATCH vería una minoría de los cierres. Es una reconciliación —`ciclos
 `SINCRONIZACIONES`, después de `ordenes` sí o sí— y la idempotencia la da el
 dato: si la última del ciclo está abierta no se hace nada.
 
-### Qué falta para que esto genere algo
+### El arranque lo trae un cambio de martillos (13/11/2026)
 
-**Los cuatro ciclos nacen con `desde` y `vuelta_desde` en null, y así no generan
-ninguna OT.** El punto de arranque lo carga una persona desde la ficha de cada
-equipo, y es el único dato del mecanismo que no sale de otro dato.
+**Los cuatro ciclos nacen con `desde` y `vuelta_desde` en null, y arrancan solos
+con el primer «Cambio de martillos» que se cierre a partir del día en que se
+configuraron.** Hasta entonces no generan ninguna OT.
 
-Se intentó deducirlo y no da: contando rotaciones cerradas desde el último
-cambio, **dos de los cuatro equipos dan 6 rotaciones de un ciclo de 3**, porque
-el texto libre mezcla rotaciones con revisiones («Revisión de rompedora y ver si
-es necesario rotar martillos»). La cara que el texto nombra sí sirve —la OT 3067
-del 11/11/2026 dice «a 4ta cara»— pero no todas la nombran.
+Es **la única parte de todo el mecanismo donde el texto de una descripción
+decide algo**, y eso es deliberado: la versión anterior pedía las cuatro fechas
+tipeadas, y lo que depende de que alguien se acuerde no pasa —el preventivo
+tenía pantalla, botón y cero OT generadas en toda la historia—. Peor: un ciclo
+sin arrancar **no genera órdenes, así que nada se atrasa** y `mant-atrasadas` no
+puede avisarlo. Se habría desplegado dormido.
 
-Y ojo con esto: **un ciclo sin arrancar no genera ninguna OT, así que nada se
-atrasa y `mant-atrasadas` no puede verlo.** Se informa en el resultado de cada
-corrida (`sin_arrancar`) y la ficha del equipo lo dice con todas las letras,
-pero si nadie carga esas cuatro fechas la función queda desplegada y dormida.
+Lo que lo hace sostenible: decide *cuándo* arrancar y no *qué existe* (el ciclo
+ya lo configuró una persona); la orden que nace lleva escrita la fecha en que
+se basa, así que se puede desmentir; el botón de la ficha lo corrige en un clic;
+y la corrida informa `arrancados` con la OT que arrancó cada ciclo.
+
+**Mira hacia adelante y nunca hacia atrás**, y eso no es prudencia: medido el
+13/11/2026, arrancando del último cambio histórico los cuatro ciclos nacían con
+su primera rotación **atrasada 7, 21, 21 y 3 días**, y PY-B1-06 —que está en 4ª
+cara— recibiría «Rotación de Martillos — a 2ª cara» fechada el 23/10. Mirar
+hacia atrás produce exactamente el anti-objetivo.
+
+**Para verlo sin esperar a que alguien cambie unos martillos:**
+
+```bash
+npx tsx scripts/que-haria-el-ciclo.mts                  # qué haría la próxima corrida
+npx tsx scripts/que-haria-el-ciclo.mts --desde=2026-10-01   # «¿y si ya hubiera pasado?»
+```
+
+No escribe nada. El `--desde` corre el piso hacia atrás **sólo en la
+simulación**; la corrida de verdad usa siempre la fecha de configuración del
+ciclo.
+
+La carga a mano sigue existiendo en la ficha del equipo, para quien no quiera
+esperar al próximo cambio. Dejó de ser el camino principal y pasó a ser el atajo.
 
 ## Los datos: qué está y qué no
 

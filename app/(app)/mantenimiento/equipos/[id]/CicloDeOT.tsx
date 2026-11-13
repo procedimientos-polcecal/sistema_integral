@@ -85,9 +85,15 @@ export default function CicloDeOT({
         {!arrancado ? (
           <>
             <p className="text-sm text-slate-700">
-              Este ciclo <strong>no arrancó</strong>, así que no está generando ninguna orden.
-              Para que arranque hace falta saber cuándo fue el último trabajo y en qué
-              vuelta quedó — eso no se puede sacar del historial sin adivinar.
+              Este ciclo <strong>todavía no arrancó</strong>, así que no está generando
+              ninguna orden. <strong>Arranca solo</strong> con el próximo{" "}
+              {ciclo.tareaMadre.toLowerCase()} que se cierre en este equipo, y desde ahí
+              pide la primera {ciclo.tareaHija.toLowerCase()} a los {ciclo.periodoDias} días.
+            </p>
+            <p className="text-xs text-slate-500">
+              Mira sólo de acá en adelante: arrancarlo del último cambio que ya figura en
+              el historial pediría rotar piezas que desde entonces ya se rotaron. Si
+              preferís no esperar, se puede cargar a mano.
             </p>
 
             {puedeEditar && (
@@ -117,8 +123,8 @@ export default function CicloDeOT({
                     ))}
                   </Select>
                 </div>
-                <button onClick={arrancar} disabled={guardando || !desde} className="btn-primary">
-                  Arrancar el ciclo
+                <button onClick={arrancar} disabled={guardando || !desde} className="btn-secondary">
+                  Arrancarlo a mano
                 </button>
               </div>
             )}

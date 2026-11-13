@@ -149,3 +149,64 @@ export function sospechasDeCambio(
 
   return sospechas;
 }
+
+export interface CicloSinArrancar {
+  id: string;
+  equipment_id: string;
+  componente: string;
+  /** El día desde el cual mirar. Nada anterior cuenta. */
+  desdeCuandoMirar: string;
+}
+
+/**
+ * Con qué cambio arranca un ciclo que todavía no arrancó.
+ *
+ * ── POR QUÉ ESTO EXISTE, Y POR QUÉ EL TEXTO ACÁ SÍ DECIDE ──────────────────
+ *
+ * El punto de arranque de un ciclo —desde cuándo son nuevas las piezas— es el
+ * único dato del mecanismo que no sale de otro dato. La primera versión lo
+ * pedía tipeado, equipo por equipo, y eso tiene un problema conocido: **lo que
+ * depende de que alguien se acuerde, no pasa**. Es la misma lección del
+ * preventivo —pantalla, botón y cero OT generadas en toda la historia— y un
+ * ciclo sin arrancar es invisible: no genera órdenes, así que nada se atrasa y
+ * `mant-atrasadas` no puede verlo.
+ *
+ * Así que acá el texto sí decide, al revés que en todo el resto del mecanismo.
+ * Lo que lo vuelve aceptable son tres cosas, y conviene tenerlas juntas:
+ *
+ *   1. **Decide cuándo arrancar, no qué existe.** El ciclo ya fue configurado
+ *      por una persona; esto sólo contesta «¿ya pasó el cambio?».
+ *   2. **La orden que nace lo dice**: «Rotación de martillos — a 2ª cara (1 de
+ *      3). Martillos cambiados el 20/11/2026». Si esa fecha está mal, quien la
+ *      abre lo ve sin tener que confiar en nada.
+ *   3. **El botón de la ficha lo corrige** en un clic, y la medición respalda
+ *      al matcher: sobre las 250 OT reales de estos equipos marcó 70, todas
+ *      cambios de verdad, y lo que no marcó son todas rotaciones.
+ *
+ * ── Y MIRA HACIA ADELANTE, NUNCA HACIA ATRÁS ──────────────────────────────
+ *
+ * `desdeCuandoMirar` es la fecha en que se configuró el ciclo, y lo anterior no
+ * cuenta. Medido el 13/11/2026: arrancando del último cambio histórico de cada
+ * equipo, los cuatro ciclos nacían con su primera rotación **atrasada 7, 21, 21
+ * y 3 días**, y Filler 2 —que está en 4ª cara— recibiría una orden de rotar a
+ * la 2ª. O sea que mirar hacia atrás produce exactamente lo que este diseño
+ * entero existe para evitar.
+ */
+export function elArranqueDeUnCambio(
+  ciclo: CicloSinArrancar,
+  cerradas: readonly CerradaParaMirar[]
+): { desde: string; ot_number: number } | null {
+  const candidatos = cerradas
+    .filter(
+      (c) =>
+        c.equipment_id === ciclo.equipment_id &&
+        !!c.fecha_cierre &&
+        c.fecha_cierre >= ciclo.desdeCuandoMirar &&
+        pareceUnCambio(c.descripcion, ciclo.componente)
+    )
+    .sort((a, b) => String(a.fecha_cierre).localeCompare(String(b.fecha_cierre)));
+
+  // El más reciente: si hubo dos cambios, el estado de la máquina es el último.
+  const ultimo = candidatos.at(-1);
+  return ultimo ? { desde: ultimo.fecha_cierre!, ot_number: ultimo.ot_number } : null;
+}
