@@ -88,23 +88,33 @@ Esperado: `tsc` 0, build 0, `ROMPE 0 · APRETADO 0`.
 
 ---
 
-## Tarea 2: Las catorce pantallas que quedan sin subtítulo
+## Tareas 2 a 12: cada módulo, completo
 
-**Archivos** — las catorce restantes de la lista medida: `administracion/empresas`, `cantera/acarreo`, `cantera/bochones/[codigo]`, `cantera/destape`, `cantera/informes`, `cantera/voladuras/[codigo]`, `compras/requerimientos`, `mantenimiento/avisos`, `mantenimiento/equipos/[id]/checklist`, `mantenimiento/ordenes-servicio`, `mi-cuenta`, `rrhh/analitico`, `rrhh/empleados/[id]`, `taller-vial/informes`.
-
-- [ ] **Paso 1: descartar las que no lo necesiten.** La lista sale de un escaneo —título sin `<p>` en las seis líneas siguientes— y puede traer falsos positivos: una pantalla cuyo título ya lo dice todo **no lleva `(i)`**, y eso se anota en el registro como descarte con su razón. El anti-goal manda sobre la cobertura.
-- [ ] **Paso 2: escribir y colgar** los que sí.
-- [ ] **Paso 3: registrar** en `docs/INFOTIPS.md`, incluidos los descartes.
-- [ ] **Paso 4: verificar** igual que la Tarea 1.
-- [ ] **Paso 5: commitear** por nombre.
-
----
-
-## Tareas 3 a 12: los números, módulo por módulo
-
-**Una tarea por módulo, en este orden:** 3 Compras · 4 Calidad · 5 Producción · 6 Cantera · 7 Mantenimiento · 8 Seguridad e Higiene · 9 Inventario · 10 Despacho y Facturación · 11 Taller Vial y Trituración · **12 las transversales**.
+**Una tarea por módulo, en este orden:** 2 Compras · 3 Calidad · 4 Producción · 5 Cantera · 6 Mantenimiento · 7 RRHH · 8 Seguridad e Higiene · 9 Inventario · 10 Despacho y Facturación · 11 Taller Vial y Trituración · 12 las transversales.
 
 Compras y Calidad van primero porque son los que más conocimiento medido tienen escrito y sin mostrar. Mantenimiento y RRHH **entran aunque ya tengan `(i)`**: lo que no se toca son los 48 existentes, y eso no impide agregar uno nuevo.
+
+**Cada tarea hace las dos clases de `(i)` de su módulo**, y eso no es un detalle
+de organización: es la aproximación elegida. Abrir Cantera para el `(i)` de
+pantalla y volver a abrirla meses después para los números es exactamente lo que
+el diseño descartó.
+
+**Las catorce pantallas sin subtítulo, repartidas** — salen de un escaneo medido
+(título sin `<p>` en las seis líneas siguientes) y cada tarea empieza por las
+suyas:
+
+| Tarea | Pantallas sin subtítulo que le tocan |
+|---|---|
+| 2 Compras | `compras/requerimientos` |
+| 5 Cantera | `acarreo`, `destape`, `informes`, `bochones/[codigo]`, `voladuras/[codigo]` |
+| 6 Mantenimiento | `avisos`, `ordenes-servicio`, `equipos/[id]/checklist` |
+| 7 RRHH | `analitico`, `empleados/[id]` |
+| 11 Taller Vial | `taller-vial/informes` |
+| 12 Transversales | `administracion/empresas`, `mi-cuenta` |
+
+**El escaneo puede traer falsos positivos**: una pantalla cuyo título ya lo dice
+todo **no lleva `(i)`**, y el descarte se anota en el registro con su razón. El
+anti-goal manda sobre la cobertura.
 
 **Cada una de estas tareas tiene la misma forma:**
 
@@ -120,11 +130,11 @@ Compras y Calidad van primero porque son los que más conocimiento medido tienen
 
 | Tarea | Lo que no puede faltar |
 |---|---|
-| 3 Compras | El semáforo y el reclamo: **`EN_ESPERA` queda afuera del conjunto reclamable** a propósito, y el orden por defecto cambia al filtrar por color |
-| 4 Calidad | **El valor de un ensayo no está transformado** —`escala` es la lectura del sistema, no una propiedad del número—; en envases y carbonilla **manda la planilla**, y un movimiento que no llega allá no existe |
-| 5 Producción | **«Turno» son los cuatro cortes del contador del robot**, no los dos del parte, y no se suman; **un día sin filas es planta cerrada, pero un turno en cero dentro de un día con filas es una parada a explicar**; la etiqueta `MATERIAL` está mal en el 11,3 % de las toneladas |
-| 6 Cantera | **El costo de mano de obra propia del Destape sale de una tabla cerrada por `tiene_acceso_rrhh()`: a quien no tenga RRHH le llega 0, sin error.** Es el mejor `(i)` de todo el trabajo |
-| 7 Mantenimiento | **`gut_orden` no es el puntaje** —lleva el 27 de «sin puntaje» y el +1000 de las abiertas, así que imprimirla muestra 1027— y **el GUT no se exporta a ninguna planilla** |
+| 2 Compras | El semáforo y el reclamo: **`EN_ESPERA` queda afuera del conjunto reclamable** a propósito, y el orden por defecto cambia al filtrar por color |
+| 3 Calidad | **El valor de un ensayo no está transformado** —`escala` es la lectura del sistema, no una propiedad del número—; en envases y carbonilla **manda la planilla**, y un movimiento que no llega allá no existe |
+| 4 Producción | **«Turno» son los cuatro cortes del contador del robot**, no los dos del parte, y no se suman; **un día sin filas es planta cerrada, pero un turno en cero dentro de un día con filas es una parada a explicar**; la etiqueta `MATERIAL` está mal en el 11,3 % de las toneladas |
+| 5 Cantera | **El costo de mano de obra propia del Destape sale de una tabla cerrada por `tiene_acceso_rrhh()`: a quien no tenga RRHH le llega 0, sin error.** Es el mejor `(i)` de todo el trabajo |
+| 6 Mantenimiento | **`gut_orden` no es el puntaje** —lleva el 27 de «sin puntaje» y el +1000 de las abiertas, así que imprimirla muestra 1027— y **el GUT no se exporta a ninguna planilla** |
 | 8 Seguridad e Higiene | **37 de 44 condiciones entraron sin sector** y hay cinco fechas dudosas; el texto de lugar original vive en `observaciones` |
 | 11 Taller Vial | **No tiene documento ni spec.** Es esperable que salga con pocos o ningún `(i)` de número y una lista de huecos larga. Eso cuenta como terminado |
 | 12 Transversales | Son `agenda`, `disponibilidad`, `mis-menciones`, `mis-pedidos`, `mis-avisos` y el Inicio. **No son un módulo y por eso casi se caen de este plan**, pero cargan las advertencias más caras del sistema: en Disponibilidad **«agregado» no es anónimo cuando el grupo es chico** —un sector tiene UNA persona, y cruzando los dos endpoints abiertos 42 de 78 celdas quedaban atribuidas— y **la `TARDANZA` cuenta distinto según quién pregunta**, a propósito; en la Agenda, **divergencia son sólo borrado y movido**, y los RSVP quedan afuera para que la gente no apague las notificaciones |
