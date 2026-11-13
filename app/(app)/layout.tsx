@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { NavMovilProvider } from "@/components/NavMovil";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { BarraInstalar } from "@/components/BarraInstalar";
 import { CargasEsperando } from "@/components/CargasEsperando";
 import { RegistrarServiceWorker } from "@/components/RegistrarServiceWorker";
@@ -75,6 +76,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <NavMovilProvider>
+      {/* El `ConfirmProvider` se monta una sola vez, acá, y no en el layout de
+          cada módulo. El hueco creció solo: el 11/11/2026 eran dos módulos con
+          un modal y sin proveedor, y el 13/11 eran tres, porque apareció
+          `mis-pedidos` entre una fecha y la otra. Una lista por módulo es una
+          lista que se queda corta sola; montado acá lo hereda el módulo que
+          venga. Importa porque `useConfirm()` **rompe** a propósito sin
+          proveedor —devolver `false` se leería como «el usuario canceló»—, y
+          esa mentira dejó muerto el botón «Pedir» de `/inventario/stock` nueve
+          días sin que el build ni los tests lo notaran.
+
+          No cubre `app/cargar`: vive fuera del grupo `(app)` y monta el suyo. */}
+      <ConfirmProvider>
       {/* `h-dvh` y no `h-screen`: en Safari de iPhone `100vh` es la altura
           **con las barras ocultas**, no la que se ve, así que el armazón mide
           más que la pantalla y el layout se recalcula cada vez que Safari
@@ -151,6 +164,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           No dibuja nada; va en el layout porque tiene que correr para todos y
           en cada carga, no detrás de un botón. */}
       <RegistrarServiceWorker />
+      </ConfirmProvider>
     </NavMovilProvider>
   );
 }

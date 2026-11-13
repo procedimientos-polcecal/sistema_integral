@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { nivelEnModulo } from "@/lib/core/access";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 import { NivelMantenimientoProvider } from "@/lib/mantenimiento/context";
-import { ConfirmProvider } from "@/components/ConfirmProvider";
 
 export default async function MantenimientoLayout({
   children,
@@ -38,7 +37,7 @@ export default async function MantenimientoLayout({
 
   return (
     <NivelMantenimientoProvider nivel={nivel}>
-      <ConfirmProvider>{children}</ConfirmProvider>
+      {children}
     </NivelMantenimientoProvider>
   );
 }

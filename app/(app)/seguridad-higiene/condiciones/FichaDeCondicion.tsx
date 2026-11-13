@@ -3,7 +3,6 @@
 import { useState, type ReactNode } from "react";
 import Select from "@/components/Select";
 import HiloDeMensajes from "@/components/HiloDeMensajes";
-import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { comoSeLee } from "@/lib/core/fechas";
 import { CRITERIOS, clasificar, type Criterio } from "@/lib/seguridadHigiene/riesgo";
 import { estadoDe } from "@/lib/seguridadHigiene/condicion";
@@ -228,19 +227,16 @@ export default function FichaDeCondicion({
         <div className="space-y-6 p-4">
           {/* Las fotos viven en su propio componente: tienen estado propio (la
               lista, lo que se está subiendo, el link copiado) y esta ficha ya
-              lleva tres etapas de formulario. Va adentro de un
-              `<ConfirmProvider>` porque sacar una foto la pierde para siempre y
-              `useConfirm()` rompe sin proveedor arriba, que es lo que se
-              quiere. El permiso es el mismo que el de la primera etapa, y no
+              lleva tres etapas de formulario. Sacar una foto la
+              pierde para siempre, y por eso pregunta con `useConfirm()`: el
+              proveedor lo monta el layout de `(app)`. El permiso es el mismo que el de la primera etapa, y no
               por parecido: las policies `syh_fotos_agregar` y `syh_fotos_sacar`
               piden `edicion` y que la condición no esté cerrada. */}
-          <ConfirmProvider>
-            <FotosDeLaCondicion
-              condicionId={fila.id}
-              numero={fila.numero}
-              puedeTocar={puedePrimera}
-            />
-          </ConfirmProvider>
+          <FotosDeLaCondicion
+            condicionId={fila.id}
+            numero={fila.numero}
+            puedeTocar={puedePrimera}
+          />
 
           {/* Primera etapa */}
           <section className="space-y-3">

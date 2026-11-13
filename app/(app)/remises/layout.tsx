@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { nivelEnModulo } from "@/lib/core/access";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
-import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { NivelRemisesProvider } from "@/lib/remises/context";
 
 export default async function RemisesLayout({ children }: { children: React.ReactNode }) {
@@ -26,7 +25,7 @@ export default async function RemisesLayout({ children }: { children: React.Reac
 
   return (
     <NivelRemisesProvider nivel={nivel}>
-      <ConfirmProvider>{children}</ConfirmProvider>
+      {children}
     </NivelRemisesProvider>
   );
 }
