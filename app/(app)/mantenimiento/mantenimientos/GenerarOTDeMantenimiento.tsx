@@ -231,8 +231,9 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
         )}
 
         <PieDeModal className="mt-5 flex justify-end gap-2">
+          {/* El único que tira. */}
           <button
-            onClick={onClose}
+            onClick={() => { tirar(); onClose(); }}
             className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-slate-100"
           >
             Cancelar

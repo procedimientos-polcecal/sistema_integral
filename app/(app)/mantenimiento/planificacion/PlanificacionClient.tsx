@@ -57,6 +57,9 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
     });
     const data = await res.json();
     if (!res.ok) { setError(data.error ?? "Error"); setSaving(false); return; }
+    // El plan existe: ya no hay nada que recordar. Sin esto el borrador
+    // sobrevive a la navegación y vuelve a aparecer en el próximo «Nuevo plan».
+    tirar();
     router.push(`/mantenimiento/planificacion/${data.data.id}`);
   }
 
