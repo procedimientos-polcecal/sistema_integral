@@ -169,6 +169,43 @@ o 12:00 y dura 1:30; el día lo da `fecha_ejecucion`. Vienen puestos cinco
 invitados —`nicolaslenzetti@`, `gerencia@`, `produccion@`, `mantenimiento@`,
 `soporte.mantenimiento@`— y se puede sumar a quien sea.
 
+### Pero Google no les avisa, desde el 13/11/2026
+
+**El evento de una OT se escribe con `sendUpdates=none`; el que crea una persona
+en la Agenda, con `all`.** Lo decide `avisaALosInvitados()` en
+[lib/agenda/escribirEnGoogle.ts](../lib/agenda/escribirEnGoogle.ts), a partir de
+una sola cosa: si la fila tiene `ot_id`.
+
+Lo pidió el usuario el 12/11/2026, y el número que lo justifica se midió al día
+siguiente: **30 eventos de OT habían mandado 120 invitaciones** en ocho días, de
+las cuales `gerencia@`, `produccion@` y `nicolaslenzetti@` recibieron **30 cada
+uno** — un correo y un aviso en el celular por cada orden de trabajo.
+
+Tres cosas que no se deducen del código:
+
+- **No se sacaron los invitados ni se dejó de crear el evento.** El evento sigue
+  apareciendo en los cinco calendarios, que es para lo que se construyó: lo que
+  se apagó es el aviso, no la visibilidad. Las otras tres salidas que se
+  evaluaron —no invitar a nadie, dejar sólo las casillas de mantenimiento, o no
+  crear el evento— se descartaron a pedido.
+- **Lo que esto NO apaga es el recordatorio propio del calendario.** `sendUpdates`
+  gobierna el correo que manda Google al invitar, modificar o cancelar; el aviso
+  que da la aplicación de calendario el día del evento es del calendario de cada
+  uno y sigue sonando. Si eso también molesta, se cambia por otro lado
+  (`reminders` en el evento), que hoy no se toca.
+- **La asimetría es deliberada y no una inconsistencia.** Invitar a alguien a una
+  reunión que uno arma y no avisarle no tiene sentido, así que el alta a mano de
+  la Agenda sigue avisando. Por eso el parámetro de las cuatro funciones de
+  escritura de [lib/core/calendar.ts](../lib/core/calendar.ts) es **obligatorio y
+  sin valor por omisión**: un camino de escritura nuevo no puede heredar una de
+  las dos respuestas sin que alguien la elija, que es exactamente como las cuatro
+  habían quedado en `all`.
+
+**Los 30 eventos que ya estaban en los calendarios no se tocaron**, por decisión
+del usuario: limpiarlos habría mandado una cancelación por cada uno a cada
+invitado, o sea una última tanda de ruido para terminar con el ruido. Se apagan
+solos a medida que sus fechas pasan.
+
 **El dueño es `mantenimiento@` cuando la orden no tiene autor.** El spec decía
 «la casilla que generó la OT» y eso queda indefinido casi siempre: **de 2.349 OT,
 sólo 91 tienen `created_by` (3,9 %), y de las 26 con fecha de ejecución futura,

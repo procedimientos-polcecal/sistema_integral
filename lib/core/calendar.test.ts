@@ -50,7 +50,7 @@ afterEach(() => {
 describe("crearEvento", () => {
   it("manda la zona explícita en inicio y en fin", async () => {
     fetchMock.mockResolvedValue(json(200, { id: "e1", status: "confirmed" }));
-    await crearEvento("ana@polcecal.com", EVENTO);
+    await crearEvento("ana@polcecal.com", EVENTO, "all");
 
     const { cuerpo } = pedido();
     // Nueve de catorce calendarios están en UTC: sin esto el evento corre de hora.
@@ -60,7 +60,7 @@ describe("crearEvento", () => {
 
   it("pide el token de la casilla, avisa a los invitados y manda los campos de Google", async () => {
     fetchMock.mockResolvedValue(json(200, { id: "e1" }));
-    await crearEvento("ana@polcecal.com", EVENTO);
+    await crearEvento("ana@polcecal.com", EVENTO, "all");
 
     expect(obtenerToken).toHaveBeenCalledWith(["https://www.googleapis.com/auth/calendar"], "ana@polcecal.com");
     const { url, metodo, cuerpo, init } = pedido();
@@ -70,6 +70,18 @@ describe("crearEvento", () => {
     expect(cuerpo.summary).toBe("OT 2901 — Mantenimiento");
     expect(cuerpo.description).toBe("Cambio de rodamientos");
     expect(cuerpo.location).toBe("Filler 1");
+    expect(cuerpo.attendees).toEqual([{ email: "ana@polcecal.com" }, { email: "luis@polcecal.com" }]);
+  });
+
+  it("con «none» crea sin mandar la invitación, y con los mismos invitados", async () => {
+    // Es lo que hace que una OT entre al calendario de las cinco casillas sin
+    // mandar cuatro correos. Los `attendees` se comprueban acá a propósito: lo
+    // que se apaga es el aviso, no la invitación, y un cambio que además
+    // vaciara la lista pasaría desapercibido mirando sólo la URL.
+    fetchMock.mockResolvedValue(json(200, { id: "e1" }));
+    await crearEvento("ana@polcecal.com", EVENTO, "none");
+    const { url, cuerpo } = pedido();
+    expect(url).toBe("https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=none");
     expect(cuerpo.attendees).toEqual([{ email: "ana@polcecal.com" }, { email: "luis@polcecal.com" }]);
   });
 
@@ -87,7 +99,7 @@ describe("crearEvento", () => {
         ],
       })
     );
-    expect(await crearEvento("ana@polcecal.com", EVENTO)).toEqual({
+    expect(await crearEvento("ana@polcecal.com", EVENTO, "all")).toEqual({
       id: "e1",
       inicio: "2026-11-03T08:00:00-03:00",
       fin: "2026-11-03T12:00:00-03:00",
@@ -106,19 +118,19 @@ describe("crearEvento con id propio", () => {
 
   it("manda el id elegido por el SdG", async () => {
     fetchMock.mockResolvedValue(json(200, { id: ID }));
-    await crearEvento("ana@polcecal.com", { ...EVENTO, id: ID });
+    await crearEvento("ana@polcecal.com", { ...EVENTO, id: ID }, "all");
     expect(pedido().cuerpo.id).toBe(ID);
   });
 
   it("un alta nueva no viene marcada como «ya estaba»", async () => {
     fetchMock.mockResolvedValue(json(200, { id: ID, status: "confirmed" }));
-    const evento = await crearEvento("ana@polcecal.com", { ...EVENTO, id: ID });
+    const evento = await crearEvento("ana@polcecal.com", { ...EVENTO, id: ID }, "all");
     expect(evento.yaEstaba).toBeUndefined();
   });
 
   it("sin id no manda ninguno", async () => {
     fetchMock.mockResolvedValue(json(200, { id: "e1" }));
-    await crearEvento("ana@polcecal.com", EVENTO);
+    await crearEvento("ana@polcecal.com", EVENTO, "all");
     expect("id" in pedido().cuerpo).toBe(false);
   });
 
@@ -126,7 +138,7 @@ describe("crearEvento con id propio", () => {
     fetchMock
       .mockResolvedValueOnce(json(409, { error: { code: 409, message: "The requested identifier already exists." } }))
       .mockResolvedValueOnce(json(200, { id: ID, status: "confirmed", summary: "OT 2901" }));
-    const evento = await crearEvento("ana@polcecal.com", { ...EVENTO, id: ID });
+    const evento = await crearEvento("ana@polcecal.com", { ...EVENTO, id: ID }, "all");
 
     expect(evento.id).toBe(ID);
     expect(evento.cancelado).toBe(false);
@@ -139,12 +151,12 @@ describe("crearEvento con id propio", () => {
 
   it("un 409 sin id propio se propaga: no hay nada que releer", async () => {
     fetchMock.mockResolvedValue(json(409, { error: { message: "Conflict" } }));
-    await expect(crearEvento("ana@polcecal.com", EVENTO)).rejects.toThrow("Conflict");
+    await expect(crearEvento("ana@polcecal.com", EVENTO, "all")).rejects.toThrow("Conflict");
   });
 
   it("un id fuera de base32hex se rechaza antes de llamar a Google", async () => {
     for (const id of ["ABCDE12345", "con-guiones-123", "abcd", "wxyz1234"]) {
-      await expect(crearEvento("ana@polcecal.com", { ...EVENTO, id })).rejects.toThrow("base32hex");
+      await expect(crearEvento("ana@polcecal.com", { ...EVENTO, id }, "all")).rejects.toThrow("base32hex");
     }
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -200,7 +212,7 @@ describe("leerEvento", () => {
     fetchMock.mockResolvedValue(
       json(403, { error: { code: 403, message: "Only the organizer can do that", errors: [{ reason: "forbiddenForNonOrganizer" }] } })
     );
-    const e = (await actualizarEvento("ana@polcecal.com", "e1", { titulo: "x" }).catch((x: Error) => x)) as Error;
+    const e = (await actualizarEvento("ana@polcecal.com", "e1", { titulo: "x" }, "all").catch((x: Error) => x)) as Error;
     expect(e.message).toContain("organiza otra persona");
     expect(e.message).toContain("Only the organizer can do that");
     expect(e.message).not.toContain("delegación");
@@ -226,7 +238,7 @@ describe("leerEvento", () => {
 describe("actualizarEvento", () => {
   it("parcha sólo lo que se pasa, con la zona si cambia la hora", async () => {
     fetchMock.mockResolvedValue(json(200, { id: "e1" }));
-    await actualizarEvento("ana@polcecal.com", "e1", { inicio: "2026-11-04T08:00:00", fin: "2026-11-04T12:00:00" });
+    await actualizarEvento("ana@polcecal.com", "e1", { inicio: "2026-11-04T08:00:00", fin: "2026-11-04T12:00:00" }, "all");
 
     const { url, metodo, cuerpo } = pedido();
     expect(metodo).toBe("PATCH");
@@ -238,7 +250,7 @@ describe("actualizarEvento", () => {
 
   it("un 403 se propaga con lo que dijo Google", async () => {
     fetchMock.mockResolvedValue(json(403, { error: { message: "Not a delegate" } }));
-    await expect(actualizarEvento("ana@polcecal.com", "e1", { titulo: "x" })).rejects.toThrow("Not a delegate");
+    await expect(actualizarEvento("ana@polcecal.com", "e1", { titulo: "x" }, "all")).rejects.toThrow("Not a delegate");
   });
 });
 
@@ -246,7 +258,7 @@ describe("restaurarEvento", () => {
   it("resucita con PUT, el cuerpo completo y status confirmed", async () => {
     // Medido el 02/11/2026: un PATCH sobre un borrado da 200 y sigue cancelled.
     fetchMock.mockResolvedValue(json(200, { id: "e1", status: "confirmed" }));
-    const evento = await restaurarEvento("ana@polcecal.com", "e1", EVENTO);
+    const evento = await restaurarEvento("ana@polcecal.com", "e1", EVENTO, "all");
 
     const { url, metodo, cuerpo } = pedido();
     expect(metodo).toBe("PUT");
@@ -261,32 +273,40 @@ describe("restaurarEvento", () => {
 
   it("un fallo se propaga con lo que dijo Google", async () => {
     fetchMock.mockResolvedValue(json(500, { error: { message: "Backend Error" } }));
-    await expect(restaurarEvento("ana@polcecal.com", "e1", EVENTO)).rejects.toThrow("Backend Error");
+    await expect(restaurarEvento("ana@polcecal.com", "e1", EVENTO, "all")).rejects.toThrow("Backend Error");
   });
 });
 
 describe("borrarEvento", () => {
   it("borra avisando a los invitados", async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
-    await borrarEvento("ana@polcecal.com", "e1");
+    await borrarEvento("ana@polcecal.com", "e1", "all");
     const { url, metodo } = pedido();
     expect(metodo).toBe("DELETE");
     expect(url).toBe("https://www.googleapis.com/calendar/v3/calendars/primary/events/e1?sendUpdates=all");
   });
 
+  it("con «none» borra sin mandarle la cancelación a nadie", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    await borrarEvento("ana@polcecal.com", "e1", "none");
+    expect(pedido().url).toBe(
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events/e1?sendUpdates=none"
+    );
+  });
+
   it("uno ya borrado (410) no es un error", async () => {
     fetchMock.mockResolvedValue(json(410, { error: { code: 410, message: "Resource has been deleted" } }));
-    await expect(borrarEvento("ana@polcecal.com", "e1")).resolves.toBeUndefined();
+    await expect(borrarEvento("ana@polcecal.com", "e1", "all")).resolves.toBeUndefined();
   });
 
   it("uno que Google no conoce (404) tampoco: ya no está, que es lo que se quería", async () => {
     fetchMock.mockResolvedValue(json(404, { error: { code: 404, message: "Not Found" } }));
-    await expect(borrarEvento("ana@polcecal.com", "e1")).resolves.toBeUndefined();
+    await expect(borrarEvento("ana@polcecal.com", "e1", "all")).resolves.toBeUndefined();
   });
 
   it("otro fallo se propaga", async () => {
     fetchMock.mockResolvedValue(json(500, { error: { message: "Backend Error" } }));
-    await expect(borrarEvento("ana@polcecal.com", "e1")).rejects.toThrow("Backend Error");
+    await expect(borrarEvento("ana@polcecal.com", "e1", "all")).rejects.toThrow("Backend Error");
   });
 });
 
@@ -339,7 +359,7 @@ describe("la espera a Google", () => {
       expect(init.signal).toBeInstanceOf(AbortSignal);
       throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
     });
-    const e = await crearEvento("ana@polcecal.com", EVENTO).catch((x: Error) => x);
+    const e = await crearEvento("ana@polcecal.com", EVENTO, "all").catch((x: Error) => x);
     expect((e as Error).message).toContain("Google no contestó en 30 segundos");
     expect((e as Error).message).not.toContain("aborted due to timeout");
   });

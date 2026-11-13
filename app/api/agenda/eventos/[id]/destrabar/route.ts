@@ -64,6 +64,11 @@ export async function POST(
       inicio: actual.inicio,
       fin: actual.fin,
       divergencia: actual.divergencia,
+      // Acá el `ot_id` no es defensivo: `reescribir` es el único camino que
+      // resucita el evento de una OT que alguien borró en Google, así que esta
+      // ruta sí escribe eventos de OT. Sin esto, resucitar uno le mandaría la
+      // invitación de nuevo a las cuatro casillas.
+      ot_id: actual.ot_id,
     },
     eventoParaGoogle(actual, actual.invitados, actual.casilla)
   );
