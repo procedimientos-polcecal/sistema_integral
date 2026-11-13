@@ -14,6 +14,7 @@ import BandejaDelCorreo from "./BandejaDelCorreo";
 import LineasDeFactura from "./LineasDeFactura";
 import BorradorEnOdoo from "./BorradorEnOdoo";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 /** A qué Odoo le está hablando el sistema. Lo resuelve el servidor. */
 interface DondeApuntaOdoo {
@@ -458,6 +459,7 @@ export default function BuzonClient({
           <h2 className="text-sm font-semibold text-slate-700">
             {estado ? `Facturas ${ESTADO_ETIQUETA[estado]?.toLowerCase() ?? estado}` : "Lo que entró"}
             <span className="ml-2 font-normal text-slate-400">{facturas.length}</span>
+            <InfoTip className="ml-1" text="La lista muestra como máximo las 300 más recientes por fecha de carga, y el número es el de la lista, no el total del sistema. «Sin vincular» filtra por el estado En el buzón: las que no se vincularon a un requerimiento ni tienen borrador en Odoo, salvo que alguien haya cambiado el estado a mano." />
           </h2>
           <div className="flex gap-2 text-xs">
             <Link
@@ -473,13 +475,16 @@ export default function BuzonClient({
               Sin vincular
             </Link>
             {puedeEditar && (
-              <button
-                disabled={sincronizando}
-                onClick={sincronizarConOdoo}
-                className="rounded-lg border border-slate-300 px-2 py-1 text-slate-700 disabled:opacity-40 hover:bg-slate-50"
-              >
-                {sincronizando ? "Preguntándole a Odoo…" : "Sincronizar con Odoo"}
-              </button>
+              <>
+                <button
+                  disabled={sincronizando}
+                  onClick={sincronizarConOdoo}
+                  className="rounded-lg border border-slate-300 px-2 py-1 text-slate-700 disabled:opacity-40 hover:bg-slate-50"
+                >
+                  {sincronizando ? "Preguntándole a Odoo…" : "Sincronizar con Odoo"}
+                </button>
+                <InfoTip text="Relee en Odoo las facturas que no están contabilizadas. «Revisadas» son las que ya tienen asiento: pasan a Contabilizada si Odoo lo posteó, y si el borrador se borró allá se les suelta el vínculo. «Buscadas» son las que no tienen asiento y se cruzan por el número del comprobante y el CUIT del emisor, nunca por el importe; lo que no se puede afirmar queda sin tocar. Un cron lo hace solo cada diez minutos." />
+              </>
             )}
           </div>
         </div>
@@ -909,6 +914,7 @@ function FilaDelBuzon({
                   ? "leída del texto"
                   : "a mano"}
             </span>
+            <InfoTip className="ml-1" text="Primero, por dónde llegó el archivo. Después, de dónde salieron los datos fiscales: «leída del QR» está firmada por ARCA; «leída del texto» la interpretó el lector del PDF y sólo se usa cuando la factura no trae QR; «a mano» la tipeó una persona." />
           </div>
         </div>
 
@@ -937,6 +943,7 @@ function FilaDelBuzon({
               {ESTADO_ETIQUETA[factura.estado] ?? factura.estado}
             </span>
           )}
+          <InfoTip text="En el buzón: la factura entró y no se vinculó a ningún requerimiento. Vinculada: se vinculó a un requerimiento (RI) de Compras. Informada: el borrador existe en Odoo. Contabilizada: Odoo lo posteó, y lo detecta la sincronización. El estado lo cambia a mano quien tiene permiso de edición, en los dos sentidos; si la factura está enlazada a un asiento ya posteado, la próxima sincronización la vuelve a poner en Contabilizada." />
 
           {factura.requerimiento ? (
             <Link
@@ -1018,6 +1025,7 @@ function FilaDelBuzon({
                 >
                   Buscar en Odoo
                 </button>
+                <InfoTip text="Crear el borrador deja la factura en Odoo en borrador, con proveedor, número, fecha e importe, y la pasa a Informada. No la postea. El IVA sale de la letra: A, B y M llevan 21 %, el resto no; y no lleva percepciones, así que si la factura las trae el borrador queda por menos. Buscar en Odoo lista las facturas de ese proveedor de los 120 días anteriores a la fecha de la factura, para elegir la que ya cargó administración." />
               </>
             )
           )}

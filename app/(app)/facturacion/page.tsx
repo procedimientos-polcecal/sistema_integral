@@ -69,7 +69,10 @@ export default async function FacturacionDashboardPage() {
       {/* ── Últimas cargadas ── */}
       <section className="card mt-6 p-4">
         <div className="flex items-center justify-between">
-          <h2 className="section-title">Últimas cargadas</h2>
+          <h2 className="section-title">
+            Últimas cargadas
+            <InfoTip className="ml-1" text="Las seis últimas que entraron al buzón, ordenadas por cuándo se cargaron. La fecha que se ve es la de carga, no la de la factura. El importe es el total del comprobante." />
+          </h2>
           <Link href="/facturacion/buzon" className="text-xs text-slate-500 underline">Ver todas →</Link>
         </div>
         {!recientes || recientes.length === 0 ? (

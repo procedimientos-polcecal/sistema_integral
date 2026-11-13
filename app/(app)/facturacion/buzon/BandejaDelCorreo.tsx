@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
 import { POR_TANDA } from "@/lib/facturacion/sePuedeGuardarSola";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * Lo que llegó por mail y todavía nadie cargó.
@@ -204,6 +205,7 @@ export default function BandejaDelCorreo({
     <section className="rounded-xl border border-slate-200 bg-white p-5">
       <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
         Llegaron por mail y falta cargarlas
+        <InfoTip className="ml-1 normal-case" text="Se muestran los 100 adjuntos más recientes, así que el número puede ser menor que lo que hay esperando. Cada tanda baja hasta 25 y guarda sola sólo la que cumple las cuatro a la vez: tiene cabecera, salió del QR y no del texto, el importe del QR coincide con el impreso y el comprobante está emitido a Polcecal o a Polysan. Las demás quedan abajo con el motivo." />
       </h2>
       <p className="mb-3 text-sm text-slate-600">
         {pendientes.length === 1
