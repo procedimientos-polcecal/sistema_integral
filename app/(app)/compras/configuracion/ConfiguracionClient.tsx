@@ -9,6 +9,7 @@ import PendientesDeOdoo from "./PendientesDeOdoo";
 import UmbralDeMontoAlto from "./UmbralDeMontoAlto";
 import type { Sincronizacion } from "@/lib/compras/types";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 /** Lo que devuelve la importación de proveedores. */
 interface Importacion {
@@ -439,7 +440,7 @@ export default function ConfiguracionClient({
                 <th className="px-3 py-2 text-right">Leídas</th>
                 <th className="px-3 py-2 text-right">Nuevas</th>
                 <th className="px-3 py-2 text-right">Actualiz.</th>
-                <th className="px-3 py-2 text-right">Omitidas</th>
+                <th className="px-3 py-2 text-right">Omitidas<InfoTip className="ml-1 normal-case" text="Son los requerimientos que ya se tocaron en el sistema: la planilla ya no los pisa, así que se leen y se dejan como están." /></th>
                 <th className="px-3 py-2 text-left">Resultado</th>
               </tr>
             </thead>

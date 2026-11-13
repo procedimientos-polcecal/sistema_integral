@@ -85,7 +85,7 @@ export default function RequerimientosPendientes({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-2">
           <h2 className="text-base font-semibold text-slate-900">Requerimientos</h2>
-          <InfoTip text="La cola va por prioridad y, a igual prioridad, por antigüedad; los que no tienen prioridad definida van al final. Pero la prioridad la propone quien pide y gerencia la confirma al aprobar, y «Se necesita» suele cargarse como «ya»: las dos distinguen poco, así que mirá también hace cuánto espera cada uno." />
+          <InfoTip text="La cola va por prioridad y, a igual prioridad, por antigüedad; los que no tienen prioridad definida van al final." />
         </div>
         <p className="text-sm text-slate-500">
           {pendientes.length === 0
@@ -146,9 +146,9 @@ export default function RequerimientosPendientes({
                     <th className="px-3 py-2 text-left">Área</th>
                     <th className="px-3 py-2 text-left">Dónde</th>
                     <th className="px-3 py-2 text-right">Cant.</th>
-                    <th className="px-3 py-2 text-left">Prioridad</th>
+                    <th className="px-3 py-2 text-left">Prioridad<InfoTip className="ml-1 normal-case" text="La propone quien pide y gerencia la confirma al aprobar. Cuando la urgencia la declara el que pide distingue poco, así que mirá también hace cuánto espera." /></th>
                     <th className="px-3 py-2 text-left">Paga</th>
-                    <th className="px-3 py-2 text-left">Se necesita</th>
+                    <th className="px-3 py-2 text-left">Se necesita<InfoTip className="ml-1 normal-case" text="La gente suele cargarla como «ya»: el margen mediano entre pedir y necesitar es de 4 días (medido el 12/11/2026), así que no ordena nada." /></th>
                     <th className="px-3 py-2"></th>
                   </tr>
                 </thead>

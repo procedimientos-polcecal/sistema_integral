@@ -489,7 +489,7 @@ export default function RequerimientosClient({
           <div className="flex flex-wrap items-baseline gap-x-3">
             <div className="flex items-baseline gap-2">
               <h1 className="text-xl font-bold text-slate-900">Requerimientos internos</h1>
-              <InfoTip text="Cada requerimiento lleva dos estados independientes: la aprobación de gerencia y la etapa de Compras. Mientras gerencia no aprueba, Compras no tiene paso que dar y la fila dice «Sin aprobar». «En espera» no es una etapa sino un desvío: es un pedido que alguien frenó a propósito, y al sacarlo vuelve a la etapa donde estaba." />
+              <InfoTip text="Cada requerimiento lleva dos estados independientes: la aprobación de gerencia y la etapa de Compras. Mientras gerencia no aprueba, Compras no tiene paso que dar y la fila dice «Sin aprobar»." />
             </div>
             <UltimaSincronizacion
               cuando={sync?.created_at}
@@ -497,13 +497,10 @@ export default function RequerimientosClient({
               error={sync?.error}
             />
           </div>
-          <div className="flex items-center gap-2">
-            <p className="text-sm text-slate-500">
-              {cargando ? "Cargando…" : `${total.toLocaleString("es-AR")} requerimiento${total === 1 ? "" : "s"}`}
-              {hayFiltros && !cargando ? " con los filtros aplicados" : ""}
-            </p>
-            <InfoTip text="«Vencido hace N días» cuenta contra la fecha en que se necesita, que la gente suele cargar como «ya»: medido el 12/11/2026, el 91% de los abiertos figuraba vencido. «Costo + IVA» vacío no es cero, porque el costo real no existe hasta que se compra. Para «Monto alto», hasta entonces cuenta el presupuesto más alto en pesos, y «Sin monto alto» incluye también lo que alguien desmarcó a mano." />
-          </div>
+          <p className="text-sm text-slate-500">
+            {cargando ? "Cargando…" : `${total.toLocaleString("es-AR")} requerimiento${total === 1 ? "" : "s"}`}
+            {hayFiltros && !cargando ? " con los filtros aplicados" : ""}
+          </p>
         </div>
         <button
           onClick={() => setModalAbierto(true)}
@@ -685,16 +682,16 @@ export default function RequerimientosClient({
               <tr>
                 <th className="px-3 py-2 text-left">N° RI</th>
                 <th className="px-3 py-2 text-left">Fecha</th>
-                <th className="px-3 py-2 text-left">Descripción</th>
+                <th className="px-3 py-2 text-left">Descripción<InfoTip className="ml-1 normal-case" text="«Vencido hace N días» cuenta contra la fecha en que se necesita, que la gente suele cargar como «ya»: medido el 12/11/2026, el 91% de los abiertos figuraba vencido." /></th>
                 <th className="px-3 py-2 text-left">Área</th>
                 <th className="px-3 py-2 text-left">Dónde</th>
                 <th className="px-3 py-2 text-right">Cant.</th>
                 <th className="px-3 py-2 text-left">Prioridad</th>
                 <th className="px-3 py-2 text-left">Paga</th>
                 <th className="px-3 py-2 text-left">Aprobación</th>
-                <th className="px-3 py-2 text-left">Compra</th>
+                <th className="px-3 py-2 text-left">Compra<InfoTip className="ml-1 normal-case" text="«En espera» no es una etapa sino un desvío: un pedido que alguien frenó a propósito. Al sacarlo vuelve a la etapa donde estaba." /></th>
                 <th className="px-3 py-2 text-left">Proveedor</th>
-                <th className="px-3 py-2 text-right">Costo + IVA</th>
+                <th className="px-3 py-2 text-right">Costo + IVA<InfoTip className="ml-1 normal-case" text="Vacío no es cero: el costo real no existe hasta que se compra. Hasta entonces «Monto alto» cuenta el presupuesto más alto en pesos, y «Sin monto alto» incluye también lo que alguien desmarcó a mano." /></th>
                 {canEdit && <th className="px-3 py-2 text-left">Acción</th>}
               </tr>
             </thead>
