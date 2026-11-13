@@ -184,7 +184,7 @@ export default function CargasClient({
                 <th className="text-right">Lectura</th>
                 <th className="text-right">
                   Trabajado
-                  <InfoTip className="ml-1" text="La lectura de esta carga menos la de la carga anterior con lectura del mismo equipo, aunque sea de otro mes. Queda en — si no hay una anterior, si esta carga no trae lectura o si el equipo no se reconoció." />
+                  <InfoTip className="ml-1" text="La lectura de esta carga menos la de la carga anterior con lectura del mismo equipo, aunque sea de otro mes; puede salir negativo. Queda en — si no hay una anterior, si esta carga no trae lectura o si el equipo no se reconoció." />
                 </th>
                 <th className="text-right">
                   Consumo
