@@ -138,7 +138,7 @@ tabla con scroll.
 
 | Dónde | Texto | De dónde salió |
 |---|---|---|
-| `/calidad/envases` · columna «Stock» | Es el que calculó la planilla (fórmula sobre el kardex), el SdG lo lee; un movimiento cargado acá que no llegó allá no existe, y la próxima lectura trae el número sin él. | `docs/CALIDAD-ENVASES.md`, párrafo «acá manda la planilla»; docstring de `lib/calidad/envases/espejo.ts` y de `envases/StockClient.tsx` |
+| `/calidad/envases` · columna «Stock» | Es el que calculó la planilla (fórmula sobre el kardex), el SdG lo lee; un movimiento cargado acá que no llegó allá queda en la lista como «No llegó a la planilla», pero este número no lo cuenta: la próxima lectura trae el de la planilla sin él. | `envases/movimientos/MovimientosClient.tsx:258-260` (la marca), `api/calidad/envases/movimientos/route.ts:96-99` (anota el pendiente), `lib/calidad/envases/sincronizar.ts:108` (`EL_SISTEMA_MANDA_EL_KARDEX = false`: la planilla sigue mandando); `docs/CALIDAD-ENVASES.md`, párrafo «acá manda la planilla»; docstring de `lib/calidad/envases/espejo.ts` y de `envases/StockClient.tsx` |
 | `/calidad/envases/movimientos` · columnas «Rotura» y «Despacho» | Sólo lo que la pantalla no dice: no se calculan a partir de las salidas (puede haber despacho con la salida en cero). Que no descuentan stock ya lo imprime el formulario de la misma pantalla. | `docs/CALIDAD-ENVASES.md`, «`ROTURA` y `DESPACHO` se guardan y no descuentan stock» |
 
 ### Ensayos
