@@ -483,7 +483,7 @@ export default function BuzonClient({
                 >
                   {sincronizando ? "Preguntándole a Odoo…" : "Sincronizar con Odoo"}
                 </button>
-                <InfoTip text="Relee en Odoo las facturas que no están contabilizadas. «Revisadas» son las que ya tienen asiento: pasan a Contabilizada si Odoo lo posteó, y si el borrador se borró allá se les suelta el vínculo. «Buscadas» son las que no tienen asiento y se cruzan por el número del comprobante y el CUIT del emisor, nunca por el importe; lo que no se puede afirmar queda sin tocar. Un cron lo hace solo cada diez minutos." />
+                <InfoTip text="Relee en Odoo las facturas que no están contabilizadas. «Revisadas» ya tienen asiento: el estado pasa a lo que diga Odoo (borrador, Informada; posteado, Contabilizada); si el asiento se borró allá se suelta el vínculo, y si está cancelado sólo queda un aviso. «Buscadas» no tienen asiento y sí CUIT, punto de venta y número: se cruzan por número y CUIT, nunca por importe. Un cron lo hace cada diez minutos." />
               </>
             )}
           </div>
@@ -943,7 +943,7 @@ function FilaDelBuzon({
               {ESTADO_ETIQUETA[factura.estado] ?? factura.estado}
             </span>
           )}
-          <InfoTip text="En el buzón: la factura entró y no se vinculó a ningún requerimiento. Vinculada: se vinculó a un requerimiento (RI) de Compras. Informada: el borrador existe en Odoo. Contabilizada: Odoo lo posteó, y lo detecta la sincronización. El estado lo cambia a mano quien tiene permiso de edición, en los dos sentidos; si la factura está enlazada a un asiento ya posteado, la próxima sincronización la vuelve a poner en Contabilizada." />
+          <InfoTip text="En el buzón: la factura entró y no se vinculó a ningún requerimiento. Vinculada: se vinculó a un requerimiento (RI) de Compras. Informada: el borrador existe en Odoo. Contabilizada: Odoo lo posteó, y lo detecta la sincronización. El estado lo cambia a mano quien tiene permiso de edición, en los dos sentidos; si la factura está enlazada a un asiento ya posteado, la próxima sincronización la vuelve a poner en Contabilizada. Y al revés: una marcada Contabilizada a mano no se vuelve a comprobar nunca." />
 
           {factura.requerimiento ? (
             <Link
@@ -1025,7 +1025,7 @@ function FilaDelBuzon({
                 >
                   Buscar en Odoo
                 </button>
-                <InfoTip text="Crear el borrador deja la factura en Odoo en borrador, con proveedor, número, fecha e importe, y la pasa a Informada. No la postea. El IVA sale de la letra: A, B y M llevan 21 %, el resto no; y no lleva percepciones, así que si la factura las trae el borrador queda por menos. Buscar en Odoo lista las facturas de ese proveedor de los 120 días anteriores a la fecha de la factura, para elegir la que ya cargó administración." />
+                <InfoTip text="Crear el borrador deja la factura en Odoo en borrador, con proveedor, número, fecha e importe, y la pasa a Informada. No la postea. El IVA sale de la letra: A, B y M llevan 21 %, calculado sobre el total o sobre las líneas leídas, el resto no. No incluye percepciones: contabilidad las completa. Buscar en Odoo lista hasta 60 facturas de ese proveedor, sin canceladas, desde 120 días antes de la fecha de la factura y sin tope hacia adelante, para elegir la que ya cargó administración." />
               </>
             )
           )}

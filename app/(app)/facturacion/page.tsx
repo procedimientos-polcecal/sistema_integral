@@ -71,7 +71,7 @@ export default async function FacturacionDashboardPage() {
         <div className="flex items-center justify-between">
           <h2 className="section-title">
             Últimas cargadas
-            <InfoTip className="ml-1" text="Las seis últimas que entraron al buzón, ordenadas por cuándo se cargaron. La fecha que se ve es la de carga, no la de la factura. El importe es el total del comprobante." />
+            <InfoTip className="ml-1" text="Las seis últimas que entraron al buzón, ordenadas por cuándo se cargaron. La fecha que se ve es la de carga, no la de la factura, y es la fecha UTC: una factura cargada de noche en Argentina aparece con la del día siguiente. Por lo mismo «Cargadas hoy» arranca a las 21:00 del día anterior. El importe es el total del comprobante." />
           </h2>
           <Link href="/facturacion/buzon" className="text-xs text-slate-500 underline">Ver todas →</Link>
         </div>

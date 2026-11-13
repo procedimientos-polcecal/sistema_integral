@@ -156,7 +156,7 @@ export default function LineasDeFactura({
         <h4 className="border-b-2 border-slate-800 pb-1 text-xs font-semibold text-slate-800">
           Líneas de factura
           {lineas && <span className="ml-2 font-normal text-slate-400">{lineas.length}</span>}
-          <InfoTip className="ml-1" text="Las sugerencias de cuenta y de analítica salen de lo que ya se hizo en Odoo con ese proveedor: se proponen sólo con al menos dos antecedentes y con el 80 % de ellos en el mismo lugar, mirando primero ese proveedor y ese producto y después el proveedor solo. La analítica en verde no es una estadística: sale del equipo que declaró quien pidió, en el requerimiento vinculado. Ninguna se guarda hasta que alguien la usa." />
+          <InfoTip className="ml-1" text="Las sugerencias de cuenta y de analítica salen de lo que ya se hizo en Odoo con ese proveedor: se proponen sólo con al menos dos antecedentes y con el 80 % de ellos en el mismo lugar, mirando primero ese proveedor y ese producto y después el proveedor solo. La analítica en verde no es una estadística: sale del equipo del requerimiento vinculado, el que declaró quien pidió o, si no declaró ninguno, el de la ubicación. Ninguna se guarda hasta que alguien la usa." />
         </h4>
       </div>
 
