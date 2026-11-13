@@ -179,7 +179,11 @@ export async function PATCH(
     const sinEscribir = !actual.google_event_id;
     const resultado = await escribirEnGoogle(
       sinEscribir ? "crear" : "actualizar",
-      { casilla: actual.casilla, google_event_id: actual.google_event_id, inicio, fin },
+      // Va el `ot_id` de la fila y no un `null` fijo: hoy `rechazoDeEventoDeOT`
+      // ya frenó a los de OT más arriba, así que siempre es null — pero si esa
+      // regla afloja, el aviso a los invitados sigue al dato en vez de quedar
+      // clavado en «avisar».
+      { casilla: actual.casilla, google_event_id: actual.google_event_id, inicio, fin, ot_id: actual.ot_id },
       sinEscribir ? { ...evento, id: idDeGoogleDe(id) } : evento
     );
     const errorAlAnotar = await anotarEnLaFila(
@@ -237,6 +241,7 @@ export async function DELETE(
     google_event_id: actual.google_event_id ?? idDeGoogleDe(id),
     inicio: actual.inicio,
     fin: actual.fin,
+    ot_id: actual.ot_id,
   });
   if (enGoogle.pendiente) {
     // La fila se queda: es lo único que sabe dónde está el evento vivo.

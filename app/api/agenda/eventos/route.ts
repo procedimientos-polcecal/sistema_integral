@@ -122,7 +122,10 @@ export async function POST(request: Request) {
 
   const enGoogle = await escribirEnGoogle(
     "crear",
-    { casilla: quien.casilla, google_event_id: null, inicio, fin },
+    // `ot_id: null` porque esta ruta es el alta a mano de la Agenda: no nace de
+    // ninguna OT. Es lo que hace que acá Google **sí** le avise a los invitados
+    // (`avisaALosInvitados`), al revés que en el evento de una OT.
+    { casilla: quien.casilla, google_event_id: null, inicio, fin, ot_id: null },
     eventoParaGoogle(fila, invitados, quien.casilla)
   );
   const errorAlAnotar = await anotarEnLaFila(
