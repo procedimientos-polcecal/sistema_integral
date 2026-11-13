@@ -101,7 +101,7 @@ export default function FrancosClient() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
           Francos compensatorios
-          <InfoTip text="Días de descanso que genera el sistema cuando un empleado trabaja un domingo. Podés marcarlos como tomados; sólo los tomados entran en la liquidación." />
+          <InfoTip text="Días de descanso que genera el sistema cuando un empleado trabaja un domingo. Podés marcarlos como tomados; en la planilla general entran sólo los tomados." />
         </h1>
         <a href={`/api/rrhh/francos/export?${queryParams()}`} className="text-sm text-blue-600 hover:underline">Exportar</a>
       </div>
