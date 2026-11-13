@@ -227,7 +227,7 @@ export default function ProgramacionClient({ empleados }: { empleados: EmpleadoE
       <div>
         <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900">
           Programación del taller
-          <InfoTip text="«No está» sale de las ausencias cargadas y de los francos tomados, y no dice el motivo de las que cargó otra persona. Sólo marca a quien tiene turno ese día, y el franco cuenta por el día en que se descansa: los tomados antes del 26/10/2026 no tienen ese día y no abren hueco. Una semana sin huecos no prueba que nadie falte, porque lo que nadie cargó todavía no aparece; la llegada tarde no cuenta como falta." />
+          <InfoTip text="«No está» sale de las ausencias cargadas y de los francos tomados, y no dice el motivo de las que cargó otra persona. Sólo marca a quien tiene turno ese día, y el franco cuenta por el día en que se descansa y sólo si está tomado: los pendientes y los tomados sin ese día no abren hueco, que son todos los tomados antes del 26/10/2026 y algunos posteriores. Una semana sin huecos no prueba que nadie falte, porque lo que nadie cargó todavía no aparece; la llegada tarde no cuenta como falta." />
         </h1>
         <p className="mt-0.5 text-sm text-slate-500">
           Quién está en cada turno y quién falta. Tocá a la persona que no viene para anotar su falta.

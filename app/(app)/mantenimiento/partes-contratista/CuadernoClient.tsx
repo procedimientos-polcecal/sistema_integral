@@ -1447,7 +1447,7 @@ export default function CuadernoClient({
                   </button>
                 );
               })}
-              <InfoTip text="«Por confirmar» son los renglones con un sector que propuso el sistema y nadie confirmó: mientras no se confirme, no se genera su orden. «Dudosos» son los que el sistema no está seguro de haber leído bien —más de 200 h en un renglón, una fecha que no cierra, un número sin unidad—: entran igual y no frenan nada. Lo que frena la generación es no tener sector, fecha, o ni horas ni precio." />
+              <InfoTip text="«Por confirmar» son los renglones con un sector que propuso el sistema y nadie confirmó: mientras no se confirme, no se genera su orden. «Dudosos» son los que el sistema no está seguro de haber leído bien —más de 200 h en un renglón, una fecha que no cierra, un número sin unidad—: entran igual y no frenan nada. Lo que frena la generación es no tener sector, fecha, o ni horas ni precio; un grupo con renglones de sectores distintos; y un grupo que ya tiene más de una orden." />
             </div>
 
             {/* Filtrar por sector es lo que hace manejable juntar: se ve de a un
