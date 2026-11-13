@@ -731,7 +731,7 @@ Los números con fecha (13/11/2026, contra producción con el cliente admin, só
 
 ## Despacho
 
-Catorce `(i)` en cinco pantallas (las tarjetas de KPI y la pantalla de proveedores de recepción no llevan; las razones, abajo). La fuente: [docs/DESPACHO.md](DESPACHO.md), el [spec de órdenes de carga](superpowers/specs/2026-09-08-despacho-ordenes-de-carga-design.md), los docstrings de `lib/despacho/` y, para todo lo que toca a la planilla, el código. **Ninguna de las cinco pantallas tenía `(i)` de subtítulo** y no se puso ninguno: los subtítulos ya dicen de qué se trata y el brief pedía justificación escrita para un `(i)` de pantalla. El de la portada (`/despacho`) ya existía y no se tocó. Las cifras con fecha (13/11/2026, contra producción con el cliente admin, sólo lectura) están acá y no en los textos, porque envejecen.
+Quince `(i)` (catorce textos: los dos indicadores del histórico van en la misma fila de la tabla) en cinco pantallas (las tarjetas de KPI y la pantalla de proveedores de recepción no llevan; las razones, abajo). La fuente: [docs/DESPACHO.md](DESPACHO.md), el [spec de órdenes de carga](superpowers/specs/2026-09-08-despacho-ordenes-de-carga-design.md), los docstrings de `lib/despacho/` y, para todo lo que toca a la planilla, el código. **Ninguna de las cinco pantallas tenía `(i)` de subtítulo** y no se puso ninguno: los subtítulos ya dicen de qué se trata y el brief pedía justificación escrita para un `(i)` de pantalla. El de la portada (`/despacho`) ya existía y no se tocó. Las cifras con fecha (13/11/2026, contra producción con el cliente admin, sólo lectura) están acá y no en los textos, porque envejecen.
 
 | Dónde | Texto (resumen) | Respaldo |
 |---|---|---|
@@ -770,7 +770,7 @@ Catorce `(i)` en cinco pantallas (las tarjetas de KPI y la pantalla de proveedor
 - Que la cola «se actualiza sola»: el reloj de «hace…» sí (cada 30 s, `ColaClient.tsx`), el resto de la fila no, hasta guardar o refrescar. No se afirmó.
 - Que `proximoHorario` guíe «un botón por fila»: es el docstring viejo; la pantalla resalta el campo siguiente y permite cargar en cualquier orden (`DESPACHO.md`, «Los cuatro horarios se tipean»). No aparece en ningún texto.
 
-**(c) Qué es «admin» en estas pantallas.** Ninguno de los catorce textos habla de quién puede ver o hacer algo (se comprobó releyéndolos). Lo que se verificó para no decir lo contrario: `nivelDespachoDe` pasa por `nivelEnModulo` (`lib/despacho/auth.ts:19-43`), que le da `admin` a todo `admin_sistema`; la pantalla de Productos pide `nivel === "admin"` (`productos/page.tsx:50`) y la de proveedores de recepción `esAdminDespacho`.
+**(c) Qué es «admin» en estas pantallas.** Ninguno de los textos habla de quién puede ver o hacer algo (se comprobó releyéndolos). Lo que se verificó para no decir lo contrario: `nivelDespachoDe` pasa por `nivelEnModulo` (`lib/despacho/auth.ts:19-43`), que le da `admin` a todo `admin_sistema`; la pantalla de Productos pide `nivel === "admin"` (`productos/page.tsx:50`) y la de proveedores de recepción `esAdminDespacho`.
 
 ### Huecos
 
