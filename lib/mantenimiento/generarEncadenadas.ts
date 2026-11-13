@@ -58,11 +58,14 @@ import {
   queSigueEnElCiclo, elCorteQueSigue, descripcionDeLaOT,
   type CicloParaDecidir, type OTDelCiclo,
 } from "./cicloDeOT";
+import { elArranqueDeUnCambio } from "./sospechaDeCambio";
 
 export interface ResultadoDeEncadenadas {
   generadas: { ot_number: number; ciclo_id: string; vuelta: number }[];
-  /** Los que esperan que una persona cargue su punto de arranque. */
+  /** Los que todavía esperan el cambio de pieza que los arranque. */
   sinArrancar: string[];
+  /** Los que arrancaron en esta corrida, con la OT del cambio que los arrancó. */
+  arrancados: { ciclo_id: string; desde: string; ot_number: number }[];
   /** Los que no pueden avanzar, con el motivo en castellano. */
   trabados: { ciclo_id: string; porque: string }[];
   /** Lo que dijo el otro lado, sin traducir. */
@@ -74,7 +77,7 @@ export interface ResultadoDeEncadenadas {
 
 /** Lo que hace falta para decidir y para armar la orden. */
 const COLUMNAS =
-  "id, equipment_id, repeticiones, especialidad, horas_estimadas, desde, vuelta_desde, " +
+  "id, equipment_id, repeticiones, especialidad, horas_estimadas, desde, vuelta_desde, creado_en, " +
   "equipos:equipment_id(code, name, is_active, sector_id, sectores:sector_id(nombre)), " +
   "madre:tarea_madre_id(nombre, componente), " +
   "hija:tarea_hija_id(nombre, componente, periodo_dias)";
@@ -89,6 +92,7 @@ type CicloLeido = {
   horas_estimadas: number | null;
   desde: string | null;
   vuelta_desde: number | null;
+  creado_en: string;
   equipos: {
     code: string | null; name: string | null; is_active: boolean | null;
     sector_id: string | null; sectores: { nombre: string | null } | null;
@@ -106,7 +110,7 @@ export async function generarLasEncadenadas(
   hoy = hoyEnArgentina()
 ): Promise<ResultadoDeEncadenadas> {
   const r: ResultadoDeEncadenadas = {
-    generadas: [], sinArrancar: [], trabados: [], fallaron: [],
+    generadas: [], sinArrancar: [], arrancados: [], trabados: [], fallaron: [],
     sinEstadoTodavia: [], sinCalendario: [],
   };
 
@@ -127,6 +131,26 @@ export async function generarLasEncadenadas(
       .not("ciclo_id", "is", null)
       .range(desde, hasta)
   );
+
+  // ── Lo cerrado que puede arrancar un ciclo ────────────────────────────────
+  //
+  // Sólo se lee si hay alguno sin arrancar, y sólo desde el día en que se
+  // configuró el más viejo de ésos: en una corrida normal —con los cuatro ya
+  // andando— esta consulta no sale.
+  const sinArrancarTodavia = ciclos.filter((c) => !c.desde);
+  const cerradasDeLosEquipos = sinArrancarTodavia.length === 0 ? [] :
+    await traerTodo<{
+      ot_number: number; equipment_id: string | null;
+      descripcion: string | null; fecha_cierre: string | null; ciclo_id: string | null;
+    }>((desde, hasta) =>
+      admin
+        .from("ordenes_trabajo")
+        .select("ot_number, equipment_id, descripcion, fecha_cierre, ciclo_id")
+        .in("equipment_id", sinArrancarTodavia.map((c) => c.equipment_id))
+        .gte("fecha_cierre", sinArrancarTodavia
+          .map((c) => String(c.creado_en).slice(0, 10)).sort()[0])
+        .range(desde, hasta)
+    );
 
   for (const ciclo of ciclos) {
     const eq = ciclo.equipos;
@@ -162,6 +186,40 @@ export async function generarLasEncadenadas(
     //
     // En este orden a propósito: la madre que acaba de cerrarse mueve el corte
     // en esta misma corrida, y así la hija 1 nace sin esperar a la siguiente.
+    // ── EL ARRANQUE, QUE VIENE DE UN CAMBIO DE PIEZA ──────────────────────
+    //
+    // Un ciclo sin arrancar no genera nada, y eso lo vuelve invisible: no hay
+    // orden que se atrase, así que `mant-atrasadas` no puede avisarlo. Pedir
+    // la fecha tipeada equipo por equipo es lo que ya falló con el preventivo
+    // —pantalla, botón y cero OT en toda la historia—, así que arranca solo
+    // con el primer cambio de la pieza **posterior a su configuración**.
+    //
+    // Hacia adelante y nunca hacia atrás: medido el 13/11/2026, arrancar del
+    // último cambio histórico dejaba a los cuatro ciclos con su primera
+    // rotación atrasada 7, 21, 21 y 3 días, sobre máquinas ya rotadas.
+    if (!paraDecidir.desde) {
+      const arranque = elArranqueDeUnCambio(
+        {
+          id: ciclo.id, equipment_id: ciclo.equipment_id,
+          componente: ciclo.hija.componente,
+          desdeCuandoMirar: String(ciclo.creado_en).slice(0, 10),
+        },
+        cerradasDeLosEquipos.filter((c) => c.equipment_id === ciclo.equipment_id)
+      );
+
+      if (arranque) {
+        const { error } = await admin
+          .from("mant_ciclos_de_ot")
+          .update({ desde: arranque.desde, vuelta_desde: 0 })
+          .eq("id", ciclo.id);
+        if (error) { r.fallaron.push({ ciclo_id: ciclo.id, error: error.message }); continue; }
+
+        paraDecidir.desde = arranque.desde;
+        paraDecidir.vuelta_desde = 0;
+        r.arrancados.push({ ciclo_id: ciclo.id, desde: arranque.desde, ot_number: arranque.ot_number });
+      }
+    }
+
     const corte = elCorteQueSigue(paraDecidir, mias);
     if (corte) {
       const { error } = await admin

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  pareceUnCambio, sospechasDeCambio,
+  pareceUnCambio, sospechasDeCambio, elArranqueDeUnCambio,
   type CerradaParaMirar,
 } from "./sospechaDeCambio";
 
@@ -98,5 +98,63 @@ describe("sospechasDeCambio", () => {
   it("sin sospechas no devuelve el ciclo", () => {
     expect(sospechasDeCambio([ciclo], [cerrada({ descripcion: "Rotación de martillos" })]))
       .toEqual([]);
+  });
+});
+
+describe("elArranqueDeUnCambio", () => {
+  const ciclo = {
+    id: "c1", equipment_id: "e1", componente: "Martillos",
+    desdeCuandoMirar: "2026-11-13",
+  };
+  const cerrada = (p: Partial<CerradaParaMirar>): CerradaParaMirar => ({
+    ot_number: 1, equipment_id: "e1", descripcion: "Cambio de martillos",
+    fecha_cierre: "2026-11-20", ciclo_id: null, ...p,
+  });
+
+  it("arranca con el cambio y en la vuelta cero", () => {
+    expect(elArranqueDeUnCambio(ciclo, [cerrada({ ot_number: 90 })]))
+      .toEqual({ desde: "2026-11-20", ot_number: 90 });
+  });
+
+  it("el mismo dia que se configuro el ciclo cuenta", () => {
+    expect(elArranqueDeUnCambio(ciclo, [cerrada({ fecha_cierre: "2026-11-13" })]))
+      .toEqual({ desde: "2026-11-13", ot_number: 1 });
+  });
+
+  /**
+   * **Mira hacia adelante y nunca hacia atrás, y es la decisión del arranque.**
+   * Medido el 13/11/2026: tomando el último cambio histórico de cada equipo,
+   * los cuatro ciclos nacían con su primera rotación atrasada 7, 21, 21 y 3
+   * días — y Filler 2, que está en 4ª cara, recibiría una orden de rotar a la
+   * 2ª. O sea, exactamente «generar OT sobre martillos que ya se rotaron».
+   */
+  it("ignora los cambios anteriores a la configuracion del ciclo", () => {
+    expect(elArranqueDeUnCambio(ciclo, [cerrada({ fecha_cierre: "2026-11-03" })]))
+      .toBeNull();
+  });
+
+  it("con dos cambios toma el mas reciente", () => {
+    const filas = [
+      cerrada({ ot_number: 90, fecha_cierre: "2026-11-20" }),
+      cerrada({ ot_number: 91, fecha_cierre: "2026-11-28" }),
+    ];
+    expect(elArranqueDeUnCambio(ciclo, filas)).toEqual({ desde: "2026-11-28", ot_number: 91 });
+  });
+
+  it("una rotacion no arranca nada", () => {
+    expect(elArranqueDeUnCambio(ciclo, [cerrada({ descripcion: "Rotación de martillos" })]))
+      .toBeNull();
+  });
+
+  it("no mira otros equipos", () => {
+    expect(elArranqueDeUnCambio(ciclo, [cerrada({ equipment_id: "e2" })])).toBeNull();
+  });
+
+  it("una cerrada sin fecha no sirve de arranque", () => {
+    expect(elArranqueDeUnCambio(ciclo, [cerrada({ fecha_cierre: null })])).toBeNull();
+  });
+
+  it("sin cierres no arranca", () => {
+    expect(elArranqueDeUnCambio(ciclo, [])).toBeNull();
   });
 });

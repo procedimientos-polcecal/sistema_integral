@@ -450,34 +450,55 @@ con el `periodo_dias` de cada equipo) y los cuatro ciclos que las enlazan, con
 `repeticiones` = 3. Eso el usuario lo confirmó por escrito, número por número, y
 es exactamente lo que esas tablas guardan.
 
-### El punto de arranque, en cambio, no puede salir de la historia
+### El punto de arranque: lo trae un cambio de pieza (13/11/2026)
 
-`desde` y `vuelta_desde` van en **null**, y **lo confirma una persona**, equipo
-por equipo.
+`desde` y `vuelta_desde` nacen en **null**, y el ciclo **arranca solo** con el
+primer `CAMBIO` de su pieza que se cierre **a partir del día en que se
+configuró**. Es la única parte de todo el mecanismo donde el texto de una
+descripción decide algo.
 
-El motivo no es prudencia genérica: se intentó deducirlo y no da. Contando las
-rotaciones cerradas posteriores al último cambio de cada equipo, dos de los
-cuatro dan **6 rotaciones de un ciclo de 3**, porque el texto libre mezcla
-rotaciones con revisiones («Revisión de rompedora y ver si es necesario rotar
-martillos») y con trabajos que sólo nombran los martillos de paso. La cara que
-el texto nombra sí es confiable y directa —en Filler 2 la OT 3067 del 11/11 dice
-«a 4ta cara»—, pero no todas las OT la nombran. Arrancar cuatro ciclos sobre esa
-mezcla es exactamente el anti-objetivo.
+**Por qué se dio vuelta.** La primera versión pedía las cuatro fechas tipeadas,
+equipo por equipo. Eso tiene un problema conocido y medido: **lo que depende de
+que alguien se acuerde, no pasa** — el preventivo tenía pantalla, botón y
+**cero OT generadas en toda la historia**—. Y un ciclo sin arrancar es
+invisible: no genera órdenes, así que no hay ninguna que se atrase y
+`mant-atrasadas` no puede verlo. Se desplegaría dormido.
 
-**Y un ciclo sin arrancar no se nota solo.** No genera OT, así que `mant-atrasadas`
-—que es lo que cubre un ciclo *parado*— no puede verlo: no hay ninguna orden que
-se atrase. Si los cuatro quedan esperando, la función se despliega inerte y
-nada lo anuncia, que es la forma de fallar que este módulo ya pagó con la
-bandeja de carbonilla. Las defensas, en orden:
+**Qué lo hace aceptable**, dado que el resto del diseño prohíbe que el texto
+decida:
 
-1. **Lo primero es no necesitarlas**: conseguir los cuatro puntos de arranque
-   antes de desplegar, y sembrarlos con la migración. Es una conversación de
-   cinco minutos contra una función que puede quedar dormida.
-2. Si alguno queda en null igual, se informa en cada corrida —como los
-   `incompletos` de las periódicas— y la ficha del equipo lo dice con todas las
-   letras y ofrece cargarlo.
+1. **Decide cuándo arrancar, no qué existe.** El ciclo ya lo configuró una
+   persona; esto sólo contesta «¿ya pasó el cambio?».
+2. **La orden que nace lo dice**: «Rotación de Martillos — a 2ª cara (1 de 3).
+   Martillos cambiados el 03/11/2026». Si esa fecha está mal, quien la abre lo
+   ve sin confiar en nada.
+3. **El botón de la ficha lo corrige** en un clic, y el matcher está medido:
+   sobre las 250 OT reales de estos equipos marcó 70, **todas cambios de
+   verdad**, y lo que no marcó son todas rotaciones.
+4. **Queda el rastro**: la corrida informa `arrancados` con la OT que arrancó
+   cada ciclo.
 
----
+**Y mira hacia adelante, nunca hacia atrás.** El piso es la fecha en que se
+configuró el ciclo. Medido el 13/11/2026 con `scripts/que-haria-el-ciclo.mts`:
+arrancando del último cambio histórico, los cuatro ciclos nacían con su primera
+rotación **atrasada 7, 21, 21 y 3 días**, y PY-B1-06 —que está en 4ª cara—
+recibiría «Rotación de Martillos — a 2ª cara» fechada el 23/10. O sea que mirar
+hacia atrás produce exactamente el anti-objetivo.
+
+Deducir la vuelta del historial tampoco servía, y por eso ni se intenta: contando
+rotaciones cerradas desde el último cambio, **dos de los cuatro equipos dan 6
+rotaciones de un ciclo de 3**, porque el texto libre mezcla rotaciones con
+revisiones («Revisión de rompedora y ver si es necesario rotar martillos»). El
+arranque empieza siempre en la vuelta 0, que es lo que un cambio significa.
+
+**La carga a mano sigue existiendo** (el PATCH de `/api/mantenimiento/ciclos/[id]`
+y su formulario en la ficha), para quien no quiera esperar al próximo cambio.
+Dejó de ser el camino principal y pasó a ser el atajo.
+
+**Se puede ver sin esperar**: `npx tsx scripts/que-haria-el-ciclo.mts` dice qué
+haría la próxima corrida con cada ciclo, sin escribir nada, y con
+`--desde=AAAA-MM-DD` corre el piso hacia atrás **sólo en la simulación** para
+ver que el arranque agarra.
 
 ## La pantalla
 

@@ -1394,9 +1394,12 @@ export const SINCRONIZACIONES = [
       return logra({
         generadas: r.generadas.length,
         ot: r.generadas.map((g) => g.ot_number),
-        // Los que esperan que una persona cargue su punto de arranque. Se
-        // informan en cada corrida porque un ciclo sin arrancar no genera
-        // ninguna OT, así que `mant-atrasadas` no tiene cómo verlo.
+        // Los que arrancaron en esta corrida, con la OT del cambio que los
+        // arrancó: es el único registro de qué decidió el texto.
+        ...(r.arrancados.length > 0 ? { arrancados: r.arrancados } : {}),
+        // Los que todavía esperan el cambio que los arranque. Se informan en
+        // cada corrida porque un ciclo sin arrancar no genera ninguna OT, así
+        // que `mant-atrasadas` no tiene cómo verlo.
         sin_arrancar: r.sinArrancar,
         trabados: r.trabados,
         fallaron: r.fallaron,
