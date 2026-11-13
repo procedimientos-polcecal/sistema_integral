@@ -475,7 +475,7 @@ llevan la fecha en el nombre (`IMG_AAAAMMDD_…`) y eso es lo que hay:
 | N° | Dice | La foto | Qué parece |
 |---|---|---|---|
 | 42, 43, 44 | 2026-11-13 | `IMG_20261013_…` | **Un 11 por un 10**: son de «Planta 3», y las otras cuatro de ese bloque (38 a 41) dicen 2026-10-13, que es lo que dicen sus fotos. Es lo más firme de las cinco |
-| 7 | 2026-01-10 | `2.jpg`, sin fecha | La única de enero entre 43 de octubre. Parece **01/10 leído al revés** (m/d en vez de d/m), la misma trampa que dio vuelta 885 fechas en Compras |
+| 7 | 2026-01-10 | `2.jpg`, sin fecha | La única de enero. Parece **01/10 leído al revés** (m/d en vez de d/m), la misma trampa que dio vuelta 885 fechas en Compras |
 | 6 | 2026-10-10 | `IMG_20261006_…` | **Lo más flojo de los cinco y por eso se dice aparte**: la foto es del 06/10 y la fila dice 10/10. No prueba nada por sí solo — el N° 5 tiene dos fotos, del 06/10 y del 13/10, y su fila dice 10/10, así que en esta planilla la foto no es del día de la detección |
 
 Nada de esto se corrigió: son conjeturas sobre el dato de otro. **Acción:

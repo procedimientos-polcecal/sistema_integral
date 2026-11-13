@@ -123,7 +123,7 @@ function Encabezado({
 
 const INFO_DE_LA_PANTALLA =
   "Una condición se carga en dos tiempos: quien la ve anota qué vio, dónde, la acción propuesta y la prioridad; el riesgo, el responsable, la fecha máxima y el cierre se completan después desde la ficha, y lo que falta se marca en ámbar. " +
-  "Por defecto la tabla pone arriba las vencidas, después las abiertas a las que les falta algo, después las completas por nivel de riesgo y al final las cerradas. Tocar un encabezado cambia ese orden hasta que volvés al sugerido.";
+  "Por defecto la tabla pone arriba las vencidas, después las abiertas a las que les falta algo, después las completas por nivel de riesgo y al final las cerradas. En la tabla de la computadora, tocar un encabezado cambia ese orden hasta que volvés al sugerido.";
 
 const INFO_DE_LOS_NUMEROS =
   "Cuentan todas las condiciones, no las que dejan los filtros. «Sin completar» son las abiertas a las que les falta algo: «Sin evaluar» (alguno de los cinco puntajes del riesgo), «Sin asignar» (responsable o fecha máxima) o «Sin lugar» (ni sector ni equipo). " +
