@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
+import InfoTip from "@/components/InfoTip";
 import { hoyEnArgentina, mesRelativo } from "@/lib/core/fechas";
 import { TIPOS_AUSENCIA, labelTipoAusencia } from "@/lib/rrhh/tiposAusencia";
 import type { ReportesCompletos, ReportesRecortados } from "@/lib/rrhh/ausentismo/armarReportes";
@@ -298,10 +299,26 @@ function PorSector({
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-3 py-2 text-left">Sector</th>
-                <th className="px-3 py-2 text-right">Gente</th>
-                <th className="px-3 py-2 text-right">Días</th>
-                {conMotivos && <th className="px-3 py-2 text-right">%</th>}
-                {conMotivos && <th className="px-3 py-2 text-left">Motivo que manda</th>}
+                <th className="px-3 py-2 text-right">
+                  Gente{" "}
+                  <InfoTip text="Cuántas personas tiene el sector, y no es la misma cuenta para todos: quien ve el porcentaje recibe el padrón entero, con las personas dadas de baja; quien no, sólo los activos de hoy. Un «–» es que no se conoce." />
+                </th>
+                <th className="px-3 py-2 text-right">
+                  Días{" "}
+                  <InfoTip text="Días de ausencia del mes, de calendario, repartidos entre dos meses si una ausencia los cruza. Entran también las personas dadas de baja, porque faltaron ese mes. La tardanza vale un día." />
+                </th>
+                {conMotivos && (
+                  <th className="px-3 py-2 text-right">
+                    %{" "}
+                    <InfoTip text="Horas perdidas (8 por día) sobre las horas a realizar: las personas del sector por las horas cargadas para ese sector si las hay, y si no por las del mes de planta, (días hábiles + sábados) × 8 sin los feriados cargados. Si los feriados del año faltan, el porcentaje sale más bajo de lo que es. Puede pasar de 100 %." />
+                  </th>
+                )}
+                {conMotivos && (
+                  <th className="px-3 py-2 text-left">
+                    Motivo que manda{" "}
+                    <InfoTip text="Los dos motivos con más días del sector. Con un clic en la fila se abren los doce motivos, con sus ceros." />
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
