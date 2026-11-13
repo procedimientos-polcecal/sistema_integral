@@ -118,7 +118,7 @@ export default function DashboardClient({
       <div>
         <div className="flex items-baseline gap-2">
           <h1 className="text-xl font-bold text-slate-900">Compras</h1>
-          <InfoTip text="«Urgentes sin cerrar» deja afuera los pedidos que ya están en Pedido y los que están en espera: es lo urgente que todavía espera que Compras lo mueva. Y «urgente» lo propone quien pide, así que distingue poco." />
+          <InfoTip text="«Urgentes sin cerrar» cuenta lo urgente que todavía no llegó a Pedido (Sin iniciar, En comparativa, Para comprar y Aprobado), sin mirar la aprobación de gerencia. Quedan afuera Pedido, En espera, Recibido y Denegado. Y «urgente» lo propone quien pide, así que distingue poco." />
         </div>
         <p className="text-sm text-slate-500">Estado del circuito de compras de POLCECAL y POLYSAN</p>
       </div>

@@ -175,7 +175,7 @@ export default function Comparativa({
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Comparativa de proveedores
             </h2>
-            <InfoTip text="El total de cada presupuesto es unitario por cantidad, más el IVA sobre ese neto, menos el descuento (que no lleva IVA), más el envío: por eso el unitario más bajo puede terminar siendo el total más alto. Los presupuestos en dólares se pasan a pesos con el dólar oficial de venta." />
+            <InfoTip text="El total de cada presupuesto es unitario por cantidad, más el IVA sobre ese neto, menos el descuento (que no lleva IVA), más el envío. Los presupuestos en dólares se pasan a pesos con el dólar oficial de venta: mientras se compara, el del día; una vez elegido, el que quedó grabado, así que lo que se pagó no cambia." />
           </div>
           {/* Alcanza con el id del archivo: el nombre puede no saberse
               todavía. La sincronización enlaza la planilla que anotó la hoja de

@@ -463,7 +463,7 @@ export default function MisPedidosClient({
       {conteos && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-slate-400">Esperando a Compras:</span>
-          <InfoTip text="Cuenta sólo los pedidos que esperan a Compras (aunque gerencia todavía no los haya aprobado). Quedan sin punto, pero en la lista, los ya pedidos —la demora es del proveedor—, los que alguien frenó a propósito en «En espera» y los denegados. Los días van desde la fecha del requerimiento; los cortes de 30 y 90 días salieron de medir el reparto real." />
+          <InfoTip text="Cuenta sólo los pedidos que esperan a Compras (aunque gerencia todavía no los haya aprobado), y por eso los tres números suman bastante menos que la lista. Quedan sin punto, pero en la lista, los ya pedidos —la demora es del proveedor—, los que alguien frenó a propósito en «En espera» y los denegados. Los cortes de 30 y 90 días salieron de medir el reparto real." />
           <ChipDelSemaforo
             color="verde" cantidad={conteos.verde} activo={color === "verde"}
             etiqueta={`hasta ${DIAS_VERDE} días`}
@@ -487,7 +487,7 @@ export default function MisPedidosClient({
               Ver todos
             </button>
           )}
-          <InfoTip text="Al tocar un color, la lista pasa a ir del pedido más viejo al más nuevo; sin color sigue por número de RI, porque acá también se mira si alguien ya pidió lo mismo. Los números cuentan todo lo que la lista muestra (tu área o todos, y la búsqueda), no sólo esta página. «Reclamar» sale en amarillo y rojo, sólo sobre pedidos de tu área, y menciona a quienes tienen edición o administración de Compras." />
+          <InfoTip text="Al tocar un color, la lista pasa a ir del pedido más viejo al más nuevo; sin color sigue por número de RI, porque acá también se mira si alguien ya pidió lo mismo." />
         </div>
       )}
 
@@ -585,7 +585,7 @@ export default function MisPedidosClient({
                 <tr>
                   <th className="px-3 py-2 text-left">N° RI</th>
                   <th className="px-3 py-2 text-left">Fecha</th>
-                  <th className="px-3 py-2 text-left">Qué se pidió</th>
+                  <th className="px-3 py-2 text-left">Qué se pidió<InfoTip className="ml-1 normal-case" text="«Reclamar» sale en los pedidos amarillos y rojos de tu área, y abre el hilo del pedido con la pregunta ya redactada, que podés editar antes de enviar. Les llega a quienes tienen cargado un permiso de edición o de administración en Compras; un administrador del sistema que no lo tenga cargado no recibe el reclamo." /></th>
                   <th className="px-3 py-2 text-right">Cant.</th>
                   <th className="px-3 py-2 text-left">Área</th>
                   {alcance === "todos" && <th className="px-3 py-2 text-left">Quién pidió</th>}

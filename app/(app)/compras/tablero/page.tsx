@@ -61,10 +61,13 @@ export default async function TableroPage() {
             error={sync?.error}
           />
         </div>
-        <p className="text-sm text-slate-500">
-          {enCurso} requerimiento{enCurso === 1 ? "" : "s"} aprobados esperando algo.
-          Tocá una etapa para trabajarla.
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm text-slate-500">
+            {enCurso} requerimiento{enCurso === 1 ? "" : "s"} aprobados esperando algo.
+            Tocá una etapa para trabajarla.
+          </p>
+          <InfoTip text="Cada cifra cuenta sólo lo que gerencia ya aprobó. Por eso tocar una etapa abre el listado filtrado por aprobadas: sin ese filtro el listado puede mostrar más pedidos en la misma etapa." />
+        </div>
       </div>
 
       {error && (

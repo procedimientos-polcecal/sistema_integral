@@ -148,7 +148,7 @@ export default function RequerimientosPendientes({
                     <th className="px-3 py-2 text-right">Cant.</th>
                     <th className="px-3 py-2 text-left">Prioridad<InfoTip className="ml-1 normal-case" text="La propone quien pide y gerencia la confirma al aprobar. Cuando la urgencia la declara el que pide distingue poco, así que mirá también hace cuánto espera." /></th>
                     <th className="px-3 py-2 text-left">Paga</th>
-                    <th className="px-3 py-2 text-left">Se necesita<InfoTip className="ml-1 normal-case" text="La gente suele cargarla como «ya»: el margen mediano entre pedir y necesitar es de 4 días (medido el 12/11/2026), así que no ordena nada." /></th>
+                    <th className="px-3 py-2 text-left">Se necesita<InfoTip className="ml-1 normal-case" text="La gente suele cargarla como «ya»: el margen entre pedir y necesitar es de pocos días, así que no ordena nada." /></th>
                     <th className="px-3 py-2"></th>
                   </tr>
                 </thead>
