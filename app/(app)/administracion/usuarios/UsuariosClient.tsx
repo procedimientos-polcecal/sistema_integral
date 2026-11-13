@@ -207,12 +207,22 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
     e.preventDefault();
     setGuardando(true);
     setError(null);
-    const res = await fetch("/api/administracion/usuarios", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    const data = await res.json().catch(() => ({}));
+    let res: Response;
+    let data: { error?: string; link_acceso?: string; aviso?: string };
+    try {
+      res = await fetch("/api/administracion/usuarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      data = await res.json().catch(() => ({}));
+    } catch (err) {
+      // Sin esto, un fallo de red dejaba `guardando` en true para siempre y,
+      // con las salidas bloqueadas mientras guarda, el modal sin salida.
+      setGuardando(false);
+      setError(`No se pudo crear el usuario: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
     // Se baja `guardando` recién con la respuesta leída: entre una cosa y la otra
     // salir tiene que seguir frenado.
     setGuardando(false);
@@ -289,7 +299,7 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
           </p>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <PieDeModal>
-            <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
+            <button type="button" onClick={onClose} disabled={guardando} className="btn-secondary">Cancelar</button>
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Creando..." : "Crear usuario"}
             </button>
@@ -330,7 +340,18 @@ function EditarUsuarioModal({
     e.preventDefault();
     setGuardando(true);
     setError(null);
+    try {
+      await guardarTodo();
+    } catch (err) {
+      // Un fallo de red en cualquiera de los tres pedidos no puede dejar
+      // `guardando` pegado: con las salidas bloqueadas, el modal quedaría sin
+      // salida. Puede haber guardado los primeros: se dice.
+      setGuardando(false);
+      setError(`No se pudo terminar de guardar (los primeros cambios pueden haber quedado): ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
+  async function guardarTodo() {
     const resUsuario = await fetch(`/api/administracion/usuarios/${usuario.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -471,7 +492,7 @@ function EditarUsuarioModal({
 
           {error && <p className="text-sm text-red-600">{error}</p>}
           <PieDeModal>
-            <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
+            <button type="button" onClick={onClose} disabled={guardando} className="btn-secondary">Cancelar</button>
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Guardando..." : "Guardar"}
             </button>
