@@ -116,6 +116,7 @@ function OrdenesAtrasadas({ resumen, hoy }: {
               · {resumen.urgentes} de puntaje GUT alto
             </span>
           )}
+          <InfoTip className="ml-2" text="Cuenta las órdenes que figuran como Atrasado y las que tienen una fecha prevista ya pasada. Una Realizada o una Suspendida no cuenta nunca, aunque se haya hecho tarde. «Sin fecha» es una que figura Atrasado sin fecha prevista, así que no se sabe hace cuánto está atrasada." />
         </h2>
         <Link
           href="/mantenimiento/ordenes?estado=ATRASADO"
@@ -175,7 +176,10 @@ function VentanasDeReparacion({ ventanas, semana }: {
   return (
     <div className="card p-5">
       <div className="flex items-baseline justify-between gap-3 mb-3">
-        <h2 className="text-sm font-semibold text-slate-700">Ventanas para reparar</h2>
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+          Ventanas para reparar
+          <InfoTip text="Un día aparece cuando ningún sector de la empresa produce: sólo cuenta un día marcado «Libre», «Parcial» no sirve. Un sector sin plan cargado cuenta como libre mientras otro de su empresa tenga plan. «Pendientes» son órdenes de trabajo abiertas con sector asignado, no órdenes de servicio." />
+        </h2>
         <Link href="/mantenimiento/produccion" className="text-xs text-[var(--primary)] hover:underline">
           Semana del {desde} →
         </Link>

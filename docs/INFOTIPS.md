@@ -493,3 +493,31 @@ Los 48 que ya existían en el módulo no se tocaron. Éstos son los nuevos.
 | `/mantenimiento/equipos/[id]/checklist` · título | Un checklist por equipo y no por tipo, el obligatorio frena el guardado de la ejecución, y la ejecución guarda una copia. | `checklist/page.tsx` y `EjecucionesClient.tsx:69-76,122-129,143` (se busca por `equipment_id`, sin tipo); `api/mantenimiento/ejecuciones/route.ts:50` (`checklist_snapshot`) |
 
 No hay documento propio del checklist: la fuente es sólo el código.
+
+### Los de número
+
+| Dónde | Texto | De dónde salió |
+|---|---|---|
+| `/mantenimiento/ordenes` · detalle, junto a «GUT» | Puntaje = G×U×T de 1 a 125, sólo con las tres notas; la «Prioridad» sale de él (>80 Alta, 30–80 Media, <30 Baja) y puede diferir de la planilla; no se exporta. | `puntajeGut()` y `PuntajeGut.tsx` (raya si falta una nota); `prioridadEfectiva()` y `CORTE_DE_PRIORIDAD` en `lib/mantenimiento/prioridad.ts`; `MANTENIMIENTO-INTEGRACION.md`, «El GUT no se exporta a ninguna planilla». `gut_orden` no se nombra: la pantalla no la imprime (migración `20261021104750`) |
+| `/mantenimiento/ordenes` · «ordenar por» | «Sugerido (GUT)»: abiertas primero (todo salvo Realizado y Suspendida), luego más puntaje, empate por número más alto; sin puntaje = 27, no 0. | Docstring de `ORDENES_DEL_LISTADO` (`filtrosOt.ts`); `CERRADAS_GUT` y el docstring de `gut.ts`; `route.ts:127-130` (`gut_orden desc, ot_number desc`) |
+| `/mantenimiento` · panel de atrasadas | Qué cuenta como atrasada (figura Atrasado o fecha prevista pasada), que Realizada y Suspendida nunca cuentan, y qué es «sin fecha». | Docstring de `lib/mantenimiento/alertas.ts` (`estaAtrasada`, `diasDeAtraso`) |
+| `/mantenimiento` · «Ventanas para reparar» | Un día libre exige todos los sectores en «Libre» (Parcial no sirve); un sector sin plan cuenta libre si otro de su empresa tiene plan; «pendientes» son sólo OT abiertas con sector. | Docstring de `ventanasDeReparacion` (`lib/mantenimiento/dashboard.ts`); el límite del plan parcial **sólo está en el código** (`days[i] ?? "LIBRE"`, `dashboard.ts:116-121`); `page.tsx:~150-157` (estados y `sector_id` no nulo) |
+| `/mantenimiento/equipos/[id]` · columna «Mano de obra» | Duración × operarios anotados × tarifa vigente; sin operarios no suma; «Ambos» cuenta uno; contratista no suma. | `horasHombreDe()`, `operariosPropios()` y `costoDelEquipo()` en `lib/mantenimiento/costoEquipo.ts` (`if (hh === 0) continue`) |
+| `/mantenimiento/programacion` · título | Qué junta «No está», que sólo marca a quien tiene turno, que el franco cuenta por `fecha_descanso`, que lo anterior al 26/10/2026 no abre hueco y que la tardanza no cuenta. | `noViene()`/`estaDeFranco()`/`TIPOS_QUE_NO_SON_FALTA` en `lib/mantenimiento/disponibilidad.ts`; el bucle `for (const a of asignaciones)` de `api/mantenimiento/programacion/route.ts`; docstring de `ProgramacionClient.tsx`; `MANTENIMIENTO-INTEGRACION.md`, «De dónde salen las ausencias» |
+| `/mantenimiento/programacion` · «La semana» | La grilla se calcula (ciclo de seis semanas, sin grilla guardada) y una pisada vale un solo día. | `MANTENIMIENTO-INTEGRACION.md`, «Son dos ciclos…» y «Las pisadas son por día» |
+| `/mantenimiento/partes-contratista` · filtros del cuaderno | Qué es «Por confirmar» y «Dudosos», y qué frena de verdad la generación. | `cuadernoGrupos.ts:375-420` (`sector_sin_confirmar`, `sin_sector`, `sin_fecha`, `sin_horas`); `TOPE_DE_HORAS_POR_RENGLON` y `marcarLosDiasFueraDeOrden` en `cuadernoLectura.ts` |
+
+Ya cubiertos y sin tocar: MTBF/MTTR (`mtbf/MtbfClient.tsx`, un `(i)` por columna), el ciclo de martillos (`CicloDeOT.tsx` se explica con texto visible), el costo del equipo (notas al pie visibles) y los partes de contratista (la lista dice «ya generó»).
+
+### Lo que no se escribió, y dónde se buscó
+
+- **Nada de esto es el hueco que más pesa: la doc y el código no dicen lo mismo sobre quién pone «Atrasado».** `MANTENIMIENTO-INTEGRACION.md` («Las órdenes atrasadas») y `alertas.ts` dicen que lo marca una persona a mano; `contraste.ts:124` dice que la columna M de la planilla calcula «Por hacer»/«Atrasado» por fórmula. El `(i)` del panel dice «figuran como Atrasado» para no elegir. Se buscó en `ordenes.ts`, `contraste.ts` y `alertas.ts`.
+- **El panel de atrasadas pide `.limit(500)` sin orden antes de filtrar** (`mantenimiento/page.tsx`, `.or(estado.eq.ATRASADO,proxima_fecha.lt.hoy)`). Si los candidatos superaran 500, `resumirAtrasadas` contaría de menos en silencio. No hay texto que lo mencione.
+- **«Avisos sin OT» del tablero no es «Sin orden de trabajo» de Avisos.** El tablero cuenta `work_order_id` y `ot_asignada` nulos (`page.tsx`), sin mirar `desestimado_en`; la pantalla de Avisos excluye los desestimados. Son `KpiCard`, que no admite `(i)`.
+- **«OS sin terminar» del tablero** cuenta todo `fecha_realizacion` nulo, también lo que espera aprobación o está denegado. `KpiCard`: sin `(i)`.
+- **«Vencidos» y «Próximos 7 días»** (`KpiCard`): no se explicó dónde están definidos.
+- **Mano de obra: una OT propia con horas y sin operarios queda afuera sin entrar en `huecos`** (`costoEquipo.ts`, `if (hh === 0) continue`): no se avisa en pantalla. Tampoco está escrito si el costo de Terceros (`ordenes_servicio.costo`) lleva IVA mientras Materiales usa `costo_iva`.
+- **«Qué hacer primero»** trae `?pendientes=1` con `.limit(300)`; «N órdenes esperando» se toparía en 300. Hoy no pasa (decenas) y no hay texto que lo diga.
+- **El Kanban** muestra 50 por columna ordenadas por GUT y ya dice «+N más»; no se agregó nada.
+- **Cifras que envejecen y no se pusieron:** medianas de carga de ausencias, cantidad de francos sin fecha, órdenes sin prioridad.
+- **No leídas con detalle por tamaño** (sin `(i)` ni hueco concreto): `produccion`, `tareas-preventivas`, `configuracion`, `ejecuciones` y `mantenimientos` salvo lo ya existente, y el interior del cuaderno (agrupar, sacar un renglón, la fila TOTALES del Excel). Es la parte que queda para una segunda pasada.
