@@ -9,11 +9,41 @@ import ConversacionDelPedido from "./ConversacionDelPedido";
 import {
   APROBACION_LABELS, COMPRA_LABELS, etiquetaPrioridad, fecha,
 } from "@/lib/compras/constants";
+import {
+  DIAS_VERDE, DIAS_AMARILLO, rangoDeColor, type ColorDelPedido,
+} from "@/lib/compras/semaforo";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 
 type Opcion = { id: string; nombre: string };
 
 const POR_PAGINA = 50;
+
+/**
+ * Los estados en los que el pedido todavía depende de Compras.
+ *
+ * Es el mismo conjunto que `esReclamable()` de `lib/compras/semaforo.ts`, acá
+ * en la forma que PostgREST necesita para un `.in()`. El test
+ * `semaforo.test.ts` ata los dos lados.
+ */
+const ESTADOS_QUE_ESPERAN = ["SIN_INICIAR", "EN_COMPARATIVA", "PARA_COMPRAR", "APROBADO"];
+
+/**
+ * Lo que una consulta de Supabase tiene que saber hacer para que los filtros
+ * de abajo la puedan encadenar. Tipado estructural: evita importar
+ * `PostgrestFilterBuilder`, que es un interno de la librería y cambia de firma
+ * entre versiones.
+ */
+interface Filtrable {
+  in(columna: string, valores: readonly (string | number)[]): Filtrable;
+  eq(columna: string, valor: string | number): Filtrable;
+  neq(columna: string, valor: string | number): Filtrable;
+  or(filtro: string): Filtrable;
+  gte(columna: string, valor: string): Filtrable;
+  lte(columna: string, valor: string): Filtrable;
+  order(columna: string, o: { ascending: boolean }): Filtrable;
+  range(desde: number, hasta: number): PromiseLike<{ data: unknown; count: number | null; error: { message: string } | null }>;
+  then: PromiseLike<{ count: number | null }>["then"];
+}
 
 /**
  * Los pedidos de mi área, y los de todos.
@@ -101,6 +131,10 @@ export default function MisPedidosClient({
   const [busqueda, setBusqueda] = useState("");
   const [busquedaAplicada, setBusquedaAplicada] = useState("");
   const [pagina, setPagina] = useState(0);
+  /** El color por el que está filtrando la franja, o null si no hay filtro. */
+  const [color, setColor] = useState<ColorDelPedido | null>(null);
+  /** Cuántos pedidos esperan a Compras en cada color, del conjunto filtrado entero. */
+  const [conteos, setConteos] = useState<Record<ColorDelPedido, number> | null>(null);
 
   const [pedidos, setPedidos] = useState<RequerimientoConRelaciones[]>([]);
   const [total, setTotal] = useState(0);
@@ -124,6 +158,57 @@ export default function MisPedidosClient({
   if (filtro !== filtroPrevio) {
     setFiltroPrevio(filtro);
     setPagina(0);
+    // Y se suelta el color. Los conteos son del conjunto anterior: dejarlo
+    // puesto deja la franja diciendo «15 en rojo» mientras la lista ya muestra
+    // otra cosa, que es la forma más rápida de que nadie vuelva a creerle.
+    setColor(null);
+  }
+
+  // El color sí resetea la página, pero no al revés.
+  const [colorPrevio, setColorPrevio] = useState(color);
+  if (color !== colorPrevio) {
+    setColorPrevio(color);
+    setPagina(0);
+  }
+
+  /*
+   * Los dos filtros que comparten la lista y los conteos de la franja.
+   *
+   * Viven acá y no copiados en cada consulta: son cuatro consultas sobre el
+   * mismo conjunto —una lista y tres conteos— y si el filtro se escribe cuatro
+   * veces, tarde o temprano una se queda vieja y la franja empieza a contar
+   * algo que la lista no muestra.
+   *
+   * El tipo es estructural a propósito: pide los métodos que se usan y nada
+   * más, así que el constructor de consultas de Supabase lo cumple sin tener
+   * que importar `PostgrestFilterBuilder`, que es un interno de la librería.
+   */
+  function conAlcanceYBusqueda(q: Filtrable): Filtrable {
+    let r = q;
+    // Un `.in()` de nueve áreas como mucho: no es el `.in()` de mil ids que
+    // arma una URL que PostgREST rechaza.
+    if (alcance === "mios") r = r.in("area_id", misAreas);
+
+    if (busquedaAplicada) {
+      // Un número suelto se busca como N° de RI, que es como lo pide la gente.
+      const comoNumero = Number(busquedaAplicada);
+      if (Number.isInteger(comoNumero) && comoNumero > 0) {
+        r = r.eq("nro_ri", comoNumero);
+      } else {
+        const t = `%${busquedaAplicada.replace(/[%,()]/g, " ")}%`;
+        r = r.or(`descripcion.ilike.${t},codigo.ilike.${t},solicitante_nombre.ilike.${t}`);
+      }
+    }
+    return r;
+  }
+
+  /** El conjunto reclamable de un color: los cuatro estados que esperan a Compras. */
+  function conColor(q: Filtrable, c: ColorDelPedido): Filtrable {
+    const { desde, hasta } = rangoDeColor(c, new Date());
+    let r = q.in("estado_compra", ESTADOS_QUE_ESPERAN).neq("estado_aprobacion", "DENEGADA");
+    if (desde) r = r.gte("fecha", desde);
+    if (hasta) r = r.lte("fecha", hasta);
+    return r;
   }
 
   // `useCargar` y no un efecto que llama y listo: descarta la respuesta que
@@ -133,40 +218,82 @@ export default function MisPedidosClient({
     setError("");
     const supabase = createClient();
 
-    let q = supabase
-      .from("compras_requerimientos")
-      // `!empresa_id`: `compras_odoo_ordenes` abre un segundo camino hasta `empresas` (PGRST201).
-      .select(
-        "*, compras_areas(nombre), empresas!empresa_id(nombre), proveedores!proveedor_id(nombre)",
-        { count: "exact" }
-      );
+    /*
+     * El cast a `Filtrable` no pierde nada: la fila que vuelve ya se castea a
+     * `RequerimientoConRelaciones` cuatro líneas más abajo, porque el embed
+     * de tres tablas no lo infiere Supabase solo. Y es lo que permite que la
+     * lista y los tres conteos compartan el mismo filtro en vez de escribirlo
+     * cuatro veces.
+     */
+    let q = conAlcanceYBusqueda(
+      supabase
+        .from("compras_requerimientos")
+        // `!empresa_id`: `compras_odoo_ordenes` abre un segundo camino hasta `empresas` (PGRST201).
+        .select(
+          "*, compras_areas(nombre), empresas!empresa_id(nombre), proveedores!proveedor_id(nombre)",
+          { count: "exact" }
+        ) as unknown as Filtrable
+    );
 
-    // Un `.in()` de nueve áreas como mucho: no es el `.in()` de mil ids que
-    // arma una URL que PostgREST rechaza.
-    if (alcance === "mios") q = q.in("area_id", misAreas);
-
-    if (busquedaAplicada) {
-      // Un número suelto se busca como N° de RI, que es como lo pide la gente.
-      const comoNumero = Number(busquedaAplicada);
-      if (Number.isInteger(comoNumero) && comoNumero > 0) {
-        q = q.eq("nro_ri", comoNumero);
-      } else {
-        const p = `%${busquedaAplicada.replace(/[%,()]/g, " ")}%`;
-        q = q.or(`descripcion.ilike.${p},codigo.ilike.${p},solicitante_nombre.ilike.${p}`);
-      }
-    }
+    if (color) q = conColor(q, color);
 
     const desde = pagina * POR_PAGINA;
-    const { data, count, error: err } = await q
-      .order("nro_ri", { ascending: false })
-      .range(desde, desde + POR_PAGINA - 1);
+    /*
+     * Con un color elegido la lista se ordena por antigüedad, del más dormido
+     * al más nuevo; sin filtro sigue por N° de RI como siempre.
+     *
+     * No es cosmético. Medido el 12/11/2026 para Mantenimiento —1.125 pedidos,
+     * 23 páginas— los 11 rojos caían en las páginas 5, 6, 7, 11, 12 y 15, y
+     * **la página 1 no tenía un solo punto de color**: con el orden de siempre
+     * el semáforo era invisible en la vista por defecto. Y el orden por defecto
+     * no se toca porque esta pantalla también sirve para buscar si alguien ya
+     * pidió lo mismo, y eso se navega por número.
+     */
+    const { data, count, error: err } = await (
+      color
+        ? q.order("fecha", { ascending: true })
+        : q.order("nro_ri", { ascending: false })
+    ).range(desde, desde + POR_PAGINA - 1);
 
     setCargando(false);
     if (err) { setError(err.message); setPedidos([]); return; }
     if (!vigente()) return;
     setPedidos((data ?? []) as RequerimientoConRelaciones[]);
     setTotal(count ?? 0);
-  }, [alcance, busquedaAplicada, pagina, misAreas]);
+  }, [alcance, busquedaAplicada, pagina, misAreas, color]);
+
+  /*
+   * Los tres conteos de la franja.
+   *
+   * Son del **conjunto filtrado entero** y no de la página: lo que el área
+   * quiere saber es cuántos tiene, no cuántos entraron en esta pantalla. Van
+   * con `head: true`, así que no traen ni una fila — tres consultas que
+   * devuelven sólo el número.
+   *
+   * No dependen de `pagina` a propósito: pasar de página no cambia el conjunto
+   * y volver a contarlo serían tres consultas por cada clic.
+   */
+  const contar = useCargar(async (vigente) => {
+    const supabase = createClient();
+    const colores: ColorDelPedido[] = ["verde", "amarillo", "rojo"];
+
+    const cuentas = await Promise.all(
+      colores.map(async (c) => {
+        const { count } = await conColor(
+          conAlcanceYBusqueda(
+            supabase
+              .from("compras_requerimientos")
+              .select("id", { count: "exact", head: true }) as unknown as Filtrable
+          ),
+          c
+        );
+        return count ?? 0;
+      })
+    );
+
+    if (!vigente()) return;
+    setConteos({ verde: cuentas[0], amarillo: cuentas[1], rojo: cuentas[2] });
+  }, [alcance, busquedaAplicada, misAreas]);
 
 
   const paginas = Math.ceil(total / POR_PAGINA);
@@ -233,6 +360,45 @@ export default function MisPedidosClient({
           </span>
         )}
       </div>
+
+      {/*
+        La franja del semáforo.
+
+        Cuenta **sólo lo que espera a Compras**: lo ya pedido depende del
+        proveedor y lo que está en espera lo frenó alguien a propósito, así que
+        reclamar por eso es pedirle a Compras que justifique algo que no maneja.
+
+        Van tres chips y no tres tarjetas: en los 343 px de un teléfono tres
+        tarjetas no entran, y esto se mira desde la cantera.
+      */}
+      {conteos && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-slate-400">Esperando a Compras:</span>
+          <ChipDelSemaforo
+            color="verde" cantidad={conteos.verde} activo={color === "verde"}
+            etiqueta={`hasta ${DIAS_VERDE} días`}
+            onClick={() => setColor(color === "verde" ? null : "verde")}
+          />
+          <ChipDelSemaforo
+            color="amarillo" cantidad={conteos.amarillo} activo={color === "amarillo"}
+            etiqueta={`${DIAS_VERDE + 1} a ${DIAS_AMARILLO} días`}
+            onClick={() => setColor(color === "amarillo" ? null : "amarillo")}
+          />
+          <ChipDelSemaforo
+            color="rojo" cantidad={conteos.rojo} activo={color === "rojo"}
+            etiqueta={`más de ${DIAS_AMARILLO} días`}
+            onClick={() => setColor(color === "rojo" ? null : "rojo")}
+          />
+          {color && (
+            <button
+              onClick={() => setColor(null)}
+              className="text-xs font-medium text-slate-500 underline hover:text-slate-900"
+            >
+              Ver todos
+            </button>
+          )}
+        </div>
+      )}
 
       {problemaDelEnlace && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -411,7 +577,7 @@ export default function MisPedidosClient({
           empresas={empresas}
           ubicaciones={ubicaciones}
           onClose={() => setModalAbierto(false)}
-          onSaved={() => { setModalAbierto(false); cargar(); router.refresh(); }}
+          onSaved={() => { setModalAbierto(false); cargar(); contar(); router.refresh(); }}
         />
       )}
     </div>
@@ -422,6 +588,48 @@ export default function MisPedidosClient({
  * La puerta a la conversación de un pedido. Un botón de texto y no un `.btn-*`:
  * va en cada tarjeta y en cada renglón, y tiene que ser lo más chico de ahí.
  */
+/** Los colores del semáforo, en un solo lugar para que el chip y el punto no discrepen. */
+const COLORES: Record<ColorDelPedido, string> = {
+  verde: "#16a34a",
+  amarillo: "#f59e0b",
+  rojo: "#dc2626",
+};
+
+/**
+ * Un chip de la franja: el número, qué cuenta, y el filtro.
+ *
+ * El color va por `style` y no por una clase al lado: en este proyecto una
+ * utilidad de Tailwind pierde contra una clase sin capa, y un color de estado
+ * que se ve gris es exactamente el tipo de error que no rompe nada.
+ */
+function ChipDelSemaforo({
+  color, cantidad, etiqueta, activo, onClick,
+}: {
+  color: ColorDelPedido;
+  cantidad: number;
+  etiqueta: string;
+  activo: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activo}
+      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+        activo ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+      }`}
+    >
+      <span
+        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+        style={{ backgroundColor: COLORES[color] }}
+      />
+      <strong>{cantidad}</strong>
+      <span className={activo ? "text-slate-200" : "text-slate-500"}>{etiqueta}</span>
+    </button>
+  );
+}
+
 function BotonDeMensajes({
   pedido, onAbrir,
 }: {
