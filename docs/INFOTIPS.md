@@ -359,7 +359,7 @@ es de número, no de pantalla. Va en las columnas de costo.
 | Dónde | Texto (resumen) | De dónde salió |
 |---|---|---|
 | `/cantera/destape` · columna «Costo máquina» | Horas × costo por hora del equipo ese mes: lo facturado en Odoo a su cuenta analítica + combustible estimado con el precio medio de toda la flota, ÷ horas del horómetro. Si Odoo no contesta o no hay horas medidas, queda en $0. El combustible no incluye el impuesto, así que queda por debajo del real. | `costoMaquinaDestape.ts:1-10` y `:28-30` (sin «IMPUESTO COMBUSTIBLE»), `costoMaquinaOdoo.ts:22-26` (mapa vacío, «muestra $0»), `destape.ts:98-99` (indefinido → 0) |
-| `/cantera/destape` · columna «Costo MO» | **El mejor del proyecto.** Horas × lo que cobra por hora ese operario. El valor hora vive en RRHH: sin acceso a RRHH llega en 0 y la columna muestra $0 con horas cargadas, sin error. | `consultas.ts:650-656` (el comentario lo dice textual), `009_rrhh_rls.sql:63` (`rrhh_empleados_datos_select … using (tiene_acceso_rrhh())`), `20260908083338…sql:164-175` (admin del sistema o grant `rrhh`), `destape.ts:9-11` |
+| `/cantera/destape` · columna «Costo MO» | **El mejor del proyecto.** Horas × lo que cobra por hora ese operario. El valor hora vive en RRHH: sin acceso a RRHH llega en 0 y la columna muestra $0 con horas cargadas, sin error. | `consultas.ts:650-656` (el comentario lo dice textual), `009_rrhh_rls.sql:63` (`rrhh_empleados_datos_select … using (tiene_acceso_rrhh())`), `20260908083338…sql:164-175` (`es_admin_sistema()` o grant `rrhh`; **no** alcanza con ser admin del módulo Cantera), `destape.ts:9-11` |
 | `/cantera/destape` · columna «Costo fletero» | Horas × tarifa «horas de destape» de Acarreo vigente ese día, y el doble si el camión es grande; la del grande es exactamente el doble de la del chico. | `destape.ts:16-22` y `:52-55`, `:104-107` |
 | `/cantera/destape` · columna «Costo total» | Suma de las tres; cada una puede quedar en $0 por su motivo y el total queda corto sin marca. | `destape.ts:101,110` (`costoTotal`); la pantalla no tiene ningún aviso de $0 (`DestapeClient.tsx` entero) |
 | `/cantera/destape` · «Registros del mes» | El «≈ t» de un registro de fletero con viajes es viajes × promedio de toneladas por viaje de ese fletero sobre todas sus pesadas de Acarreo, sin distinguir material; sin pesadas no se estima ni se muestra. | `destape.ts:75`, `:113-121` |
@@ -410,7 +410,7 @@ es de número, no de pantalla. Va en las columnas de costo.
 |---|---|---|
 | `/cantera/cubicacion` · insignia de lectura | Residuo sobre lo volado del mes: ≤ 5 % cierra, ≤ 10 % aceptable, más revisar; «sin actividad» = sin voladuras; «Pendiente» = falta la existencia final del mes o la del anterior. | `cubicacion.ts:18-22`, `:76`, `:126-134` |
 | cubicación · «Exist. inicial» | Es la final total del mes anterior; sin cierre ese mes queda «—», no cero, y sin inicial no hay stock teórico ni residuo. | `cubicacion.ts:62`, `:180-199` (`armarCierresCubicacion`) |
-| cubicación · «Voladuras» | Toneladas estimadas de las perforaciones que **terminaron** ese mes aunque se hayan volado en otro; sin fecha de fin no cuenta en ningún mes. | `cubicacion.ts:5-8`, `:103`; `cubicacion/page.tsx:65-79` |
+| cubicación · «Voladuras» | Toneladas estimadas de las perforaciones que **terminaron** ese mes aunque se hayan volado en otro; sin fecha de fin no cuenta en ningún mes; una cuya tonelada no se puede estimar entra como 0 y baja el stock teórico. | `cubicacion.ts:5-8`, `:103`, `:105` (`toneladas ?? 0`), `toneladas.ts:45` (null si falta un dato); `cubicacion/page.tsx:65-79` |
 
 **Cuenta de colocaciones:** 30 `(i)` en 7 archivos (`DestapeClient` 5, `AcarreoClient` 4,
 `InformeClient` 8, `VoladuraClient` 3, `BochonClient` 1, `CanteraClient` 6, `CubicacionClient` 3).
@@ -472,5 +472,10 @@ De los de Informe, uno es del título, uno de la serie, cinco del resumen por ca
   y subtítulos: son catálogos o formularios y lo que dicen sus rótulos alcanza; las reglas que tienen
   (`resolverFleteroDestape` deja «Orsatti» y «Dumerauf» sin resolver, `destape.ts:141-160`) viven del
   lado de la importación, no de la pantalla.
+- **El cero silencioso del Destape llega a cifras sin `(i)`.** El $0 de «Costo MO» (y el de máquina y
+  fletero) alimenta también las tarjetas «Costo total del mes» y «Máquina + MO propia»
+  (`DestapeClient.tsx:217,220`), el total del día elegido y el costo de cada registro del detalle.
+  `KpiCard` no admite `(i)` y no se tocó; el `(i)` de «Costo total» dice que el total queda corto sin
+  nombrar a RRHH. Quien mire una tarjeta sin RRHH ve un total menor al real sin ninguna marca.
 - **Cifras con fecha que no se pusieron:** los 354 de 7.510 pesadas sin fletero de `acarreo.ts:201`, los 7.623+ de `consultas.ts:385` y los
   valores de tarifa de `destape.ts:19-21` envejecen con cada carga.

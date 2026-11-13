@@ -292,7 +292,7 @@ export default function CubicacionClient({
                 <dd className="text-right font-mono tabular-nums text-slate-700">{t(fila?.existenciaInicial ?? null)}</dd>
                 <dt className="text-slate-500">
                   Voladuras
-                  <InfoTip className="ml-1" text="Toneladas estimadas por la malla, no pesadas, de las perforaciones que terminaron de perforarse ese mes, aunque se hayan volado en otro: así cierra la planilla de cubicación. Una perforación sin fecha de fin no cuenta en ningún mes." />
+                  <InfoTip className="ml-1" text="Toneladas estimadas por la malla, no pesadas, de las perforaciones que terminaron de perforarse ese mes, aunque se hayan volado en otro: así cierra la planilla de cubicación. Una perforación sin fecha de fin no cuenta en ningún mes, y una cuya tonelada no se puede estimar (falta densidad, malla o metros) entra como 0, lo que baja el stock teórico y mueve el residuo." />
                 </dt>
                 <dd className="text-right font-mono tabular-nums text-slate-700">{t(fila?.voladuras ?? 0)}</dd>
                 <dt className="text-slate-500">Acarreo</dt>

@@ -236,7 +236,7 @@ export default function DestapeClient({
                   </th>
                   <th className="text-right">
                     Costo MO
-                    <InfoTip className="ml-1" text="Horas cargadas por lo que cobra por hora ese operario. El valor hora vive en RRHH: si no tenés acceso a RRHH te llega en 0 y esta columna muestra $0 aunque haya horas cargadas, sin ningún error. Lo tienen los administradores y quien tenga RRHH asignado. Un $0 acá puede ser un costo que no ves, no un costo que no hubo." />
+                    <InfoTip className="ml-1" text="Horas cargadas por lo que cobra por hora ese operario. El valor hora vive en RRHH: si no tenés acceso a RRHH te llega en 0 y esta columna muestra $0 aunque haya horas cargadas, sin ningún error. Lo tienen los administradores del sistema y quien tenga RRHH asignado: ser administrador de Cantera no alcanza. Un $0 acá puede ser un costo que no ves, no un costo que no hubo." />
                   </th>
                   <th className="text-right">
                     Costo fletero
