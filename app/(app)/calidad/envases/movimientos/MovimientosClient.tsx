@@ -230,11 +230,11 @@ export default function MovimientosClient({
               <th className="px-3 py-2 text-right">Sale</th>
               <th className="px-3 py-2 text-right">
                 Rotura
-                <InfoTip className="ml-1" text="Se guarda pero no descuenta stock, igual que en la planilla. No sale de «Sale»: son números independientes." />
+                <InfoTip className="ml-1" text="No se calcula a partir de las salidas: rotura, despacho y salida son tres números independientes." />
               </th>
               <th className="px-3 py-2 text-right">
                 Despacho
-                <InfoTip className="ml-1" text="Se guarda pero no descuenta stock, igual que en la planilla. No se deriva de «Sale»: puede haber un despacho con la salida en cero." />
+                <InfoTip className="ml-1" text="No se calcula a partir de las salidas: puede haber un despacho con la salida en cero." />
               </th>
               <th className="px-3 py-2">Observación</th>
             </tr>

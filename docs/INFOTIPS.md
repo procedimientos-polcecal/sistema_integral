@@ -131,8 +131,7 @@ tabla con scroll.
 
 | Dónde | Texto | De dónde salió |
 |---|---|---|
-| `/calidad/conciliacion` · «N líneas leídas de Odoo · sin desvíos» | Qué líneas son (órdenes confirmadas, carbonilleros declarados y activos, creadas en 30 días) y que con **0 líneas leídas no se comparó nada**: «sin desvíos» ahí no es «todo bien». | `lib/calidad/sincronizar.ts:59,82-89` (dos `return vacio` antes de comparar) |
-| `/calidad/conciliacion` · «N camiones sin orden de compra» | Se aparea con una orden del **mismo proveedor** a no más de dos días; sólo camiones de carbonilleros declarados y activos de los últimos 30 días. | Docstring de `DIAS_DE_GRACIA` y de `desviosContraOdoo()`, `lib/calidad/conciliacion.ts:14-22,70-80`; `sincronizar.ts` (filtro de `camiones`) |
+| `/calidad/conciliacion` · «N camiones sin orden de compra» | Se aparea con una orden del **mismo proveedor** a no más de dos días, y cada orden se usa una sola vez; sólo entran las líneas con producto en la lista de «Productos de Odoo» con «cuenta» y cantidad posible (más de 0 y hasta 60 t): si no pasan, el camión sale acá aunque la orden exista; sólo camiones de carbonilleros declarados y activos de los últimos 30 días. | Docstring de `DIAS_DE_GRACIA` y de `desviosContraOdoo()`, `lib/calidad/conciliacion.ts:14-22,70-80`; el filtro `resultado !== "entra"` de `sincronizar.ts` y `reconocer.ts:86-104` (`TONELADAS_POSIBLES`, l.26) |
 | `/calidad/conciliacion` · «N camiones con otra cantidad» | Se compara con la orden del mismo proveedor más parecida en cantidad, cada orden se usa una vez, y menos de 5 kg es el mismo número. | `lib/calidad/conciliacion.ts:24-25,86-96` |
 
 ### Envases
@@ -140,7 +139,7 @@ tabla con scroll.
 | Dónde | Texto | De dónde salió |
 |---|---|---|
 | `/calidad/envases` · columna «Stock» | Es el que calculó la planilla (fórmula sobre el kardex), el SdG lo lee; un movimiento cargado acá que no llegó allá no existe, y la próxima lectura trae el número sin él. | `docs/CALIDAD-ENVASES.md`, párrafo «acá manda la planilla»; docstring de `lib/calidad/envases/espejo.ts` y de `envases/StockClient.tsx` |
-| `/calidad/envases/movimientos` · columnas «Rotura» y «Despacho» | Se guardan y no descuentan stock, igual que la planilla; no se derivan de «Sale» (puede haber despacho con la salida en cero). | `docs/CALIDAD-ENVASES.md`, «`ROTURA` y `DESPACHO` se guardan y no descuentan stock» |
+| `/calidad/envases/movimientos` · columnas «Rotura» y «Despacho» | Sólo lo que la pantalla no dice: no se calculan a partir de las salidas (puede haber despacho con la salida en cero). Que no descuentan stock ya lo imprime el formulario de la misma pantalla. | `docs/CALIDAD-ENVASES.md`, «`ROTURA` y `DESPACHO` se guardan y no descuentan stock» |
 
 ### Ensayos
 
@@ -162,7 +161,7 @@ tabla con scroll.
 
 | Dónde | Texto | De dónde salió |
 |---|---|---|
-| `/calidad/historico` · columna «Valor» | La escala es la lectura del sistema y no del laboratorio, y si se equivoca se corrige la etiqueta y no el número; que una fila no esté en ámbar **no prueba** que su escala esté bien; el peso volumétrico viejo puede traer 1 % de error. | `docs/CALIDAD-HISTORICO.md`, «Lo único que hay que saber antes de tocarlo», «La aritmética no valida la escala» y «Riesgos asumidos» |
+| `/calidad/historico` · columna «Valor» | La escala es la lectura del sistema y no del laboratorio, y si se equivoca se corrige la etiqueta y no el número; que una fila no esté en ámbar **no prueba** que su escala esté bien (sin cifras: la medición envejece); el peso volumétrico viejo puede traer 1 % de error. Lo de «cada valor declara su escala» y «ningún número fue convertido» ya lo dice el cartel fijo de la pantalla y no se repite. | `docs/CALIDAD-HISTORICO.md`, «Lo único que hay que saber antes de tocarlo», «La aritmética no valida la escala» y «Riesgos asumidos» |
 
 ### Lo que no se escribió, y dónde se buscó
 
@@ -180,12 +179,17 @@ tabla con scroll.
   blanca de productos» («es lo que hace que una línea entre al stock») son de
   antes del 13/10/2026. Hoy la lista sólo la lee `lib/calidad/sincronizar.ts` (el
   control contra Odoo): la lectura de la planilla (`desdeLaPlanilla.ts`) no la
-  consulta. Manda el código; no se escribió `(i)`.
-- **Conciliación: si Odoo contesta sin líneas, el control devuelve vacío sin
-  comparar** (`sincronizar.ts:89`), así que los camiones del libro no salen como
-  «sin orden». El `(i)` lo dice porque está en el código, pero la causa de fondo
-  —¿debería devolver todos los camiones como sin orden?— es una decisión que no
-  está escrita en ningún lado.
+  consulta. Manda el código; no se escribió `(i)` en esa pantalla. Esa lista
+  **sólo importa en Conciliación** (el `(i)` de «camiones sin orden» lo dice), y
+  la pantalla de Productos no lo avisa.
+- **Conciliación, «N líneas leídas»: hueco, no tooltip.** Con 0 líneas de Odoo el
+  control devuelve vacío sin comparar (`sincronizar.ts:59,89`), así que los
+  camiones del libro no salen como «sin orden» y la pantalla dice «sin desvíos».
+  Es cierto por flujo de control, pero **ningún documento, encabezado ni
+  docstring lo contesta** —¿debería devolver todos los camiones como sin orden?
+  es una decisión que no está escrita—, así que se sacó el `(i)` que lo decía.
+  Se buscó en `docs/CALIDAD.md`, el spec del 13/10 y los docstrings de
+  `sincronizar.ts` y `conciliacion.ts`.
 - **Ninguna pantalla muestra cuándo se leyó la planilla de carbonilla**, que es
   lo que mueve el saldo: la fecha visible es la del control contra Odoo
   (`carbonilla-odoo`). El `(i)` lo aclara, pero lo correcto sería mostrar la otra
@@ -206,11 +210,18 @@ tabla con scroll.
 - **Humedad (listado).** Su fórmula es la del documento pero no hay supuesto
   detrás —a diferencia de peso volumétrico y cal útil—, así que se dejó sin `(i)`.
 - **Ya dicho en pantalla, no se repite:** el mínimo y el faltante por grupo en el
-  stock de envases (párrafo al pie), las dos aclaraciones del informe por período
-  de envases, el promedio con su `n` en Indicadores, la escala de cada valor del
-  histórico, las filas en ámbar y la humedad como fracción en la vista de
-  planilla.
-- **Cifras con fecha que no se pusieron:** «27 de 362» filas del histórico y los
-  conteos del oráculo envejecen con cada reimportación; el `(i)` de «Valor» dice
-  «una minoría». Las únicas cifras que quedaron llevan su fecha (la de la curva)
-  o son del método (0,037; 330 cc; 3 g).
+  stock de envases (párrafo al pie), que la rotura y el despacho no descuentan
+  stock (formulario de movimientos), las dos aclaraciones del informe por período
+  de envases, el promedio con su `n` en Indicadores, que cada valor del histórico
+  declara su escala y que ninguno fue convertido (cartel fijo; el `(i)` de
+  «Valor» agrega otra cosa: que esa escala es una lectura), las filas en ámbar y
+  la humedad como fracción en la vista de planilla.
+- **Cifras con fecha que no se pusieron:** «27 de 362» filas del histórico y
+  «ninguna de Cal ni de Filler 2» salen de la misma medición y envejecen con cada
+  reimportación; el `(i)` de «Valor» dice «una minoría» y nada más. Las únicas
+  cifras que quedaron llevan su fecha (la de la curva) o son del método (0,037;
+  330 cc; 3 g; 5 kg; 60 t).
+- **Cuenta de colocaciones:** 27 `(i)` colocados y 31 renderizados (eran 28 y 32
+  antes de sacar el de «líneas leídas»); la diferencia son los cuatro duplicados
+  de la tarjeta del teléfono (P. vol., Cal útil y Acumulado en el listado de
+  Ensayos, y «Fuera de límite» en Indicadores), que están bien.

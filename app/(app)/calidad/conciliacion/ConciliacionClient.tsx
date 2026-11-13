@@ -102,7 +102,6 @@ export default function ConciliacionClient({
                 {total} {total === 1 ? "desvío" : "desvíos"}
               </span>
             )}
-            <InfoTip className="ml-1" text="Las líneas son las de órdenes de compra confirmadas de los carbonilleros declarados y activos, creadas en Odoo en los últimos 30 días. Si dice 0, no se comparó nada, porque el control corta antes de mirar el libro: «sin desvíos» ahí no quiere decir que esté todo bien." />
           </p>
 
           {/* 1. Lo que cuesta plata, arriba */}
@@ -115,7 +114,7 @@ export default function ConciliacionClient({
                       ? "camión sin orden de compra"
                       : "camiones sin orden de compra"
                   }`}
-              <InfoTip className="ml-1" text="Un camión cuenta como con orden si Odoo tiene una del mismo proveedor con fecha a no más de dos días de la suya; con otro proveedor no se aparea aunque coincidan fecha y cantidad. Sólo se miran los camiones de carbonilleros declarados y activos, de los últimos 30 días." />
+              <InfoTip className="ml-1" text="Un camión se aparea con una orden del mismo proveedor a no más de dos días, y cada orden se usa una sola vez. Sólo entran al cruce las líneas de Odoo cuyo producto está en la lista de «Productos de Odoo» con «cuenta» y cuya cantidad es posible para un camión (más de 0 y hasta 60 t): si la orden no pasa eso, el camión sale acá aunque la orden exista. Sólo se miran camiones de carbonilleros declarados y activos, de los últimos 30 días." />
             </h2>
             <p className="mt-0.5 text-xs text-red-800">
               Entraron al stock y no tienen orden en Odoo. <strong>No se les puede facturar.</strong>
