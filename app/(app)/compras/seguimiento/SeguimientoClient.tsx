@@ -8,6 +8,7 @@ import { fecha } from "@/lib/compras/constants";
 import FormularioRecepcion from "./FormularioRecepcion";
 import type { RequerimientoConRelaciones, Cumplio } from "@/lib/compras/types";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 const SIN_FILTRO = "TODAS";
 
@@ -72,7 +73,10 @@ export default function SeguimientoClient({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Seguimiento de la compra</h1>
+        <div className="flex items-baseline gap-2">
+          <h1 className="text-xl font-bold text-slate-900">Seguimiento de la compra</h1>
+          <InfoTip text="«Cumplió Compras» y «Cumplió el proveedor» los carga una persona: no hay ninguna regla que los calcule, y medido sobre el histórico muchos «Sí» habían llegado tarde. Al lado, el sistema muestra el dato duro —cuántos días de demora y cuánto llegó— para que decidas mirándolo. La demora sólo aparece si el pedido tiene fecha estimada y fecha de recepción." />
+        </div>
         <p className="text-sm text-slate-500">
           Lo que ya se compró y espera llegar, y lo que ya llegó.
         </p>

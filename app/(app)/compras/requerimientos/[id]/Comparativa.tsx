@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import InfoTip from "@/components/InfoTip";
 import { urlDePlanilla } from "@/lib/compras/vincular";
 import type { Cotizacion, RequerimientoConRelaciones } from "@/lib/compras/types";
 import SelectorComparativa from "./SelectorComparativa";
@@ -170,9 +171,12 @@ export default function Comparativa({
     <section className="rounded-xl border border-slate-200 bg-white">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Comparativa de proveedores
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Comparativa de proveedores
+            </h2>
+            <InfoTip text="El total de cada presupuesto es unitario por cantidad, más el IVA sobre ese neto, menos el descuento (que no lleva IVA), más el envío: por eso el unitario más bajo puede terminar siendo el total más alto. Los presupuestos en dólares se pasan a pesos con el dólar oficial de venta." />
+          </div>
           {/* Alcanza con el id del archivo: el nombre puede no saberse
               todavía. La sincronización enlaza la planilla que anotó la hoja de
               área —el link escondido detrás del "LINK" de la celda— y para eso

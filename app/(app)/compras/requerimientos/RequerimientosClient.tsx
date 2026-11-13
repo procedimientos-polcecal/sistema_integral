@@ -20,6 +20,7 @@ import {
 import MultiSelect from "../MultiSelect";
 import MarcaMontoAlto from "../MarcaMontoAlto";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import { filtroDeMontoAlto } from "@/lib/compras/montoAlto";
 import {
   ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES,
@@ -486,17 +487,23 @@ export default function RequerimientosClient({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-baseline gap-x-3">
-            <h1 className="text-xl font-bold text-slate-900">Requerimientos internos</h1>
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-xl font-bold text-slate-900">Requerimientos internos</h1>
+              <InfoTip text="Cada requerimiento lleva dos estados independientes: la aprobación de gerencia y la etapa de Compras. Mientras gerencia no aprueba, Compras no tiene paso que dar y la fila dice «Sin aprobar». «En espera» no es una etapa sino un desvío: es un pedido que alguien frenó a propósito, y al sacarlo vuelve a la etapa donde estaba." />
+            </div>
             <UltimaSincronizacion
               cuando={sync?.created_at}
               ok={sync?.ok ?? true}
               error={sync?.error}
             />
           </div>
-          <p className="text-sm text-slate-500">
-            {cargando ? "Cargando…" : `${total.toLocaleString("es-AR")} requerimiento${total === 1 ? "" : "s"}`}
-            {hayFiltros && !cargando ? " con los filtros aplicados" : ""}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-slate-500">
+              {cargando ? "Cargando…" : `${total.toLocaleString("es-AR")} requerimiento${total === 1 ? "" : "s"}`}
+              {hayFiltros && !cargando ? " con los filtros aplicados" : ""}
+            </p>
+            <InfoTip text="«Vencido hace N días» cuenta contra la fecha en que se necesita, que la gente suele cargar como «ya»: medido el 12/11/2026, el 91% de los abiertos figuraba vencido. «Costo + IVA» vacío no es cero, porque el costo real no existe hasta que se compra. Para «Monto alto», hasta entonces cuenta el presupuesto más alto en pesos, y «Sin monto alto» incluye también lo que alguien desmarcó a mano." />
+          </div>
         </div>
         <button
           onClick={() => setModalAbierto(true)}

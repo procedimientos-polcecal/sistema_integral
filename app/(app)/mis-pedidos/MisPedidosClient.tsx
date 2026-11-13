@@ -8,6 +8,7 @@ import { textoDelReclamo } from "@/lib/compras/reclamo";
 import { traerTodo } from "@/lib/core/paginado";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import ConversacionDelPedido from "./ConversacionDelPedido";
+import InfoTip from "@/components/InfoTip";
 import {
   APROBACION_LABELS, COMPRA_LABELS, etiquetaPrioridad, fecha,
 } from "@/lib/compras/constants";
@@ -462,6 +463,7 @@ export default function MisPedidosClient({
       {conteos && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-slate-400">Esperando a Compras:</span>
+          <InfoTip text="Cuenta sólo los pedidos que esperan a Compras (aunque gerencia todavía no los haya aprobado). Quedan sin punto, pero en la lista, los ya pedidos —la demora es del proveedor—, los que alguien frenó a propósito en «En espera» y los denegados. Los días van desde la fecha del requerimiento; los cortes de 30 y 90 días salieron de medir el reparto real." />
           <ChipDelSemaforo
             color="verde" cantidad={conteos.verde} activo={color === "verde"}
             etiqueta={`hasta ${DIAS_VERDE} días`}
@@ -485,6 +487,7 @@ export default function MisPedidosClient({
               Ver todos
             </button>
           )}
+          <InfoTip text="Al tocar un color, la lista pasa a ir del pedido más viejo al más nuevo; sin color sigue por número de RI, porque acá también se mira si alguien ya pidió lo mismo. Los números cuentan todo lo que la lista muestra (tu área o todos, y la búsqueda), no sólo esta página. «Reclamar» sale en amarillo y rojo, sólo sobre pedidos de tu área, y menciona a quienes tienen edición o administración de Compras." />
         </div>
       )}
 

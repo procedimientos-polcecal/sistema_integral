@@ -8,6 +8,7 @@ import {
 } from "@/lib/compras/constants";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * Los requerimientos que esperan decisión.
@@ -82,7 +83,10 @@ export default function RequerimientosPendientes({
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-slate-900">Requerimientos</h2>
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-base font-semibold text-slate-900">Requerimientos</h2>
+          <InfoTip text="La cola va por prioridad y, a igual prioridad, por antigüedad; los que no tienen prioridad definida van al final. Pero la prioridad la propone quien pide y gerencia la confirma al aprobar, y «Se necesita» suele cargarse como «ya»: las dos distinguen poco, así que mirá también hace cuánto espera cada uno." />
+        </div>
         <p className="text-sm text-slate-500">
           {pendientes.length === 0
             ? "Nada esperando decisión."
