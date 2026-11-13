@@ -142,9 +142,19 @@ export default function FrancosClient() {
               <tr className="text-left text-slate-500 border-b">
                 <th className="pb-2">Legajo</th>
                 <th className="pb-2">Empleado</th>
-                <th className="pb-2">Generado el</th>
+                <th className="pb-2">
+                  <span className="inline-flex items-center gap-1">
+                    Generado el
+                    <InfoTip text="Es el día trabajado. El sistema genera el franco al recalcular un domingo trabajado. Un feriado entre semana trabajado se paga al 100% si «Tratar feriados como domingo» está activo, pero desde el 02/11/2026 no genera franco." />
+                  </span>
+                </th>
                 <th className="pb-2">Horas</th>
-                <th className="pb-2">Estado</th>
+                <th className="pb-2">
+                  <span className="inline-flex items-center gap-1">
+                    Estado
+                    <InfoTip text="Pendiente: sus horas no entran en la liquidación. Tomado: entran, pero en la planilla general del período de «Generado el» y no en el que lo marcaste: un franco ganado en octubre y tomado en noviembre va en la de octubre, cuando se vuelva a emitir." />
+                  </span>
+                </th>
                 <th className="pb-2"></th>
               </tr>
             </thead>

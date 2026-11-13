@@ -521,3 +521,112 @@ Ya cubiertos y sin tocar: MTBF/MTTR (`mtbf/MtbfClient.tsx`, un `(i)` por columna
 - **El Kanban** muestra 50 por columna ordenadas por GUT y ya dice «+N más»; no se agregó nada.
 - **Cifras que envejecen y no se pusieron:** medianas de carga de ausencias, cantidad de francos sin fecha, órdenes sin prioridad.
 - **No leídas con detalle por tamaño** (sin `(i)` ni hueco concreto): `produccion`, `tareas-preventivas`, `configuracion`, `ejecuciones` y `mantenimientos` salvo lo ya existente, y el interior del cuaderno (agrupar, sacar un renglón, la fila TOTALES del Excel). Es la parte que queda para una segunda pasada.
+
+## RRHH y Remises
+
+Los 48 que ya existían (los de RRHH y los de Remises entre ellos) no se tocaron. Un `(i)` de columna va dentro del `<th>`, y las tablas de estas pantallas no tienen versión de tarjeta para el teléfono, así que no hay un segundo lugar donde repetirlos.
+
+### Los dos de pantalla
+
+| Pantalla | Texto | De dónde salió |
+|---|---|---|
+| `/rrhh/analitico` · título | Qué cuenta cada tarjeta: sólo activos; Ausentismo y Tardanza del mes en curso hasta hoy sobre todos los días salvo domingos (y sábados en sectores de lunes a viernes), con feriados y vacaciones en la cuenta pero nunca como ausencia; el ausentismo cuenta toda falta, justificada o sin clasificar; la Tardanza incluye la cargada a mano y no los retiros anticipados; la edad promedio sólo toma a quienes tienen fecha de nacimiento. | `lib/rrhh/analiticoResumen.ts`: `.eq("activo", true)` (:38), `esDiaEsperado` y el bucle de `diasEsperados`/`diasAusentes`, `tardeSet` con las manuales (:76-78) y `conFechaNacimiento`; `lib/rrhh/engine/recalcular.ts:247-258` (vacación → no ausente; ausencia cargada → ausente aunque esté justificada; feriado → no ausente); `docs/RRHH-ACTUALIZACION.md`, «El umbral de hora extra pasó de 15 a 30 minutos», último párrafo («contando como ausencia cada día que nadie clasificó») |
+| `/rrhh/empleados/[id]` · nombre | Las extras no entran en la liquidación hasta validarlas con «Validar»; la validación se pierde si cambian las extras de ese día; «(manual)» es un día con horas corregidas a mano y el recálculo no lo pisa. **No es un descarte**: aunque hay una línea con legajo, empresa y sector, no dice nada de cómo funciona la ficha. | `liquidaciones/generar/route.ts:50-58` (sólo `extras_validadas`) y `lib/rrhh/planillaGeneral.ts:55-60` (docstring de `extrasSinValidar`); `recalcular.ts:266-` (`preservarValidacion`) y `asistencia/horas-manual/route.ts` (`extras_validadas: false`); `recalcular.ts:210` («corregido a mano por RRHH, no se pisa») |
+
+### Los de número
+
+| Dónde | Texto | De dónde salió |
+|---|---|---|
+| `/rrhh` · «Top 10 ausencias» | Cuenta días «ausente» (sin marcación, sin vacaciones), justificados o no; la falta sin clasificar cuenta igual; sólo activos y con los filtros de Empresa y Sector. | `dashboard/top-ausencias/route.ts` (`.eq("ausente", true)`), `dashboardHelpers.ts:28` (`activo`) y `:40` (el rango por defecto, que es lo que usa la pantalla porque no manda `periodo`); `recalcular.ts:247-250`; `docs/RRHH-ACTUALIZACION.md`, mismo párrafo que arriba |
+| `/rrhh` · «Top 10 llegadas tarde / salidas tempranas» | Sólo lo que marcó el reloj, ordenado por tardanzas + retiros; la tardanza cargada a mano no entra, aunque la tarjeta «Tardes» y el Analítico sí la cuentan. | `dashboard/top-tardanzas/route.ts` (lee sólo `calculos_diarios.tarde`/`retiro_anticipado`, sin tocar `ausencias`); docstring de `ResumenHoy.tardes` en `tarjetasHoy.ts` («por el reloj o cargada a mano») y `analiticoResumen.ts:76-78` |
+| `/rrhh` · «Horas extra por Sector» | Suma las extras calculadas, validadas o no; el gráfico de costo de abajo parte de lo mismo; la liquidación y la planilla sólo toman las validadas. | `dashboard/horas-extra-por-sector/route.ts` (no filtra `extras_validadas`); docstring de `extrasSinValidar` («una hora extra se paga cuando alguien la aprobó, no porque el reloj la haya registrado») |
+| `/rrhh/francos` · columna «Generado el» | Es el día trabajado; el franco lo genera un domingo trabajado; un feriado entre semana se paga al 100 % (con la opción activa) pero desde el 02/11/2026 no genera franco. | Comentario de `lib/rrhh/engine/calculo.ts:83-97` (`francoGenerado: dayOfWeekUtc(fecha) === 0 && total > 0`, «por pedido del 02/11/2026»); `recalcular.ts` (`fecha_generado: f.fecha`) |
+| `/rrhh/francos` · columna «Estado» | Pendiente no entra en la liquidación; tomado entra, en la planilla del período de «Generado el» y no del que se marcó. | Docstring de `horasDeFrancoAPagar` (`planillaGeneral.ts:71-90`); el mensaje de «Volver a pendiente» en `FrancosClient.tsx` dice lo mismo |
+| `/rrhh/liquidaciones` · planilla, «Franco comp.» | Sólo francos tomados y en el período de su «Generado el». | Mismo docstring |
+| `/rrhh/liquidaciones` · planilla, «Hs. vacaciones» | Días corridos del período dentro del rango, domingos y feriados incluidos, × horas teóricas; no salen de las marcaciones. | `diasSuperpuestos` («Días calendario») y docstring de `calcularPlanillaGeneral` en `planillaGeneral.ts`; `docs/RRHH-ACTUALIZACION.md`, «Las horas de vacaciones y enfermedad se calculan, no se guardan» |
+| `/rrhh/liquidaciones` · planilla, «Hs. enfermedad» | Sólo enfermedad/accidente inculpable justificada; días hábiles y sábados; las otras licencias no aparecen en ninguna columna. | `planillaGeneral.ts:221-222` (los dos `.eq`), docstring de `diasHabilesSuperpuestos`; `RRHH-ACTUALIZACION.md`, mismo párrafo («domingos y feriados no suman») |
+| `/rrhh/liquidaciones` · listado, «Estado» | Cerrar protege el período de Lenox y del Excel; una ausencia cargada después en un período cerrado se guarda y no llega al recibo, y RRHH no frena; no hay botón para reabrir, sí Eliminar. | `RRHH-ACTUALIZACION.md`, «Las tres protecciones» (:442-444 y la tabla de dos caminos, «La liquidación cerrada frena a los dos»); docstring de `periodoEstaCerrado` en `altaDeAusencia.ts` («RRHH nunca tuvo este freno»); `liquidaciones/[id]/route.ts` (el `DELETE` no mira el estado) y el comentario de `[id]/cerrar/route.ts` («No había reapertura escrita en ningún lado») |
+| `/rrhh/vacaciones` · «Días tomados» | Suma los períodos cargados con ese año correspondiente sin mirar las fechas; los que vienen de Ausencias cuentan días corridos. | `vacaciones/[id]/balance/route.ts:32-34`; `diasEntre` y `sincronizarPeriodoVacaciones` en `vacacionesDeAusencia.ts`; `RRHH-ACTUALIZACION.md`, tabla de «Portado en esta pasada» (vacaciones vinculadas a la ausencia) |
+| `/remises/hoy` · tarjeta de ruta, junto a «km» y «min» | Es una sola punta; salen de OSRM (servicio público sin garantía); si no contesta los km son en línea recta y los minutos salen de la velocidad de Configuración (40 si está vacía); la tarjeta no avisa cuál se usó. | `lib/remises/refrescarGeometria.ts:39-43` (los `waypoints` de ida/vuelta y el `\|\|` 40); `lib/remises/engine/osrm.ts` y `geo.ts:17` (docstring de `distanciaRuta`: «fallback cuando OSRM no está disponible»); spec de la Fase 3, líneas 328-329 («sin SLA, pueden fallar») |
+
+**Los dos `(i)` de `/rrhh/francos` contradicen al `(i)` del título de esa pantalla**, que
+ya estaba y no se tocó: ver el primer punto de la lista de abajo. Quien lo corrija tiene que
+leer los tres juntos.
+
+### Lo que no se escribió, y dónde se buscó
+
+- **Tres `(i)` que ya estaban y hoy dicen otra cosa que el código** (no se tocaron,
+  por la regla; se anotan para que alguien los corrija):
+  - **«Francos compensatorios» (título)** dice «trabaja un domingo o feriado» y «los que
+    no [tomados], se pagan en la liquidación». Desde el 02/11/2026 un feriado entre semana
+    no genera franco (`calculo.ts:83-97`) y un franco pendiente **no** se paga
+    (`planillaGeneral.ts:71-90`; el propio diálogo de la pantalla dice «Mientras esté
+    pendiente sus horas no entran en la liquidación»). Los dos `(i)` agregados dicen lo
+    contrario del título.
+  - **«Feriados»** dice que trabajar un feriado «genera francos compensatorios». Mismo motivo.
+  - **«Margen (minutos)» en Turnos** dice que pasado el margen la salida «se marca como hora
+    extra a validar». La hora extra de salida tiene un umbral fijo de 30 minutos
+    (`UMBRAL_EXTRA_MINUTOS`, `recalcular-puro.ts:62`) independiente del margen: coinciden mientras
+    el margen sea 30 (lo es según el doc del 08/10/2026), pero no en general.
+- **Asistencia: «Presentes», «Días esperados» y «% Asistencia»** (`asistencia/resumen/route.ts`).
+  «Presentes» es días esperados menos las ausencias, así que **cuenta feriados y vacaciones
+  como presente**, y el «% Asistencia» **suma las justificadas como asistencia** —el Analítico
+  las cuenta como ausencia—. Son dos convenciones opuestas para la misma palabra y no hay
+  texto que diga cuál es la querida; se buscó en `RRHH-ACTUALIZACION.md`, en
+  `resumenHoy.ts`/`tarjetasHoy.ts` y en el spec de la Fase 2.
+- **Asistencia: «Faltas sin clasificar (N)»** (`asistencia/faltas-sin-clasificar/route.ts`):
+  es un `select("*")` **sin `traerPaginado`**, así que con un período largo el número topa en
+  1.000 sin avisar, y no filtra por activos (el resumen de al lado sí). El doc dice que
+  el backlog sin clasificar era de 8.237 al 17/09/2026, así que es alcanzable.
+  El mismo doc exige `traerPaginado` para toda consulta que barra el padrón.
+- **Las cuatro tarjetas del dashboard** (Presentes, Ausentes, Tardes, Vacaciones): la regla
+  está muy bien escrita en `lib/rrhh/tarjetasHoy.ts` —incluye por qué «Ausentes» mira el último día
+  hábil con fichadas—, pero `KpiCard` no admite `(i)`. Su subtítulo ya dice el día.
+- **«Trabajadas» y «Teóricas» por sector** (`horas-por-sector/route.ts`): las teóricas son
+  días esperados × horas teóricas, y los días esperados **incluyen vacaciones y feriados**, donde
+  no hay horas; el gráfico muestra así menos trabajadas que teóricas por construcción. No está
+  escrito en ningún lado.
+- **El costo de horas extra** ya tiene un `(i)` que dice «Estimado» y no dice que parte de
+  extras sin validar; el que se puso en «Horas extra por Sector» lo cubre sólo si se lee primero.
+- **Liquidación individual vs planilla general**: `liquidaciones/generar/route.ts:65`
+  (`totalBruto = normal + extra 50 + extra 100`) **no suma francos**; la planilla sí
+  (`planillaGeneral.ts:285`). Para el mismo empleado y período los dos totales pueden diferir y
+  ningún texto lo dice ni dice si es a propósito. Tampoco el «Total $» de la planilla incluye
+  las columnas de vacaciones y enfermedad. Se buscó en `docs/RRHH-ACTUALIZACION.md` y en los
+  docstrings de `planillaGeneral.ts`; el docstring de `horasDeFrancoAPagar` habla sólo de la
+  planilla.
+- **«Modalidad de pago» (jornal / mensual)**: el doc dice dónde vive y que la planilla filtra por
+  ella; **no dice qué cambia para un mensual en el cálculo** (el código no la usa para nada más
+  que filtrar). Los 12 mensuales de la corrida del 27/08/2026 envejecen.
+- **Vacaciones: «Días correspondientes»** (`vacaciones/[id]/balance/route.ts`,
+  `engine/vacaciones.ts`): la antigüedad se mide **al 1° de enero del año elegido**, quien
+  ingresó después tiene 0 ese año, y la escala es la del sistema o la propia del empleado. Es una
+  decisión que sólo está en el código —`diasCorrespondientes` no tiene docstring y la
+  migración 008 sólo trae el valor por defecto—, y la escala no se edita desde ninguna
+  pantalla (por búsqueda de «escala» en `app`, `components` y `lib`; no es lo mismo que probarlo).
+  El doc del 27/08/2026 tampoco dice si los 8 períodos derivados quedaron finalmente en 2025.
+- **Analítico, el resto**: «Empleados por género» manda a «Sin especificar» a quien no tiene el dato,
+  los tramos de antigüedad son `[min, max)` y la última barra de «Índice de ausentismo por mes» es
+  el mes en curso hasta hoy. Nada de eso está escrito; son los tres gráficos y las tarjetas
+  «Empleados» y «Antigüedad promedio». Y **el día de hoy cuenta**: `analiticoResumen.ts` llega
+  hasta hoy y el motor marca ausente a quien todavía no tiene marcación, así que a la mañana el
+  ausentismo del mes incluye a quien no llegó aún. Se buscó en el doc y no está dicho. La cifra
+  de «~70 %» del doc es del 17/09/2026 y no se repitió.
+- **Ficha: «Validar»** (`EmpleadoDetalle.tsx:104-112`, `asistencia/validar/route.ts`): la ruta exige
+  `es_admin_check`, es decir nivel **admin** de RRHH —y `nivelEnModulo` le da `admin` a todo
+  `admin_sistema`—, pero el botón aparece para cualquiera con acceso al módulo y `validar()`
+  **ignora la respuesta**: quien no es admin aprieta y no pasa nada ni se avisa. No hay
+  texto sobre eso; es un fallo mudo y no se escribió un `(i)` que lo explicara.
+- **Fichadas**: no se agregó nada. Las tres cargas (Lenox, Excel, manual) y el «Acreditado» ya
+  tienen su `(i)`; la ventana de 7 días del cron y el riesgo de que lo más viejo no se recupere solo
+  están en el doc y el `(i)` de «Traer de Lenox» ya nombra los 7 días.
+- **Remises, lo que no se leyó a fondo**: `semana`, `empleados`, `historial`, `hoja-ruta/[id]/imprimir`
+  y `configuracion` sólo se miraron por sus `(i)` existentes y un grep de números. La portada
+  `/remises` **ya tiene** su `(i)` y los cuatro `KpiCard` no admiten uno. «Historial reciente» de la portada
+  sale de las últimas 60 hojas (`.limit(60)` en `remises/page.tsx`), así que una corrida con muchas
+  rutas podría quedar cortada en su grupo más viejo: no hay texto, no se midió.
+- **Quedan sin leer con detalle**: `rrhh/empleados` (el listado y la importación de la planilla), `rrhh/ausencias`
+  (salvo lo que toca a liquidaciones cerradas), la pestaña Francos de la ficha (mismas columnas que
+  `/rrhh/francos`, sin `(i)`), y `administracion`.
+- **Cifras con fecha que no se pusieron:** 54 fichadas abiertas y 73 vs 70 empleados del doc de Lenox
+  (07/10/2026), 931 días corregidos y 8.237 faltas sin clasificar (27/08 y 17/09/2026).

@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/ConfirmProvider";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import InfoTip from "@/components/InfoTip";
 
 const tabs = ["fichadas", "ausencias", "vacaciones", "francos"] as const;
 type Tab = (typeof tabs)[number];
@@ -286,9 +287,12 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
   return (
     <div>
       <div className="flex items-start justify-between mb-1">
-        <h1 className="text-xl font-bold text-slate-900">
-          {empleado.apellido}, {empleado.nombre}
-          {!empleado.activo && <span className="ml-2 text-sm font-normal text-red-600">(inactivo)</span>}
+        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <span>
+            {empleado.apellido}, {empleado.nombre}
+            {!empleado.activo && <span className="ml-2 text-sm font-normal text-red-600">(inactivo)</span>}
+          </span>
+          <InfoTip text="Las horas extra de cada día no entran en la liquidación hasta que se validan con «Validar», y la validación se pierde si después cambian las horas extra de ese día. «(manual)» marca un día con las horas corregidas a mano: el recálculo no lo pisa." />
         </h1>
         {canEdit && (
           <div className="flex gap-2">

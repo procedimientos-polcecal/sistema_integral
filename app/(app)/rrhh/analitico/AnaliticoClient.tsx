@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import type { ResumenAnalitico } from "@/lib/rrhh/analiticoResumen";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * Los gráficos, aparte: `recharts` son ~350 KB y su JS bloqueaba el primer
@@ -44,7 +45,10 @@ export default function AnaliticoClient({ resumenInicial }: { resumenInicial: Re
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-slate-900 mb-6">Analítico de personal</h1>
+      <h1 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+        Analítico de personal
+        <InfoTip text="Todo es del personal activo. Ausentismo y Tardanza son del mes en curso, hasta hoy, sobre los días del mes salvo domingos (y sábados en los sectores de lunes a viernes): feriados y vacaciones suman al total pero nunca como ausencia. Ausentismo cuenta todo día sin marcación, con la falta justificada o sin clasificar; Tardanza incluye la cargada a mano pero no los retiros anticipados. Edad promedio toma sólo a quienes tienen fecha de nacimiento." />
+      </h1>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <StatCard titulo="Empleados" valor={resumen.cantidadEmpleados ?? "-"} />

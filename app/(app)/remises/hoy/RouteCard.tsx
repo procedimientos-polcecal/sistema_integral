@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
+import InfoTip from "@/components/InfoTip";
 import { gmapsLink, wazeLink, textoRuta, whatsappLink, emailLink, type HojaTexto } from "@/lib/remises/shareText";
 
 const COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
@@ -118,6 +119,7 @@ export default function RouteCard({
         <div className="flex items-center gap-1.5 flex-wrap ml-auto">
           <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{hoja.km ?? "-"} km</span>
           <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">~{hoja.minutos ?? "-"} min</span>
+          <InfoTip text="Es el recorrido de ida hacia la fábrica o de vuelta desde ella, no los dos. Salen del ruteo por calles de OSRM, un servicio público gratuito sin garantía de respuesta. Si no contesta, los km son en línea recta entre paradas, que no sigue las calles, y los minutos se estiman con la velocidad promedio de Configuración (40 km/h si está vacía). La tarjeta no avisa cuál de los dos se usó." />
           <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">{pax}{hoja.vehiculos?.capacidad ? `/${hoja.vehiculos.capacidad}` : ""} pax</span>
           <label className="text-xs px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 flex items-center gap-1">
             Salida:

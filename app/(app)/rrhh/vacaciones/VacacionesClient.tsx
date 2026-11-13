@@ -91,7 +91,10 @@ function Balance({ empleados }: { empleados: any[] }) {
               <div className="text-3xl font-semibold mt-1">{balance.correspondientes}</div>
             </div>
             <div className="card p-5">
-              <div className="text-sm text-slate-500">Días tomados</div>
+              <div className="text-sm text-slate-500 flex items-center gap-1.5">
+                Días tomados
+                <InfoTip text="Suma los días de los períodos cargados con ese año correspondiente, sin mirar las fechas: unas vacaciones tomadas en enero pueden descontar del año anterior. Los que vienen de Ausencias cuentan días corridos, fines de semana incluidos." />
+              </div>
               <div className="text-3xl font-semibold mt-1">{balance.tomados}</div>
             </div>
             <div className="card p-5">

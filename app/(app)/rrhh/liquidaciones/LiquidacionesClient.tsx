@@ -258,9 +258,24 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
                   <th className="pb-2 pr-3">Hs. normales</th>
                   <th className="pb-2 pr-3">Hs. extra 50%</th>
                   <th className="pb-2 pr-3">Hs. extra 100%</th>
-                  <th className="pb-2 pr-3">Franco comp.</th>
-                  <th className="pb-2 pr-3">Hs. vacaciones</th>
-                  <th className="pb-2 pr-3">Hs. enfermedad</th>
+                  <th className="pb-2 pr-3">
+                    <span className="inline-flex items-center gap-1">
+                      Franco comp.
+                      <InfoTip text="Sólo cuentan los francos marcados como tomados, y en el período de su fecha de «Generado el», no en el que se tomaron: un franco ganado en octubre y tomado en noviembre va en la planilla de octubre, cuando se vuelva a emitir." />
+                    </span>
+                  </th>
+                  <th className="pb-2 pr-3">
+                    <span className="inline-flex items-center gap-1">
+                      Hs. vacaciones
+                      <InfoTip text="Días corridos del período de vacaciones que caen dentro del rango, domingos y feriados incluidos, por las horas teóricas diarias del empleado. No salen de las marcaciones: esos días no generan horas normales." />
+                    </span>
+                  </th>
+                  <th className="pb-2 pr-3">
+                    <span className="inline-flex items-center gap-1">
+                      Hs. enfermedad
+                      <InfoTip text="Sólo licencias de tipo enfermedad o accidente inculpable marcadas como justificadas. Cuenta los días hábiles y sábados del rango, sin domingos ni feriados, por las horas teóricas diarias. Las demás licencias no aparecen en ninguna columna." />
+                    </span>
+                  </th>
                   <th className="pb-2">Total $</th>
                 </tr>
               </thead>
@@ -317,7 +332,12 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
                   <th className="pb-2">Hs. extra 50%</th>
                   <th className="pb-2">Hs. extra 100%</th>
                   <th className="pb-2">Total</th>
-                  <th className="pb-2">Estado</th>
+                  <th className="pb-2">
+                    <span className="inline-flex items-center gap-1">
+                      Estado
+                      <InfoTip text="Cerrar es lo que protege el período: las marcaciones de esos días ya no las toca ni Lenox ni el Excel del reloj. Una ausencia que cargues después dentro de un período cerrado se guarda pero no llega al recibo, y RRHH no te frena. Desde acá no se reabre: sólo existe Eliminar, también en las cerradas." />
+                    </span>
+                  </th>
                   <th className="pb-2"></th>
                 </tr>
               </thead>
