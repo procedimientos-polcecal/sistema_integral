@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { MODULOS_ORDEN } from "@/lib/core/access";
 import type { Modulo } from "@/lib/core/types";
@@ -176,6 +176,32 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<{ link: string; aviso: string | null } | null>(null);
+  const confirmar = useConfirm();
+  const preguntando = useRef(false);
+
+  // Fondo, X y Escape. No usa `tocado` del `Modal`: su cartel promete que lo
+  // cargado se encuentra al volver a abrir, y un link de un solo uso no vuelve.
+  async function salir() {
+    // Mientras se crea no se sale: el usuario se crea igual, y el modal
+    // desmontado nunca mostraría el link, que es la única forma de entrar si
+    // el correo no salió.
+    if (guardando) return;
+    if (!resultado) { onClose(); return; }
+    if (preguntando.current) return;
+    preguntando.current = true;
+    try {
+      const salgo = await confirmar({
+        title: "¿Cerrar sin copiar el link?",
+        message:
+          "El link no se vuelve a mostrar. Si todavía no se lo pasaste a la persona, no vas a poder recuperarlo desde acá.",
+        confirmText: "Cerrar",
+        cancelText: "Volver al link",
+      });
+      if (salgo) onSaved();
+    } finally {
+      preguntando.current = false;
+    }
+  }
 
   async function crear(e: React.FormEvent) {
     e.preventDefault();
@@ -186,8 +212,10 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     });
-    setGuardando(false);
     const data = await res.json().catch(() => ({}));
+    // Se baja `guardando` recién con la respuesta leída: entre una cosa y la otra
+    // salir tiene que seguir frenado.
+    setGuardando(false);
     if (!res.ok) {
       setError(data.error ?? "No se pudo crear el usuario");
       return;
@@ -202,9 +230,7 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
   }
 
   return (
-    // Con el link a la vista el usuario ya existe: salir por el fondo, la X o
-    // Escape tiene que refrescar la lista igual que «Listo».
-    <Modal titulo="Nuevo usuario" alSalir={resultado ? onSaved : onClose}>
+    <Modal titulo="Nuevo usuario" alSalir={() => void salir()}>
         {resultado ? (
           <div className="space-y-3">
             <p className="text-sm text-slate-700">
@@ -262,7 +288,7 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
             Se le va a mandar un email a esa dirección para que defina su propia contraseña.
           </p>
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <PieDeModal className="flex justify-end gap-2 pt-2">
+          <PieDeModal>
             <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Creando..." : "Crear usuario"}
@@ -344,7 +370,9 @@ function EditarUsuarioModal({
   }
 
   return (
-    <Modal titulo="Editar usuario" alSalir={onClose}>
+    // Mientras guarda no se sale: son tres pedidos seguidos y cerrar a mitad
+    // dejaría los permisos a medio escribir sin que la pantalla se entere.
+    <Modal titulo="Editar usuario" alSalir={() => { if (!guardando) onClose(); }}>
         <p className="text-xs text-slate-500 mb-4">{usuario.email}</p>
         <form onSubmit={guardar} className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
@@ -442,7 +470,7 @@ function EditarUsuarioModal({
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <PieDeModal className="flex justify-end gap-2 pt-2">
+          <PieDeModal>
             <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Guardando..." : "Guardar"}
