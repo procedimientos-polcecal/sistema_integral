@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import KpiCard from "@/components/KpiCard";
+import InfoTip from "@/components/InfoTip";
 import { costoDeRegistro, resumenPorYacimiento, ETIQUETA_TIPO_RECURSO, ETIQUETA_TIPO_CAMION } from "@/lib/cantera/destape";
 import type { DestapeDB, TarifaAcarreoDB } from "@/lib/cantera/types";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -229,10 +230,22 @@ export default function DestapeClient({
                   <th>Yacimiento</th>
                   <th className="text-right">Hs. operario</th>
                   <th className="text-right">Hs. fletero</th>
-                  <th className="text-right">Costo máquina</th>
-                  <th className="text-right">Costo MO</th>
-                  <th className="text-right">Costo fletero</th>
-                  <th className="text-right">Costo total</th>
+                  <th className="text-right">
+                    Costo máquina
+                    <InfoTip className="ml-1" text="Horas de cada registro por el costo por hora de la máquina ese mes: lo facturado en Odoo a la cuenta analítica del equipo, más el combustible estimado con el precio medio que tuvo en toda la flota, dividido las horas del horómetro de Taller Vial. Si Odoo no contesta o la máquina no tiene horas medidas ese mes, queda en $0. El combustible no incluye el impuesto, así que queda por debajo del gasto real." />
+                  </th>
+                  <th className="text-right">
+                    Costo MO
+                    <InfoTip className="ml-1" text="Horas cargadas por lo que cobra por hora ese operario. El valor hora vive en RRHH: si no tenés acceso a RRHH te llega en 0 y esta columna muestra $0 aunque haya horas cargadas, sin ningún error. Lo tienen los administradores y quien tenga RRHH asignado. Un $0 acá puede ser un costo que no ves, no un costo que no hubo." />
+                  </th>
+                  <th className="text-right">
+                    Costo fletero
+                    <InfoTip className="ml-1" text="Horas por la tarifa «horas de destape» de Acarreo vigente ese día, y el doble si el camión es grande. Es la misma tarifa que usa Acarreo: la del camión grande es exactamente el doble de la del chico, no una tarifa aparte." />
+                  </th>
+                  <th className="text-right">
+                    Costo total
+                    <InfoTip className="ml-1" text="Máquina más mano de obra más fletero. Cada una puede quedar en $0 por su propio motivo (mirá el (i) de su columna), y cuando pasa el total queda corto: la pantalla no lo marca." />
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -282,7 +295,10 @@ export default function DestapeClient({
       )}
 
       <section className="mt-6">
-        <h2 className="section-title">Registros del mes</h2>
+        <h2 className="section-title">
+          Registros del mes
+          <InfoTip className="ml-1.5" text="Cuando un registro de fletero tiene viajes, el «≈ t» es viajes por el promedio de toneladas por viaje de ese fletero, medido sobre todas sus pesadas de Acarreo sin distinguir material. Si el fletero no tiene ninguna pesada no se estima, y no se muestra." />
+        </h2>
         <div className="mt-2 grid grid-cols-1 gap-4 lg:grid-cols-5">
           <div className="card p-4 lg:col-span-2">
             <CalendarioDestape mes={mes} porFecha={registrosPorFecha} diaSeleccionado={diaSeleccionado} onElegir={setDiaSeleccionado} />

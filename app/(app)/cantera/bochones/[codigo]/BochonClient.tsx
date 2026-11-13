@@ -6,6 +6,7 @@ import Link from "next/link";
 import { montoBochon } from "@/lib/cantera/costos";
 import type { Bochon, Yacimiento } from "@/lib/cantera/types";
 import { useConfirm } from "@/components/ConfirmProvider";
+import InfoTip from "@/components/InfoTip";
 import ConciliacionOdoo from "../../ConciliacionOdoo";
 import { numeroDeCampo } from "@/lib/cantera/numero";
 
@@ -147,7 +148,10 @@ export default function BochonClient({
           <Link href={`/cantera/registros?y=${bochon.yacimiento_id}`} className="text-xs text-slate-500 underline">
             ← {yacimiento?.nombre ?? "Registros"}
           </Link>
-          <h1 className="font-mono text-xl font-semibold">{bochon.codigo}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="font-mono text-xl font-semibold">{bochon.codigo}</h1>
+            <InfoTip text="Un bochón es la voladura secundaria: rompe los bloques que quedaron grandes después de la primaria. Cargás cuántos son, los metros por bochón, el precio y el tipo de cambio, y el monto sale de multiplicarlos. Cuando finanzas vincula la factura de Odoo, lo compara con el importe neto." />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {bochon.origen === "importacion" && (

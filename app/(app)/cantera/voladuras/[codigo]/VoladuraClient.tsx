@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmProvider";
+import InfoTip from "@/components/InfoTip";
 import {
   baseDeConsumosUsd,
   montoPerforacion,
@@ -393,7 +394,10 @@ export default function VoladuraClient({
           <Link href={`/cantera/registros?y=${voladura.yacimiento_id}`} className="text-xs text-slate-500 underline">
             ← {yacimiento?.nombre ?? "Registros"}
           </Link>
-          <h1 className="font-mono text-xl font-semibold">{voladura.codigo}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="font-mono text-xl font-semibold">{voladura.codigo}</h1>
+            <InfoTip text="Una voladura es un solo registro con dos etapas: la perforación (el barrenado) y la voladura (la carga y el disparo), cada una con su monto y, para finanzas, su factura. Los consumos de abajo son los que arman el monto de la voladura." />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {voladura.origen === "importacion" && (
@@ -423,7 +427,10 @@ export default function VoladuraClient({
       <section className="mt-5 card p-4">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold">Perforación</h2>
-          <span className="text-sm font-medium">{money(montoPerf)}</span>
+          <span className="text-sm font-medium">
+            {money(montoPerf)}
+            <InfoTip className="ml-1.5" text="Metros perforados por USD/m por el tipo de cambio, más las noches de sereno por su monto: el sereno es un pago en pesos y no pasa por el tipo de cambio. Si falta el precio, el tipo de cambio o los metros, muestra «—» y no un cero." />
+          </span>
         </div>
         <div className="mt-3 text-xs text-slate-600">
           Pozos por profundidad
@@ -472,6 +479,7 @@ export default function VoladuraClient({
               </span>
             )}
             <span className="font-medium">{money(montoVol)}</span>
+            <InfoTip className="ml-1.5" text="Las toneladas son una estimación por la malla, no pesadas: metros volados por densidad, burden y espaciamiento. Usa la malla real si la cargaste, si no la de la perforación y si no la de diseño del yacimiento. Si la voladura trae la tonelada de la planilla, va al lado, y se pone ámbar cuando las dos difieren en más del 15 %. Esta fórmula no reproduce la de la planilla vieja. El monto es (insumos + 4 % de servicio) por el tipo de cambio, y «—» quiere decir que falta el tipo de cambio o no hay consumos cargados, no que costó cero." />
           </span>
         </div>
         <div className="mt-3 text-xs text-slate-600">

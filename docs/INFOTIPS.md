@@ -338,3 +338,139 @@ aparte: las tablas siguen siendo tablas con scroll.
   ese día queda sin filas y se toma como cerrado, sin distinguirse. La frase del
   `(i)` de «Horas no trabajadas» habla de «ninguna fila», no de «el robot no
   informó». Se buscó en `csv.ts`, `turnos.ts` y `PRODUCCION.md`; no está resuelto.
+
+## Cantera
+
+**Cantera no tiene documento de módulo** (no es una fila de la tabla de `CLAUDE.md`):
+lo escrito vive en `docs/superpowers/specs/2026-09-10-cantera-design.md`, que cubre sólo la
+fase 1 (perforación, voladura, bochones, informe), y en los docstrings de `lib/cantera/`
+—`destape.ts`, `costoMaquinaDestape.ts`, `costoMaquinaOdoo.ts`, `costos.ts`, `toneladas.ts`,
+`informe.ts`, `cubicacion.ts`, `pesadas.ts`, `acarreo.ts` y un comentario largo de
+`consultas.ts:645-656`—. Donde el spec y el código discrepan, manda el código.
+
+**Pantallas sin subtítulo (las cinco del escaneo):** cuatro llevan `(i)` de pantalla
+(`acarreo`, `informes`, `bochones/[codigo]`, `voladuras/[codigo]`). **`destape` se descartó:**
+el escaneo la marcó porque su subtítulo cae ocho líneas después del título, pero lo tiene
+(`DestapeClient.tsx:208`, «El costo de destapar un frente…») y el resto de lo que hay que decir
+es de número, no de pantalla. Va en las columnas de costo.
+
+### Destape
+
+| Dónde | Texto (resumen) | De dónde salió |
+|---|---|---|
+| `/cantera/destape` · columna «Costo máquina» | Horas × costo por hora del equipo ese mes: lo facturado en Odoo a su cuenta analítica + combustible estimado con el precio medio de toda la flota, ÷ horas del horómetro. Si Odoo no contesta o no hay horas medidas, queda en $0. El combustible no incluye el impuesto, así que queda por debajo del real. | `costoMaquinaDestape.ts:1-10` y `:28-30` (sin «IMPUESTO COMBUSTIBLE»), `costoMaquinaOdoo.ts:22-26` (mapa vacío, «muestra $0»), `destape.ts:98-99` (indefinido → 0) |
+| `/cantera/destape` · columna «Costo MO» | **El mejor del proyecto.** Horas × lo que cobra por hora ese operario. El valor hora vive en RRHH: sin acceso a RRHH llega en 0 y la columna muestra $0 con horas cargadas, sin error. | `consultas.ts:650-656` (el comentario lo dice textual), `009_rrhh_rls.sql:63` (`rrhh_empleados_datos_select … using (tiene_acceso_rrhh())`), `20260908083338…sql:164-175` (admin del sistema o grant `rrhh`), `destape.ts:9-11` |
+| `/cantera/destape` · columna «Costo fletero» | Horas × tarifa «horas de destape» de Acarreo vigente ese día, y el doble si el camión es grande; la del grande es exactamente el doble de la del chico. | `destape.ts:16-22` y `:52-55`, `:104-107` |
+| `/cantera/destape` · columna «Costo total» | Suma de las tres; cada una puede quedar en $0 por su motivo y el total queda corto sin marca. | `destape.ts:101,110` (`costoTotal`); la pantalla no tiene ningún aviso de $0 (`DestapeClient.tsx` entero) |
+| `/cantera/destape` · «Registros del mes» | El «≈ t» de un registro de fletero con viajes es viajes × promedio de toneladas por viaje de ese fletero sobre todas sus pesadas de Acarreo, sin distinguir material; sin pesadas no se estima ni se muestra. | `destape.ts:75`, `:113-121` |
+
+### Acarreo
+
+| Dónde | Texto (resumen) | De dónde salió |
+|---|---|---|
+| `/cantera/acarreo` · título | Cuánto transportó cada fletero y cuánto se le paga. Las toneladas salen de las pesadas de la balanza, que se traen de la planilla con «Actualizar»; lo que no pasa por la balanza, como las horas de destape, se carga a mano. | `acarreo/page.tsx:20-30` (docstring), `ActualizarAcarreo.tsx:11-18` |
+| `/cantera/acarreo` · «Por fletero» | Cantidad × tarifa vigente ese mes; las horas de Orsatti y Schneider valen el doble; un renglón sin tarifa no suma y dice «sin tarifa»; las pesadas sin fletero reconocido no entran acá pero sí en las toneladas de abajo. | `acarreo.ts:118-127` (camión grande), `:156-190` (`resumenPorFletero`: `monto ?? 0`), `pesadas.ts:331-348` y `:357-372` |
+| `/cantera/acarreo` · «Total del mes, por tipo» | Todas las pesadas del mes con tipo, se sepa o no el fletero; las columnas «Destape» de la balanza no tienen tipo y quedan afuera; horas y viajes se listan pero no suman al cartel de toneladas. | `pesadas.ts:17-19`, `:357-372` (`agruparPesadasPorTipoMes`), `acarreo.ts:216-226` y `AcarreoClient.tsx:79` (`unidad === "tonelada"`) |
+| `/cantera/acarreo` · «Toneladas por yacimiento» | Cada pesada por el origen que trae la balanza, sin mirar material ni fletero; sólo D1, D6, C1 y C3 tienen tarjeta; dolomita D1 con origen PT 2, caliza de Loma Negra y piedra de Pavone/Serjen van aparte; el % es sobre las toneladas del mes, no sobre las tarjetas. | `pesadas.ts:205-212` (`ORIGENES_DE_YACIMIENTO` y la lista de lo que queda afuera), `:252-271`, `:302-322`; `AcarreoClient.tsx:238` (denominador `totalToneladas`) |
+
+### Voladuras y bochones
+
+| Dónde | Texto (resumen) | De dónde salió |
+|---|---|---|
+| `/cantera/voladuras/[codigo]` · título | Un registro con dos etapas (perforación y voladura), cada una con su monto y, para finanzas, su factura; los consumos arman el monto de la voladura. | spec `2026-09-10-cantera-design.md:145-150`; `voladuras/[codigo]/page.tsx:11-18`; `VoladuraClient.tsx:534` («De acá sale el monto de la voladura») |
+| voladura · monto de «Perforación» | Metros × USD/m × TC + noches de sereno × monto por noche, el sereno sin TC; «—» si falta precio, TC o metros. | `costos.ts:16-26` (sereno «sin pasar por el TC»), `:27-45` (null) |
+| voladura · toneladas y monto de «Voladura» | Toneladas estimadas por la malla (real, si no la de la perforación, si no la del yacimiento), con la de la planilla al lado y ámbar si difieren más del 15 %; la fórmula no reproduce la de la planilla vieja. Monto = (insumos + 4 %) × TC; «—» es que falta TC o consumos, no cero. | `toneladas.ts:1-22`, `:58`; `VoladuraClient.tsx:285-291` (cadena de malla), `costos.ts:67-104` |
+| `/cantera/bochones/[codigo]` · título | Voladura secundaria que rompe los bloques que quedaron grandes; cargás cantidad, metros por bochón, precio y TC; la factura de finanzas se compara contra el neto. | spec `:51-54`; `costos.ts:48-54` (campos invertidos en la planilla vieja); `ConciliacionOdoo.tsx:157` |
+
+### Registros
+
+| Dónde | Texto (resumen) | De dónde salió |
+|---|---|---|
+| `/cantera/registros` · «Monto perf.» y «Monto vol.» | Lo mismo que en la voladura; «—» no es cero. | `costos.ts` (ídem) |
+| `/cantera/registros` · «Toneladas» | Estimadas, no pesadas; entre paréntesis la de la planilla; ámbar si difieren más del 15 %; el informe en cambio usa la de la planilla cuando existe. | `toneladas.ts:15-22`, `consultas.ts:241-249` (comentario «Es distinto del tablero») |
+| `/cantera/registros` · «Facturas» y «Factura» (bochones) | P = perforación, V = voladura; «coincide» ≤ 2 %, «revisar» más, «sin factura» sin vincular, «sin monto» sin datos; contra el importe neto. | `costos.ts:106-136` (`cruce`, `TOLERANCIA`), spec `:211-216` |
+| `/cantera/registros` · bochones, «Metros perf.» | Son los metros de **cada bochón** (≤ 1), no el total; el monto es cantidad × metros × USD/m × TC. | `costos.ts:48-54`, `informe.ts:52` |
+
+### Informe
+
+| Dónde | Texto (resumen) | De dónde salió |
+|---|---|---|
+| `/cantera/informes` · título | Arriba el histórico mes a mes, abajo las tablas de un rango para exportar; no escribe prosa; cada tabla recorta con su propia fecha. | `informe.ts:1-16`, `informes/page.tsx:8-14` |
+| informes · «Variación mes a mes» | Cada mes se arma como el informe; perforaciones por fin de perforación, voladuras por fecha de voladura; USD/tonelada = (perf + vol) ÷ toneladas, sin bochones; mes sin toneladas no lo tiene. | `informe.ts:13-16`, `:99`, `:344-376` |
+| informes · resumen, «Toneladas» | Estimadas; las de la planilla histórica cuando existen, la fórmula de cantera sólo para lo cargado después. | `consultas.ts:241-249` |
+| informes · resumen, «Costo total USD» | Perforación + voladura, sin bochones; la perforación sin TC ni sereno; la voladura con su 4 %. | `informe.ts:36-38`, `:174`, `:265` |
+| informes · resumen, «Servicio USD» | 4 % de los insumos, calculado, no es un renglón. | `costos.ts:67-75` |
+| informes · resumen, «Gr Expl./Ton» | Σ cantidad de insumos tipo «detonador» (kilos) × 1000 ÷ toneladas. | `informe.ts:158-166` |
+| informes · resumen, «USD/Ton» | (perf + vol) ÷ toneladas sin bochones; perforación por fin de perforación y toneladas por voladura: pueden no ser de las mismas voladuras. | `informe.ts:99`, `:13-16` |
+| informes · perforaciones, «Total ARS» | Metros × USD/m × TC + sereno en pesos; no es Total USD × TC. | `costos.ts:17-26`, `informe.ts:36-38` |
+
+### Cubicación
+
+| Dónde | Texto (resumen) | De dónde salió |
+|---|---|---|
+| `/cantera/cubicacion` · insignia de lectura | Residuo sobre lo volado del mes: ≤ 5 % cierra, ≤ 10 % aceptable, más revisar; «sin actividad» = sin voladuras; «Pendiente» = falta la existencia final del mes o la del anterior. | `cubicacion.ts:18-22`, `:76`, `:126-134` |
+| cubicación · «Exist. inicial» | Es la final total del mes anterior; sin cierre ese mes queda «—», no cero, y sin inicial no hay stock teórico ni residuo. | `cubicacion.ts:62`, `:180-199` (`armarCierresCubicacion`) |
+| cubicación · «Voladuras» | Toneladas estimadas de las perforaciones que **terminaron** ese mes aunque se hayan volado en otro; sin fecha de fin no cuenta en ningún mes. | `cubicacion.ts:5-8`, `:103`; `cubicacion/page.tsx:65-79` |
+
+**Cuenta de colocaciones:** 30 `(i)` en 7 archivos (`DestapeClient` 5, `AcarreoClient` 4,
+`InformeClient` 8, `VoladuraClient` 3, `BochonClient` 1, `CanteraClient` 6, `CubicacionClient` 3).
+De los de Informe, uno es del título, uno de la serie, cinco del resumen por cantera y uno de
+«Total ARS» de perforaciones.
+
+### Lo que no se escribió, y dónde se buscó
+
+- **Costo MO en $0 también cuando el operario no está en la lista del selector.**
+  `valorHoraPorOperarioId` sale de `traerOperariosDeCantera`, que trae sólo empleados activos de
+  un sector que se llame como «cantera» o «tritura» (`consultas.ts:635-662`). Un registro cuyo
+  operario se dio de baja o está en otro sector queda con `operarioValorHora = null` y costo MO 0
+  (`DestapeClient.tsx:44`, `destape.ts:100`), aunque el que mira tenga RRHH. El código lo hace;
+  ningún comentario ni documento lo dice. Se buscó en `consultas.ts`, `destape.ts` y `DestapeClient.tsx`.
+- **`costoMaquinaOdoo.ts` promete un aviso que la pantalla no tiene.** El docstring dice «el tablero
+  muestra $0 con aviso» y `costoMaquinaDestape.ts:41` dice que no vale mostrar $0 porque «diría
+  gratis»; `DestapeClient.tsx` no tiene ningún aviso y `costoDeRegistro` usa 0 (`destape.ts:98-99`).
+  El `(i)` de «Costo máquina» dice sólo «queda en $0». Qué hay que hacer lo decide un humano.
+- **Costo fletero en $0 si no hay tarifa vigente o falta el tipo de camión**, en silencio
+  (`destape.ts:104-107`); en Acarreo el mismo caso dice «sin tarifa». Es comportamiento del código,
+  no está explicado en ningún lado, así que no entró al `(i)`.
+- **Un fletero desactivado desaparece del total de Acarreo.** `acarreo/page.tsx:51` y `page.tsx:80`
+  (portada) piden `traerFleteros(supabase, true)` (sólo activos): quien tuvo movimiento ese mes y
+  se dio de baja no entra ni en «Por fletero» ni en «Acarreo a pagar», mientras las toneladas sí
+  lo cuentan. Ningún comentario lo menciona.
+- **El cartel de Acarreo contradice al código.** `AcarreoClient.tsx:121-122` dice de las pesadas sin
+  fletero «no entran en ningún total», y `acarreo.ts:197-214`, `pesadas.ts:214-229` y `:357-372` dicen
+  —y el código hace— que sí entran en toneladas, yacimiento y total por tipo. El `(i)` de «Por fletero»
+  dice lo que hace el código; el cartel no se tocó.
+- **Tres cuentas de toneladas voladas que no dicen lo mismo.** Registros y Voladura usan la estimada
+  por la malla; el Informe usa `toneladas_planilla ?? estimada` (`consultas.ts:249`); Cubicación usa
+  la estimada sola (`cubicacion/page.tsx:65-79`) y la agrupa por fin de perforación mientras el
+  Informe agrupa por fecha de voladura. La del Informe y la de Registros quedan explicadas; **qué
+  número es «el bueno» para un mes no está escrito en ningún lado.**
+- **Registros filtra por `vol_fecha` y el bochón muestra `fecha_voladura ?? fin`.** Con un rango de
+  fechas, una voladura «sin volar» y un bochón que sólo tiene `fin` salen del listado
+  (`consultas.ts:79-80`, `:96-97`, `tablero.ts:94`). Es la semántica del `gte`/`lte` sobre null y no
+  una decisión escrita. Se buscó en `consultas.ts`, `registros/page.tsx` y el spec.
+- **«Conforme» no mueve el chip ni el aviso.** El spec (`:229-231`) dice que finanzas puede marcar
+  `conforme` «aunque difiera», pero `armarFilaVoladura`/`armarFilaBochon` calculan el chip sólo de
+  `cruce(monto, importe)` y `contarAvisos` cuenta «revisar» aunque esté marcado conforme
+  (`tablero.ts:78-79`, `:116-119`). Ningún documento dice si es lo querido; el `(i)` de «Facturas» no
+  dice nada de «conforme».
+- **Un renglón de consumo sin precio no suma y no avisa.** `baseDeConsumosUsd` lo saltea
+  (`costos.ts:86`); con renglones pero ninguno con precio, `montoVoladura` da 0 en vez de `null`
+  (`costos.ts:97-104`) mientras el informe da `null` (`informe.ts:174`). No hay texto que lo explique.
+- **La fórmula de toneladas sigue sin confirmar.** Spec `:556-559` (punto 2 de «Lo que hace falta de
+  una persona») y `toneladas.ts:15-22`: no reproduce la columna histórica. Los `(i)` lo dicen sin
+  prometer cuál de las dos está bien; no está escrito si cantera respondió.
+- **Los gramos de detonador.** `informe.ts:158-162` dice que la cantidad se carga en kilos
+  «confirmado con el usuario» y el spec (`:553-555`) lista como detonadores a insumos que se cuentan
+  en unidades (`detonadores x 4,8`). El `(i)` repite lo que dice el código; no se pudo cruzar con el
+  catálogo real de insumos.
+- **Portada: «Costo por tonelada este mes» y «Toneladas voladas».** `KpiCard` no admite un `(i)` y
+  esas dos tarjetas son links o números sueltos; no se tocó el componente compartido. Su definición
+  es la de la serie del Informe, ya explicada allá (`serieMensual`, `informe.ts:344-376`).
+- **Cantera: `fleteros`, `tarifas-acarreo`, `insumos`, `yacimientos` y las pantallas de carga
+  (`destape/cargar`, `acarreo/cargar`, `voladuras/nueva`, `bochones/nuevo`).** Se leyeron los títulos
+  y subtítulos: son catálogos o formularios y lo que dicen sus rótulos alcanza; las reglas que tienen
+  (`resolverFleteroDestape` deja «Orsatti» y «Dumerauf» sin resolver, `destape.ts:141-160`) viven del
+  lado de la importación, no de la pantalla.
+- **Cifras con fecha que no se pusieron:** los 354 de 7.510 pesadas sin fletero de `acarreo.ts:201`, los 7.623+ de `consultas.ts:385` y los
+  valores de tarifa de `destape.ts:19-21` envejecen con cada carga.

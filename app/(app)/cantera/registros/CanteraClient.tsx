@@ -7,6 +7,10 @@ import type { LecturaDeCruce } from "@/lib/cantera/costos";
 import type { Yacimiento } from "@/lib/cantera/types";
 import { avisosDe, type FilaBochon, type FilaVoladura } from "@/lib/cantera/tablero";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
+
+/** Qué quiere decir cada chip de factura; sale de `cruce()` en `lib/cantera/costos.ts` y de la decisión del spec (el monto es neto). */
+const INFO_FACTURA = "Compara el monto calculado con el importe neto de la factura de Odoo que finanzas vinculó: «coincide» es una diferencia de hasta el 2 %, «revisar» una mayor, «sin factura» que nadie la vinculó todavía y «sin monto» que el sistema no pudo calcularlo por falta de datos.";
 
 export type { FilaBochon, FilaVoladura };
 
@@ -159,10 +163,22 @@ export default function CanteraClient({
                 <th className="px-3 py-2">Cantera</th>
                 <th className="px-3 py-2">Voladura</th>
                 <th className="px-3 py-2">Pozos</th>
-                <th className="px-3 py-2">Monto perf.</th>
-                <th className="px-3 py-2">Monto vol.</th>
-                <th className="px-3 py-2">Toneladas</th>
-                <th className="px-3 py-2">Facturas</th>
+                <th className="px-3 py-2">
+                  Monto perf.
+                  <InfoTip className="ml-1" text="Metros perforados por USD/m por el tipo de cambio, más las noches de sereno por su monto: el sereno es en pesos y no pasa por el tipo de cambio. «—» es que falta el precio, el tipo de cambio o los metros, no un cero." />
+                </th>
+                <th className="px-3 py-2">
+                  Monto vol.
+                  <InfoTip className="ml-1" text="Los insumos cargados más el 4 % de servicio, por el tipo de cambio de la voladura. «—» es que falta el tipo de cambio o no hay consumos cargados, no que costó cero." />
+                </th>
+                <th className="px-3 py-2">
+                  Toneladas
+                  <InfoTip className="ml-1" text="Estimadas por la malla (metros volados por densidad, burden y espaciamiento), no pesadas. Entre paréntesis va la de la planilla histórica, cuando la hay, y el número se pone ámbar si difieren en más del 15 %. Esta fórmula no reproduce la de la planilla vieja. El informe, en cambio, usa la de la planilla cuando existe." />
+                </th>
+                <th className="px-3 py-2">
+                  Facturas
+                  <InfoTip className="ml-1" text={`P es la perforación y V la voladura. ${INFO_FACTURA}`} />
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -207,9 +223,15 @@ export default function CanteraClient({
                 <th className="px-3 py-2">Fecha voladura</th>
                 <th className="px-3 py-2">Voladura asoc.</th>
                 <th className="px-3 py-2">Cantidad</th>
-                <th className="px-3 py-2">Metros perf.</th>
+                <th className="px-3 py-2">
+                  Metros perf.
+                  <InfoTip className="ml-1" text="Son los metros de cada bochón, casi siempre uno o menos, y no el total perforado. El monto es cantidad por estos metros por USD/m por el tipo de cambio." />
+                </th>
                 <th className="px-3 py-2">Monto</th>
-                <th className="px-3 py-2">Factura</th>
+                <th className="px-3 py-2">
+                  Factura
+                  <InfoTip className="ml-1" text={INFO_FACTURA} />
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

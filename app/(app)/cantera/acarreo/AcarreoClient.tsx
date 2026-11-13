@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import KpiCard from "@/components/KpiCard";
+import InfoTip from "@/components/InfoTip";
 import {
   tipoDeAcarreo,
   ETIQUETA_UNIDAD,
@@ -82,7 +83,10 @@ export default function AcarreoClient({
     <div className="mx-auto max-w-5xl">
       <Link href="/cantera" className="text-xs text-slate-500 underline">← Cantera</Link>
       <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="page-header">Acarreo</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="page-header">Acarreo</h1>
+          <InfoTip text="Cuánto transportó cada fletero en el mes y cuánto se le paga. Las toneladas salen de las pesadas de la balanza, que se traen de la planilla de transporte con «Actualizar»; las actividades que no pasan por la balanza, como las horas de destape, se cargan a mano con «Cargar datos»." />
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <ActualizarAcarreo sync={sync} />
           {esAdmin && (
@@ -135,7 +139,10 @@ export default function AcarreoClient({
         {/* ── Por fletero ── */}
         <section className="card p-4">
           <div className="flex items-baseline justify-between">
-            <h2 className="section-title">Por fletero</h2>
+            <h2 className="section-title">
+              Por fletero
+              <InfoTip className="ml-1.5" text="Lo que se le paga a cada fletero: cantidad por la tarifa vigente ese mes. Las horas de Orsatti y Schneider valen el doble por su camión grande. Un renglón sin tarifa vigente no suma y dice «sin tarifa». Las pesadas sin fletero reconocido no entran acá, pero sí en las toneladas de abajo." />
+            </h2>
             <span className="text-sm font-semibold text-[var(--text-primary)]">{money(totalGeneral)}</span>
           </div>
           <div className="mt-3 space-y-2">
@@ -184,7 +191,10 @@ export default function AcarreoClient({
 
         {/* ── Total del mes, por tipo (ranking) ── */}
         <section className="card p-4">
-          <h2 className="section-title">Total del mes, por tipo</h2>
+          <h2 className="section-title">
+            Total del mes, por tipo
+            <InfoTip className="ml-1.5" text="Cuenta todas las pesadas del mes que tienen tipo de material, se sepa o no quién hizo el viaje. Las columnas «Destape» de la balanza no tienen tipo y quedan afuera. Las horas y los viajes se listan pero no suman a las toneladas del cartel de arriba." />
+          </h2>
           <p className="mt-1 text-xs text-[var(--text-muted)]">Todos los fleteros juntos — sólo lo que tuvo movimiento.</p>
           {totalesDelMes.length === 0 ? (
             <p className="empty-state mt-3">Sin movimiento este mes.</p>
@@ -210,7 +220,10 @@ export default function AcarreoClient({
 
       {/* ── Toneladas por yacimiento ── */}
       <section className="card mt-5 p-4">
-        <h2 className="section-title">Toneladas por yacimiento</h2>
+        <h2 className="section-title">
+          Toneladas por yacimiento
+          <InfoTip className="ml-1.5" text="Cada pesada cuenta por el origen que trae la balanza, sin mirar el material ni el fletero. Sólo D1, D6, C1 y C3 tienen tarjeta como yacimiento; la dolomita D1 con origen PT 2, la caliza de Loma Negra y la piedra de Pavone (origen Pavone o Serjen) se muestran aparte, y cualquier otro origen (reservas, galpones, plantas) no tiene tarjeta. El porcentaje es sobre las toneladas del mes de arriba, no sobre la suma de las tarjetas." />
+        </h2>
         <p className="mt-1 text-xs text-[var(--text-muted)]">Por el origen real de cada pesada — todos los materiales, incluida Caliza.</p>
         {toneladasDelMes.length === 0 && origenesExternos.calizaLomaNegra === 0 && origenesExternos.piedraPavone === 0 && origenesExternos.dolomitaD1DePt2 === 0 ? (
           <p className="empty-state mt-3">Sin datos este mes.</p>

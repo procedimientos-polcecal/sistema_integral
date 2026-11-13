@@ -6,6 +6,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { FilaSerieMensual, Informe } from "@/lib/cantera/informe";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 const esqueleto = () => <div className="h-full w-full animate-pulse rounded-lg bg-slate-100" />;
 const TendenciaToneladas = dynamic(() => import("./GraficosCantera").then((m) => m.TendenciaToneladas), { ssr: false, loading: esqueleto });
@@ -38,15 +39,27 @@ function Grafico({ titulo, children }: { titulo: string; children: React.ReactNo
 }
 
 /** El encabezado de una sección/tabla, con el color verde o ámbar de la planilla. */
-function Encabezado({ color, columnas }: { color: string; columnas: string[] }) {
+function Encabezado({ color, columnas, info = {} }: { color: string; columnas: string[]; info?: Record<string, string> }) {
   return (
     <tr style={{ backgroundColor: color }}>
       {columnas.map((c) => (
-        <th key={c} className="px-3 py-2 text-left text-xs font-semibold text-white">{c}</th>
+        <th key={c} className="px-3 py-2 text-left text-xs font-semibold text-white">
+          {c}
+          {info[c] && <InfoTip className="ml-1" text={info[c]} />}
+        </th>
       ))}
     </tr>
   );
 }
+
+/** Lo que cada columna del resumen por cantera no dice con su rótulo; cada texto cuelga de `lib/cantera/informe.ts` o `costos.ts`. */
+const INFO_RESUMEN: Record<string, string> = {
+  "Toneladas": "Son toneladas estimadas por la malla, no pesadas. Para una voladura que viene de la planilla histórica se usa la tonelada que ella cargó, y sólo las que se cargaron después usan la fórmula de cantera (metros × densidad × burden × espaciamiento), así que el tablero de Registros puede mostrar otro número para la misma voladura.",
+  "Costo total USD": "Perforación más voladura, sin los bochones. La perforación es metros por USD/m, sin tipo de cambio y sin las noches de sereno, que son pesos; la voladura lleva sus insumos más el 4 % de servicio.",
+  "Servicio USD": "Es el 4 % de la suma de todos los insumos usados, calculado: no es un renglón que se cargue.",
+  "Gr Expl./Ton": "La suma de la cantidad de los insumos de tipo «detonador», que se carga en kilos, pasada a gramos y dividida por las toneladas. Sin toneladas no hay cuenta.",
+  "USD/Ton": "(Perforación + voladura) en USD dividido las toneladas, sin bochones. La perforación entra por su fin de perforación y las toneladas por la fecha de voladura, así que en un período corto pueden no ser de las mismas voladuras.",
+};
 
 /** Una fila de datos con cebra del color de su sección. */
 function FilaCebra({
@@ -109,12 +122,18 @@ export default function InformeClient({
   return (
     <div className="mx-auto max-w-5xl">
       <Link href="/cantera" className="text-xs text-slate-500 underline">← Cantera</Link>
-      <h1 className="mt-1 text-xl font-semibold">Informe de cantera</h1>
+      <div className="mt-1 flex items-baseline gap-2">
+        <h1 className="text-xl font-semibold">Informe de cantera</h1>
+        <InfoTip text="Arriba, cómo vienen los números de las voladuras mes a mes. Abajo, las tablas de un rango de fechas, para exportar a Excel. Acá no se escribe el informe en prosa: da las cuentas hechas para que las escribas vos. Cada tabla recorta el rango con su propia fecha." />
+      </div>
 
       {/* ── Histórico: cómo viene variando ── */}
       <section className="mt-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-700">Variación mes a mes</h2>
+          <h2 className="text-sm font-semibold text-slate-700">
+            Variación mes a mes
+            <InfoTip className="ml-1.5" text="Cada mes se arma igual que el informe de abajo, con todo lo cargado: las perforaciones entran por su fin de perforación y las voladuras por su fecha de voladura, así que una perforación de fin de mes puede volarse en el mes siguiente. USD por tonelada es (perforación + voladura) dividido las toneladas, sin bochones, y un mes sin toneladas no lo tiene." />
+          </h2>
           <Select
             className="rounded border border-slate-300 px-2 py-1 text-sm"
             value={canteraGrafico}
@@ -190,7 +209,7 @@ export default function InformeClient({
             <h2 className="mt-6 text-sm font-semibold text-slate-700">Resumen por cantera</h2>
             <div className="mt-2 overflow-x-auto card">
               <table className="w-full text-sm">
-                <thead><Encabezado color={VERDE} columnas={["Cantera", "Toneladas", "Costo total USD", "Perf. USD", "Explosivo USD", "Accesorios USD", "Servicio USD", "Gr Expl./Ton", "USD/Ton", "Ton/m Perf."]} /></thead>
+                <thead><Encabezado color={VERDE} columnas={["Cantera", "Toneladas", "Costo total USD", "Perf. USD", "Explosivo USD", "Accesorios USD", "Servicio USD", "Gr Expl./Ton", "USD/Ton", "Ton/m Perf."]} info={INFO_RESUMEN} /></thead>
                 <tbody>
                   {informe.porCantera.map((c, i) => (
                     <FilaCebra key={c.cantera} i={i} claro={VERDE_CLARO}>
@@ -219,7 +238,7 @@ export default function InformeClient({
             </h2>
             <div className="mt-2 overflow-x-auto card">
               <table className="w-full text-sm">
-                <thead><Encabezado color={VERDE} columnas={["Código", "Cantera", "Fin Perf.", "Prof. (mts)", "Pozos", "Metros Perf.", "Total USD", "Total ARS"]} /></thead>
+                <thead><Encabezado color={VERDE} columnas={["Código", "Cantera", "Fin Perf.", "Prof. (mts)", "Pozos", "Metros Perf.", "Total USD", "Total ARS"]} info={{ "Total ARS": "El monto que se pagó: metros × USD/m × tipo de cambio, más las noches de sereno por su monto, que son pesos y no pasan por el tipo de cambio. Por eso no es el Total USD por el tipo de cambio." }} /></thead>
                 <tbody>
                   {informe.perforaciones.map((p, i) => (
                     <FilaCebra key={p.codigo} i={i} claro={VERDE_CLARO}>
