@@ -243,11 +243,11 @@ aparte: las tablas siguen siendo tablas con scroll.
 
 | Dónde | Texto | De dónde salió |
 |---|---|---|
-| `/produccion/molinos` y `/produccion/molinos/mes` (tabla de turnos señalados) · columna «Turno del robot» | Son los cuatro cortes del contador del robot (20 a 24, 00 a 04, 04 a 12, 12 a 20), no los dos del parte; los de 20 a 24 y 00 a 04 sólo existen acá; las toneladas de uno y otro no se suman. | `docs/PRODUCCION.md`, «Qué mide, y por qué no se suma con el parte de fábrica» (343-365); `formato.ts` `comoSeLeeElTurnoDelRobot` |
+| `/produccion/molinos` y `/produccion/molinos/mes` (tabla de turnos señalados) · columna «Turno del robot» | Son los cuatro cortes del contador del robot (20 a 24, 00 a 04, 04 a 12, 12 a 20), no los dos del parte; el robot cuenta piedra que entra al molino y el parte producto terminado, por eso robot y parte no se suman ni se restan; 20 a 24 y 00 a 04 sólo existen en el robot. | `docs/PRODUCCION.md`, «Qué mide, y por qué no se suma con el parte de fábrica» (343-365); `formato.ts` `comoSeLeeElTurnoDelRobot` |
 | `/produccion/molinos` · columna «Parada» | Es lo que falta a la marcha para llegar a la teórica del corte (4 h o 8 h; la de toda la racha en un acumulado); se despeja, no se carga; «—» en un turno sin informar o inconsistente. | `PRODUCCION.md:361-364`; `turnos.ts` `DURACION` (240/240/480/480); la propia fila (`MolinosClient.tsx`: «—» en `huerfano` e `inconsistente`) |
 | `/produccion/molinos` · columna «Estado» | «Sin informar» es falta de dato y no una parada; lo normal es verlo en el día en curso porque el archivo se corta a las 9:00. | `PRODUCCION.md:434-445` (el huérfano y «el zip se corta a las 09:00»); `formato.ts` `leyendaDelEstado` |
 | Molinos y mes · tarjeta «Toneladas» | La etiqueta `MATERIAL` del robot sólo es confiable con un material por turno; no se guarda y ninguna pantalla muestra material (el reparto correcto sí se guarda). Con fecha: en una medición de octubre de 2026, 11,3 % de las toneladas de Filler 1 quedaban mal. | `PRODUCCION.md:449-463`; `csv.ts`, encabezado (líneas 10-17); la fecha es aproximada, ver los huecos |
-| Molinos y mes · tarjeta «Horas no trabajadas» | Se despejan (teórica − marcha); un día sin ninguna fila es planta cerrada y no suma; un turno en cero dentro de un día con filas sí es parada; quedan afuera los inconsistentes y los no informados. | `PRODUCCION.md:362-364, 380-398`; encabezado de `turnos.ts` (reglas 1, 2 y 4) y de `indicadores.ts` |
+| Molinos y mes · tarjeta «Horas no trabajadas» | Se despejan (teórica − marcha); un día sin ninguna fila es planta cerrada y no suma, sólo si queda estrictamente entre el primer y el último día con datos (fuera es «sin datos»); un turno en cero dentro de un día con filas sí es parada; quedan afuera los inconsistentes y los no informados. | `PRODUCCION.md:362-364, 380-398` (el límite: 384-386); `consultas.ts` `condicionDelDia`; encabezado de `turnos.ts` (reglas 1, 2 y 4) y de `indicadores.ts` |
 | Molinos y mes · tarjeta «Utilización» | Marcha sobre teórica de los turnos que cuentan; marcar «planta parada» **no la mueve**; «—» y no cero sin horas teóricas. | `PRODUCCION.md:399-407` («Y acá hay que ser preciso…»); `indicadores.ts` (`indicadoresDe(turnos, diasNoOperativos)` no recibe paradas) y su docstring de `null` |
 | Molinos y mes · tarjeta «Productividad» | Las toneladas incluyen las de los inconsistentes y las horas no, a propósito: la balanza midió lo uno, el reloj falla en lo otro. «—» sin marcha. | `indicadores.ts`, encabezado (líneas 97-101) y el comentario de `productividad` |
 | `/produccion/molinos/sin-explicar` · «N sin explicar» | Qué cuenta: parada que llega al mínimo y sin motivo ni «planta parada»; no entran los no informados ni los inconsistentes. | `cola.ts`, encabezado (condiciones 1 a 4 y la nota del `inconsistente`); `consultas.ts` `colaDeMolino` pasa todos los turnos desde `desde` sin otro filtro |
@@ -258,7 +258,7 @@ aparte: las tablas siguen siendo tablas con scroll.
 | Dónde | Texto | De dónde salió |
 |---|---|---|
 | `/produccion/dia` · «Producción T1» | T1 es el turno de 4 a 12; no se carga, se despeja con la cuenta; un negativo sale en rojo y no se recorta. | `PRODUCCION.md`, «Que la producción no se mide: se despeja» y «Los cuatro estados…» (producción negativa); `produccion.ts` `produccionDelTurno`; `turnos.ts` `TURNOS` |
-| `/produccion/dia` · «Producción T2» | T2 es de 12 a 20, contra el parte de 4 a 12 del mismo día; de 20 a 4 no hay parte. | `turnos.ts` `parteAnterior`; `PRODUCCION.md`, «Qué reemplaza» (las otras ocho horas no se registran) |
+| `/produccion/dia` · «Producción T2» | T2 es de 12 a 20, contra el parte de 4 a 12 del mismo día; esas otras ocho horas no se registran. | `turnos.ts` `parteAnterior`; `PRODUCCION.md`, «Qué reemplaza» (las otras ocho horas no se registran) |
 | `/produccion/dia` · «Producción del día» | Suma de T1 y T2; con un turno o un parte anterior faltante queda «—»; el primer parte es sólo línea de base. | `produccion.ts` `produccionDelDia`; `PRODUCCION.md`, «El primer día no va a mostrar producción, y está bien» |
 | `/produccion/dia` · «Despachado» | Son bultos, no kilos; sólo renglones con producto reconocido; uno con kilos pero sin bultos suma cero. | `despachos.ts` `totalesDeDespacho` (`bultos ?? 0`, `sinProducto`) y su interfaz; `cantidades.ts`, docstring inicial (línea 14: «`bultos ?? 0`… desaparezca del total del día») |
 | `/produccion/parte/[fecha]/[turno]` · «Reconocido como» (renglón de despacho) | Sólo los renglones con producto elegido suman a despachado, rotura y producción; uno «sin reconocer» se guarda pero no entra en ninguna cuenta. | `despachos.ts` `totalesDeDespacho` (el `continue` antes de sumar despachado **y** rotura) |
@@ -328,3 +328,13 @@ aparte: las tablas siguen siendo tablas con scroll.
   2 en `ColaClient.tsx` y 3 en `ParteClient.tsx`). Los repetidos: «Turno del
   robot» (molinos y mes) y las cuatro tarjetas, que se renderizan una vez por
   molino y por pantalla.
+- **Producción de 20 a 4: ¿desaparece o la absorbe T1?** `parteAnterior` hace que T1
+  (4 a 12) se calcule contra el depósito del 12 a 20 del día anterior, una
+  diferencia que atraviesa esas ocho horas, así que su producción podría estar
+  dentro de T1. `PRODUCCION.md:14` sólo dice que esas horas no se registran; ningún
+  documento dice cuál de las dos cosas pasa. El `(i)` de T2 dice sólo lo escrito.
+- **Un día cuyas únicas líneas se descartaron parece planta cerrada.** `csv.ts`
+  descarta las líneas ilegibles (`if (!v) continue`); si eran todas las de un día,
+  ese día queda sin filas y se toma como cerrado, sin distinguirse. La frase del
+  `(i)` de «Horas no trabajadas» habla de «ninguna fila», no de «el robot no
+  informó». Se buscó en `csv.ts`, `turnos.ts` y `PRODUCCION.md`; no está resuelto.

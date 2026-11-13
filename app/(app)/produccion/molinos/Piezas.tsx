@@ -44,11 +44,11 @@ function Tarjeta({ rotulo, valor, nota, info }: { rotulo: string; valor: string;
  * respaldo de cada texto está en `docs/INFOTIPS.md`.
  */
 export const INFO_TURNO_DEL_ROBOT =
-  "Son los cuatro cortes del contador del robot (20 a 24, 00 a 04, 04 a 12 y 12 a 20), no los dos turnos del parte de fábrica: comparten horas de reloj pero no son lo mismo. Los de 20 a 24 y de 00 a 04 sólo existen acá, y las toneladas de uno y otro no se suman ni se restan.";
+  "Son los cuatro cortes del contador del robot (20 a 24, 00 a 04, 04 a 12 y 12 a 20), no los dos turnos del parte de fábrica: comparten horas de reloj pero no son lo mismo. El robot cuenta la piedra que entra al molino y el parte cuenta producto terminado, así que las toneladas del robot y las del parte no se suman ni se restan. Los cortes de 20 a 24 y de 00 a 04 sólo existen en el robot.";
 const INFO_TONELADAS =
   "La etiqueta MATERIAL del robot sólo es confiable cuando el turno molió un material, y en Filler 1 hay turnos que molieron dos. Por eso no se guarda y ninguna pantalla muestra toneladas por material (el reparto correcto sí se guarda). En una medición de octubre de 2026, usarla dejaba el 11,3 % de las toneladas de ese molino en el material equivocado.";
 const INFO_NO_TRABAJADAS =
-  "No se cargan: salen de restar la marcha a la duración teórica de cada turno. Un día en que el robot no informó ningún turno se toma como planta cerrada y no suma horas; un turno en cero dentro de un día con otros turnos informados sí cuenta como parada. Quedan afuera los turnos inconsistentes y los que el robot no informó.";
+  "No se cargan: salen de restar la marcha a la duración teórica de cada turno. Un día sin ninguna fila se toma como planta cerrada y no suma horas, pero sólo si queda entre el primer y el último día con datos del molino; fuera de ese rango es «sin datos». Un turno en cero dentro de un día con filas sí cuenta como parada. Quedan afuera los turnos inconsistentes y los que el robot no informó.";
 const INFO_UTILIZACION =
   "Horas de marcha sobre horas teóricas de los mismos turnos que cuentan. Marcar un día como «planta parada» en Paradas sin explicar no la cambia: sólo saca esos turnos de la cola de lo que falta explicar. Da «—», y no cero, si no hay horas teóricas con qué calcularla.";
 const INFO_PRODUCTIVIDAD =

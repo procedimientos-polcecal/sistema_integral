@@ -26,7 +26,7 @@ const FAMILIAS: { clave: Familia; etiqueta: string }[] = [
 const INFO_PRODUCCION_T1 =
   "Turno de 4 a 12. No se carga: sale de depósito − depósito del parte anterior + despachado + rotura. Un negativo se muestra en rojo y no se recorta a cero: es un error de carga que hay que corregir.";
 const INFO_PRODUCCION_T2 =
-  "Turno de 12 a 20. La misma cuenta que T1, contra el parte de 4 a 12 del mismo día. De 20 a 4 no hay parte, así que no se calcula nada.";
+  "Turno de 12 a 20. La misma cuenta que T1, contra el parte de 4 a 12 del mismo día. Esas otras ocho horas, de 20 a 4, no se registran.";
 const INFO_PRODUCCION_DEL_DIA =
   "La suma de T1 y T2. Si falta cargar uno de los dos, o el parte anterior de alguno, queda «—» y no una suma parcial. El primer parte que se carga en el sistema es sólo línea de base: ese día no muestra producción.";
 const INFO_DESPACHADO =
