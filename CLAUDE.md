@@ -695,6 +695,108 @@ a mano funcionaban—, pero `disabled:cursor-not-allowed` **no**, que es la fila
 nueva de la tabla. Un estado deshabilitado que necesite algo más que opacidad
 va dentro de la regla de `globals.css`, no en una utilidad al lado.
 
+## Y un modal se escribe `<Modal>`, no `fixed inset-0`
+
+La cuarta de la misma familia, y falla igual de callado: **escribir la capa a
+mano no rompe nada.** Compila, se ve bien, cierra cuando se toca afuera — y esa
+pantalla vuelve a perder lo que alguien había cargado, que es el bug del que
+salió todo esto: alguien estaba registrando una OT, tocó fuera del formulario sin
+querer y perdió diecisiete campos.
+
+La capa buena es la de [components/Modal.tsx](components/Modal.tsx), y hace
+cumplir una sola regla: **«Cancelar» tira; todo lo demás sale conservando.** El
+fondo, la X y Escape significan «salir», y salir nunca destruye nada; el único
+que descarta es el botón negativo del formulario. Se pidió exactamente así, y por
+eso `Modal` **no dibuja pie ni botones**: el botón negativo lo pone cada
+formulario, que es el único que llama a `tirar()`. Si hay algo a medio cargar,
+salir pregunta antes, y **el cartel no dice que se pierde nada**, porque no se
+pierde: dice que hay algo a medio cargar y ofrece quedarse. Un cartel que miente
+enseña a apretar sin leer el próximo, el que sí importaba.
+
+Hoy lo usan **19 formularios**, que son las mismas 19 llamadas a `useBorrador` y
+los mismos 19 `tocado={…}`, y hay **cinco excepciones declaradas**: capas a
+pantalla completa donde no hay nada escrito que perder — el cajón de navegación
+del teléfono (`Sidebar`), el panel del Asistente, la foto «Ampliada» de
+`CuadernoClient`, el propio `ConfirmProvider` e `InfoTip`. **Las dos últimas
+aparecieron sólo porque el chequeo busca también la otra escritura**
+—`position: "fixed", inset: 0` en un `style`—, que el `fixed inset-0` de las
+clases no ve.
+
+Lo detecta `node scripts/revisar-modales.mjs`, que hoy da **ROMPE 0 · MIRAR 0**
+sobre 399 archivos y **no está en el CI**, por lo mismo que `revisar-responsive`
+y `revisar-exportaciones`: hasta que la lista de excepciones aguante unas
+semanas, un CI rojo por falsos positivos no lo mira nadie. El argumento entero
+para que exista está medido: **entre el 11/11 y el 13/11/2026 los modales pasaron
+de 45 a 48, tres de ellos escritos a mano. Dos días.** Sin algo que lo note, la
+inconsistencia que se acaba de ordenar vuelve sola.
+
+Lo que no se deduce del código:
+
+- **El borrador vive lo que vive la app, y no más.** Es un `Map` a nivel de
+  módulo ([lib/core/borradorDeFormulario.ts](lib/core/borradorDeFormulario.ts)) y
+  no `localStorage` ni `sessionStorage`: se preguntó, y se pidió que **no
+  sobreviva a cerrar la app**, porque lo que se guarda en el teléfono sobrevive a
+  todo y reaparecería días después sobre un trabajo que ya no es ése. Lo que se
+  pierde, aceptado a propósito: **recargar la página también lo borra.** El caso
+  a resolver era el formulario que se cierra por un toque de más, no el navegador
+  que se va.
+- **La clave lleva de dónde salió el formulario, y no sólo qué registro edita**
+  (`claveDelBorrador`). Un alta en blanco y una prellenada desde un aviso son dos
+  formularios distintos aunque se llamen igual, así que no se pisan; dos altas
+  desde el mismo aviso sí comparten clave, porque es el mismo trabajo retomado.
+  Lo que eso evita: se abre la OT 2905, se escribe, se cierra, se abre la 2907 —
+  **perder lo escrito se nota en el acto; que reaparezca sobre el registro
+  equivocado no se nota nunca.**
+- **El borrador guarda sólo lo que se tocó** (`soloLoTocado`), y al retomarlo lo
+  apoya sobre el registro **tal como está ahora** (`conElBorrador`). El motivo es
+  el `PATCH` único de la OT: `RegistrarOTModal` manda juntos las horas, el
+  contratista, los tres operarios y la falla, así que un borrador con el objeto
+  entero reescribiría encima lo que otro corrigió mientras tanto. Y desde el
+  16/10/2026 la app vive instalada en los teléfonos, así que «mientras la app
+  esté abierta» puede ser días.
+- **Una sola vara, no dos.** Una pantalla que se guarda su propia copia congelada
+  del inicial al lado de la del hook revierte a la vieja después de guardar:
+  `asentar()` mueve la vara del hook y no la copia, así que «Descartar» devuelve
+  la foto de **antes** de guardar y el siguiente «Guardar» la manda encima de lo
+  recién guardado. Costó un defecto real en el detalle de una orden de servicio.
+  Quien descarta es `tirar()`, que ya vuelve a la vara buena. La única excepción
+  está anotada donde vive: `HojaDePersona`, con paneles que se descartan por
+  separado, donde `tirar()` se llevaría también lo que se está escribiendo en el
+  otro — y lo que la mantiene sana es que en ese archivo **nadie llame a
+  `asentar()`**.
+- **Un guardado tiene tres finales y la pantalla elige uno.** `tirar()` vuelve a
+  «cómo nació», y es el del guardado que **cierra** el formulario, porque al
+  reabrirlo se monta de nuevo contra el registro ya actualizado. `asentar()` hace
+  que lo que está en pantalla **pase a ser** cómo nació: no cambia nada de lo que
+  se ve, y es el del guardado que **deja el formulario abierto**. El tercero es
+  ninguno de los dos: `RegistrarOTModal` hace un `POST` y después un `PATCH`, y
+  si el segundo falla el modal queda abierto con el error y lo cargado tiene que
+  seguir ahí. Elegir mal no se ve como un error, y es la otra puerta del defecto
+  de arriba.
+- **El `ConfirmProvider` se monta una sola vez, en `app/(app)/layout.tsx`.** La
+  lista por módulo se quedaba corta sola: el 11/11/2026 eran dos módulos con un
+  modal y sin proveedor, y el 13/11 eran tres, porque apareció `mis-pedidos`
+  entre una fecha y la otra. Importa porque `useConfirm()` **rompe a propósito**
+  sin proveedor —devolver `false` se leería como «el usuario canceló»—, y esa
+  mentira dejó muerto el botón «Pedir» de `/inventario/stock` nueve días sin que
+  el build ni los tests lo notaran. `app/cargar/CargarClient.tsx` monta el suyo
+  porque vive fuera del grupo `(app)`.
+
+**Tres pantallas quedaron sin borrador a propósito** —el tablero de
+Mantenimiento, `ejecuciones` y `mantenimientos`—, y cada una lo dice al lado de
+su `<Modal>`, que es donde alguien lo va a buscar. El motivo es la forma de esas
+pantallas y no una preferencia: el estado del formulario vive en el componente de
+la página, que no se desmonta; los dos caminos que lo abren lo vacían a
+propósito; y la clave tendría que llevar el registro que se está editando, que
+recién se sabe al abrirlo. Una clave fija haría **lo peor de los dos mundos**: lo
+escrito para un registro reapareciendo sobre otro, que es justo lo que la clave
+existe para impedir. Migrarlas es sacar el cuerpo del modal a su propio
+componente, que se monte por registro — y es la misma razón por la que el hook va
+en el componente que **se monta y se desmonta con el formulario** y no en la
+pantalla que lo contiene: en `EquipoDetalle`, vivir arriba dejaba el modal
+reabriendo con el estado **anterior** preseleccionado, y un clic revertía el
+equipo.
+
 ## Un aviso nuevo sale por dos lados, y hay un tercero que se gana aparte
 
 Desde el 18/10/2026 el SdG manda **un resumen diario por push**: una
