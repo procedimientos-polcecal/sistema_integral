@@ -549,25 +549,20 @@ Los 48 que ya existían (los de RRHH y los de Remises entre ellos) no se tocaron
 | `/rrhh/vacaciones` · «Días tomados» | Suma los períodos cargados con ese año correspondiente sin mirar las fechas; los que vienen de Ausencias cuentan días corridos. | `vacaciones/[id]/balance/route.ts:32-34`; `diasEntre` y `sincronizarPeriodoVacaciones` en `vacacionesDeAusencia.ts`; `RRHH-ACTUALIZACION.md`, tabla de «Portado en esta pasada» (vacaciones vinculadas a la ausencia) |
 | `/remises/hoy` · tarjeta de ruta, junto a «km» y «min» | Es una sola punta; salen de OSRM (servicio público sin garantía); si no contesta los km son en línea recta y los minutos salen de la velocidad de Configuración (40 si está vacía); la tarjeta no avisa cuál se usó. | `lib/remises/refrescarGeometria.ts:39-43` (los `waypoints` de ida/vuelta y el `\|\|` 40); `lib/remises/engine/osrm.ts` y `geo.ts:17` (docstring de `distanciaRuta`: «fallback cuando OSRM no está disponible»); spec de la Fase 3, líneas 328-329 («sin SLA, pueden fallar») |
 
-**Los dos `(i)` de `/rrhh/francos` contradicen al `(i)` del título de esa pantalla**, que
-ya estaba y no se tocó: ver el primer punto de la lista de abajo. Quien lo corrija tiene que
-leer los tres juntos.
+### Tres textos preexistentes corregidos (no son colocaciones nuevas)
+
+Excepción explícita del coordinador (13/11/2026): estos tres `(i)` ya existían y su
+afirmación la contradice el código. Se corrigieron contra el código, sin tocar estilo
+ni largo. Para revertir, basta volver a la frase de la columna «Decía».
+
+| Dónde | Decía | Dice ahora | Línea del código que lo contradecía |
+|---|---|---|---|
+| `/rrhh/francos` · título | «…trabaja un domingo o feriado. Podés marcarlos como tomados; los que no, se pagan en la liquidación.» | «…trabaja un domingo. … sólo los tomados entran en la liquidación.» | `calculo.ts:94` (`francoGenerado: dayOfWeekUtc(fecha) === 0 && total > 0`) y `planillaGeneral.ts:89-90` (`horasDeFrancoAPagar` filtra `TOMADO`) |
+| `/rrhh/feriados` · título | «…trabajar un feriado genera francos compensatorios y se paga con recargo…» | «…se paga con recargo, igual que un domingo, pero no genera franco compensatorio (salvo que caiga en domingo).» | `calculo.ts:83-94` (el comentario: sólo el domingo genera franco, pedido del 02/11/2026) |
+| `/rrhh/turnos` · «Margen (minutos)» | «…pasado este margen, … la salida como hora extra a validar.» | «…la salida anticipada como retiro anticipado. La hora extra pide además 30 minutos de más, fijos e independientes del margen.» | `recalcular-puro.ts:62,132-134` (`UMBRAL_EXTRA_MINUTOS = 30`, `seQuedoExtra`, `retiroAnticipado`) |
 
 ### Lo que no se escribió, y dónde se buscó
 
-- **Tres `(i)` que ya estaban y hoy dicen otra cosa que el código** (no se tocaron,
-  por la regla; se anotan para que alguien los corrija):
-  - **«Francos compensatorios» (título)** dice «trabaja un domingo o feriado» y «los que
-    no [tomados], se pagan en la liquidación». Desde el 02/11/2026 un feriado entre semana
-    no genera franco (`calculo.ts:83-97`) y un franco pendiente **no** se paga
-    (`planillaGeneral.ts:71-90`; el propio diálogo de la pantalla dice «Mientras esté
-    pendiente sus horas no entran en la liquidación»). Los dos `(i)` agregados dicen lo
-    contrario del título.
-  - **«Feriados»** dice que trabajar un feriado «genera francos compensatorios». Mismo motivo.
-  - **«Margen (minutos)» en Turnos** dice que pasado el margen la salida «se marca como hora
-    extra a validar». La hora extra de salida tiene un umbral fijo de 30 minutos
-    (`UMBRAL_EXTRA_MINUTOS`, `recalcular-puro.ts:62`) independiente del margen: coinciden mientras
-    el margen sea 30 (lo es según el doc del 08/10/2026), pero no en general.
 - **Asistencia: «Presentes», «Días esperados» y «% Asistencia»** (`asistencia/resumen/route.ts`).
   «Presentes» es días esperados menos las ausencias, así que **cuenta feriados y vacaciones
   como presente**, y el «% Asistencia» **suma las justificadas como asistencia** —el Analítico
