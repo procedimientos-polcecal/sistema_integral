@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 
 /**
  * Editar lo que lleva una clase de máquina.
@@ -96,18 +98,31 @@ export default function TipoModal({
 }) {
   const esNuevo = tipo === null;
 
-  const [codigo, setCodigo] = useState(tipo?.tipo_id ?? "");
-  const [campos, setCampos] = useState<Record<string, string>>(() => {
-    const inicial: Record<string, string> = {};
-    for (const g of GRUPOS) for (const c of g.campos) inicial[c.clave] = tipo?.[c.clave] ?? "";
-    inicial.notas_tecnicas = tipo?.notas_tecnicas ?? "";
-    return inicial;
-  });
+  /*
+   * La ficha entera, recordada mientras la app esté abierta. Los campos van
+   * planos y el borrador guarda sólo el que se tocó: este `PATCH` manda la ficha
+   * completa, así que retomar un borrador que llevara los treinta campos
+   * enteros le devolvería a los veintinueve que nadie tocó el valor que tenían
+   * cuando se abrió.
+   *
+   * La clave lleva el tipo cuando lo hay; un tipo nuevo no tiene registro de
+   * origen y usa la clave sin origen, que es la del alta en blanco.
+   */
+  const { valores: campos, cambiar, tocado, tirar } = useBorrador<Record<string, string>>(
+    claveDelBorrador("mantenimiento-tipo-de-equipo", tipo ? { tipo: "tipo", id: tipo.tipo_id } : null),
+    (() => {
+      const inicial: Record<string, string> = { codigo: tipo?.tipo_id ?? "" };
+      for (const g of GRUPOS) for (const c of g.campos) inicial[c.clave] = tipo?.[c.clave] ?? "";
+      inicial.notas_tecnicas = tipo?.notas_tecnicas ?? "";
+      return inicial;
+    })(),
+  );
+  const codigo = campos.codigo ?? "";
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
-  const set = (clave: string, valor: string) => setCampos((c) => ({ ...c, [clave]: valor }));
+  const set = (clave: string, valor: string) => cambiar({ [clave]: valor });
 
   async function guardar() {
     if (esNuevo && !codigo.trim()) { setError("Falta el código del tipo."); return; }
@@ -119,21 +134,26 @@ export default function TipoModal({
     const res = await fetch("/api/mantenimiento/tipos", {
       method: esNuevo ? "POST" : "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...campos, tipo_id: esNuevo ? codigo.trim() : tipo.tipo_id }),
+      // `codigo` queda afuera del cuerpo: es el mismo dato que `tipo_id`, que
+      // viaja aparte, y mandarlo sería una segunda columna con el mismo valor.
+      body: JSON.stringify({ ...sinElCodigo(campos), tipo_id: esNuevo ? codigo.trim() : tipo.tipo_id }),
     });
     const body = await res.json().catch(() => ({}));
     setGuardando(false);
 
     if (!res.ok) { setError(body.error ?? "No se pudo guardar."); return; }
+    // Recién con el guardado en verde no hay nada que recordar.
+    tirar();
     onGuardado();
   }
 
   return (
-    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-    // hay borrador, así que hoy los dos llaman a `onCerrar`.
+    // El fondo, la X y Escape salen conservando: lo cargado queda y aparece
+    // igual al volver a abrir. Sólo «Cancelar» tira.
     <Modal
       titulo={esNuevo ? "Nuevo tipo de equipo" : `Tipo ${tipo.tipo_id}`}
       alSalir={onCerrar}
+      tocado={tocado}
       ancho="ancho"
     >
       <div className="space-y-4">
@@ -150,7 +170,7 @@ export default function TipoModal({
             <span className="block text-xs font-medium text-slate-600">Código</span>
             <input
               value={codigo}
-              onChange={(e) => setCodigo(e.target.value.toUpperCase())}
+              onChange={(e) => set("codigo", e.target.value.toUpperCase())}
               placeholder="CT, RM, AP…"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
@@ -202,8 +222,9 @@ export default function TipoModal({
           >
             {guardando ? "Guardando…" : "Guardar"}
           </button>
+          {/* El único que tira. */}
           <button
-            onClick={onCerrar}
+            onClick={() => { tirar(); onCerrar(); }}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cancelar
@@ -212,4 +233,10 @@ export default function TipoModal({
       </div>
     </Modal>
   );
+}
+
+/** La ficha sin el código, que viaja aparte como `tipo_id`. */
+function sinElCodigo(campos: Record<string, string>): Record<string, string> {
+  const { codigo: _codigo, ...resto } = campos;
+  return resto;
 }

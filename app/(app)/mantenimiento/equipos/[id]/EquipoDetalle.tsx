@@ -12,6 +12,8 @@ import CicloDeOT, { type CicloDeLaFicha } from "./CicloDeOT";
 import type { FallaContada } from "@/lib/mantenimiento/fallas";
 import Select from "@/components/Select";
 import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import { comoSeLee } from "@/lib/core/fechas";
 
 const OT_ESTADO: Record<string, { label: string; color: string; bg: string; dot: string }> = {
@@ -77,8 +79,16 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
   }, [equipo.id]);
 
   const [statusModal, setStatusModal] = useState(false);
-  const [newStatus, setNewStatus] = useState(equipo.status);
-  const [reason, setReason]     = useState("");
+  /*
+   * El cambio de estado del equipo: a cuál y por qué. Recordado por equipo
+   * mientras la app esté abierta, y nace en el estado que el equipo ya tiene,
+   * así que abrir y cerrar sin elegir nada no cuenta como tocado.
+   */
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-estado-del-equipo", { tipo: "equipo", id: equipo.id }),
+    { newStatus: equipo.status as string, reason: "" },
+  );
+  const { newStatus, reason } = valores;
   const [statusSaving, setStatusSaving] = useState(false);
   const [statusError, setStatusError]   = useState("");
 
@@ -98,8 +108,8 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
   }
 
   function openStatusModal() {
-    setNewStatus(equipo.status);
-    setReason("");
+    // Sin limpiar: si quedó algo a medio escribir de antes, vuelve a aparecer
+    // —que es para lo que existe el borrador—. Lo descarta «Cancelar».
     setStatusError("");
     setStatusModal(true);
   }
@@ -121,6 +131,8 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
     const data = await res.json();
     if (!res.ok) { setStatusError(data.error ?? "Error al actualizar"); setStatusSaving(false); return; }
     setStatusSaving(false);
+    // Recién con el estado cambiado no hay nada que recordar.
+    tirar();
     setStatusModal(false);
     router.refresh();
   }
@@ -377,11 +389,13 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
       <CostoDelEquipo equipoId={equipo.id} {...costo} />
 
       {statusModal && (
-        // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía
-        // no hay borrador, así que hoy los dos llaman a `setStatusModal(false)`.
+        // El fondo, la X y Escape salen conservando: el estado elegido y la
+        // justificación quedan y aparecen igual al volver a abrir. Sólo
+        // «Cancelar» tira.
         <Modal
           titulo={`Cambiar estado — ${equipo.code}`}
           alSalir={() => setStatusModal(false)}
+          tocado={tocado}
           ancho="chico"
         >
           <div className="space-y-4">
@@ -391,7 +405,7 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
                 const selected = newStatus === opt.value;
                 return (
                   <button key={opt.value}
-                    onClick={() => { setNewStatus(opt.value); setStatusError(""); }}
+                    onClick={() => { cambiar({ newStatus: opt.value }); setStatusError(""); }}
                     className="w-full flex items-center gap-3 rounded-xl border-2 px-4 py-2.5 text-sm font-medium text-left transition-all"
                     style={{
                       borderColor: selected ? m.color : "#E2E8F0",
@@ -418,7 +432,7 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
                 </label>
                 <textarea
                   value={reason}
-                  onChange={(e) => { setReason(e.target.value); setStatusError(""); }}
+                  onChange={(e) => { cambiar({ reason: e.target.value }); setStatusError(""); }}
                   rows={3}
                   className="input resize-none w-full"
                   placeholder="Ej: Falla en rodamiento, esperando repuesto..."
@@ -442,7 +456,8 @@ export default function EquipoDetalle({ equipo, sectores, historial, canEdit, co
               >
                 {statusSaving ? "Guardando..." : "Confirmar"}
               </button>
-              <button onClick={() => setStatusModal(false)}
+              {/* El único que tira. */}
+              <button onClick={() => { tirar(); setStatusModal(false); }}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
                 Cancelar
               </button>

@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import Select from "@/components/Select";
 import { Modal, PieDeModal } from "@/components/Modal";
 import { instanteDeArgentina } from "@/lib/core/fechas";
-import FallaDeLaOT, { type LaFalla } from "@/components/FallaDeLaOT";
+import FallaDeLaOT from "@/components/FallaDeLaOT";
 import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import { loQueImpideCerrar } from "@/lib/mantenimiento/cierreDeOT";
 import { comoSeLee } from "@/lib/core/fechas";
@@ -75,26 +77,43 @@ export default function RegistrarOTModal({
   onCerrar: () => void;
   onRegistrada: () => void;
 }) {
-  const [resultado, setResultado] = useState<string>("completado");
-  const [cuando, setCuando] = useState(hoy());
-  const [horas, setHoras] = useState(orden.horas != null ? String(orden.horas) : "");
-  const [contratista, setContratista] = useState(orden.contratista ?? "");
-  const [operario1, setOperario1] = useState(orden.operario_1 ?? "");
-  const [operario2, setOperario2] = useState(orden.operario_2 ?? "");
-  const [operario3, setOperario3] = useState(orden.operario_3 ?? "");
-  const [observaciones, setObservaciones] = useState("");
   /*
-   * Precargada y no vacía: este modal se abre cada vez que una orden se da por
-   * realizada y manda todos sus campos en cada guardado, así que arrancar en
-   * blanco le borraría la falla a quien reabre una OT para corregir las horas.
-   * Vaciar el desplegable sigue siendo "borrala": viaja como "" y la ruta lo
-   * guarda como null.
+   * Los once campos del formulario, en un solo objeto y recordados mientras la
+   * app esté abierta: **acá empezó todo**, con un toque fuera del formulario que
+   * se llevó diecisiete campos cargados.
+   *
+   * Van **planos y no anidados**, la falla incluida: el borrador guarda campo por
+   * campo lo que se tocó (`soloLoTocado`), así que escribir el detalle de la
+   * falla no se lleva puesto el modo ni la causa si alguien los corrigió desde
+   * otro lado mientras tanto. Este modal manda los once en un solo `PATCH`, que
+   * es justo lo que vuelve caro guardar el registro entero.
+   *
+   * La falla nace precargada y no vacía: este modal se abre cada vez que una
+   * orden se da por realizada y manda todos sus campos en cada guardado, así que
+   * arrancar en blanco le borraría la falla a quien reabre una OT para corregir
+   * las horas. Vaciar el desplegable sigue siendo "borrala": viaja como "" y la
+   * ruta lo guarda como null.
+   *
+   * Lo que **no** entra: `guardando`, el error, el aviso, la foto y las listas de
+   * Configuración. No son lo que la persona escribió.
    */
-  const [falla, setFalla] = useState<LaFalla>({
-    falla_modo: orden.falla_modo ?? "",
-    falla_causa: orden.falla_causa ?? "",
-    falla_detalle: orden.falla_detalle ?? "",
-  });
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-registrar-ot", { tipo: "ot", id: orden.id }),
+    {
+      resultado: "completado",
+      cuando: hoy(),
+      horas: orden.horas != null ? String(orden.horas) : "",
+      contratista: orden.contratista ?? "",
+      operario_1: orden.operario_1 ?? "",
+      operario_2: orden.operario_2 ?? "",
+      operario_3: orden.operario_3 ?? "",
+      observaciones: "",
+      falla_modo: orden.falla_modo ?? "",
+      falla_causa: orden.falla_causa ?? "",
+      falla_detalle: orden.falla_detalle ?? "",
+    },
+  );
+  const { resultado, cuando, horas, contratista, observaciones } = valores;
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -215,12 +234,14 @@ export default function RegistrarOTModal({
         fecha_cierre: cuando,
         horas: horas ? Number(horas) : null,
         contratista: contratista.trim() || null,
-        operario_1: operario1.trim() || null,
-        operario_2: operario2.trim() || null,
-        operario_3: operario3.trim() || null,
+        operario_1: valores.operario_1.trim() || null,
+        operario_2: valores.operario_2.trim() || null,
+        operario_3: valores.operario_3.trim() || null,
         observaciones: observaciones.trim() || null,
         // Las tres claves son las de la base: viajan sin traducir.
-        ...falla,
+        falla_modo: valores.falla_modo,
+        falla_causa: valores.falla_causa,
+        falla_detalle: valores.falla_detalle,
         foto_url: foto?.link ?? undefined,
       }),
     });
@@ -231,6 +252,11 @@ export default function RegistrarOTModal({
       setError(`El trabajo quedó registrado, pero no se pudo cerrar la OT: ${body.error ?? ""}`);
       return;
     }
+
+    // El borrador se tira acá y no al apretar «Registrar»: son dos escrituras, y
+    // si la segunda falla el modal queda abierto con el error y lo cargado tiene
+    // que seguir estando. Recién con el `PATCH` en verde no hay nada que recordar.
+    tirar();
     // Quedó todo bien en la app y lo único que falta es la planilla. Qué decir
     // depende de si el sistema va a insistir: desde que el PATCH anota el
     // pendiente, fallar acá es lo normal —la fila del master llega por
@@ -247,13 +273,16 @@ export default function RegistrarOTModal({
   }
 
   return (
-    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-    // hay borrador, así que hoy los dos llaman a `onCerrar`. Acá empezó todo:
+    // El fondo, la X y Escape salen conservando: lo cargado queda en el borrador
+    // y aparece igual al volver a abrir. Sólo «Cancelar» tira. Acá empezó todo:
     // el fondo cerraba sin preguntar y se perdían diecisiete campos. Con el aviso
     // de la planilla en pantalla el trabajo ya quedó registrado, así que salir
     // por cualquier lado es «Entendido» (`onRegistrada`) y no sólo ocultar: quien
     // llama tiene que refrescar el listado.
-    <Modal titulo="Registrar el trabajo" alSalir={aviso ? onRegistrada : onCerrar}>
+    //
+    // `tocado` es false después de un guardado bueno, porque `tirar()` ya corrió:
+    // así el cartel del aviso de la planilla no se cruza con la pregunta al salir.
+    <Modal titulo="Registrar el trabajo" alSalir={aviso ? onRegistrada : onCerrar} tocado={tocado}>
       <div className="space-y-4">
         <p className="-mt-2 text-xs text-slate-400">
           OT #{orden.ot_number ?? "—"} · {orden.equipo_raw ?? orden.descripcion ?? ""}
@@ -273,7 +302,7 @@ export default function RegistrarOTModal({
           <Campo etiqueta="Cómo salió">
             <Select
               value={resultado}
-              onChange={(e) => setResultado(e.target.value)}
+              onChange={(e) => cambiar({ resultado: e.target.value })}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
               {RESULTADOS.map((r) => <option key={r.valor} value={r.valor}>{r.label}</option>)}
@@ -293,7 +322,7 @@ export default function RegistrarOTModal({
               type="date"
               value={cuando}
               min={orden.fecha_ejecucion ?? undefined}
-              onChange={(e) => setCuando(e.target.value)}
+              onChange={(e) => cambiar({ cuando: e.target.value })}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
             {/*
@@ -315,7 +344,7 @@ export default function RegistrarOTModal({
               min="0"
               step="0.5"
               value={horas}
-              onChange={(e) => setHoras(e.target.value)}
+              onChange={(e) => cambiar({ horas: e.target.value })}
               placeholder="—"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
@@ -324,7 +353,7 @@ export default function RegistrarOTModal({
           <Campo etiqueta="Contratista">
             <Select
               value={contratista}
-              onChange={(e) => setContratista(e.target.value)}
+              onChange={(e) => cambiar({ contratista: e.target.value })}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
               <option value="">Lo hizo personal propio</option>
@@ -357,19 +386,15 @@ export default function RegistrarOTModal({
 
         <Campo etiqueta="Quiénes lo hicieron">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {[
-              [operario1, setOperario1],
-              [operario2, setOperario2],
-              [operario3, setOperario3],
-            ].map(([valor, set], i) => {
+            {(["operario_1", "operario_2", "operario_3"] as const).map((campo, i) => {
               // Cada columna de la orden tiene su propia lista de gente.
               const suyos = operarios.filter((o) => o.slot === i + 1).map((o) => o.nombre);
-              const elegido = valor as string;
+              const elegido = valores[campo];
               return (
                 <Select
-                  key={i}
+                  key={campo}
                   value={elegido}
-                  onChange={(e) => (set as (v: string) => void)(e.target.value)}
+                  onChange={(e) => cambiar({ [campo]: e.target.value })}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 >
                   <option value="">Operario {i + 1}</option>
@@ -385,14 +410,22 @@ export default function RegistrarOTModal({
         <Campo etiqueta="Qué se hizo y qué se encontró">
           <textarea
             value={observaciones}
-            onChange={(e) => setObservaciones(e.target.value)}
+            onChange={(e) => cambiar({ observaciones: e.target.value })}
             rows={3}
             placeholder="Se cambió el rodamiento del lado motor; el acople está gastado y va a haber que cambiarlo."
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
         </Campo>
 
-        <FallaDeLaOT falla={falla} onCambiar={setFalla} deshabilitado={guardando} />
+        <FallaDeLaOT
+          falla={{
+            falla_modo: valores.falla_modo,
+            falla_causa: valores.falla_causa,
+            falla_detalle: valores.falla_detalle,
+          }}
+          onCambiar={(f) => cambiar(f)}
+          deshabilitado={guardando}
+        />
 
         <Campo etiqueta="Foto del trabajo">
           {foto ? (
@@ -436,8 +469,9 @@ export default function RegistrarOTModal({
           >
             {guardando ? "Guardando…" : "Registrar"}
           </button>
+          {/* El único que tira: «Cancelar» descarta lo cargado a propósito. */}
           <button
-            onClick={onCerrar}
+            onClick={() => { tirar(); onCerrar(); }}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cancelar

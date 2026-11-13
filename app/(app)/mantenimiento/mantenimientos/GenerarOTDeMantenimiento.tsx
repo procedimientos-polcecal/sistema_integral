@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Select from "@/components/Select";
 import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -37,9 +39,19 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
   onClose: () => void;
   onCreada: (mensaje: string) => void;
 }) {
-  const [respuestas, setRespuestas] = useState<RespuestasDelMantenimiento>(
-    () => respuestasIniciales(mantenimiento)
-  );
+  /*
+   * Lo que hay que contestar para generar la orden, recordado por mantenimiento
+   * mientras la app esté abierta. Nace de lo que el mantenimiento ya dice, que
+   * es contra lo que se compara «tocado»: abrirlo y cerrarlo sin contestar nada
+   * no pregunta nada.
+   */
+  const { valores: respuestas, cambiar, tocado, tirar } =
+    useBorrador<RespuestasDelMantenimiento>(
+      claveDelBorrador("mantenimiento-generar-ot-de-mantenimiento", {
+        tipo: "mantenimiento", id: mantenimiento.id,
+      }),
+      respuestasIniciales(mantenimiento),
+    );
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
@@ -55,9 +67,6 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
     !!respuestas.fecha_ejecucion && respuestas.fecha_ejecucion < hoyEnArgentina();
   const asignado = nombreDelAsignado(mantenimiento);
 
-  const cambiar = (c: Partial<RespuestasDelMantenimiento>) =>
-    setRespuestas((p) => ({ ...p, ...c }));
-
   async function generar() {
     setGuardando(true); setError("");
     const res = await fetch("/api/mantenimiento/ordenes", {
@@ -72,6 +81,8 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
 
     if (!res.ok) { setError(body.error ?? "No se pudo generar la OT."); return; }
 
+    // Recién con la OT creada no hay nada que recordar.
+    tirar();
     onCreada(
       [
         `Se generó la OT #${body.ot_number}.`,
@@ -81,9 +92,9 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
   }
 
   return (
-    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-    // hay borrador, así que hoy los dos llaman a `onClose`.
-    <Modal titulo="Generar la orden de trabajo" alSalir={onClose}>
+    // El fondo, la X y Escape salen conservando: lo contestado queda y aparece
+    // igual al volver a abrir. Sólo «Cancelar» tira.
+    <Modal titulo="Generar la orden de trabajo" alSalir={onClose} tocado={tocado}>
         <p className="text-sm text-slate-500">
           Del mantenimiento programado de {mantenimiento.equipos?.code ?? "—"}. Lo que el
           mantenimiento ya dice no se vuelve a preguntar.

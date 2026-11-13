@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Select from "@/components/Select";
 import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import { comoSeLee } from "@/lib/core/fechas";
 import {
   INVITADOS_DE_UNA_OT, TURNOS_DEL_TALLER, esCorreo, fechaParaElCalendario, horarioDeLaOT,
@@ -66,9 +68,29 @@ export default function MandarAlCalendarioModal({
   onMandada: () => void;
 }) {
   const fecha = fechaParaElCalendario(orden);
-  const [turno, setTurno] = useState<Turno>("8-16");
-  const [extras, setExtras] = useState<string[]>([]);
-  const [nuevo, setNuevo] = useState("");
+  /*
+   * Lo que se elige acá, recordado por orden mientras la app esté abierta: el
+   * turno, los invitados extra, el correo a medio tipear y la confirmación de
+   * pisar el evento que ya estaba.
+   *
+   * **`extras` en `null` quiere decir «todavía no los tocó nadie»**: la lista de
+   * la vez anterior llega del servidor **después** de montar el modal, y
+   * escribirla en el estado haría que el formulario figure tocado por haber
+   * terminado de cargar. Mientras valga null se muestra la del servidor; sacar
+   * uno o sumar uno la fija. Una lista vacía elegida a mano **no** es null: es
+   * «saqué a todos», y tiene que poder guardarse.
+   */
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-mandar-al-calendario", { tipo: "ot", id: orden.id }),
+    {
+      turno: "8-16" as Turno,
+      extras: null as string[] | null,
+      nuevo: "",
+      pisar: false,
+    },
+  );
+  const { turno, nuevo, pisar } = valores;
+
   const [errorDelCorreo, setErrorDelCorreo] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -78,7 +100,6 @@ export default function MandarAlCalendarioModal({
   // `undefined` es que todavía no se sabe; `null`, que no se pudo saber.
   const [estado, setEstado] = useState<EstadoDelEvento | null | undefined>(undefined);
   const [errorDelEstado, setErrorDelEstado] = useState("");
-  const [pisar, setPisar] = useState(false);
 
   useEffect(() => {
     let vigente = true;
@@ -90,11 +111,11 @@ export default function MandarAlCalendarioModal({
       })
       .then((b) => {
         if (!vigente) return;
-        setEstado(b);
         // Reenviar reemplaza la lista de invitados: los extras de la vez
-        // anterior arrancan puestos, o quien sólo cambia el turno los sacaría
-        // sin enterarse (y a cada uno le llegaría una cancelación).
-        setExtras(b.invitados_extra ?? []);
+        // anterior arrancan puestos (se derivan de acá, abajo), o quien sólo
+        // cambia el turno los sacaría sin enterarse (y a cada uno le llegaría
+        // una cancelación).
+        setEstado(b);
       })
       .catch((e) => {
         if (!vigente) return;
@@ -103,6 +124,10 @@ export default function MandarAlCalendarioModal({
       });
     return () => { vigente = false; };
   }, [orden.id]);
+
+  // Los que se van a invitar: los que eligió quien está mirando, o los de la
+  // vez anterior mientras nadie toque la lista.
+  const extras = valores.extras ?? estado?.invitados_extra ?? [];
 
   const horario = fecha ? horarioDeLaOT(fecha, turno) : null;
   const duenoCasilla = estado?.dueno_casilla?.trim().toLowerCase() ?? null;
@@ -120,8 +145,7 @@ export default function MandarAlCalendarioModal({
       setErrorDelCorreo("Ya está en la lista");
       return;
     }
-    setExtras([...extras, correo]);
-    setNuevo("");
+    cambiar({ extras: [...extras, correo], nuevo: "" });
     setErrorDelCorreo("");
   }
 
@@ -143,6 +167,9 @@ export default function MandarAlCalendarioModal({
         );
         return;
       }
+      // Recién con el evento adentro no hay nada que recordar. Un fallo deja el
+      // modal abierto con el error y la lista de invitados en su lugar.
+      tirar();
       setListo({
         reemplazo: Boolean(body.reemplazo),
         // Sin dato se supone que no: un verde de más es la mentira.
@@ -157,13 +184,14 @@ export default function MandarAlCalendarioModal({
   }
 
   return (
-    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-    // hay borrador, así que hoy los dos llaman a `onCerrar`. Una vez mandada,
+    // El fondo, la X y Escape salen conservando: el turno y los invitados quedan
+    // y aparecen igual al volver a abrir. Sólo «Cancelar» tira. Una vez mandada,
     // salir por cualquier lado es «Cerrar» (`onMandada`): la orden ya está en el
     // calendario y quien llama tiene que refrescar, no sólo ocultar la ventana.
     <Modal
       titulo={`Mandar la OT #${orden.ot_number} al calendario`}
       alSalir={listo ? onMandada : onCerrar}
+      tocado={tocado}
     >
       <div className="space-y-4">
         <p className="-mt-2 text-xs text-slate-500">
@@ -203,7 +231,7 @@ export default function MandarAlCalendarioModal({
           <>
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">Turno</label>
-              <Select value={turno} onChange={(e) => setTurno(e.target.value as Turno)} className="input">
+              <Select value={turno} onChange={(e) => cambiar({ turno: e.target.value as Turno })} className="input">
                 {TURNOS_DEL_TALLER.map((t) => (
                   <option key={t} value={t}>Turno {t}</option>
                 ))}
@@ -224,7 +252,7 @@ export default function MandarAlCalendarioModal({
                   <li key={c} className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate">{c}</span>
                     <button
-                      onClick={() => setExtras(extras.filter((x) => x !== c))}
+                      onClick={() => cambiar({ extras: extras.filter((x) => x !== c) })}
                       className="shrink-0 text-xs font-semibold text-slate-500 underline hover:text-slate-900"
                     >
                       Sacar
@@ -250,7 +278,7 @@ export default function MandarAlCalendarioModal({
                 <input
                   type="email" className="input min-w-0 flex-1" placeholder="correo@empresa.com"
                   value={nuevo}
-                  onChange={(e) => { setNuevo(e.target.value); setErrorDelCorreo(""); }}
+                  onChange={(e) => { cambiar({ nuevo: e.target.value }); setErrorDelCorreo(""); }}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); sumar(); } }}
                 />
                 <button
@@ -299,7 +327,7 @@ export default function MandarAlCalendarioModal({
                 <label className="flex cursor-pointer items-start gap-2">
                   <input
                     type="checkbox" className="mt-0.5" checked={pisar}
-                    onChange={(e) => setPisar(e.target.checked)}
+                    onChange={(e) => cambiar({ pisar: e.target.checked })}
                   />
                   <span>Entiendo que se pisa lo que se hizo en Google</span>
                 </label>
@@ -313,7 +341,8 @@ export default function MandarAlCalendarioModal({
             )}
 
             <PieDeModal className="flex justify-end gap-2">
-              <button onClick={onCerrar} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+              {/* El único que tira. */}
+              <button onClick={() => { tirar(); onCerrar(); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
                 Cancelar
               </button>
               <button

@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import Select from "@/components/Select";
 import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import { MAXIMO_DE_DIAS } from "@/lib/mantenimiento/postergar";
 
 interface Razon {
@@ -38,11 +40,33 @@ export default function PostergarOTModal({
   onPostergada: () => void;
 }) {
   const [razones, setRazones] = useState<Razon[]>([]);
-  const [razon, setRazon] = useState("");
-  const [dias, setDias] = useState("");
-  const [justificacion, setJustificacion] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
+
+  /*
+   * Los tres campos del formulario, recordados mientras la app esté abierta.
+   *
+   * **`null` quiere decir «todavía no lo tocó nadie»**, y no es un adorno: la
+   * razón y los días vienen puestos desde la configuración, que llega **después**
+   * de montar el modal. Si el valor por omisión se escribiera en el estado, el
+   * formulario figuraría tocado por haber terminado de cargar una lista, y la
+   * pregunta al salir saltaría sobre un formulario que nadie escribió — que es
+   * justo lo que enseña a pasarla por alto la vez que sí importaba. Por eso el
+   * valor por omisión se **deriva al pintar** (abajo) en vez de guardarse.
+   *
+   * `""` y `null` son dos cosas distintas en `dias`: vaciar el campo para
+   * retipearlo es haberlo tocado y tiene que quedar vacío, no volver al número
+   * de la razón.
+   *
+   * Los tres van juntos o ninguno: restaurar la justificación y perder la razón
+   * dejaría el formulario diciendo un motivo que nadie eligió, que es peor que
+   * perderlo entero.
+   */
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-postergar-ot", { tipo: "ot", id: orden.id }),
+    { razon: null as string | null, dias: null as string | null, justificacion: "" },
+  );
+  const { justificacion } = valores;
 
   useEffect(() => {
     let vigente = true;
@@ -50,21 +74,21 @@ export default function PostergarOTModal({
       .then((r) => (r.ok ? r.json() : { data: [] }))
       .then((b) => {
         if (!vigente) return;
-        const activas = (b.data ?? []).filter((r: Razon) => r.activa);
-        setRazones(activas);
-        if (activas.length > 0) {
-          setRazon(activas[0].codigo);
-          setDias(String(activas[0].dias));
-        }
+        setRazones((b.data ?? []).filter((r: Razon) => r.activa));
       })
       .catch(() => { if (vigente) setRazones([]); });
     return () => { vigente = false; };
   }, []);
 
+  // La razón elegida, o la primera de la configuración mientras nadie elija.
+  const razon = valores.razon ?? razones[0]?.codigo ?? "";
+  // Los días de esa razón, mientras nadie los corrija.
+  const dias = valores.dias ?? String(razones.find((r) => r.codigo === razon)?.dias ?? "");
+
+  // Cambiar de razón devuelve los días a los de la razón nueva: vuelven a quedar
+  // sin tocar, así que si se cambia otra vez siguen al desplegable.
   function elegirRazon(codigo: string) {
-    setRazon(codigo);
-    const r = razones.find((x) => x.codigo === codigo);
-    if (r) setDias(String(r.dias));
+    cambiar({ razon: codigo, dias: null });
   }
 
   async function postergar() {
@@ -83,15 +107,17 @@ export default function PostergarOTModal({
       setError(body.error ?? "No se pudo postergar.");
       return;
     }
+    // Recién con el guardado en verde no hay nada que recordar.
+    tirar();
     onPostergada();
   }
 
   const falta = !razon || !justificacion.trim() || !Number.isInteger(Number(dias)) || Number(dias) <= 0;
 
   return (
-    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-    // hay borrador, así que hoy los dos llaman a `onCerrar`.
-    <Modal titulo={`Postergar la OT #${orden.ot_number}`} alSalir={onCerrar}>
+    // El fondo, la X y Escape salen conservando: la justificación a medio
+    // escribir queda y aparece igual al volver a abrir. Sólo «Cancelar» tira.
+    <Modal titulo={`Postergar la OT #${orden.ot_number}`} alSalir={onCerrar} tocado={tocado}>
       <div className="space-y-4">
         <p className="-mt-2 text-xs text-slate-500">
           {orden.fecha_ejecucion
@@ -121,7 +147,7 @@ export default function PostergarOTModal({
               <div className="w-24">
                 <input
                   type="number" min={1} max={MAXIMO_DE_DIAS} className="input"
-                  value={dias} onChange={(e) => setDias(e.target.value)}
+                  value={dias} onChange={(e) => cambiar({ dias: e.target.value })}
                 />
               </div>
             </div>
@@ -132,7 +158,7 @@ export default function PostergarOTModal({
               </label>
               <textarea
                 className="input min-h-20" value={justificacion}
-                onChange={(e) => setJustificacion(e.target.value)}
+                onChange={(e) => cambiar({ justificacion: e.target.value })}
                 placeholder="Qué pasó, con las palabras de quien lo sabe."
               />
               <p className="mt-1 text-xs text-slate-400">
@@ -149,7 +175,8 @@ export default function PostergarOTModal({
         )}
 
         <PieDeModal className="flex justify-end gap-2">
-          <button onClick={onCerrar} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+          {/* El único que tira. */}
+          <button onClick={() => { tirar(); onCerrar(); }} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
             Cancelar
           </button>
           <button

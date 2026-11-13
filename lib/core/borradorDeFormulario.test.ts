@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   claveDelBorrador,
+  conElBorrador,
   guardarBorrador,
   hayAlgoEscrito,
   leerBorrador,
+  soloLoTocado,
   tirarBorrador,
   vaciarBorradores,
 } from "./borradorDeFormulario";
@@ -83,5 +85,73 @@ describe("el almacén de borradores", () => {
     guardarBorrador("b", { y: 2 });
     tirarBorrador("a");
     expect(leerBorrador("b")).toEqual({ y: 2 });
+  });
+});
+
+describe("el borrador guarda el cambio y no el registro", () => {
+  beforeEach(() => vaciarBorradores());
+
+  it("el borrador guarda sólo lo que se tocó, no el registro entero", () => {
+    const inicial = { horas: "8", contratista: "PIPARO", operario: "Perez" };
+    guardarBorrador("k", soloLoTocado(inicial, { ...inicial, horas: "9" }));
+    expect(leerBorrador("k")).toEqual({ horas: "9" });
+  });
+
+  it("restaurar sobre un registro que cambió no pisa lo que no se tocó", () => {
+    const delServidor = { horas: "8", contratista: "CANDIA", operario: "Perez" };
+    expect(conElBorrador(delServidor, { horas: "9" }))
+      .toEqual({ horas: "9", contratista: "CANDIA", operario: "Perez" });
+  });
+});
+
+describe("soloLoTocado", () => {
+  it("un formulario intacto no deja ningún campo", () => {
+    const inicial = { horas: "8", contratista: "PIPARO" };
+    expect(soloLoTocado(inicial, { ...inicial })).toEqual({});
+  });
+
+  it("un campo que volvió a su valor inicial no queda en el borrador", () => {
+    expect(soloLoTocado({ horas: "8", nota: "" }, { horas: "8", nota: "algo" }))
+      .toEqual({ nota: "algo" });
+  });
+
+  it("compara en profundidad: una lista igual campo a campo no es un cambio", () => {
+    const inicial = { repuestos: [{ id: 1, cantidad: "2" }] };
+    expect(soloLoTocado(inicial, { repuestos: [{ id: 1, cantidad: "2" }] })).toEqual({});
+    expect(soloLoTocado(inicial, { repuestos: [{ id: 1, cantidad: "3" }] }))
+      .toEqual({ repuestos: [{ id: 1, cantidad: "3" }] });
+  });
+
+  // `guardarBorrador` guarda la referencia que le dan y `leerBorrador` devuelve
+  // esa misma: si el resultado compartiera objeto con `actual`, seguir tipeando
+  // reescribiría el borrador ya guardado sin que nadie lo note.
+  it("devuelve un objeto nuevo y no el que le pasaron", () => {
+    const inicial = { horas: "8" };
+    const actual = { horas: "9" };
+    const tocado = soloLoTocado(inicial, actual);
+    expect(tocado).not.toBe(actual);
+    expect(tocado).not.toBe(inicial);
+  });
+});
+
+describe("conElBorrador", () => {
+  it("sin borrador devuelve lo del servidor tal cual", () => {
+    const delServidor = { horas: "8", contratista: "CANDIA" };
+    expect(conElBorrador(delServidor, undefined)).toEqual(delServidor);
+    expect(conElBorrador(delServidor, {})).toEqual(delServidor);
+  });
+
+  // Si devolviera el mismo objeto, el formulario escribiría sobre lo que le
+  // llegó del servidor y nadie podría volver a compararse contra «como nació».
+  it("no devuelve ni el objeto del servidor ni el del borrador", () => {
+    const delServidor = { horas: "8" };
+    const borrador = { horas: "9" };
+    const resultado = conElBorrador(delServidor, borrador);
+    expect(resultado).not.toBe(delServidor);
+    expect(resultado).not.toBe(borrador);
+  });
+
+  it("un campo del borrador con valor vacío sí pisa: borrarlo es haberlo tocado", () => {
+    expect(conElBorrador({ nota: "algo" }, { nota: "" })).toEqual({ nota: "" });
   });
 });

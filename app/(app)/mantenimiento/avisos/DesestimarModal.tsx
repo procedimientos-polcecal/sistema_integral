@@ -7,6 +7,8 @@ import {
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import type { Aviso } from "@/lib/mantenimiento/types";
 import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 
 /**
  * Por qué este aviso no va a ser orden de trabajo.
@@ -25,7 +27,15 @@ export default function DesestimarModal({ aviso, onClose, onHecho }: {
   onClose: () => void;
   onHecho: (mensaje: string) => void;
 }) {
-  const [motivo, setMotivo] = useState("");
+  // El motivo es lo único que se escribe acá, y se recuerda por aviso: un
+  // borrador que reapareciera sobre otro aviso desestimaría el equivocado con un
+  // texto que no es suyo.
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-desestimar-aviso", { tipo: "aviso", id: aviso.id }),
+    { motivo: "" },
+  );
+  const { motivo } = valores;
+
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
@@ -43,6 +53,8 @@ export default function DesestimarModal({ aviso, onClose, onHecho }: {
 
     if (!res.ok) { setError(body.error ?? "No se pudo desestimar."); return; }
 
+    // Recién con el guardado en verde no hay nada que recordar.
+    tirar();
     onHecho(
       [
         `El aviso ${aviso.oa_number} quedó desestimado.`,
@@ -54,9 +66,9 @@ export default function DesestimarModal({ aviso, onClose, onHecho }: {
   }
 
   return (
-    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-    // hay borrador, así que hoy los dos llaman a `onClose`.
-    <Modal titulo={`Desestimar el aviso ${aviso.oa_number}`} alSalir={onClose}>
+    // El fondo, la X y Escape salen conservando: el motivo a medio escribir
+    // queda y aparece igual al volver a abrir. Sólo «Cancelar» tira.
+    <Modal titulo={`Desestimar el aviso ${aviso.oa_number}`} alSalir={onClose} tocado={tocado}>
         <p className="text-sm text-slate-500">
           Deja de contar como pendiente. No se borra: queda con el motivo, quién lo decidió
           y cuándo, y se puede volver atrás.
@@ -75,7 +87,7 @@ export default function DesestimarModal({ aviso, onClose, onHecho }: {
           </span>
           <textarea
             value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
+            onChange={(e) => cambiar({ motivo: e.target.value })}
             rows={3}
             autoFocus
             placeholder="El equipo se da de baja el mes que viene"
@@ -105,8 +117,9 @@ export default function DesestimarModal({ aviso, onClose, onHecho }: {
         )}
 
         <PieDeModal className="mt-5 flex justify-end gap-2">
+          {/* El único que tira. */}
           <button
-            onClick={onClose}
+            onClick={() => { tirar(); onClose(); }}
             className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-slate-100"
           >
             Cancelar

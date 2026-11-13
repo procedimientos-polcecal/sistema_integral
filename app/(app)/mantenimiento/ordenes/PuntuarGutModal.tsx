@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Select from "@/components/Select";
 import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import { AYUDA_GUT, ESCALAS_GUT, puntajeGut } from "@/lib/mantenimiento/gut";
 import InfoTip from "@/components/InfoTip";
 import PuntajeGut from "./PuntajeGut";
@@ -51,12 +53,22 @@ export default function PuntuarGutModal({
   onCerrar: () => void;
   onGuardada: () => void;
 }) {
-  const inicial: Notas = {
-    gut_gravedad: aTexto(orden.gut_gravedad),
-    gut_urgencia: aTexto(orden.gut_urgencia),
-    gut_tendencia: aTexto(orden.gut_tendencia),
-  };
-  const [notas, setNotas] = useState<Notas>(inicial);
+  /*
+   * Las tres notas, recordadas mientras la app esté abierta y **de a una**: el
+   * borrador guarda sólo la que se cambió, así que al volver a abrirlo las otras
+   * dos salen de la orden como está ahora. Importa porque este `PATCH` manda las
+   * tres siempre: con el registro entero guardado, retomar un borrador de ayer le
+   * devolvería a dos notas el valor que tenían ayer.
+   */
+  const { valores: notas, cambiar, tocado: cambio, tirar } = useBorrador<Notas>(
+    claveDelBorrador("mantenimiento-gut", { tipo: "ot", id: orden.id }),
+    {
+      gut_gravedad: aTexto(orden.gut_gravedad),
+      gut_urgencia: aTexto(orden.gut_urgencia),
+      gut_tendencia: aTexto(orden.gut_tendencia),
+    },
+  );
+
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
@@ -67,10 +79,9 @@ export default function PuntuarGutModal({
   };
   const puntaje = puntajeGut(elegidas);
   const cuantas = CAMPOS.filter(([campo]) => notas[campo] !== "").length;
-  const cambio = CAMPOS.some(([campo]) => notas[campo] !== inicial[campo]);
 
   function elegir(campo: Campo, valor: string) {
-    setNotas((n) => ({ ...n, [campo]: valor }));
+    cambiar({ [campo]: valor });
     setError("");
   }
 
@@ -91,6 +102,8 @@ export default function PuntuarGutModal({
         setError(body.error ?? "No se pudo guardar el puntaje.");
         return;
       }
+      // Recién con el guardado en verde no hay nada que recordar.
+      tirar();
       onGuardada();
     } catch {
       setError("No se pudo guardar el puntaje: no hubo conexión con el servidor.");
@@ -100,9 +113,9 @@ export default function PuntuarGutModal({
   }
 
   return (
-    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-    // hay borrador, así que hoy los dos llaman a `onCerrar`.
-    <Modal titulo={`Puntaje GUT · OT #${orden.ot_number ?? "—"}`} alSalir={onCerrar}>
+    // El fondo, la X y Escape salen conservando: las notas elegidas quedan y
+    // aparecen igual al volver a abrir. Sólo «Cancelar» tira.
+    <Modal titulo={`Puntaje GUT · OT #${orden.ot_number ?? "—"}`} alSalir={onCerrar} tocado={cambio}>
       <div className="space-y-4">
         <p className="-mt-2 truncate text-xs text-slate-400">{orden.equipo_raw ?? orden.descripcion ?? ""}</p>
 
@@ -151,8 +164,9 @@ export default function PuntuarGutModal({
           >
             {guardando ? "Guardando…" : "Guardar"}
           </button>
+          {/* El único que tira. */}
           <button
-            onClick={onCerrar}
+            onClick={() => { tirar(); onCerrar(); }}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cancelar

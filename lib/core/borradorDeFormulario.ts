@@ -52,6 +52,51 @@ export function hayAlgoEscrito<T extends object>(inicial: T, actual: T): boolean
 }
 
 /**
+ * Los campos que cambiaron respecto de cómo nació el formulario, y sólo ésos.
+ *
+ * **Un borrador guarda el cambio y no el registro.** `RegistrarOTModal` manda en
+ * un solo `PATCH` las horas, el contratista, los tres operarios y la falla. Si el
+ * borrador llevara el registro entero, al retomarlo reescribiría también lo que
+ * otro corrigió mientras tanto — y desde el 16/10/2026 la app vive instalada en
+ * los teléfonos, así que «mientras la app esté abierta» puede ser días. Pisar lo
+ * que corrigió otro no se nota nunca; es la misma familia de daño que un borrador
+ * que reaparece sobre el registro equivocado.
+ *
+ * La comparación es la misma de `hayAlgoEscrito`, campo por campo y en
+ * profundidad: un campo que volvió a su valor inicial no es un cambio y no entra.
+ *
+ * Devuelve siempre un objeto nuevo. `guardarBorrador` guarda la referencia que le
+ * dan y `leerBorrador` devuelve esa misma: si acá saliera `actual`, seguir
+ * tipeando reescribiría el borrador ya guardado y nada lo notaría. Los valores de
+ * adentro sí se comparten —no se clonan listas ni fechas—, lo que vale mientras
+ * el formulario los reemplace en vez de mutarlos, que es lo que ya hace React.
+ */
+export function soloLoTocado<T extends object>(inicial: T, actual: T): Partial<T> {
+  const antes = inicial as Record<string, unknown>;
+  const ahora = actual as Record<string, unknown>;
+  const tocado: Record<string, unknown> = {};
+  for (const clave of Object.keys(ahora)) {
+    if (!iguales(antes[clave], ahora[clave])) tocado[clave] = ahora[clave];
+  }
+  return tocado as Partial<T>;
+}
+
+/**
+ * El registro como está hoy, con encima los campos que la persona había tocado.
+ *
+ * Es la otra mitad de `soloLoTocado`: lo que no está en el borrador queda como
+ * vino del servidor, incluso si cambió desde que se empezó a escribir. Un campo
+ * presente en el borrador pisa aunque valga vacío — haberlo borrado también es
+ * haberlo tocado.
+ *
+ * Devuelve un objeto nuevo: ni el del servidor ni el del borrador se tocan, para
+ * que «como nació» siga siendo comparable contra lo que hay en pantalla.
+ */
+export function conElBorrador<T extends object>(delServidor: T, borrador?: Partial<T> | null): T {
+  return { ...delServidor, ...(borrador ?? {}) };
+}
+
+/**
  * Igualdad en profundidad para lo que lleva un formulario: valores simples, listas, objetos y fechas.
  * Un campo `undefined` y un campo ausente cuentan como iguales: un formulario no
  * debería figurar como tocado porque una clave existe con valor vacío en un lado y no en el otro.

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { ESTADO_DE_STOCK, type Disponibilidad, type Insumo } from "@/lib/mantenimiento/stock";
 import { useCargar } from "@/lib/core/useCargar";
 import { Modal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import { convienePedir, pedidoSugerido, type PedidoSugerido } from "@/lib/mantenimiento/pedirRepuesto";
@@ -85,6 +87,29 @@ export default function RepuestosOTModal({
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
+  /*
+   * EL RENGLÓN A MEDIO ESCRIBIR DE «AGREGAR», Y POR QUÉ ESTE MODAL TUVO QUE
+   * GANARSE UN BOTÓN NEGATIVO
+   *
+   * Acá no hay formulario con «Cancelar»: la lista se edita renglón por renglón
+   * y cada cambio ya está guardado del otro lado. Lo único a medio cargar es el
+   * repuesto que se está por sumar, y ése sí se perdía al tocar el fondo.
+   *
+   * Encender `tocado` sin más dejaba la regla coja: todas las salidas ofrecerían
+   * conservar el renglón y **ninguna** lo descartaría, así que un «rodamient» a
+   * medio tipear volvería a aparecer cada vez que se abra esta OT, sin forma de
+   * sacarlo salvo borrando letra por letra. Por eso el renglón tiene ahora su
+   * propio «Borrar», que aparece sólo cuando hay algo escrito: es el botón
+   * negativo que la regla pide, y el único que tira.
+   *
+   * Vive acá arriba y no adentro de `Agregar` porque el `Modal` necesita
+   * `tocado`, y un hijo no se lo puede contar al padre sin un efecto.
+   */
+  const renglon = useBorrador(
+    claveDelBorrador("mantenimiento-repuesto-a-sumar", { tipo: "ot", id: orden.id }),
+    { nombre: "", codigo: "", cantidad: "" },
+  );
+
   const traer = useCargar(async (vigente) => {
     setCargando(true);
     const res = await fetch(`/api/mantenimiento/ordenes/${orden.id}/repuestos`);
@@ -126,11 +151,11 @@ export default function RepuestosOTModal({
 
   return (
     <>
-      {/* Es una lista que se edita renglón por renglón, no un formulario con
-          Cancelar: no hay botón que tire nada, y el fondo, la X y Escape salen
-          igual. Lo único a medio escribir es el repuesto de «Agregar»; si eso
-          merece un cartel es decisión de cuando haya borrador. */}
-      <Modal titulo="Repuestos que hacen falta" alSalir={onCerrar}>
+      {/* Es una lista que se edita renglón por renglón: cada repuesto ya está
+          guardado y no hay nada que tirar. Lo único a medio escribir es el
+          renglón de «Agregar», que el fondo, la X y Escape salen conservando y
+          descarta su propio «Borrar» (ver el comentario de `renglon`). */}
+      <Modal titulo="Repuestos que hacen falta" alSalir={onCerrar} tocado={renglon.tocado}>
       <div className="space-y-4">
         <p className="-mt-2 text-xs text-slate-400">
           OT #{orden.ot_number ?? "—"} · {orden.descripcion ?? ""}
@@ -234,7 +259,9 @@ export default function RepuestosOTModal({
           </p>
         )}
 
-        {puedeEditar && <Agregar ordenId={orden.id} onAgregado={traer} onError={setError} />}
+        {puedeEditar && (
+          <Agregar ordenId={orden.id} onAgregado={traer} onError={setError} renglon={renglon} />
+        )}
       </div>
       </Modal>
 
@@ -269,15 +296,20 @@ export default function RepuestosOTModal({
  * el código, después se sabe si hay stock sin adivinar por el nombre.
  */
 function Agregar({
-  ordenId, onAgregado, onError,
+  ordenId, onAgregado, onError, renglon,
 }: {
   ordenId: string;
   onAgregado: () => void;
   onError: (e: string) => void;
+  /** El renglón a medio escribir, que vive en el modal: ver su comentario. */
+  renglon: {
+    valores: { nombre: string; codigo: string; cantidad: string };
+    cambiar: (p: Partial<{ nombre: string; codigo: string; cantidad: string }>) => void;
+    tocado: boolean;
+    tirar: () => void;
+  };
 }) {
-  const [nombre, setNombre] = useState("");
-  const [codigo, setCodigo] = useState("");
-  const [cantidad, setCantidad] = useState("");
+  const { nombre, codigo, cantidad } = renglon.valores;
   const [sugerencias, setSugerencias] = useState<Insumo[]>([]);
   const [avisoBusqueda, setAvisoBusqueda] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -321,7 +353,9 @@ function Agregar({
       onError((await res.json().catch(() => ({}))).error ?? "No se pudo agregar.");
       return;
     }
-    setNombre(""); setCodigo(""); setCantidad(""); setSugerencias([]);
+    // Sumado: lo que había a medio escribir ya es un repuesto de la lista.
+    renglon.tirar();
+    setSugerencias([]);
     onAgregado();
   }
 
@@ -330,7 +364,7 @@ function Agregar({
       <div className="relative">
         <input
           value={nombre}
-          onChange={(e) => setNombre(e.target.value)}
+          onChange={(e) => renglon.cambiar({ nombre: e.target.value })}
           placeholder="Rodamiento 6206, correa B-75…"
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
@@ -343,8 +377,7 @@ function Agregar({
               <li key={i}>
                 <button
                   onClick={() => {
-                    setNombre(s.descripcion ?? "");
-                    setCodigo(s.codigo ?? "");
+                    renglon.cambiar({ nombre: s.descripcion ?? "", codigo: s.codigo ?? "" });
                     setSugerencias([]);
                   }}
                   className="block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50"
@@ -362,13 +395,13 @@ function Agregar({
       <div className="flex gap-2">
         <input
           value={codigo}
-          onChange={(e) => setCodigo(e.target.value)}
+          onChange={(e) => renglon.cambiar({ codigo: e.target.value })}
           placeholder="Código"
           className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
         <input
           value={cantidad}
-          onChange={(e) => setCantidad(e.target.value)}
+          onChange={(e) => renglon.cambiar({ cantidad: e.target.value })}
           placeholder="Cantidad"
           className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
@@ -380,6 +413,19 @@ function Agregar({
           Sumar
         </button>
       </div>
+
+      {/* El botón negativo de esta pantalla, y el único que tira el renglón.
+          Aparece sólo con algo escrito: un «Borrar» permanente al lado de tres
+          campos vacíos es ruido. */}
+      {renglon.tocado && (
+        <button
+          type="button"
+          onClick={() => { renglon.tirar(); setSugerencias([]); }}
+          className="text-xs text-slate-400 underline hover:text-red-600"
+        >
+          Borrar lo escrito
+        </button>
+      )}
     </div>
   );
 }

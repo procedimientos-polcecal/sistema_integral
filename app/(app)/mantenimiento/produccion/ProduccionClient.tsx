@@ -8,6 +8,8 @@ import {
 } from "@/lib/mantenimiento/produccion";
 import { useCargar } from "@/lib/core/useCargar";
 import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 
 /**
  * La grilla de producción: sectores por los siete días de una semana.
@@ -413,6 +415,9 @@ export default function ProduccionClient({
         const sector = sectores.find((s) => s.id === editando.sectorId);
         return (
           <EditorDeDia
+            /* La identidad de la celda, que los rótulos de abajo no tienen: el
+               borrador de un día de un sector no puede aparecer en otro. */
+            clave={`${editando.sectorId}|${editando.dia}`}
             sector={sector?.nombre ?? ""}
             dia={`${DIAS[editando.dia]} ${diaCorto(fechas[editando.dia])}`}
             estado={plan.days[editando.dia]}
@@ -492,8 +497,10 @@ function PendientesDelSector({
 }
 
 function EditorDeDia({
-  sector, dia, estado, turnos, motivo, onGuardar, onCerrar,
+  clave, sector, dia, estado, turnos, motivo, onGuardar, onCerrar,
 }: {
+  /** Qué celda es: sector y día, que es lo que distingue un borrador de otro. */
+  clave: string;
   sector: string;
   dia: string;
   estado: EstadoProduccion;
@@ -502,23 +509,31 @@ function EditorDeDia({
   onGuardar: (estado: EstadoProduccion, turnos: string, motivo: string) => void;
   onCerrar: () => void;
 }) {
-  const [est, setEst] = useState<EstadoProduccion>(estado);
-  const [tur, setTur] = useState(turnos);
-  const [mot, setMot] = useState(motivo);
+  /*
+   * Lo que se edita de la celda, recordado mientras la app esté abierta. Nace
+   * con lo que el plan ya dice, así que abrirla y cerrarla sin tocar nada no
+   * pregunta nada; y va campo por campo, que es lo que hace que escribir el
+   * motivo no se lleve puesto un turno que cambió abajo.
+   */
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-produccion-dia", { tipo: "celda", id: clave }),
+    { est: estado as EstadoProduccion, tur: turnos, mot: motivo },
+  );
+  const { est, tur, mot } = valores;
 
   // Los turnos se guardan como una cadena — "MT" —, siempre en el orden
   // mañana/tarde/noche para que se lean igual en todas las celdas.
   const alternarTurno = (t: string) =>
-    setTur((prev) =>
-      TURNOS.map((x) => x.valor as string)
-        .filter((x) => (x === t ? !prev.includes(x) : prev.includes(x)))
-        .join("")
-    );
+    cambiar({
+      tur: TURNOS.map((x) => x.valor as string)
+        .filter((x) => (x === t ? !tur.includes(x) : tur.includes(x)))
+        .join(""),
+    });
 
   return (
-    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-    // hay borrador, así que hoy los dos llaman a `onCerrar`.
-    <Modal titulo={sector} alSalir={onCerrar} ancho="chico">
+    // El fondo, la X y Escape salen conservando: lo elegido queda y aparece
+    // igual al volver a abrir esta celda. Sólo «Cancelar» tira.
+    <Modal titulo={sector} alSalir={onCerrar} tocado={tocado} ancho="chico">
       <div className="space-y-4">
         <p className="-mt-2 text-xs text-slate-400">{dia}</p>
 
@@ -531,7 +546,7 @@ function EditorDeDia({
               return (
                 <button
                   key={k}
-                  onClick={() => setEst(k)}
+                  onClick={() => cambiar({ est: k })}
                   className="rounded-xl border-2 px-2 py-2 text-xs font-semibold"
                   style={{
                     borderColor: elegido ? m.color : "#E2E8F0",
@@ -570,7 +585,7 @@ function EditorDeDia({
           </label>
           <input
             value={mot}
-            onChange={(e) => setMot(e.target.value)}
+            onChange={(e) => cambiar({ mot: e.target.value })}
             placeholder={est === "EN_PRODUCCION" ? "Sin parada" : "Mantenimiento, falta de insumo, feriado…"}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
           />
@@ -578,11 +593,12 @@ function EditorDeDia({
 
         <PieDeModal className="flex gap-2">
           <button
-            onClick={() => onGuardar(est, tur, mot)}
+            onClick={() => { tirar(); onGuardar(est, tur, mot); }}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
           >Guardar</button>
+          {/* El único que tira. */}
           <button
-            onClick={onCerrar}
+            onClick={() => { tirar(); onCerrar(); }}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >Cancelar</button>
         </PieDeModal>

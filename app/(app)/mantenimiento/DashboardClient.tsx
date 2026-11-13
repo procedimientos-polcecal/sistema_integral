@@ -833,8 +833,23 @@ export default function DashboardClient({
       </section>
 
       {statusModal && (
-        // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía
-        // no hay borrador, así que hoy los dos llaman a `setStatusModal(null)`.
+        // ── SIN BORRADOR, Y NO POR DESCUIDO ───────────────────────────────
+        // El fondo, la X y Escape salen conservando porque no hay nada que
+        // tirar: este formulario **no pasa por `useBorrador`** y pierde lo
+        // cargado al salir, como antes.
+        //
+        // El motivo es la forma de esta pantalla y no una preferencia. El estado
+        // del formulario vive en el componente de la página —que no se
+        // desmonta—, los dos caminos que lo abren lo **vacían a propósito**, y
+        // la clave del borrador tendría que llevar el registro que se está
+        // editando, que recién se sabe al abrirlo. Un borrador con clave fija
+        // haría lo peor de los dos mundos: lo escrito para un registro
+        // reapareciendo sobre otro, que es justo lo que `claveDelBorrador`
+        // existe para impedir.
+        //
+        // Para migrarlo hay que sacar el cuerpo del modal a su propio
+        // componente, que se monte por registro. Es un cambio de forma y va
+        // aparte.
         <Modal
           titulo={`Cambiar estado — ${statusModal.sector.nombre}`}
           alSalir={() => setStatusModal(null)}
