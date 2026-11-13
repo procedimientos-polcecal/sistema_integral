@@ -152,16 +152,23 @@ export default async function TrituracionInicioPage({
       {/* ── KPIs globales del mes ── */}
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard color="#1E7D34" value={`${num0.format(resumenGlobal.toneladasTotal)} t`} label={`Procesadas en ${nombreDeMes(mesVista)}`} />
-        <KpiCard color="#7E22CE" value={String(resumenGlobal.diasOperativos)} label="Días operativos (3 plantas)" />
+        <KpiCard
+          color="#7E22CE"
+          value={String(resumenGlobal.diasOperativos)}
+          label="Días operativos (3 plantas)"
+          sub={<InfoTip text="Cuenta los días del mes en que operó al menos una de las tres plantas: si dos operaron el mismo día es un solo día, y un día con dos turnos «Operó» también. Las tarjetas de cada planta, abajo, cuentan los suyos y su suma da más; el informe mensual también suma los de cada planta." />}
+        />
         <KpiCard
           color="#0891B2"
           value={resumenGlobal.disponibilidadPromedio !== null ? pct.format(resumenGlobal.disponibilidadPromedio) : "—"}
           label="Disponibilidad promedio"
+          sub={<InfoTip text="Horas reales sobre horas teóricas de todos los turnos «Operó» del mes, de las tres plantas juntas: un turno largo pesa más que uno corto, y no es el promedio de los porcentajes. Las teóricas van de la hora de inicio a la de fin de cada parte; las reales, esas menos las cuatro clases de parada. Un turno sin las dos horas no entra. El informe mensual usa otra cuenta." />}
         />
         <KpiCard
           color={pendientesTotal > 0 ? "#B45309" : "#1E7D34"}
           value={String(pendientesTotal)}
           label="Partes sin exportar a la planilla"
+          sub={<InfoTip text="Partes cuya última escritura en la planilla falló, de cualquier mes y de cualquier planta, también de una planta desactivada. Se limpia cuando ese turno se vuelve a guardar y esta vez sale bien; no hay reintento automático. El ⚠ de la tabla de partes muestra qué dijo Google." />}
         />
       </div>
 
@@ -201,8 +208,9 @@ export default async function TrituracionInicioPage({
           </div>
         </section>
         <section className="card overflow-hidden lg:col-span-2">
-          <div style={{ backgroundColor: "#7E22CE" }} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white">
+          <div style={{ backgroundColor: "#7E22CE" }} className="flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white">
             Material procesado en el mes
+            <InfoTip text="Sólo turnos «Operó» con toneladas. Un parte sin material, o con dos (como «Caliza + Chocolata», que vienen del histórico importado), va a «Sin clasificar»: no se reparte adivinando a cuál." />
           </div>
           <div className="h-56 p-4">
             {materiales.length > 0 ? (

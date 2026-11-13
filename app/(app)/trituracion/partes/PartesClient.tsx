@@ -8,6 +8,7 @@ import { despejarParte } from "@/lib/trituracion/horas";
 import { ESTADOS_PARTE, ETIQUETA_ESTADO, MATERIALES, ORIGENES_SIN_YACIMIENTO } from "@/lib/trituracion/vocabulario";
 import type { EmpleadoLiviano, ParteDB, PlantaDB } from "@/lib/trituracion/consultas";
 import { COLOR_CLARO, COLORES_TRITURACION } from "../GraficosTrituracion";
+import InfoTip from "@/components/InfoTip";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
@@ -87,10 +88,13 @@ function formDeParte(p: ParteDB): Form {
   };
 }
 
-function Campo({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+function Campo({ etiqueta, info, children }: { etiqueta: string; info?: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-slate-500">{etiqueta}</span>
+      <span className="mb-1 block text-xs font-medium text-slate-500">
+        {etiqueta}
+        {info && <InfoTip text={info} className="ml-1" />}
+      </span>
       {children}
     </label>
   );
@@ -170,6 +174,7 @@ function CalendarioMes({
         <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm border border-emerald-200 bg-emerald-50" /> Operó</span>
         <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm border border-slate-300 bg-slate-100" /> No operó</span>
         <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm border border-dashed border-slate-200" /> Sin cargar</span>
+        <InfoTip text="El número en la esquina de un día es la cantidad de turnos que tiene; el ⚠, que algún turno de ese día no se pudo escribir en la planilla. Un día se pinta «Operó» si algún turno operó, aunque otro no." />
       </div>
     </div>
   );
@@ -365,7 +370,10 @@ export default function PartesClient({
       <Link href="/trituracion" className="text-xs text-slate-500 underline">← Trituración</Link>
       <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="page-header">Partes de trituración</h1>
+          <div className="flex items-baseline gap-2">
+            <h1 className="page-header">Partes de trituración</h1>
+            <InfoTip text="Elegís un día del calendario y cargás sus turnos: cada turno es un parte, y si la planta trabajó de 4 a 8 con un material y de 8 a 12 con otro, son dos. Guardar sobre un turno ya cargado lo corrige. También se escribe en la planilla, pero ahí hay una sola fila por día: un segundo turno del mismo día pisa la fila del primero, y borrar un turno no la toca." />
+          </div>
           <p className="page-subheader">Uno o más turnos por planta y día. Queda exportado a la planilla real al guardar.</p>
         </div>
         <select
@@ -405,7 +413,10 @@ export default function PartesClient({
               <div className="text-lg font-bold" style={{ color: colorDeDisponibilidad(disponibilidadPromedio) }}>
                 {disponibilidadPromedio !== null ? pct.format(disponibilidadPromedio) : "—"}
               </div>
-              <div className="text-[11px] text-slate-500">disponibilidad</div>
+              <div className="text-[11px] text-slate-500">
+                disponibilidad
+                <InfoTip className="ml-1" text="Promedio simple de la disponibilidad de cada turno con horario cargado, haya operado o no: uno de 2 horas pesa igual que uno de 8. No es horas reales sobre teóricas como en el inicio. Las «toneladas» de al lado suman todos los turnos del mes, también uno «No operó» que tenga toneladas; el inicio sólo suma los «Operó»." />
+              </div>
             </div>
           </div>
           {pendientes > 0 && (
@@ -545,7 +556,7 @@ export default function PartesClient({
                 </div>
 
                 <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <Campo etiqueta="Operario">
+                  <Campo etiqueta="Operario" info="Aparecen los empleados activos de los sectores cuyo nombre incluye «cantera» o «tritura». Si el operario es de otro sector no está en la lista y el parte queda sin operario: acá no se puede tipear un nombre.">
                     <select className="input" value={form.operarioId} onChange={(e) => set("operarioId", e.target.value)}>
                       <option value="">Elegir...</option>
                       {empleados.map((e) => (
@@ -651,13 +662,27 @@ export default function PartesClient({
                 <th>Origen</th>
                 <th>Horario</th>
                 <th>Operario</th>
-                <th className="text-right">Hs. teóricas</th>
+                <th className="text-right">
+                  Hs. teóricas
+                  <InfoTip className="ml-1" text="Desde la hora de inicio hasta la de fin de ese turno. Queda en — si falta una de las dos o si el fin es anterior al inicio (un turno que cruza la medianoche), y entonces ese turno no entra en la disponibilidad. El informe mensual no usa este horario: cuenta 8 horas por día operativo." />
+                </th>
                 <th className="text-right">Hs. paradas</th>
-                <th className="text-right">Disp.</th>
+                <th className="text-right">
+                  Disp.
+                  <InfoTip className="ml-1" text="Horas reales sobre teóricas de ese turno; las reales son las teóricas menos las cuatro clases de parada, falta de piedra incluida. Verde desde 80 %, ámbar desde 60 %, rojo por debajo. El informe mensual no resta la falta de piedra." />
+                </th>
                 <th className="text-right">Camiones</th>
                 <th className="text-right">Toneladas</th>
-                <th className="text-right">Llegado (Cantera)</th>
-                {mostrarViajesDeBloques && <th className="text-right">Hs. viaje de bloques</th>}
+                <th className="text-right">
+                  Llegado (Cantera)
+                  <InfoTip className="ml-1" text="Toneladas de las pesadas de balanza de Cantera con destino «PT 1», «PT 2» o «PT 3» —según la planta, con o sin espacios— ese día. Un destino escrito de otra manera no cuenta, y sin acceso a Cantera aparece «—». Es un dato para comparar con lo procesado: no tiene por qué coincidir el mismo día." />
+                </th>
+                {mostrarViajesDeBloques && (
+                  <th className="text-right">
+                    Hs. viaje de bloques
+                    <InfoTip className="ml-1" text="Horas de «viaje de bloques» que Cantera cargó ese día, sumando todos los fleteros. Sólo aparece en Planta 2, que casi no tiene pesadas con destino PT 2: ésa es su medida de acarreo." />
+                  </th>
+                )}
                 <th className="text-right">t/h real</th>
               </tr>
             </thead>

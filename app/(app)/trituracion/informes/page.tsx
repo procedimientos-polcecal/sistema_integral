@@ -5,6 +5,7 @@ import { permisosTrituracionDe } from "@/lib/trituracion/auth";
 import { traerPartes, traerPlantas } from "@/lib/trituracion/consultas";
 import { informeMensualPorPlanta, toneladasPorOrigen, type ParteParaInformeMensual } from "@/lib/trituracion/informeMensual";
 import BuscadorInformeMensual from "./BuscadorInformeMensual";
+import InfoTip from "@/components/InfoTip";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -20,6 +21,13 @@ const VERDE = "#1E7D34";
 const VERDE_CLARO = "#F0F8F5";
 const AMBAR = "#B45309";
 const AMBAR_CLARO = "#FFF7ED";
+
+/** Lo que cada columna de la Tabla N°4 no dice sola; el porqué de cada cuenta está en `lib/trituracion/informeMensual.ts`. */
+const AYUDAS_TABLA_4: Record<string, string> = {
+  Disponibilidad: "(Horas teóricas − mantenimiento − varios) sobre horas teóricas, con las teóricas como días operativos × 8. La falta de piedra no resta: no es una falla de la planta. «Varios» es producción más otro. En el inicio y en los partes la disponibilidad es otra cuenta, y no van a coincidir.",
+  Utilización: "Horas reales sobre horas teóricas, donde las reales son las teóricas menos todas las horas perdidas, falta de piedra incluida. Contra el informe armado a mano de agosto de 2026 dio hasta 13 puntos de diferencia en una planta, porque la planilla elegía a mano qué horas sumar.",
+  Dirección: "Horas teóricas (días operativos × 8) sobre todas las horas del mes calendario (días del mes × 24): qué parte del mes entero fue turno teórico.",
+};
 
 function aParteInforme(p: { fecha: string; estado: string; material: string | null; origen: string | null; horas_mantenimiento: number; horas_falta_piedra: number; horas_produccion: number; horas_otro: number; camiones_llegados: number | null; toneladas_procesadas: number | null }): ParteParaInformeMensual {
   return {
@@ -100,7 +108,10 @@ export default async function InformesTrituracionPage({
   return (
     <div className="mx-auto max-w-5xl">
       <Link href="/trituracion" className="text-xs text-slate-500 underline">← Trituración</Link>
-      <h1 className="mt-1 text-xl font-semibold">Informe mensual</h1>
+      <div className="mt-1 flex items-baseline gap-2">
+        <h1 className="text-xl font-semibold">Informe mensual</h1>
+        <InfoTip text="Abre en el mes en curso, que está vacío hasta que se cargan sus primeros partes: elegí otro con el selector. Reproduce las seis tablas que se armaban a mano en la planilla y sólo cuenta los turnos «Operó» de las plantas activas. Las horas se miden como días operativos × 8 y no con el horario de cada parte, así que estos números no coinciden con los del inicio ni con los de la pantalla de partes." />
+      </div>
       <p className="mt-1 text-sm text-slate-500">Las mismas tablas que hoy se arman a mano en el Sheets, para exportarlas y escribir el informe.</p>
 
       <section className="mt-4 card p-4">
@@ -135,15 +146,18 @@ export default async function InformesTrituracionPage({
               </thead>
               <tbody>
                 {[
-                  { etiqueta: "Productividad media (t/h marcha)", valor: (i: (typeof informesPorPlanta)[number]["informe"]) => i.productividadTHMarcha !== null ? num2.format(i.productividadTHMarcha) : "—" },
+                  { etiqueta: "Productividad media (t/h marcha)", ayuda: "Toneladas sobre horas reales, con horas reales = días operativos × 8 menos todas las horas perdidas. Es el mismo número que «Producción (Tn/h)» de la Tabla 2. Puede diferir de informes anteriores: la planilla armaba esas horas reales a mano, con rangos de celdas elegidos uno por uno.", valor: (i: (typeof informesPorPlanta)[number]["informe"]) => i.productividadTHMarcha !== null ? num2.format(i.productividadTHMarcha) : "—" },
                   { etiqueta: "Toneladas por viaje", valor: (i: (typeof informesPorPlanta)[number]["informe"]) => i.toneladasPorViaje !== null ? num2.format(i.toneladasPorViaje) : "—" },
                   { etiqueta: "Horas perdidas totales", valor: (i: (typeof informesPorPlanta)[number]["informe"]) => num1.format(i.horasPerdidasTotal) },
                   { etiqueta: "% horas perdidas s/ teóricas", valor: (i: (typeof informesPorPlanta)[number]["informe"]) => i.pctHorasPerdidas !== null ? pct2.format(i.pctHorasPerdidas) : "—" },
                   { etiqueta: "Días operativos", valor: (i: (typeof informesPorPlanta)[number]["informe"]) => String(i.diasOperativos) },
-                  { etiqueta: "Días con falta de piedra", valor: (i: (typeof informesPorPlanta)[number]["informe"]) => String(i.diasConFaltaPiedra) },
+                  { etiqueta: "Días con falta de piedra", ayuda: "Cuenta partes y no días distintos: un día con dos turnos con falta de piedra cuenta dos, igual que el COUNTIFS de la planilla.", valor: (i: (typeof informesPorPlanta)[number]["informe"]) => String(i.diasConFaltaPiedra) },
                 ].map((fila, i) => (
                   <tr key={fila.etiqueta} style={{ backgroundColor: i % 2 === 1 ? VERDE_CLARO : undefined }}>
-                    <td className="px-3 py-2 font-medium text-slate-700">{fila.etiqueta}</td>
+                    <td className="px-3 py-2 font-medium text-slate-700">
+                      {fila.etiqueta}
+                      {"ayuda" in fila && fila.ayuda && <InfoTip text={fila.ayuda} className="ml-1" />}
+                    </td>
                     {informesPorPlanta.map(({ planta, informe }) => (
                       <td key={planta.id} className="px-3 py-2 text-right font-mono tabular-nums">{fila.valor(informe)}</td>
                     ))}
@@ -230,7 +244,10 @@ export default async function InformesTrituracionPage({
               <thead>
                 <tr style={{ backgroundColor: AMBAR }}>
                   {["Planta", "Disponibilidad", "Utilización", "Dirección", "Falta de piedra (%)", "Mantenimiento (%)", "Varios (%)"].map((c, ci) => (
-                    <th key={c} className={`px-3 py-2 text-xs font-semibold text-white ${ci === 0 ? "text-left" : "text-right"}`}>{c}</th>
+                    <th key={c} className={`px-3 py-2 text-xs font-semibold text-white ${ci === 0 ? "text-left" : "text-right"}`}>
+                      {c}
+                      {AYUDAS_TABLA_4[c] && <InfoTip text={AYUDAS_TABLA_4[c]} className="ml-1" />}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -289,7 +306,10 @@ export default async function InformesTrituracionPage({
           </div>
 
           {/* ── Tabla N°6 — Toneladas acarreadas por cantera/origen ── */}
-          <h3 className="mt-6 text-sm font-semibold text-slate-700">Tabla N°6 — Toneladas acarreadas por cantera</h3>
+          <div className="mt-6 flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-slate-700">Tabla N°6 — Toneladas acarreadas por cantera</h3>
+            <InfoTip text="Son las toneladas procesadas, las del parte, agrupadas por el origen que se anotó; no las pesadas de acarreo de Cantera. Un parte sin origen no entra, así que el total puede ser menor que el de la Tabla 5. «Cantera» incluye orígenes que no lo son: proveedores externos, ACOPIO u otra planta." />
+          </div>
           <div className="mt-2 overflow-x-auto card">
             <table className="w-full text-sm">
               <thead>
