@@ -1,7 +1,8 @@
 /**
  * Las decisiones de un formulario que guarda lo que se va escribiendo, como
  * funciones puras: la clave bajo la que se guarda y si hay algo que guardar.
- * Nada acá toca el navegador, así que se prueban sin pantalla.
+ * Nada acá toca el navegador, así que se prueban sin pantalla. Lo único con
+ * estado es el almacén del final, y es un `Map` en memoria.
  */
 
 /** De dónde salió el formulario, cuando nació prellenado desde otra cosa. */
@@ -50,7 +51,11 @@ export function hayAlgoEscrito<T extends object>(inicial: T, actual: T): boolean
   return !iguales(inicial, actual);
 }
 
-/** Igualdad en profundidad para lo que lleva un formulario: valores simples, listas, objetos y fechas. */
+/**
+ * Igualdad en profundidad para lo que lleva un formulario: valores simples, listas, objetos y fechas.
+ * Un campo `undefined` y un campo ausente cuentan como iguales: un formulario no
+ * debería figurar como tocado porque una clave existe con valor vacío en un lado y no en el otro.
+ */
 function iguales(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
@@ -75,4 +80,39 @@ function iguales(a: unknown, b: unknown): boolean {
     if (!iguales(x[clave], y[clave])) return false;
   }
   return true;
+}
+
+/**
+ * El almacén de borradores: un `Map` a nivel de módulo.
+ *
+ * **Está en memoria y no en `localStorage` ni `sessionStorage` a propósito.** Se
+ * pidió que un borrador no sobreviva a cerrar la app, y lo que se guarda en el
+ * teléfono sobrevive a todo: reaparecería días después sobre un trabajo que ya
+ * no es ese. Un `Map` de módulo muere con el bundle, que es exactamente la vida
+ * pedida.
+ *
+ * Lo que se pierde, a propósito: **recargar la página también lo borra.** Se
+ * aceptó porque el caso a resolver es el formulario que se cierra por un toque
+ * de más, no el navegador que se va.
+ */
+const borradores = new Map<string, unknown>();
+
+/** Guarda (o pisa) el borrador de esa clave. */
+export function guardarBorrador(clave: string, valor: unknown): void {
+  borradores.set(clave, valor);
+}
+
+/** El borrador de esa clave, o `undefined` si nadie guardó uno: nunca un objeto vacío, que se confundiría con un formulario guardado en blanco. */
+export function leerBorrador<T>(clave: string): T | undefined {
+  return borradores.get(clave) as T | undefined;
+}
+
+/** Saca el borrador de esa clave, y sólo ése. */
+export function tirarBorrador(clave: string): void {
+  borradores.delete(clave);
+}
+
+/** Vacía todo el almacén. Sólo para los tests: el `Map` es de módulo y se arrastra entre casos. */
+export function vaciarBorradores(): void {
+  borradores.clear();
 }

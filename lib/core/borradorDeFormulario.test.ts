@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { claveDelBorrador, hayAlgoEscrito } from "./borradorDeFormulario";
+import { beforeEach, describe, expect, it } from "vitest";
+import {
+  claveDelBorrador,
+  guardarBorrador,
+  hayAlgoEscrito,
+  leerBorrador,
+  tirarBorrador,
+  vaciarBorradores,
+} from "./borradorDeFormulario";
 
 describe("claveDelBorrador", () => {
   it("dos registros distintos no comparten clave", () => {
@@ -39,5 +46,42 @@ describe("hayAlgoEscrito", () => {
 
   it("un campo anidado que cambió cuenta como escrito", () => {
     expect(hayAlgoEscrito({ repuestos: [{ id: 1 }] }, { repuestos: [{ id: 2 }] })).toBe(true);
+  });
+});
+
+describe("hayAlgoEscrito: dos decisiones que el código ya tomaba", () => {
+  it("un campo undefined y un campo ausente son lo mismo", () => {
+    expect(hayAlgoEscrito<Record<string, unknown>>({ nota: "x" }, { nota: "x", extra: undefined })).toBe(false);
+  });
+
+  it("dos fechas se comparan por su instante y no por identidad", () => {
+    expect(hayAlgoEscrito({ dia: new Date("2026-11-13T00:00:00Z") }, { dia: new Date("2026-11-13T00:00:00Z") })).toBe(false);
+    expect(hayAlgoEscrito({ dia: new Date("2026-11-13T00:00:00Z") }, { dia: new Date("2026-11-14T00:00:00Z") })).toBe(true);
+  });
+});
+
+describe("el almacén de borradores", () => {
+  beforeEach(() => vaciarBorradores());
+
+  it("lo guardado vuelve con la misma clave", () => {
+    guardarBorrador("k", { horas: "8" });
+    expect(leerBorrador("k")).toEqual({ horas: "8" });
+  });
+
+  it("una clave que nadie guardó devuelve undefined y no un objeto vacío", () => {
+    expect(leerBorrador("nunca")).toBeUndefined();
+  });
+
+  it("tirarlo lo saca de verdad", () => {
+    guardarBorrador("k", { a: 1 });
+    tirarBorrador("k");
+    expect(leerBorrador("k")).toBeUndefined();
+  });
+
+  it("tirar una clave no toca a las demás", () => {
+    guardarBorrador("a", { x: 1 });
+    guardarBorrador("b", { y: 2 });
+    tirarBorrador("a");
+    expect(leerBorrador("b")).toEqual({ y: 2 });
   });
 });
