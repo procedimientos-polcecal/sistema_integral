@@ -90,13 +90,18 @@ function formDeParte(p: ParteDB): Form {
 
 function Campo({ etiqueta, info, children }: { etiqueta: string; info?: string; children: React.ReactNode }) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium text-slate-500">
-        {etiqueta}
-        {info && <InfoTip text={info} className="ml-1" />}
-      </span>
-      {children}
-    </label>
+    // El (i) va afuera del <label>: un <button> adentro le robaría el control.
+    <div className="relative">
+      {info && (
+        <div className="absolute right-0 top-0">
+          <InfoTip text={info} />
+        </div>
+      )}
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-slate-500">{etiqueta}</span>
+        {children}
+      </label>
+    </div>
   );
 }
 

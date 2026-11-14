@@ -735,10 +735,18 @@ function RenglonDespacho({
     onChange: (v: string) => void,
     opciones?: { numerico?: boolean; error?: string | null; placeholder?: string; info?: string }
   ) {
+    // El (i) va afuera del <label>: un <button> adentro es un control
+    // etiquetable y le robaría el label al campo (tocar el rótulo abriría el
+    // globo y el input quedaría sin nombre).
     return (
-      <label className="block">
+      <div className="relative">
+        {opciones?.info && (
+          <div className="absolute right-0 top-0">
+            <InfoTip text={opciones.info} />
+          </div>
+        )}
+        <label className="block">
         <span className="text-xs font-medium text-slate-600">{etiqueta}</span>
-        {opciones?.info && <InfoTip text={opciones.info} className="ml-1" />}
         <input
           value={valor}
           onChange={(e) => onChange(e.target.value)}
@@ -748,7 +756,8 @@ function RenglonDespacho({
           className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
         />
         {opciones?.error && <span className="mt-0.5 block text-xs text-red-600">{opciones.error}</span>}
-      </label>
+        </label>
+      </div>
     );
   }
 
@@ -770,9 +779,12 @@ function RenglonDespacho({
 
       <div className="grid gap-3 sm:grid-cols-2">
         {campo("Producto (como está escrito)", renglon.producto_raw, (v) => onCambiar({ producto_raw: v }))}
+        <div className="relative">
+        <div className="absolute right-0 top-0">
+          <InfoTip text={INFO_RECONOCIDO_COMO} />
+        </div>
         <label className="block">
           <span className="text-xs font-medium text-slate-600">Reconocido como</span>
-          <InfoTip text={INFO_RECONOCIDO_COMO} className="ml-1" />
           <Select
             value={renglon.renglon_papel_id}
             disabled={!puedeEditar}
@@ -798,6 +810,7 @@ function RenglonDespacho({
             ))}
           </Select>
         </label>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
