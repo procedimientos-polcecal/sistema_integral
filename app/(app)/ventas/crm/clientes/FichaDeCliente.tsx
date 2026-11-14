@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
+import InfoTip from "@/components/InfoTip";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
 import { etapaDe, ETAPAS_ABIERTAS } from "@/lib/ventas/crm/etapas";
@@ -389,9 +390,12 @@ export default function FichaDeCliente({
 
         {esAdmin && (
           <div className="border-t border-slate-200 pt-3">
-            <button type="button" onClick={() => void borrar()} className="btn-danger text-sm">
-              Borrar cliente
-            </button>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => void borrar()} className="btn-danger text-sm">
+                Borrar cliente
+              </button>
+              <InfoTip text="Borrar un cliente no se deshace y se lleva puesto, en cascada, sus contactos, sus oportunidades, todo su historial de actividades y el enlace con Odoo que alguien le haya hecho (el cartel de confirmación no nombra ese último). No hay archivo de origen en ningún lado de donde recuperarlo: lo único que queda es una fila del registro de auditoría, con quién lo borró, la razón social, el CUIT y cuántos contactos, oportunidades y actividades colgaban. Si ese registro no se puede escribir, no se borra nada. Si dejó de comprar, lo que corresponde es marcarlo como inactivo." />
+            </div>
             <p className="mt-1 text-xs text-slate-500">
               Se lleva sus contactos, sus oportunidades y todo su historial. Si dejó de comprar,
               lo que corresponde es marcarlo como inactivo.
