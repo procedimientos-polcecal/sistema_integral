@@ -407,7 +407,8 @@ export default function MisPedidosClient({
           <p className="text-sm text-slate-500">
             {alcance === "mios"
               ? `Lo que pidió ${nombreDeMisAreas || "tu área"} y en qué anda.`
-              : "Todos los requerimientos, de todas las áreas. Buscá acá antes de pedir."}
+              : "Todos los requerimientos, de todas las áreas. Buscá acá antes de pedir."}{" "}
+            <InfoTip text="«Mi área» son los pedidos de las áreas que te asignaron en Administración → Usuarios, los haya cargado quien los haya cargado y no sólo los que pediste vos. «Todos» muestra los de todas las áreas, y cualquiera con sesión puede mirarlos, tenga o no Compras. Sin un área asignada la pantalla abre en «Todos» y no se puede reclamar." />
           </p>
         </div>
         <button
@@ -442,6 +443,7 @@ export default function MisPedidosClient({
           placeholder="Buscar por descripción, código, N° de RI…"
           className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm sm:max-w-sm"
         />
+        <InfoTip text="Busca en la descripción, el código y el nombre de quien lo pidió; un número solo se toma como N° de RI exacto. Busca dentro de «Mi área» o de «Todos», según lo que tengas elegido, y cambiar la búsqueda o el alcance suelta el color elegido en «Esperando a Compras»." />
 
         {!cargando && (
           <span className="text-xs text-slate-400">

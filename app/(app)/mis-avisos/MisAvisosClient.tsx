@@ -10,6 +10,7 @@ import { finalDelAviso } from "@/lib/mantenimiento/desestimarAviso";
 import type { Aviso } from "@/lib/mantenimiento/types";
 import NuevoAvisoModal from "@/app/(app)/mantenimiento/avisos/NuevoAvisoModal";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 type Opcion = { id: string; nombre: string };
 
@@ -158,7 +159,8 @@ export default function MisAvisosClient({
           <p className="text-sm text-slate-500">
             {alcance === "mios"
               ? `Lo que avisó ${nombreDeMisAreas || "tu área"} y en qué terminó.`
-              : "Todos los avisos, de todas las áreas. Buscá acá antes de avisar."}
+              : "Todos los avisos, de todas las áreas. Buscá acá antes de avisar."}{" "}
+            <InfoTip text="«Mi área» son los avisos de las áreas que te asignaron en Administración → Usuarios, aunque los haya cargado otra persona. El área de un aviso es la que se eligió al cargarlo; en los que vinieron de la planilla sale de quien avisó, y sólo si ese nombre coincide con una sola persona que tenga una sola área. Los que no se pudieron resolver figuran «— sin área» y se ven en «Todos». Cualquiera con sesión puede mirar todos, tenga o no Mantenimiento." />
           </p>
         </div>
         <button
@@ -192,6 +194,7 @@ export default function MisAvisosClient({
           placeholder="Buscar por equipo, descripción, N° de aviso…"
           className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm sm:max-w-sm"
         />
+        <InfoTip text="Busca en el N° de aviso, la descripción, el equipo y el sector tal como se escribieron, y en quién avisó. Busca dentro de «Mi área» o de «Todos», según lo que tengas elegido." />
 
         <Select
           value={urgencia}
@@ -297,7 +300,10 @@ export default function MisAvisosClient({
                   {/* "Sugerida": la eligió quien avisó, no es la prioridad con
                       la que Mantenimiento va a trabajar. Ver NuevoAvisoModal. */}
                   <th className="px-3 py-2 text-left">Urgencia sugerida</th>
-                  <th className="px-3 py-2 text-left">En qué terminó</th>
+                  <th className="px-3 py-2 text-left">
+                    En qué terminó
+                    <InfoTip className="ml-1 normal-case" text="«Con orden de trabajo» le gana a «No va a hacerse»: cuenta como con orden un aviso que tenga una vinculada o algo escrito en OT asignada, y si no es un número se muestra lo que dice la planilla (por ejemplo «-» o «Revision»). Sólo un número se presenta como OT #N, y es un enlace si tenés Mantenimiento. «Pendiente» es un aviso sin orden y sin descarte." />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
