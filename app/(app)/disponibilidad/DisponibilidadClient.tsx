@@ -70,7 +70,7 @@ export default function DisponibilidadClient({
           <InfoTip
             text={
               vista === "quien"
-                ? "Abierta a cualquiera con sesión. Dice quién no viene y qué día, nunca por qué: el motivo no sale de esta lista ni se pide por otro lado. Entran también las personas dadas de baja, si faltaron en esas fechas. Una ausencia ocupa todos los días de su rango, fines de semana incluidos. No aparece quien sólo tiene una tardanza (vino a trabajar) ni los francos del taller, que se leen de otra tabla."
+                ? "Abierta a cualquiera con sesión. Dice quién no viene y qué día, nunca por qué: el motivo no sale de esta lista. Entran también las personas dadas de baja, si faltaron en esas fechas. Una ausencia ocupa todos los días de su rango, fines de semana incluidos. No aparece quien sólo tiene una tardanza (vino a trabajar) ni los francos del taller, que se leen de otra tabla."
                 : "Cuenta a todo el padrón, también a quienes ya no están, y a todos los sectores. Quien es encargado, administrador del sistema o tiene acceso a RRHH ve además el porcentaje, el motivo que más pesa y el detalle por persona del año; el resto ve los días y la dotación por sector."
             }
           />
