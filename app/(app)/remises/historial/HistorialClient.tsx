@@ -82,6 +82,7 @@ function PlantillasSection({ turnos }: { turnos: any[] }) {
                     <input type="date" value={aplicando.fecha} onChange={(e) => setAplicando({ p, fecha: e.target.value })}
                       className="border border-slate-300 rounded-md px-2 py-1 text-sm" />
                     <button onClick={aplicar} className="btn-primary text-xs">Confirmar</button>
+                    <InfoTip text="Confirmar reemplaza las rutas que ya hubiera ese día, en ese turno y tipo, también las editadas a mano, y marca presentes a los empleados del grupo sin sacar a nadie. Un grupo se omite si su vehículo ya no existe o ninguno de sus empleados tiene coordenadas; las rutas anteriores se borran igual." />
                     <button onClick={() => setAplicando(null)} className="text-xs text-slate-500 hover:underline">Cancelar</button>
                   </div>
                 )}
@@ -166,6 +167,7 @@ function HistorialSection({ turnos }: { turnos: any[] }) {
                     <input type="date" value={reutilizando.fecha} onChange={(e) => setReutilizando({ g, fecha: e.target.value })}
                       className="border border-slate-300 rounded-md px-2 py-1 text-sm" />
                     <button onClick={reutilizar} className="btn-primary text-xs">Confirmar</button>
+                    <InfoTip text="Confirmar reemplaza las rutas que ya hubiera ese día, en ese turno y tipo, también las editadas a mano, y marca presentes a los empleados del grupo sin sacar a nadie. Un grupo se omite si su vehículo ya no existe o ninguno de sus empleados tiene coordenadas; las rutas anteriores se borran igual." />
                     <button onClick={() => setReutilizando(null)} className="text-xs text-slate-500 hover:underline">Cancelar</button>
                   </div>
                 )}

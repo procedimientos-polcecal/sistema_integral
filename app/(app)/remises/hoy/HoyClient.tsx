@@ -165,6 +165,7 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
           <button onClick={() => generar("vuelta")} disabled={generando !== null} className="btn-primary disabled:opacity-50">
             {generando === "vuelta" ? "Generando..." : "Generar Vuelta"}
           </button>
+          <InfoTip text="Arma las rutas con los presentes de este turno que tienen coordenadas (los demás se ignoran y se avisa) y reemplaza las que ya hubiera para ese día, turno y tipo, también las editadas a mano: no pide confirmación. Usa los vehículos activos de más a menos capacidad hasta cubrir a todos (uno sin capacidad cargada cuenta como 8) y reparte con un paso al azar, así que regenerar puede dar otro reparto. En cada remis va a la parada más cercana por tiempo de manejo, sin buscar el recorrido óptimo, y en la Ida se invierte ese orden para terminar en la fábrica. Ida y Vuelta se generan por separado." />
         </div>
       </div>
 
@@ -188,7 +189,10 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
                   Asistencia
                   <InfoTip text="Marcá qué empleados vienen hoy en este turno. Solo los presentes con coordenadas geocodificadas entran en la generación de rutas." />
                 </h2>
-                <button onClick={marcarSegunTurnoDefault} className="text-xs text-[var(--primary)] hover:underline">Marcar según turno default</button>
+                <span className="flex items-center gap-1.5">
+                  <button onClick={marcarSegunTurnoDefault} className="text-xs text-[var(--primary)] hover:underline">Marcar según turno default</button>
+                  <InfoTip text="Marca presentes a los empleados activos cuyo turno default es el turno elegido. No desmarca a nadie ni pisa lo que ya estaba marcado, y hay que hacerlo en cada día y turno: no se marca solo." />
+                </span>
               </div>
               {!empleados || !presentIds ? (
                 <p className="text-sm text-slate-500">Cargando...</p>

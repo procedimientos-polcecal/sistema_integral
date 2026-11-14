@@ -192,6 +192,7 @@ function TripCard({ tipo, fecha, turnoId, empleados }: { tipo: "ida" | "vuelta";
         </button>
         <button onClick={() => seleccionar(true)} className="text-xs text-slate-500 hover:underline">Todos</button>
         <button onClick={() => seleccionar(false)} className="text-xs text-slate-500 hover:underline">Ninguno</button>
+        <InfoTip text="«Generar rutas» pasa el plan de ese día a la asistencia real (suma a quien falte, sin sacar a nadie que ya estuviera marcado en Hoy), genera las rutas sólo con los del plan y reemplaza las que hubiera para ese día, turno y tipo, también las editadas a mano. «Todos» marca a los activos cuyo turno default es éste, no a todos los empleados, y no toca a quien ya estaba marcado; «Ninguno» borra todo el plan de ese día, turno y tipo." />
         {generado && <span className="text-xs text-emerald-600 ml-auto">Generado</span>}
       </div>
     </div>
