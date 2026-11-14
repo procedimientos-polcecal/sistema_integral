@@ -46,6 +46,12 @@ const INFO_DE_LA_EVALUACION =
   "Probabilidad = frecuencia + antecedentes + controles. Gravedad = magnitud del daño + legislación. Nivel = probabilidad × gravedad. Clasificación: I desde 139, S desde 90, M desde 49, PS desde 18 y NS menos de 18. " +
   "Con un solo puntaje sin elegir no hay nivel. Evalúa quien tiene nivel admin en Seguridad e Higiene, y los administradores del sistema lo tienen siempre.";
 
+const INFO_DE_LA_FECHA_DE_EJECUCION =
+  "Poner la fecha cierra la condición y no se registra, porque se puede deshacer. Lo que no se deshace es quitarla: «Reabrir» borra la fecha, y esa fecha es el único lugar donde quedaba cuándo se arregló. Por eso, al guardar, reabrir sí queda registrado, con la fecha que había y quién la quitó. Hasta que no apretás «Guardar cambios» no pasa nada. Sólo lo hace un administrador de Seguridad e Higiene.";
+
+const INFO_DE_LOS_PUNTAJES_PISADOS =
+  "Corregir un puntaje que ya tenía valor no se deshace: el nivel de riesgo se calcula sobre los cinco puntajes, así que cambiar uno reescribe la clasificación entera y el número de antes no queda en ningún otro lado. Por eso queda registrado, en una sola fila por guardado, con los puntajes y el nivel que había, los nuevos y quién lo hizo. Ponerle puntaje a una condición que no tenía ninguno no se registra: no destruye nada.";
+
 const INFO_DE_LA_FECHA_MAXIMA =
   "La condición vence el día después de esta fecha, no ese mismo día. Sin fecha máxima no puede vencer nunca, y por eso cuenta como «sin asignar». Una condición con fecha de ejecución tampoco figura nunca como vencida.";
 
@@ -454,6 +460,12 @@ export default function FichaDeCondicion({
                   se calcula cuando están los cinco.
                 </span>
               )}
+              {esAdmin && (
+                <p className="mt-2 flex items-center gap-1 text-xs text-slate-500">
+                  Qué pasa al corregir un puntaje ya cargado
+                  <InfoTip text={INFO_DE_LOS_PUNTAJES_PISADOS} />
+                </p>
+              )}
             </div>
           </section>
 
@@ -515,6 +527,7 @@ export default function FichaDeCondicion({
 
               <Campo
                 titulo="Fecha de ejecución"
+                info={INFO_DE_LA_FECHA_DE_EJECUCION}
                 ayuda={
                   esAdmin
                     ? "Tener fecha de ejecución cierra la condición; borrarla la reabre."
