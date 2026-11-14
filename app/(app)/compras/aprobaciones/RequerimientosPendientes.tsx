@@ -123,6 +123,9 @@ export default function RequerimientosPendientes({
                 {procesando ? "Aprobando…" : `Aprobar ${seleccion.size} seleccionado${seleccion.size === 1 ? "" : "s"}`}
               </button>
             )}
+            {puedeAprobar && seleccion.size > 0 && (
+              <InfoTip text="Aprueba de a uno cada pedido marcado, tal como está: no pide prioridad ni quién paga (la ficha sí las pide para aprobar) y no pide confirmación. Si alguno falla, los demás igual quedan aprobados y el cartel dice cuántos no. Desde acá no se vuelve atrás: cada pedido guarda quién lo aprobó y cuándo, y queda en su historial y en la planilla de Compras." />
+            )}
           </div>
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
