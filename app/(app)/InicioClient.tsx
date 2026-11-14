@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import InfoTip from "@/components/InfoTip";
 import type { Modulo } from "@/lib/core/types";
 import type { Ritmo } from "@/lib/home/ritmo";
 import { armarTarjetaRrhh, type ResumenRrhh } from "@/lib/home/tarjetaRrhh";
@@ -71,7 +72,10 @@ export default function InicioClient({
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Hola, {nombreUsuario || "de nuevo"}</h1>
-        <p className="text-slate-600">Esto es lo que está pasando hoy en cada módulo.</p>
+        <p className="text-slate-600">
+          Esto es lo que está pasando hoy en cada módulo.{" "}
+          <InfoTip text="Hay una tarjeta por cada módulo al que tenés acceso, salvo Seguridad e Higiene y Ventas, que no tienen. Cada una lleva en grande lo que pide hacer algo —no lo que está bien—, y los números se completan cuando llegan. La línea ámbar «Hace N días que no se carga» sale cuando el módulo supera su propio umbral: el hueco más largo que tuvo en 180 días más uno, entre 3 y 30; en Calidad cuenta la peor de carbonilla y envases. Esta pantalla muestra lo que hay hoy, y la campana sólo avisa ese atraso al doble del umbral, o si nunca se cargó; el resumen de las 8:30 cuenta lo que se movió desde el anterior, y los lunes los totales." />
+        </p>
       </div>
 
       {sinModulos && (
