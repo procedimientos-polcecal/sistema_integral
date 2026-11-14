@@ -165,7 +165,7 @@ export default function HoyClient({ nombreUsuario, turnos }: { nombreUsuario: st
           <button onClick={() => generar("vuelta")} disabled={generando !== null} className="btn-primary disabled:opacity-50">
             {generando === "vuelta" ? "Generando..." : "Generar Vuelta"}
           </button>
-          <InfoTip text="Arma las rutas con los presentes de este turno que tienen coordenadas (los demás se ignoran y se avisa) y reemplaza las que ya hubiera para ese día, turno y tipo, también las editadas a mano: no pide confirmación. Usa los vehículos activos de más a menos capacidad hasta cubrir a todos (uno sin capacidad cargada cuenta como 8) y reparte con un paso al azar, así que regenerar puede dar otro reparto. En cada remis va a la parada más cercana por tiempo de manejo, sin buscar el recorrido óptimo, y en la Ida se invierte ese orden para terminar en la fábrica. Ida y Vuelta se generan por separado." />
+          <InfoTip text="Arma las rutas con los presentes de este turno que tienen coordenadas (los demás se ignoran y se avisa) y reemplaza las que ya hubiera para ese día, turno y tipo, también las editadas a mano: no pide confirmación. Usa los vehículos activos de más a menos capacidad hasta cubrir a todos (uno sin capacidad cargada cuenta como 8) y reparte con un paso al azar, así que regenerar puede dar otro reparto. En cada remis va a la parada más cercana por tiempo de manejo (o por distancia en línea recta si el servicio de calles no responde), sin buscar el recorrido óptimo, y en la Ida se invierte ese orden para terminar en la fábrica. Ida y Vuelta se generan por separado." />
         </div>
       </div>
 
