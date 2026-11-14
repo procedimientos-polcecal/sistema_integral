@@ -310,7 +310,8 @@ export default function NuevoMovimientoClient({
               />
               <span className="mt-1 block text-xs text-slate-400">
                 Un ajuste cambia el stock sin que haya entrado ni salido nada: queda
-                registrado quién lo hizo y por qué.
+                registrado quién lo hizo y por qué.{" "}
+                <InfoTip className="ml-0.5" text="Un ajuste no suma ni resta: deja el stock del artículo en lo que contaste, y lo cambia en el momento. Los movimientos del kardex no se editan ni se borran, así que un ajuste equivocado se corrige cargando otro. Ojo con cómo se lo ve después: a la planilla le llega la diferencia como una entrada o una salida, y los ajustes cargados hasta ahora figuran en el kardex como entrada o salida por esa diferencia, no como «ajuste» (el stock de antes y el de después se conservan). Lo que sí lo nombra como ajuste, con el motivo, quién lo contó y el stock antes y después, es el registro de auditoría. Si el ajuste no mueve nada, no se escribe nada en la planilla." />
               </span>
             </label>
           )}
