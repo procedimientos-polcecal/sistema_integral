@@ -611,7 +611,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                   <th className="pb-2">Año corresp.</th>
                   <th className="pb-2">Justificada</th>
                   <th className="pb-2">Observaciones</th>
-                  <th className="pb-2"></th>
+                  <th className="pb-2 text-right"><InfoTip text="«Eliminar» borra la ausencia y no se deshace. Si era de vacaciones, se lleva también su período de vacaciones y el balance deja de contarlo. Después el sistema recalcula esos días y vuelven a verse como si nunca hubiera habido nada, porque las ausencias no tienen historial: lo que decía queda sólo en el registro de auditoría, con quién lo borró, y ese registro se escribe antes del borrado. Esta pantalla no mira si el período ya está liquidado, y una liquidación cerrada no se recalcula (la del encargado de Mantenimiento sí se niega). «Editar» también queda registrado, con lo que decía antes y lo que dice ahora." /></th>
                 </tr>
               </thead>
               <tbody>

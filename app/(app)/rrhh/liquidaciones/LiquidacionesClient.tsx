@@ -358,7 +358,10 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
                     <td className="py-2 text-right whitespace-nowrap">
                       <a href={`/api/rrhh/liquidaciones/${l.id}/export`} className="text-blue-600 underline text-sm">Exportar</a>
                       {l.estado === "BORRADOR" && (
-                        <button onClick={() => cerrar(l)} className="text-slate-700 underline text-sm ml-3">Cerrar</button>
+                        <span className="ml-3 inline-flex items-center gap-1">
+                          <button onClick={() => cerrar(l)} className="text-slate-700 underline text-sm">Cerrar</button>
+                          <InfoTip text="Cerrar pasa la liquidación a «Cerrada» y desde esta pantalla no se vuelve a abrir: no hay botón de reapertura y sí uno de Eliminar, que también funciona con las cerradas. Por eso «definitiva», como dice el cartel, quiere decir que el sistema ya no la recalcula, no que no se pueda borrar. Queda registrado quién la cerró, el período y el total bruto, y el registro se escribe después de cerrar; Eliminar, en cambio, no deja ningún registro." />
+                        </span>
                       )}
                       <button onClick={() => eliminar(l)} className="text-red-600 underline text-sm ml-3">Eliminar</button>
                     </td>
