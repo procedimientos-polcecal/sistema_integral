@@ -204,6 +204,7 @@ export default function RecepcionesClient({
                   </div>
 
                   {puedeEditar && paso && (
+                    <span className="flex shrink-0 items-center gap-1.5">
                     <button
                       onClick={() =>
                         paso === "lista"
@@ -219,6 +220,8 @@ export default function RecepcionesClient({
                     >
                       {ocupado === recepcion.id ? "Guardando…" : ETIQUETA_DEL_BOTON[paso]}
                     </button>
+                    {paso === "lista" && <InfoTip text="Cerrar y crear la orden no se deshace desde el sistema. Crea en Odoo la orden de compra con el neto pesado, la confirma (ahí recibe su número) y valida la recepción del remito, que mueve stock de verdad. Además, si el proveedor es un carbonillero de Calidad, anota el camión en el stock de carbonilla, y escribe la fila en la planilla de Despacho. Si Odoo no deja confirmar la orden o validar el remito, la recepción figura igual como «Cerrada» y avisa lo que falló, pero desde esta pantalla no hay botón para reintentar. Queda registrado quién cerró, la orden y las toneladas." />}
+                    </span>
                   )}
                 </div>
 
