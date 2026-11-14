@@ -1864,7 +1864,8 @@ export default function CuadernoClient({
             </summary>
             <p className="mt-2 text-xs text-slate-500">
               Es la misma cuenta que hace la generación: antes de escribir, el servidor la vuelve a
-              calcular y se te muestra para confirmar. Generar no se deshace desde acá.
+              calcular y se te muestra para confirmar. Generar no se deshace desde acá.{" "}
+              <InfoTip text="«OT nueva»: el grupo todavía no tiene orden. «Suma horas»: alguno de sus renglones ya es una OT; se la reescribe con el total del grupo (las horas pasan a ser ese total, no se acumulan) y no se crea otra. «Revisar a mano»: el grupo apunta a dos o más órdenes distintas y no se toca ninguna. Un grupo cuyos renglones ya son todos una orden no aparece. El costo se guarda en la orden y se escribe además en la columna REPUESTO UTILIZADO de la planilla, sumado al texto que hubiera y sin pisarlo: queda en dos lugares que nada ata, y la ficha del equipo no lo suma a ningún costo." />
             </p>
             {puedeEditar && (
               <div className="mt-3">

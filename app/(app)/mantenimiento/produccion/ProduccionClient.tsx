@@ -7,6 +7,7 @@ import {
   type EstadoProduccion,
 } from "@/lib/mantenimiento/produccion";
 import { useCargar } from "@/lib/core/useCargar";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * La grilla de producción: sectores por los siete días de una semana.
@@ -193,7 +194,10 @@ export default function ProduccionClient({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Producción semanal</h1>
+          <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900">
+            Producción semanal
+            <InfoTip text="Esta grilla la carga una persona a mano: no se trae de Producción ni de ninguna planilla. Un sector que no tiene nada cargado figura «Libre», así que una semana vacía muestra la franja verde «Ningún sector produce» todos los días (el tablero, en cambio, no anuncia ventana para una empresa sin ningún plan cargado). El número de «pendientes» de cada sector suma las OT por hacer, en proceso o atrasadas y todas las órdenes de servicio que figuran en ese sector, sin mirar el estado de éstas." />
+          </h1>
           <p className="text-sm text-slate-500">
             {puedeEditar
               ? "Tocá una celda para cargar el día. Los días libres son los candidatos para reparar."

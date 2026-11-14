@@ -199,6 +199,10 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
             {t}
           </button>
         ))}
+        <InfoTip
+          className="ml-1 self-center"
+          text="«Pendientes» lista todos los mantenimientos programados activos, estén vencidos o no, por fecha más próxima: en rojo los vencidos y en amarillo los de los próximos 7 días. Las OT no están ahí. «Recientes» son las últimas 50 ejecuciones registradas, sean de un mantenimiento programado o de una OT; las que vienen de una OT no muestran el equipo en esta lista."
+        />
       </div>
 
       {tab === "pendientes" && (

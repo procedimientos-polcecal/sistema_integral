@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import {
   periodoSugerido, type Catalogo, type EstadoDeLaTarea, type RenglonDelCatalogo,
 } from "@/lib/mantenimiento/catalogoConfirmado";
@@ -147,7 +148,10 @@ export default function TareasPreventivasClient({
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-bold text-slate-900">Tareas preventivas</h1>
+        <h1 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+          Tareas preventivas
+          <InfoTip text="Sólo entran las OT cargadas como PROGRAMADO, con equipo, con fecha de ejecución desde hace 365 días en adelante (también las de fecha futura, y sin mirar su estado), y cuya descripción nombre una acción de preventivo y un componente del catálogo de componentes del equipo. Las que no cumplen alguna de esas cosas no aparecen en la lista ni avisan que quedaron afuera. «Veces» cuenta las órdenes de esa tarea en ese equipo; «Cada» es la mediana de los días entre fechas distintas y queda en «—» con menos de tres fechas distintas." />
+        </h1>
         <p className="mt-0.5 text-sm text-slate-500">
           Lo que el historial muestra que se viene haciendo. Confirmá las que son de verdad.
         </p>
@@ -205,8 +209,15 @@ export default function TareasPreventivasClient({
                 <th className="px-3 py-3 text-left font-medium text-slate-600">Equipo</th>
                 <th className="px-3 py-3 text-right font-medium text-slate-600 whitespace-nowrap">Veces</th>
                 <th className="px-3 py-3 text-right font-medium text-slate-600 whitespace-nowrap">Cada</th>
-                <th className="px-3 py-3 text-left font-medium text-slate-600 whitespace-nowrap">Período</th>
-                <th className="px-3 py-3 text-left font-medium text-slate-600" />
+                <th className="px-3 py-3 text-left font-medium text-slate-600 whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1">
+                    Período
+                    <InfoTip text="El número en gris es el sugerido: si confirmás sin escribir nada en el campo, se guarda ese." />
+                  </span>
+                </th>
+                <th className="px-3 py-3 text-left font-medium text-slate-600">
+                  <InfoTip text="Descartar también se guarda: la tarea sale de «Por decidir» y no vuelve a proponerse, pero se ve en «Descartadas». «Volver a proponer» borra la decisión y la deja como la propone el historial." />
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

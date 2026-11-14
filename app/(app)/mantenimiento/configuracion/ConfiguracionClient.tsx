@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import TipoModal, { type Tipo as TipoCompleto } from "./TipoModal";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
@@ -148,7 +149,10 @@ function RazonesDePostergacion({
   return (
     <div className="card p-4 space-y-3">
       <div>
-        <h2 className="text-sm font-semibold text-slate-700">Razones para postergar una OT</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          Razones para postergar una OT
+          <InfoTip text="El conjunto de razones es fijo: acá no se agregan, sólo se cambian los días que propone cada una y si se ofrece. «No ofrecerla» la saca del desplegable de «Postergar» (ese desplegable sólo lista las activas). Los días son una propuesta que quien posterga puede cambiar, y la postergación no vuelve a leer esta tabla: cambiarlos no mueve ninguna OT ya postergada." />
+        </h2>
         <p className="mt-0.5 text-xs text-slate-500">
           Cuántos días se corre la fecha según por qué. El número viene puesto al postergar y
           se puede cambiar ahí mismo; esto es lo que propone.
@@ -223,9 +227,10 @@ function Operarios({
 
   return (
     <div className="card p-4">
-      <h2 className="text-sm font-semibold text-slate-700">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
         Operarios
-        <span className="ml-2 text-xs font-normal text-slate-400">{operarios.length}</span>
+        <span className="text-xs font-normal text-slate-400">{operarios.length}</span>
+        <InfoTip text="Esta lista sólo alimenta los desplegables de operario al registrar una orden de trabajo. No es el padrón del taller: la Programación y «Gente del taller» al elegir fecha salen de otra tabla (Programación → Padrón del taller). Sacar a alguien de acá no toca las OT donde ya quedó anotado, porque ahí el nombre es texto." />
       </h2>
       <p className="mb-3 mt-0.5 text-xs text-slate-500">
         La orden de trabajo tiene tres columnas de operario y cada una tiene su propia lista.
@@ -314,9 +319,10 @@ function Contratistas({
 
   return (
     <div className="card p-4">
-      <h2 className="text-sm font-semibold text-slate-700">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
         Contratistas
-        <span className="ml-2 text-xs font-normal text-slate-400">{contratistas.length}</span>
+        <span className="text-xs font-normal text-slate-400">{contratistas.length}</span>
+        <InfoTip text="Ésta es la lista que ofrece «Partes de contratista» para elegir de quién se carga: quien deja de figurar acá deja de aparecer allá (lo ya cargado no se borra). Cómo entrega cada uno —partes diarios o cuaderno— lo define el campo «modo de carga» de su ficha de proveedor, y ninguna pantalla lo cambia." />
       </h2>
       <p className="mb-3 mt-0.5 text-xs text-slate-500">
         Quienes prestan servicios. Son proveedores del SdG, los mismos que ve Compras: sacar a uno
@@ -423,9 +429,10 @@ function ProveedoresSueltos({ puedeEditar }: { puedeEditar: boolean }) {
 
   return (
     <div className="card p-4">
-      <h2 className="text-sm font-semibold text-slate-700">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
         Proveedores sin reconocer
-        <span className="ml-2 text-xs font-normal text-slate-400">{nombres.length}</span>
+        <span className="text-xs font-normal text-slate-400">{nombres.length}</span>
+        <InfoTip text="«Sumarlos y enlazar todo» da de alta cada uno de esos nombres como proveedor del SdG, marcado como contratista y en la misma lista que usa Compras, y enlaza lo que ya los nombraba. Si algún nombre estaba mal, sacarlo después es uno por uno con la × de «Contratistas», que le quita la marca pero no borra la ficha. Un nombre se reconoce sólo si es igual al de un proveedor sin contar acentos, mayúsculas, puntos ni comas: «Cortadi» y «Domingo Cortadi» no se enlazan solos. «Sólo enlazar los que ya están» no crea ninguna ficha." />
       </h2>
       <p className="mb-3 mt-0.5 text-xs text-slate-500">
         Nombres que aparecen en las órdenes de trabajo, las de servicio o las comparativas y no
@@ -496,9 +503,10 @@ function TiposDeEquipo({ tipos, esAdmin }: { tipos: Tipo[]; esAdmin: boolean }) 
     <div className="card p-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-slate-700">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
             Tipos de equipo
-            <span className="ml-2 text-xs font-normal text-slate-400">{tipos.length}</span>
+            <span className="text-xs font-normal text-slate-400">{tipos.length}</span>
+            <InfoTip text="Son valores de referencia escritos como texto («cada 500 hs»): ningún plan, aviso ni cálculo del sistema los usa. Volver a importar el libro BD Equipos escribe de nuevo cada tipo que trae con lo que dice el libro, y una celda vacía del libro se escribe vacía." />
           </h2>
           <p className="mt-0.5 text-xs text-slate-500">
             Qué lleva cada clase de máquina: rodamientos, lubricante, cada cuánto revisarla. Se
@@ -661,10 +669,11 @@ function TarifaDeLaHora({
 
   return (
     <div className="card p-4">
-      <h2 className="text-sm font-semibold text-slate-700">
+      <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700">
         Tarifa de la hora
+        <InfoTip text="El costo de mano de obra de cada equipo no se guarda: se calcula cada vez que se abre su ficha, con la tarifa que regía el día de cada orden. Por eso cargar una tarifa nueva con otra fecha no mueve lo viejo. Pero cargar una con una fecha que ya tiene tarifa la reemplaza, y quitar una hace que sus horas se costeen con la anterior —o queden «sin tarifa» si no hay una más vieja—: esos dos cambian el costo que ya se veía de ese período." />
         {vigente && (
-          <span className="ml-2 text-xs font-normal text-slate-400">
+          <span className="text-xs font-normal text-slate-400">
             {pesos(vigente.valor)} desde el{" "}
             {new Date(vigente.vigente_desde + "T00:00:00").toLocaleDateString("es-AR")}
           </span>
