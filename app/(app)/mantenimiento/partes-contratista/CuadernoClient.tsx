@@ -2243,7 +2243,7 @@ function FilaDelRenglon({
             >
               Sacar
             </button>
-            <InfoTip text="Sacar borra el renglón de la carga y no se deshace. Es para la tarea que ya tiene su orden de trabajo cargada a mano: sacarla es decir que esas horas no se facturan desde acá. No se puede sacar un renglón que ya es una orden de trabajo ni uno que está en un grupo que ya generó. Nada más cuelga del renglón. El archivo del que salió (la foto o el Excel) sigue guardado, así que qué decía se puede reconstruir; lo que sólo queda en el registro de auditoría es quién lo sacó y cuándo. Si ese registro no entra, no se borra." />
+            <InfoTip text="Sacar borra el renglón de la carga y no se deshace. Es para la tarea que ya tiene su orden de trabajo cargada a mano: sacarla es decir que esas horas no se facturan desde acá. No se puede sacar un renglón que ya es una orden de trabajo ni uno que está en un grupo que ya generó. Nada más cuelga del renglón. El archivo del que salió (la foto o el Excel) sigue guardado, pero recuperar el renglón es volver a cargar ese archivo en otra carga; lo que sólo queda en el registro de auditoría es quién lo sacó y qué decía. Si ese registro no entra, no se borra." />
           </span>
         )}
       </div>
