@@ -16,6 +16,10 @@ type Opcion = { id: string; nombre: string };
 
 const POR_PAGINA = 50;
 
+/** Lo dice el `(i)` del encabezado de la tabla y el de la línea sobre las tarjetas del teléfono: un solo texto. */
+const TEXTO_EN_QUE_TERMINO =
+  "«Con orden de trabajo» le gana a «No va a hacerse»: cuenta como con orden un aviso que tenga una vinculada o algo escrito en OT asignada, y si no es un número se muestra lo que dice la planilla (por ejemplo «-» o «Revision»). Sólo un número se presenta como OT #N, y es un enlace si tenés Mantenimiento. «Pendiente» es un aviso sin orden y sin descarte.";
+
 /**
  * Los avisos de mi área, y los de todos.
  *
@@ -249,6 +253,10 @@ export default function MisAvisosClient({
             y grande, que es el dato con el que se reconoce si el aviso es el
             suyo, y en qué terminó va abajo, aparte. */}
         <div className="space-y-2 md:hidden">
+          <p className="flex items-center gap-1.5 text-xs text-slate-500">
+            En cada tarjeta, abajo: en qué terminó
+            <InfoTip text={TEXTO_EN_QUE_TERMINO} />
+          </p>
           {avisos.map((a) => (
             <article key={a.id} className="rounded-xl border border-slate-200 bg-white p-3">
               <div className="mb-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -302,7 +310,7 @@ export default function MisAvisosClient({
                   <th className="px-3 py-2 text-left">Urgencia sugerida</th>
                   <th className="px-3 py-2 text-left">
                     En qué terminó
-                    <InfoTip className="ml-1 normal-case" text="«Con orden de trabajo» le gana a «No va a hacerse»: cuenta como con orden un aviso que tenga una vinculada o algo escrito en OT asignada, y si no es un número se muestra lo que dice la planilla (por ejemplo «-» o «Revision»). Sólo un número se presenta como OT #N, y es un enlace si tenés Mantenimiento. «Pendiente» es un aviso sin orden y sin descarte." />
+                    <InfoTip className="ml-1 normal-case" text={TEXTO_EN_QUE_TERMINO} />
                   </th>
                 </tr>
               </thead>
