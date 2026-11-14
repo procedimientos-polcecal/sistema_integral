@@ -2234,14 +2234,17 @@ function FilaDelRenglon({
             lo único irreversible de esta fila, y no se pone al lado de los campos
             que se tocan todo el tiempo. Un renglón ya convertido no se saca. */}
         {!bloqueado && (
-          <button
-            type="button"
-            onClick={onSacar}
-            className="shrink-0 self-end text-xs text-rose-700 underline"
-            title="Borra el renglón —para la tarea que ya tiene su OT cargada a mano—"
-          >
-            Sacar
-          </button>
+          <span className="flex shrink-0 items-center gap-1 self-end">
+            <button
+              type="button"
+              onClick={onSacar}
+              className="text-xs text-rose-700 underline"
+              title="Borra el renglón —para la tarea que ya tiene su OT cargada a mano—"
+            >
+              Sacar
+            </button>
+            <InfoTip text="Sacar borra el renglón de la carga y no se deshace. Es para la tarea que ya tiene su orden de trabajo cargada a mano: sacarla es decir que esas horas no se facturan desde acá. No se puede sacar un renglón que ya es una orden de trabajo ni uno que está en un grupo que ya generó. Nada más cuelga del renglón. El archivo del que salió (la foto o el Excel) sigue guardado, así que qué decía se puede reconstruir; lo que sólo queda en el registro de auditoría es quién lo sacó y cuándo. Si ese registro no entra, no se borra." />
+          </span>
         )}
       </div>
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Select from "@/components/Select";
 import { MAXIMO_DE_DIAS } from "@/lib/mantenimiento/postergar";
+import InfoTip from "@/components/InfoTip";
 
 interface Razon {
   codigo: string;
@@ -93,6 +94,7 @@ export default function PostergarOTModal({
         <div>
           <h2 className="text-base font-bold text-slate-900">
             Postergar la OT <span className="font-mono text-sm text-slate-500">#{orden.ot_number}</span>
+            <InfoTip className="ml-1" text="Postergar corre la fecha de ejecución de la orden hacia adelante, de 1 a 90 días. Desde el sistema no hay forma de volverla a la fecha anterior: sólo se puede postergar otra vez o escribir a mano la celda de la planilla. Se escribe primero en la planilla, que es donde manda, y si Google no la acepta no se mueve nada. Sólo vale para las órdenes que creó el sistema: las que entraron por el formulario se cambian en la planilla. La justificación queda como una nota de la orden, que no se edita. La fecha anterior queda sólo en el registro de auditoría, con quién la corrió y la razón; ese registro se escribe después de mover la fecha y esta pantalla no avisa si falla." />
           </h2>
           <p className="mt-0.5 text-xs text-slate-500">
             {orden.fecha_ejecucion

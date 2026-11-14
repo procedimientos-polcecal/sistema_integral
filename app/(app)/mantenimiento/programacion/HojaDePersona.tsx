@@ -9,6 +9,7 @@ import {
   diaLargo, rangoComoSeLee, tipoTexto,
   type Asignacion, type Ausente, type AusenciaPropia, type Persona,
 } from "./programacionComun";
+import InfoTip from "@/components/InfoTip";
 
 // ── La hoja de una persona ───────────────────────────────────
 
@@ -192,7 +193,10 @@ export default function HojaDePersona({
         {/* ── Ya figura ausente ── */}
         {falta && (
           <section className="mb-4">
-            <h3 className="mb-1 text-sm font-semibold text-red-800">Figura ausente este día</h3>
+            <h3 className="mb-1 flex items-center gap-1 text-sm font-semibold text-red-800">
+              Figura ausente este día
+              {propia && <InfoTip text="«Corregir» y «Sacar» valen sólo para las ausencias que cargaste vos, de los cuatro tipos que carga el encargado (permiso personal, enfermedad o accidente inculpable, injustificada y otra) y de hasta 90 días, y se niegan si el período de esa persona ya tiene la liquidación cerrada. Una ausencia no tiene historial: al corregirla o sacarla el sistema recalcula esos días, y los que la ausencia dejó de cubrir vuelven a verse como si nada hubiera pasado. Lo que decía antes queda sólo en el registro de auditoría, junto con quién lo hizo; ese registro se escribe antes del cambio y, si no entra, no se cambia ni se saca nada." />}
+            </h3>
 
             {propia ? (
               <>
