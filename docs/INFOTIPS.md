@@ -7,6 +7,21 @@ explica mal es peor que ninguno y nadie lo nota hasta que alguien le cree.
 **Cuando cambia lo que una pantalla hace, se corrige su fila.** El texto es una
 afirmación sobre el sistema y envejece como cualquier otra.
 
+**Dónde está lo accionable.** Tres secciones al final, y conviene leerlas antes que
+el resto: **«Lo que este trabajo encontró y no tocó»** (un bug de auditoría en
+Compras, seis pantallas que afirman algo que el sistema no hace y tres hallazgos
+más, cada uno con su archivo y su línea), **«Los huecos, juntos»** (los números
+que la pantalla muestra y que nadie supo explicar, por módulo: la lista que sólo
+contesta quien conozca la planta) y **«Lo que ningún comando puede decir»** (qué
+falta comprobar y cómo). Cada módulo conserva su propia lista de huecos al final
+de su sección, con el detalle de dónde se buscó.
+
+**Para quien va a escribir un `(i)` nuevo:** antes, buscá la pantalla en este
+documento: si ya tiene uno, se corrige su fila y no se agrega otro. La vara es la
+que usó todo el trabajo: **una frase se escribe sólo si una línea de código o de
+documento la respalda, y esa línea se anota en la columna «De dónde salió»**; si
+no, se anota el hueco y no se inventa.
+
 Los 48 que ya existían en Mantenimiento, Remises y RRHH antes del 13/11/2026 no
 están en este registro: se escribieron antes y su fuente es la propia pantalla.
 
@@ -1299,3 +1314,221 @@ La Tarea 12 descubrió que esta pieza no estaba en ninguna pantalla repartida: v
 - **No escrito, por no poder sostenerlo:** cuántas veces el panel dice «nadie ese día» sobre un día pasado en uso real (no hay forma de saberlo sin la pantalla abierta con sesión); y por qué las 8 filas tienen `desde` = 09/11 (se cargaron ese día; no se sabe si una persona del taller entra desde ahí o si se usó la fecha de la carga).
 
 **Un documento que quedó viejo, sin tocar.** La fila de la Agenda de `CLAUDE.md` dice que **«la columna de gente disponible no dice nada hasta que se cargue el padrón (`mant_personal_taller` vacía)»** y el docstring de `genteDelDia.ts` dice «Al 04/11/2026 … tiene cero filas». **Medido el 14/11/2026: tiene 8.** La primera mitad de la frase —«no dice nada hasta que se cargue»— sigue siendo cierta para los días anteriores al 09/11 y ya no para los posteriores.
+
+## Lo que este trabajo encontró y no tocó
+
+**Tarea 14, 14/11/2026.** El encargo era colgar `(i)`, no arreglar el sistema, y ninguno de estos hallazgos se arregló. Están acá juntos porque estaban repartidos en las secciones de cada módulo y **es lo primero que alguien va a querer leer**: un `(i)` que explica bien algo que está roto no ayuda a nadie, y varios de los textos de este registro tuvieron que escribirse *alrededor* de lo que sigue.
+
+**Cada línea de abajo se volvió a comprobar el 14/11/2026 contra el árbol de esta rama** (`HEAD` = `0b0f4769`) **y, donde dice «medido», contra la base de producción con el cliente admin, sólo lectura.** Los números de línea se movieron respecto de lo que decían las secciones de cada módulo: **valen estos**.
+
+### El bug, y va primero
+
+**La auditoría de aprobar y denegar un requerimiento de Compras no escribió nunca una fila.**
+
+- **Qué hace el código.** `app/api/compras/requerimientos/[id]/route.ts:465` pregunta `nuevoEstado === "APROBADO" || nuevoEstado === "DENEGADO"`, y `nuevoEstado` sale de `cambios.estado_aprobacion` casteado a `string` (`:464`), que es por lo que TypeScript no lo atrapa. El enum `compras_estado_aprobacion` (`supabase/migrations/017_compras_schema.sql:12-14`) es `'PENDIENTE', 'EN_REVISION', 'APROBADA', 'DENEGADA'`. **La misma ruta compara contra los valores buenos** en `:168` (`=== "APROBADA" || === "DENEGADA"`) y en `:181`, `:184` y `:222`. La rama que llama a `auditar()` (`:475`, con los verbos `aprobar` y `denegar`) es inalcanzable.
+- **Medido el 14/11/2026.** 2.303 requerimientos están en `APROBADA` (2.218) o `DENEGADA` (85); la tabla `auditoria` tiene 52 filas, **3 de `compras` y ninguna es `aprobar` ni `denegar`** (las 3 son `borrar` del espejo). Las cero filas son coherentes con la lectura pero no la prueban solas: lo que la prueba es comparar los dos literales.
+- **Por qué importa más que un `(i)` mal puesto.** `CLAUDE.md` enumera «aprobar o denegar una compra» entre las acciones que se auditan, y hoy no se audita. Es una acción que no se deshace desde la pantalla (ver «Las acciones que no se deshacen»). El `(i)` de «Aprobación» dice lo que sí queda (`aprobado_por`, `aprobado_en`, el historial) y **no promete auditoría**.
+- **Quien lo arregle:** cambiar los dos literales de `:465` y de `:475` a `"APROBADA"` y `"DENEGADA"`, y declarar `nuevoEstado` con el tipo del enum para que el compilador lo atrape la próxima vez. Después hay que decidir qué hacer con las 2.303 aprobaciones que ya pasaron sin rastro: el rastro que existe es el del propio pedido.
+
+### Seis pantallas que afirman algo que el sistema no hace
+
+En las seis el `(i)` dice lo que hace el código y **la pantalla no se tocó**.
+
+| Pantalla | Lo que afirma | Lo que hace el código | Medido o comprobado |
+|---|---|---|---|
+| **Acarreo** (Cantera), cartel ámbar | `AcarreoClient.tsx:121-122`: las pesadas con un fletero que no se pudo reconocer «no entran en ningún total» | Sí entran en dos de los totales: las toneladas por yacimiento (`pesadas.ts:214-229`, «Tampoco filtra por fletero») y el total del mes por tipo (`agruparPesadasPorTipoMes`, `pesadas.ts:357-372`, «sin mirar el fletero»); lo que no entran es el «Por fletero» (el pago, que sin fletero no se puede liquidar). El docstring de `acarreo.ts:197-214` cuenta que la primera versión las excluía y que era el error | Lectura de las tres funciones. El docstring cita «354 de 7510» pesadas sin fletero, sin fecha |
+| **Artículos** (Inventario), subtítulo | `ArticulosClient.tsx:125`: «acá se edita lo que decide una persona»; el docstring de la ruta dice que el stock de seguridad «sí se edita» | `lib/inventario/sincronizar.ts:132-138` hace un `upsert` por código con todo lo que trae la planilla (descripción, ubicación, proveedores, marcas, stock de seguridad) y corre cada diez minutos (`vercel.json`, ruta `inventario-sync`). Lo editado se pisa. Sólo `activo` sobrevive, porque el lector de la planilla no lo trae | Medido el 13/11/2026 22:33: las filas con `updated_at` más reciente comparten el mismo instante, es decir que cada corrida reescribe todas. **No se probó editando en producción** |
+| **Bandeja** (Facturación), cartel | `BandejaDelCorreo.tsx:213`: «Hay N adjuntos esperando» | `app/api/facturacion/correo/route.ts:39` corta en `.limit(100)` sin `traerTodo`: el número nunca pasa de 100 | **Medido el 14/11/2026: 451 en `pendiente`.** Quien confíe en el cartel subestima el trabajo por un factor de cuatro, y el botón «Cargar las próximas 25» tampoco avisa que hay más |
+| **Productos** (Despacho), rótulo | `ProductosClient.tsx:163`: «cargadas sin remito» | Casi todas las filas de esa lista son órdenes **importadas de la planilla**, no cargadas sin remito: el filtro (`productos/page.tsx:86`) agrupa toda orden sin producto de Odoo | Medido el 13/11/2026 por la tarea 4: 218 textos distintos de producto en 1.997 órdenes sin producto de Odoo, y la gran mayoría importada. No se recontó |
+| **Partes** (Trituración), subtítulo | `PartesClient.tsx:377`: «Queda exportado a la planilla real al guardar» | La planilla tiene **una fila por día**: el espejo busca por fecha y sin `orden` (`lib/trituracion/espejo.ts:42,66`), así que un segundo turno del mismo día pisa la fila del primero, y el `DELETE` de un turno «no toca la planilla» (`app/api/trituracion/partes/route.ts:152-157`). La migración `20260921094643` lo dice en «LO QUE ESTO NO RESUELVE» | Medido el 13/11/2026: **0 partes con más de un turno** en producción, así que hoy no muerde |
+| **Recepciones** (Despacho), aviso | `lib/despacho/pushRecepcion.ts:205`: «La orden se creó pero no se pudo confirmar. **Queda para reintentar.**» | No hay ningún botón para reintentar: la pantalla ofrece un único «próximo paso» y `estadoDeLaRecepcion` (`lib/despacho/recepcion.ts:105`) da `"cerrada"` en cuanto hay `odoo_purchase_order_id`, y la sección de Despacho de este registro dice que una orden creada y no confirmada queda «Cerrada» igual; en «cerrada» no hay botón (`proximoPaso`). La ruta sí lo permitiría (`recepciones/[id]/route.ts:53`) | Lectura de las dos funciones. Cómo se reintenta hoy desde la interfaz **no se sabe** |
+
+### Tres hallazgos más, que no son pantallas
+
+1. **Una fuga de privacidad por un camino lateral: el título de un evento de la Agenda llega a la pantalla de salud.** `lib/agenda/reintentarPendientes.ts:84` arma `«${titulo}» (${id}, ${casilla})` y lo pone al principio de cada mensaje de fallo (`:143`, `:164`, `:181`, `:185`); `app/api/cron/agenda/route.ts:115-120` junta esos fallos en el campo `error` de `sincronizaciones`; `app/(app)/administracion/salud/SaludClient.tsx:138-141` lo imprime; y `sincronizaciones_select` es abierta a todo `authenticated` (`supabase/migrations/037_sincronizaciones.sql:33`). **Resultado:** quien abra `/administracion/salud` —un administrador, que en la Agenda propiamente dicha no ve la agenda ajena porque `agenda_eventos_ver` no tiene rama de administrador— puede leer el título de un evento ajeno si su reintento falló. Por eso el `(i)` de la Agenda dice «cada uno ve lo que creó y a lo que lo invitaron» **acotado a la pantalla** y no «nadie más lo ve». Qué tan alcanzable es hoy depende de que haya pendientes fallidos, y eso no se midió.
+2. **Ningún componente del repo lee `auditoria_error`.** Cinco rutas lo devuelven en el cuerpo de la respuesta —`administracion/usuarios/[id]/modulos` (`:83`), `compras/requerimientos/[id]` (`:572`), `facturacion/facturas/[id]/odoo/borrador` (`:159`), `inventario/movimientos` (`:298`) y `rrhh/liquidaciones/[id]/cerrar` (`:41`)— y `grep -rn auditoria_error app components lib` no encuentra ningún lector. En las cinco el cambio **ya está hecho** cuando se intenta registrar, así que cuando el registro no entra la pantalla dice «guardado» y nadie lo sabe. Pesa más en postear un asiento en Odoo, que no se deshace. (Una sexta, `postergar`, hace `await auditar(...)` y descarta el resultado; ver el hallazgo 3 de «Las acciones que no se deshacen».)
+3. **Pisar la fecha de ejecución de una condición insegura ya evaluada no deja rastro.** `app/api/seguridad-higiene/condiciones/[id]/route.ts:250-258` audita sólo cuando la fecha **se quita** (`"fecha_ejecucion" in cambio && actual.fecha_ejecucion && !cambio.fecha_ejecucion`). El campo es editable también con valor, así que cambiar la fecha X por la Y pisa la X —que es el único lugar donde quedaba cuándo se arregló— sin una fila de auditoría. La ruta lo justifica para *cerrar* (poner la fecha primera vez se deshace borrándola) y no para esto.
+
+### Una corrección al encargo: lo del valor hora de Cantera
+
+**El plan traía este hallazgo y no se sostiene tal como estaba escrito.** Decía que Cantera lee el valor hora con su propio `select` (`lib/cantera/consultas.ts:622`) en vez de con `valorHoraDe()`, y que por eso no tiene la protección de las dos formas del embed. **Se leyó el archivo y no es así:** la línea 622 es el comentario de la interfaz `EmpleadoLiviano`; el `select` propio está en `traerOperariosDeCantera` (`:659-664`, `rrhh_empleados_datos(valor_hora_normal)`), **pero el número se lee con `valorHoraDe(e)` (`:669`)**, que acepta objeto o arreglo (`lib/rrhh/valorHora.ts`). Tiene la protección. Lo que sí es cierto y se puede comprobar:
+
+- El `select` es propio y no sale de un ayudante compartido: si el embed cambiara de nombre, hay un lugar más que tocar.
+- **Tres comentarios siguen diciendo que el valor hora está en `empleados`**, que es lo que dejó de ser cierto el 22/09/2026: `lib/cantera/destape.ts:10` y `:62` (`empleados.valor_hora_normal`) y `app/(app)/cantera/destape/DestapeClient.tsx:144`. El comentario largo de `consultas.ts:645-656` sí está actualizado.
+- Lo que más pesa, y ya estaba dicho en `CLAUDE.md` y en `consultas.ts:651`: **a quien no tiene acceso a RRHH le llega 0 sin error**, y el costo de mano de obra de Destape sale en $0 (ver la sección de Cantera).
+
+### Otros defectos que el registro anotó, tomados de sus secciones
+
+**No se recomprobaron en esta tarea**: son lo que cada sección de módulo dejó escrito, con el archivo y la línea de ese momento. Se juntan acá para que no se pierdan, ordenados por cuánto pesan.
+
+- **Reservas de Taller Vial: «Confirmar baja» baja el stock sin escribir la planilla ni anotar el pendiente** (Inventario). Y un movimiento de origen `app` (`00746`) que no llegó a la planilla y que ninguna pantalla muestra. Ver `## Inventario`, «Huecos».
+- **Eliminar una liquidación es irreversible, no deja registro y no mira el estado**, y el cartel de cerrar dice «definitiva» (RRHH y «Las acciones que no se deshacen», hallazgo 2). El docstring de `periodoEstaCerrado` dice que una liquidación cerrada «no se vuelve a calcular», y ningún camino recalcula una fila de `liquidaciones` (hallazgo 6).
+- **Los 8 ajustes de stock de producción figuran hoy como entrada o salida** y no como ajuste, medido el 13/11/2026 (hallazgo 4 de las acciones).
+- **La tarjeta «Stock» de Envases en el tablero de Calidad cuenta con una columna que la migración `20261013133904` declara en desuso** y puede dar un número distinto del de la pantalla de stock (Calidad, «Lo que no se escribió»).
+- **Las fechas de «Cargadas hoy» y «Últimas cargadas» de Facturación miden en UTC** (Facturación, «Huecos»).
+- **El `Costo MO` de Destape sale en $0 sin avisar** si quien mira no tiene RRHH, si el operario se dio de baja o está en otro sector; el costo de máquina y el de fletero también caen a $0 en silencio, y `costoMaquinaOdoo.ts` promete un aviso que la pantalla no tiene (Cantera, «Lo que no se escribió»).
+- **`Faltas sin clasificar (N)` de RRHH topa en 1.000** sin `traerPaginado` (RRHH, «Lo que no se escribió»); **«Validar» en la ficha falla en silencio** para quien no es administrador de RRHH.
+- **Quien tiene sólo Seguridad e Higiene o sólo Ventas entra al Inicio y ve la grilla vacía**, sin el cartel de «no tenés acceso» (Pantallas transversales, Inicio).
+- **Informe, Cargas y Services de Taller Vial no filtran las fechas imposibles** que la portada sí filtra; 8 cargas con fecha anterior a 2020 el 13/11/2026 (Taller Vial, «Lo que se encontró de paso»).
+- **El usuario con el correo guardado con mayúsculas no queda enlazado como invitado de la Agenda** y por lo tanto no ve el evento ni recibe el aviso (Agenda, discrepancia 2).
+- **Remises:** «Generar» y «Aplicar» **borran las rutas editadas a mano sin pedir confirmación**; los mensajes de dos rutas mandan a «desactivalo», que ninguna pantalla ofrece; el importador de vehículos no dice cuántos agregó ni si falló (Frente 2 de «Lo que quedó sin mirar»).
+- **Mantenimiento:** un mantenimiento programado crea solo su OT sólo con «Lubricación» y «Revisión eléctrica», y la edición no puede cargar la especialidad; «Tipos de equipo» se pisa al reimportar el libro (Frente 1).
+- **Documentos que discrepan del código:** `docs/COMPRAS.md` (fórmula de la comparativa; ya reemplazada por la migración `041`), `docs/FACTURACION.md:1127` y los docstrings que dicen que la sincronización corre una vez por día, `docs/RRHH-ACTUALIZACION.md:442-444` (dice que un período cerrado se libera reabriendo la liquidación, y la reapertura no existe), `docs/AGENDA.md` (omite que un evento ya terminado no se vigila), `docs/MANTENIMIENTO-INTEGRACION.md` (se contradice sobre quién pone «Atrasado») y el spec de Trituración (ver su fila en `CLAUDE.md`).
+
+## Los huecos, juntos
+
+**Un hueco es algo que la pantalla muestra y que nadie, buscando en el código, en los documentos y en los comentarios, pudo explicar.** No es un defecto de redacción del `(i)`: es que **la respuesta no está escrita en ningún lado** y sólo la tiene una persona. Por eso esta lista es la parte del registro que no se resuelve leyendo más código, y la que más rinde mostrarle a quien conozca la planta, la balanza o el taller.
+
+Esta es **la lista completa y en un solo lugar**, ordenada por módulo. Cada módulo conserva su propia lista al final de su sección, con el detalle de dónde se buscó; si alguna difiere de ésta, **manda la de su sección** (tiene la línea y la fecha de la medición). Lo que se anota acá es la pregunta, no el defecto: los defectos van en la sección anterior.
+
+**Cómo leerla.** Cada línea termina con la pregunta que alguien tiene que contestar. Tres familias aparecen mezcladas porque se parecen desde afuera:
+
+- **Decisión que no está escrita** (¿esto es lo querido?): marcadas con «¿…?».
+- **Medición que envejeció o no se hizo**: la cifra no se puso en el `(i)` porque cambia, y está en la sección del módulo con su fecha.
+- **Código que no se leyó**: se dice cuál; no es un hueco de conocimiento sino de tiempo.
+
+### Compras
+
+- **«Pedidos» y «Monto» de Proveedores, y los cálculos hermanos de `/compras`** («Principales proveedores», «Gasto por mes / empresa / área»): suman `costo_iva + costo_envio` de todo requerimiento con costo o proveedor, en cualquier estado y sin convertir dólares, y «Gasto por mes» agrupa por la fecha del requerimiento y no la del pedido. **¿Deben entrar los denegados y los recibidos?** No está escrito en `COMPRAS*.md`, en `COMPRAS-PROVEEDORES-ODOO.md` ni en los comentarios.
+- **«Pedidos en curso» de `/compras`:** tres fuentes discrepan —la migración `20261019092428` mide 299 en `PEDIDO` y 1.646 en `RECIBIDO`; `COMPRAS-ESTADO.md` todavía habla de 1.787 en `PEDIDO` y ninguno recibido; el comentario de `compras/page.tsx` cita «1.171 de 1.185» y un cartel que ya no existe—. **¿Cuál es el estado de verdad hoy?** No se afirmó nada.
+- **El «en pantalla: $…» del pie del listado de requerimientos** suma sólo las filas de la página (`totalPantalla`) y no tiene respaldo escrito.
+- **«Pedido el …» en Seguimiento** muestra `fecha_pedido`, que `COMPRAS.md` dice que estaba en null en los 2.220 requerimientos (30/10/2026). **No se comprobó hoy** si sigue así.
+- **Prioridad `URGENTE`: 68 % contra 42 %.** Son dos universos distintos (histórico y abiertos) y ninguna cifra se puso en un `(i)` porque envejece.
+- **Las tarjetas de `/compras`** (`KpiCard`) no admiten un `(i)`: tienen `overflow-hidden` y un `transform` al pasar el mouse, y el globo `fixed` se recortaría. Es una limitación de componente.
+
+### Calidad
+
+- **Conciliación, «N líneas leídas»:** con 0 líneas de Odoo el control devuelve vacío sin comparar (`sincronizar.ts:59,89`) y la pantalla dice «sin desvíos». **¿Debería devolver todos los camiones como «sin orden»?** Ningún documento lo contesta; se sacó el `(i)` que lo decía.
+- **Ninguna pantalla muestra cuándo se leyó la planilla de carbonilla**, que es lo que mueve el saldo; la fecha visible es la del control contra Odoo. **¿Se quiere mostrar `carbonilla-planilla`?**
+- **Los saldos «Vegetal» y «Residual» y los números del tablero** (`KpiCard`, sin `(i)`): `CALIDAD.md` dice que el saldo nació igualado a la planilla, «no verificado», y que el conteo físico lo pondría sobre una medición. **No se sabe si sigue así ni si hubo conteo físico.** Las cifras de los comentarios (224 de 256 días, 32 sin consumo) no tienen documento.
+- **«Productos de Odoo»:** la pantalla y `CALIDAD.md` (lista blanca) dicen que la lista decide qué entra al stock; hoy sólo la lee el control contra Odoo. **¿Se corrige la pantalla o se restituye el uso?** (es un defecto de documentación, pero la pregunta de diseño es de Calidad).
+- **El pasante de la curva:** que herede lo de apagar tamices (no recalcula y puede dar negativo) está en el documento, pero la pantalla sólo lo dice del acumulado; y los títulos de los paneles se fotografían con `html2canvas`, así que un `(i)` ahí entraría en la imagen.
+- **Humedad (listado):** su fórmula es la del documento pero no hay supuesto detrás, así que no se explicó.
+- **Cifras con fecha que no se pusieron:** «27 de 362» filas del histórico y «ninguna de Cal ni de Filler 2» envejecen con cada reimportación.
+
+### Producción
+
+- **Las tarjetas «Producido / Despachado / Rotura este mes» de la portada dicen «t» y suman bultos y unidades** (`page.tsx` las formatea como toneladas). **¿Qué unidad tiene el depósito?** `PRODUCCION.md`, «Lo que está pendiente de una persona», punto 4: en el papel el número a veces parece kilos y a veces bultos. Posible defecto de rótulo; no se tocó ni se explicó.
+- **Producción de 20 a 4:** `parteAnterior` hace que T1 se calcule contra el depósito del 12 a 20 del día anterior, con una diferencia que atraviesa esas ocho horas. **¿Esa producción desaparece o la absorbe T1?** `PRODUCCION.md:14` sólo dice que esas horas no se registran.
+- **«Sin informar» no siempre es «el robot no informó»:** `csv.ts` descarta con un aviso las líneas ilegibles, y el turno de esa línea sale después como huérfano o absorbido, sin distinguirse. Y **un día cuyas únicas líneas se descartaron parece planta cerrada.** **¿Qué hay que hacer con eso?** No está escrito.
+- **Resúmenes, el «·» de las celdas de Producción:** el comentario dice «ningún turno del día tocó este producto», pero un día sin ningún parte también lo muestra (`mes.ts:163`). Hay dos causas y el comentario cubre una.
+- **La fecha exacta de la medición del 11,3 %** (4.034 de 35.797 toneladas, 809 turnos): los documentos no dicen de qué corte del zip salió; el `(i)` dice «una medición de octubre de 2026».
+- **Las cifras de utilización que dependen de la regla** (65,3 / 75,0 / 87,8 % de Filler 2 con tres reglas; 85,3 contra 82,0 % de Filler 1) están con fecha en `PRODUCCION.md:405-428` y no se pusieron.
+- **La planilla de Google y el día 31:** el espejo tiene 30 filas, así que el parte del 31 queda `sheets_pendiente`. **¿Se ampliaron las filas?** No hay documento posterior a septiembre.
+
+### Cantera
+
+- **Tres cuentas de toneladas voladas que no dicen lo mismo:** Registros y Voladura usan la estimada por la malla; el Informe usa `toneladas_planilla ?? estimada`; Cubicación usa la estimada sola y agrupa por fin de perforación mientras el Informe agrupa por fecha de voladura. **¿Cuál es «el número bueno» de un mes?**
+- **La fórmula de toneladas sigue sin confirmar** (spec `:556-559`, `toneladas.ts:15-22`): no reproduce la columna histórica. **¿Respondió Cantera cuál de las dos está bien?**
+- **Los gramos de detonador:** `informe.ts:158-162` dice que la cantidad se carga en kilos «confirmado con el usuario» y el spec (`:553-555`) lista como detonadores a insumos que se cuentan en unidades. **No se pudo cruzar con el catálogo real de insumos.**
+- **«Conforme» no mueve el chip ni el aviso:** el spec dice que finanzas puede marcar `conforme` «aunque difiera», pero el chip y `contarAvisos` calculan sólo del cruce. **¿Es lo querido?**
+- **Un renglón de consumo sin precio no suma y no avisa**, y `montoVoladura` da 0 donde el informe da `null`. No hay texto que lo explique.
+- **Registros filtra por `vol_fecha` y el bochón muestra `fecha_voladura ?? fin`:** un rango de fechas saca las voladuras «sin volar» y los bochones que sólo tienen `fin`. Es la semántica de `gte`/`lte` sobre null y no una decisión escrita.
+- **Un fletero desactivado desaparece del total de Acarreo** (`acarreo/page.tsx:51` y `page.tsx:80` piden sólo activos) aunque las toneladas lo cuenten. Ningún comentario lo menciona.
+- **El Costo MO en $0 también cuando el operario no está en el selector**, el costo de máquina cuando Odoo no contesta, y el del fletero sin tarifa vigente: los tres callan. `costoMaquinaOdoo.ts` promete un aviso («el tablero muestra $0 con aviso») que `DestapeClient.tsx` no tiene. **¿Qué se quiere mostrar en lugar de $0?** Lo decide un humano.
+- **Las tarjetas de la portada y las de Destape** (`KpiCard`) no admiten `(i)`: «Costo total del mes» y «Máquina + MO propia» suman los tres $0 silenciosos sin ninguna marca.
+- **Cifras con fecha que no se pusieron:** los 354 de 7.510 pesadas sin fletero, los 7.623+ de `consultas.ts:385` y las tarifas de `destape.ts:19-21`.
+
+### Mantenimiento
+
+- **¿Quién pone «Atrasado»?** `docs/MANTENIMIENTO-INTEGRACION.md` se contradice: la sección «Las órdenes atrasadas» y `alertas.ts` dicen que lo marca una persona; otras líneas del mismo documento dicen que la columna M lo calcula sola (`=IF(J="","",L)`), y `contraste.ts:124` coincide con éstas. El `(i)` del panel dice «figuran como Atrasado» para no elegir.
+- **«Avisos sin OT» del tablero** no es «Sin orden de trabajo» de Avisos (el tablero no mira `desestimado_en`); **«OS sin terminar»**, **«Vencidos»** y **«Próximos 7 días»** no tienen definición escrita. Son `KpiCard`, que no admite `(i)`.
+- **Mano de obra:** una OT propia con horas y sin operarios queda afuera sin entrar en `huecos` (`costoEquipo.ts`, `if (hh === 0) continue`), y **no está escrito si el costo de Terceros (`ordenes_servicio.costo`) lleva IVA** mientras Materiales usa `costo_iva`.
+- **Topes silenciosos:** el panel de atrasadas pide `.limit(500)` sin orden antes de filtrar y «Qué hacer primero» `.limit(300)`; hoy no se alcanzan y nada avisa si pasa.
+- **«Gente del taller» al elegir una fecha:** no se sabe por qué las 8 filas de `mant_personal_taller` tienen `desde` = 09/11/2026 (se cargaron ese día; **¿alguien del taller entra desde ahí o se usó la fecha de la carga?**), ni cuántas veces el panel dice «nadie ese día» sobre un día pasado en uso real. Qué órdenes muestra cada día (`calendarioDeOT.ts`) no se leyó.
+- **Cifras que envejecen y no se pusieron:** medianas de carga de ausencias, francos sin fecha, órdenes sin prioridad, y cuántas tareas del historial entrarían a la propuesta de Tareas preventivas.
+- **Código que no se leyó con detalle:** `PartesContratistaClient.tsx` (944 líneas, el modo «parte diario»), `GenerarOTDeMantenimiento.tsx`, los treinta campos de `TipoModal.tsx`, y cada cuánto corre hoy el cron de Mantenimiento (`vercel.json` no se leyó en la tarea 6b).
+
+### RRHH y Remises
+
+- **Asistencia: «Presentes», «Días esperados» y «% Asistencia»** (`asistencia/resumen/route.ts`) cuentan feriados y vacaciones como presente y suman las justificadas como asistencia; **el Analítico las cuenta como ausencia**. Son dos convenciones opuestas para la misma palabra. **¿Cuál es la querida?**
+- **Liquidación individual contra planilla general:** `liquidaciones/generar/route.ts:65` no suma francos y la planilla sí (`planillaGeneral.ts:285`); el «Total $» de la planilla tampoco incluye vacaciones ni enfermedad. **¿Es a propósito?**
+- **«Modalidad de pago» (jornal / mensual):** el código sólo la usa para filtrar. **¿Qué cambia para un mensual en el cálculo?**
+- **Vacaciones, «Días correspondientes»:** la antigüedad se mide al 1° de enero del año elegido y quien ingresó después tiene 0 ese año; la escala no se edita desde ninguna pantalla. Sólo está en el código (`diasCorrespondientes` sin docstring). El documento del 27/08/2026 tampoco dice si los 8 períodos derivados quedaron en 2025.
+- **Analítico, el resto:** «Empleados por género» manda a «Sin especificar» a quien no tiene el dato; los tramos de antigüedad son `[min, max)`; **el día de hoy cuenta** y a la mañana el ausentismo incluye a quien todavía no llegó. Nada de eso está escrito.
+- **«Trabajadas» y «Teóricas» por sector:** los días esperados incluyen vacaciones y feriados, donde no hay horas, así que el gráfico muestra menos trabajadas que teóricas por construcción.
+- **El costo de horas extra** dice «Estimado» y no dice que parte de extras sin validar.
+- **Las cuatro tarjetas del dashboard** (`KpiCard`) tienen la regla muy bien escrita en `tarjetasHoy.ts` y no admiten `(i)`.
+- **Remises:** «Presentes hoy» de la portada se calcula contra «Empleados con remis» y no se leyó su definición; «Historial reciente» pide `.limit(300)` y recorta a 60 grupos, así que el último podría quedar cortado (no se midió); no se leyeron la pestaña «Choferes», `empleados/[id]/cuenta/route.ts` ni `remises/layout.tsx`; **no hay medición de la calidad del reparto del k-means**, sólo que usa azar.
+- **Código que no se leyó con detalle:** `rrhh/empleados` (listado e importación), `rrhh/ausencias` salvo lo que toca a liquidaciones cerradas, la pestaña Francos de la ficha, `administracion`.
+- **Cifras con fecha que no se pusieron:** 54 fichadas abiertas y 73 contra 70 empleados (07/10/2026), 931 días corregidos y 8.237 faltas sin clasificar (27/08 y 17/09/2026).
+
+### Seguridad e Higiene
+
+- **¿Qué significan 1, 2 y 3 en «Prioridad»?** No hay definición ni dirección (¿1 es lo más urgente?) en el spec, el plan, `CLAUDE.md`, la migración ni el formulario offline. La prioridad **no ordena nada ni cambia avisos**. Cuando alguien lo diga, también va al formulario de `/cargar` (`app/cargar/FormularioCondicionOffline.tsx`).
+- **Las dos decisiones de datos que `CLAUDE.md` deja pendientes del usuario:** a qué se refiere «Planta 02» (5 condiciones: N° 2, 8, 9, 10, 11), «Planta 2» (N° 30 a 37) y «Planta 3» (N° 38 a 44), que hoy están sin sector (37 de 44), y **las cinco fechas dudosas** (N° 42, 43, 44, 7 y 6). Se confirman contra el `21-10-26.xlsm` con quien lo armó.
+- **Una discrepancia chica sin corregir:** el lugar de una fila se escribe «`code` · `name`» en la tabla y sólo `name` al ordenar por «Lugar» (`ordenDeColumna.ts`): ordena por un texto distinto del que muestra. Y el plan (Task 9) da como ejemplo un enlace de «Planta 02» a «Planta 2» que el código no hace.
+
+### Inventario
+
+- **«Cantidad» de un ajuste en el kardex:** el RPC guarda el stock contado y la planilla recibe la diferencia; la sincronización reescribe `tipo` y `cantidad`. **Medido el 13/11/2026: 8 ajustes y los 8 figuran hoy como entrada o salida** (la causa es lectura de código y no se observó la sincronización haciéndolo).
+- **Lo que la planilla deja de tener no se borra en Inventario:** `sincronizar.ts` sólo hace `upsert`, no hay `delete` ni `borradoDeEspejo`, ni freno de 50 filas o del 10 %. **¿Se quiere el mismo comportamiento que en Compras, Mantenimiento y las órdenes de servicio?** La regla de `CLAUDE.md` no alcanza a Inventario.
+- **El 0 que no es 0:** Stock, Artículos y Reponer muestran `stock_actual`; hoy 0 de 1.206 artículos tienen `stock_planilla` en null, así que no se ve la diferencia. El día que haya una celda vacía, esas pantallas mostrarán 0.
+- **Las cuatro tarjetas de la portada** no admiten `(i)` (con `href` son un `<a>`); «Artículos» y «Con faltante» no filtran `activo` y Stock y Reponer sí (hoy 0 de 1.206 inactivos).
+- **Reservas de Taller Vial y PostgREST:** la ruta de lectura resuelve ids con `.in()` sobre los ids de las reservas; con 0 filas no muerde, con cientos rompería primero.
+- **Números del 13/11/2026 que respaldan los textos y no están en ellos:** 1.206 artículos, 523 con faltante, 388 con stock de seguridad 0; 988 de 4.856 movimientos con texto de sector sin `sector_id`; 1.706 de 2.304 requerimientos de Compras sin código.
+
+### Despacho
+
+- **El histórico casi no tiene empresa:** 1.997 de 1.998 órdenes con `empresa_id` en null el 13/11/2026, así que filtrar por empresa deja una. No se completa sin inventar.
+- **La balanza casi no se usó:** una sola orden con producto de Odoo, 49 productos en el catálogo y **ninguno con material**; toda orden que se cargue desde la balanza escribe a la planilla el nombre crudo de Odoo en `Material`. Es el riesgo que `DESPACHO.md` avisa antes de «la primera orden real».
+- **«Desactivar» un producto no desactiva nada en Despacho:** el docstring de `ProductosClient.tsx` dice «lo saca del alta» y el de `lib/core/productos.ts:92` «del desplegable de la pantalla de mapeo»; ninguna se cumple. **¿Hay un consumidor en Producción?** No se vio.
+- **Los límites silenciosos de la consulta a Odoo:** `remitosParaElAlta` pide 400 remitos y 1.000 movimientos (`odoo.ts:100`, `:145`) y corta sin avisar; la documentación mide ~84 remitos.
+- **Proveedores de recepción:** la lista es de proveedores activos con rubro `CARBONILLA` o ya configurados, así que uno de otro rubro no aparece y no hay cómo agregarlo desde la interfaz.
+- **Las cuatro tarjetas de la portada** no admiten `(i)`.
+
+### Facturación
+
+- **El umbral del control del asiento** («El asiento difiere del comprobante en $X», gris hasta `0,01 × cantidad de líneas` y ámbar después, `BorradorEnOdoo.tsx`) **decide si se puede postear y su valor no lo explica ninguna pantalla ni documento.** **¿De dónde sale el centavo por línea?**
+- **«Cargadas hoy» y «este mes» miden en UTC** (comprobado: la base devuelve `created_at` con `+00:00`); hay 4 facturas y la última es del 31/10, así que el desfase no se vio en un dato real.
+- **«Sin vincular» y «Esperando confirmar»** (tarjetas) no son lo que dicen: son `estado = recibida` y `vinculada` + `informada`, y no admiten `(i)`.
+- **«Actualizar con lo del sistema»** reemplaza las líneas enteras del borrador sin volver a adjuntar el PDF; **«Cargar las próximas 25»** guarda hasta 25 y no hay deshacer en lote; **el estado se puede cambiar a mano a «Contabilizada» sin que Odoo lo sepa.** Ninguna llama a `auditar()`.
+
+### Taller Vial
+
+- **«Reparación» contra «Revisión»** (selector de «Tipo»): ningún documento, migración ni docstring define la diferencia. **Hay que preguntar al taller.**
+- **De dónde salen los cortes** de 70 y 85 % de disponibilidad (`informe.ts:31-33` dice «el mismo umbral de la hoja real»), los de +10 y +25 % del consumo, los umbrales de las alertas (`tablero.ts:1-9`: «criterio del taller», sin decir quién) y **el corte de 2 del «Desvío»** del informe. Los `(i)` muestran los números sin su razón.
+- **Cargas:** no hay forma de corregir o borrar una carga guardada desde el sistema (`cargas/route.ts` sólo tiene `GET` y `POST`), y la sincronización no toca las que tienen `cargado_por`. Hoy 0 de 876 se cargaron desde el SdG (13/11/2026); «Cargas para revisar» dice «se corrigen en la planilla», cierto sólo para las que vienen de allá.
+- **Horas por turno y calendario de feriados** no están en el SdG (`informe.ts:19-27`), por eso el informe no tiene utilización ni productividad.
+- **«Reservado» frente a lo que ve Inventario:** cómo se ve y se confirma del otro lado no se leyó.
+
+### Trituración
+
+- **¿Qué es parar «por Producción»?** El parte tiene cuatro horas de parada (Mantenimiento, Falta de piedra, Producción, Otro) y el spec no define la tercera. **Hay que preguntar a planta.** El informe mensual las junta en «Varios».
+- **Quién fijó los cortes de 80 y 60 % del color de «Disp.»** (`PartesClient.tsx:36-38`, sin comentario).
+- **¿Anda el espejo a la planilla en producción?** `docs/VARIABLES-VERCEL.md` dice que necesita permiso de editor y que al 18/09/2026 estaba sólo como lectora; hoy hay 0 partes con `sheets_pendiente` (13/11/2026), compatible con las dos cosas.
+- **15 turnos «Operó» sin horario** (de 263): no se sabe si vienen del histórico importado o se cargaron sin completar. Cuentan en el informe y no en la portada.
+- **«Viaje de bloques»:** `lib/cantera/acarreo.ts` lo describe y no se leyó entero.
+- **Los orígenes «ACOPIO» y «PLANTA 2»:** el spec y `vocabulario.ts:25-29` los nombran sin decir más que «acopio propio» y «otra planta».
+- **Tres definiciones de «disponibilidad» en el mismo módulo** (portada, panel de Partes e informe) y **la Tabla 6 se llama «Toneladas acarreadas por cantera»** siendo toneladas procesadas: ningún comentario las nombra juntas.
+
+### Pantallas transversales
+
+- **Empresas y sectores:** qué desplegables exactos dejan de ofrecer un sector dado de baja (se verificaron cuatro) y **qué hace Despacho con un sector inactivo** no se verificó.
+- **Mi cuenta:** cuántas personas tienen hoy el push prendido; el docstring de `avisos-diarios/route.ts:25-27` dice «cero suscripciones» y es de antes.
+- **Disponibilidad:** el **canal residual de la tardanza** (restar el total de un sector a lo que muestra «Quién no viene» da sus tardanzas, y en un sector de una persona la nombra) es conocido y está sin resolver (`docs/RRHH-ACTUALIZACION.md`, «La asimetría de la `TARDANZA`»). Hoy hay 0 tardanzas cargadas.
+- **Agenda:** las tres incógnitas que `docs/AGENDA.md` deja abiertas (si el `PATCH` resetea los RSVP, el plazo real de un canal, los eventos de usuarios dados de baja); cuántos eventos tiene cada persona; la cuota de Google.
+- **Mis menciones:** cuántos correos de mención fallaron (`avisado_en` y `aviso_fallo` lo guardan y no se contó); que `ENTIDADES[tipo].puedeVerlo` esté en línea con la policy de cada tabla, que `CLAUDE.md` nombra como contrato sin comprobar.
+- **Mis pedidos:** qué porcentaje de los requerimientos tiene solicitante (el docstring dice que los 1.947 de la planilla no lo traen, sin fecha) y qué columnas viajan al navegador.
+- **Mis avisos:** cuántos avisos hay sin área hoy (el docstring dice 19 de 184 al 22/10/2026) y qué guarda el modal si la persona tiene dos áreas y lo deja vacío.
+- **Inicio: qué cuenta cada número de cada tarjeta** («Órdenes atrasadas», «Requerimientos en curso», «Partes sin cargar (7 días)»…). La definición vive en `lib/home/resumen*` y en `/api/home/resumen`, que no se leyeron, y las tarjetas no admiten `(i)`. **Es el hueco más grande de esa pantalla.** Tampoco se midió cuántas personas tienen sólo Seguridad e Higiene o sólo Ventas.
+- **La campana:** la × de descartar se dibuja con `group-hover` y **no se probó en un teléfono** si el toque la dispara o abre el enlace.
+
+### Las acciones que no se deshacen
+
+- **Referencia del ciclo:** cuántas semanas ya pasadas cambian al corregir no se verificó.
+- **Aprobar sin comparativa** (Compras) va por `estado_compra: "APROBADO"` y no por `estado_aprobacion`: las otras formas de elegir un presupuesto no se leyeron.
+- **«Sacar» una foto de una condición** no se deshace y no se audita; su cartel dice que «no queda en ningún lado» y la ruta no toca la copia de Drive.
+- **Qué hace `recalcularEmpleadoPeriodo` con un período cerrado** no se repite: no mira el estado y ninguna ruta recalcula `liquidaciones`.
+
+## Lo que ningún comando puede decir
+
+`tsc`, `revisar-responsive`, `revisar-arbol-commiteado` y `npm test` confirman que el código compila, que nada se sale de un teléfono, que el árbol commiteado está completo y que la lógica pura anda. **No pueden decir si lo que dicen los tooltips es cierto.** Eso es otra pregunta: cada texto es una afirmación sobre la planta, la balanza, el taller o la contabilidad, y la única garantía que tiene es que **una línea de código o de documento la respalda** (columna «De dónde salió» de cada tabla). Que el código haga lo que el taller cree que hace es lo que sólo se comprueba mirándolo en uso.
+
+Quedan tres cosas que sólo se contestan con una persona:
+
+1. **Leer este documento con alguien que conozca la planta.** Para cada fila: ¿esto es lo que pasa? Es el único control que falta, y por decisión del usuario **esa lectura pasa después de que el trabajo salga**.
+2. **Responder los huecos** de la sección anterior. Cada respuesta se vuelve un `(i)` con respaldo (o una corrección al sistema, si la respuesta es «eso está mal»).
+3. **Abrir las pantallas con una sesión real.** Casi todo está detrás del login y **ninguna pantalla de este trabajo se abrió en un navegador con sesión**: lo que se comprobó es el código, los datos y `revisar-responsive`. La posición de un globo dentro de un `overflow`, la lectura en un teléfono de 375 px y lo que dice cada mensaje con datos reales no se vieron.
+
+**Cuentas a la fecha de cierre (14/11/2026), para que quien las rehaga sepa qué contó:** 322 `<InfoTip>` en el árbol (`grep -rn "<InfoTip" app components --include=*.tsx`, sin el propio `components/InfoTip.tsx`), repartidos en 141 archivos; **eran 48 antes de empezar** (los de Mantenimiento, Remises y RRHH que este registro no describe). Los 322 son colocaciones, no textos distintos: varios se repiten a propósito (el teléfono, las dos tarjetas de Semana, una tarjeta que se renderiza una vez por molino), y cada sección dice cuántos son distintos. La rama tenía 105 commits sobre el `main` local (el encargo de la tarea decía 68; el `main` local puede estar atrasado respecto del de `origin`).
