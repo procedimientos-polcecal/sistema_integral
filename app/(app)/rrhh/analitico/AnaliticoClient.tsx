@@ -47,7 +47,7 @@ export default function AnaliticoClient({ resumenInicial }: { resumenInicial: Re
     <div>
       <h1 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
         Analítico de personal
-        <InfoTip text="Todo es del personal activo. Ausentismo y Tardanza son del mes en curso, hasta hoy, sobre los días ya calculados del mes, salvo domingos (y sábados en los sectores de lunes a viernes; un feriado cuenta aunque caiga en uno de ésos): las vacaciones suman al total pero nunca como ausencia, y un feriado tampoco, salvo que ese día haya una ausencia cargada. Ausentismo cuenta todo día sin marcación, con la falta justificada o sin clasificar; Tardanza incluye la cargada a mano pero no los retiros anticipados. Edad promedio toma sólo a quienes tienen fecha de nacimiento." />
+        <InfoTip text="Todo es del personal activo. Ausentismo y Tardanza son del mes en curso, hasta hoy, sobre los días ya calculados del mes, salvo domingos (y sábados en los sectores de lunes a viernes; un feriado cuenta aunque caiga en uno de ésos): las vacaciones suman al total pero nunca como ausencia, y un feriado en un día hábil tampoco, salvo que ese día haya una ausencia cargada. Ausentismo cuenta todo día sin marcación, con la falta justificada o sin clasificar; Tardanza incluye la cargada a mano pero no los retiros anticipados. Edad promedio toma sólo a quienes tienen fecha de nacimiento." />
       </h1>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">

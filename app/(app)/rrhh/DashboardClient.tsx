@@ -171,7 +171,7 @@ export default function DashboardClient({
         <div className="card p-5">
           <h2 className="font-medium text-slate-700 mb-3 flex items-center gap-1.5">
             Top 10 ausencias (mes en curso)
-            <InfoTip text="Cuenta los días en que la persona figura ausente: sin marcación y sin vacaciones, tenga o no la falta justificada. Las faltas que nadie clasificó cuentan igual. Sólo personal activo, con los filtros de Empresa y Sector." />
+            <InfoTip text="Cuenta los días en que la persona figura ausente: sin marcación y sin vacaciones, tenga o no la falta justificada. Las faltas que nadie clasificó cuentan igual. No cuentan los domingos (ni los sábados en los sectores de lunes a viernes), los feriados sin una ausencia cargada ni los días cubiertos por el turno de la víspera. Sólo personal activo, con los filtros de Empresa y Sector." />
           </h2>
           {topAusencias?.length === 0 && <p className="text-sm text-slate-500">Sin ausencias registradas.</p>}
           {topAusencias && topAusencias.length > 0 && (
