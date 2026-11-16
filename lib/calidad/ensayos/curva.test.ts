@@ -28,7 +28,7 @@ describe("curvaDeLaMuestra", () => {
 
     expect(curva.mallas).toEqual(TODAS);
     expect(curva.puntos).toHaveLength(8);
-    expect(curva.puntos[7]).toEqual({ malla: 200, retenido: 10.4, acumulado: 66.4 });
+    expect(curva.puntos[7]).toEqual({ malla: 200, retenido: 10.4, acumulado: 66.4, pasante: 33.6 });
   });
 
   it("apagar un tamiz le saca el punto y no toca ningun otro numero", () => {
@@ -67,10 +67,49 @@ describe("curvaDeLaMuestra", () => {
   it("los retenidos en cero son dato y se dibujan", () => {
     const curva = curvaDeLaMuestra(MUESTRA, []);
 
-    expect(curva.puntos).toContainEqual({ malla: 6, retenido: 0, acumulado: 0 });
+    expect(curva.puntos).toContainEqual({ malla: 6, retenido: 0, acumulado: 0, pasante: 100 });
   });
 
   it("una malla apagada que la muestra no midio no cambia nada", () => {
     expect(curvaDeLaMuestra(MUESTRA, [325])).toEqual(curvaDeLaMuestra(MUESTRA, []));
+  });
+
+  it("el pasante es el complemento del acumulado", () => {
+    const curva = curvaDeLaMuestra(MUESTRA, []);
+
+    expect(curva.puntos.map((p) => p.pasante)).toEqual([100, 100, 99.8, 99.1, 93.1, 58.4, 44, 33.6]);
+  });
+
+  it("el pasante se redondea a dos decimales como los otros dos", () => {
+    const curva = curvaDeLaMuestra(MUESTRA, []);
+
+    // 100 - 66.4 en coma flotante da 33.599999999999994: sin redondear, el
+    // número que llega a la pantalla y al Excel trae cola.
+    expect(100 - 66.4).not.toBe(33.6);
+    expect(curva.puntos.find((p) => p.malla === 200)?.pasante).toBe(33.6);
+    for (const p of curva.puntos) {
+      expect(p.pasante).toBe(Math.round(p.pasante * 100) / 100);
+    }
+  });
+
+  it("una muestra cuyos retenidos superan el peso da pasante negativo", () => {
+    const curva = curvaDeLaMuestra({ ...MUESTRA, pesoMuestraG: 50 }, []);
+
+    // Con 50 g pesados y 66,4 g retenidos el acumulado llega a 132,8: se muestra
+    // como da. Recortarlo a 0 escondería justo la muestra que hay que corregir.
+    const ultimo = curva.puntos[curva.puntos.length - 1];
+    expect(ultimo.acumulado).toBe(132.8);
+    expect(ultimo.pasante).toBeLessThan(0);
+    expect(ultimo.pasante).toBe(-32.8);
+    expect(curva.problema).toBeDefined();
+  });
+
+  it("apagar una malla no cambia el pasante de las demas", () => {
+    const todas = curvaDeLaMuestra(MUESTRA, []);
+    const sin20 = curvaDeLaMuestra(MUESTRA, [20]);
+
+    for (const p of sin20.puntos) {
+      expect(p.pasante).toBe(todas.puntos.find((q) => q.malla === p.malla)?.pasante);
+    }
   });
 });

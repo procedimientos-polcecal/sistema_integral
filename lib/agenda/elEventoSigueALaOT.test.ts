@@ -668,14 +668,14 @@ describe("borrarLosEventosDeLasOT", () => {
     const { cliente } = clienteFalso({ eventos: [FILA_DE_EVENTO()] });
     const r = await borrarLosEventosDeLasOT(cliente, ["ot-1"]);
     expect(r.size).toBe(0);
-    expect(borrarEvento).toHaveBeenCalledWith("mantenimiento@polcecal.com", "0123456789abcdef0123456789abcdef");
+    expect(borrarEvento).toHaveBeenCalledWith("mantenimiento@polcecal.com", "0123456789abcdef0123456789abcdef", "none");
   });
 
   it("sin google_event_id igual intenta, por el id que sale de la fila", async () => {
     vi.mocked(borrarEvento).mockResolvedValue();
     const { cliente } = clienteFalso({ eventos: [FILA_DE_EVENTO({ google_event_id: null })] });
     await borrarLosEventosDeLasOT(cliente, ["ot-1"]);
-    expect(borrarEvento).toHaveBeenCalledWith("mantenimiento@polcecal.com", "0123456789abcdef0123456789abcdef");
+    expect(borrarEvento).toHaveBeenCalledWith("mantenimiento@polcecal.com", "0123456789abcdef0123456789abcdef", "none");
   });
 
   it("si el borrado en Google falla, esa OT queda en la lista de las que no se borran, y el fallo va a `aviso`, no a la cola", async () => {

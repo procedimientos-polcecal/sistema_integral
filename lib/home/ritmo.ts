@@ -86,6 +86,13 @@ const FUENTES_POR_MODULO: Record<Modulo, string[]> = {
   // otra cosa —condiciones sin completar y vencidas—, y que pasen días sin
   // cargar una condición insegura no es una falla del ritmo.
   seguridad_higiene: [],
+  // Sin fuentes, por lo mismo que Seguridad e Higiene y con un motivo propio:
+  // el CRM no tiene una carga periódica que pueda atrasarse. Que pasen cinco
+  // días sin registrar una actividad puede ser una semana tranquila, no una
+  // falla; lo que sí hay que mirar —un cliente al que nadie llama hace dos
+  // meses, un próximo paso vencido— lo dice el semáforo de
+  // `lib/ventas/crm/seguimiento.ts`, que mira por cliente y no por módulo.
+  ventas: [],
 };
 
 /** El ritmo de una sola fuente, con el umbral calculado sobre su propio hueco. */

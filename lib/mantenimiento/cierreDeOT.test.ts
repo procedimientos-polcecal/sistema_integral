@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  loQueFaltaParaDarPorRealizada,
   estadoSegunElCierre, loQueFaltaParaCerrar, loQueHayQueExportar, loQueImpideCerrar,
 } from "./cierreDeOT";
 
@@ -260,5 +261,112 @@ describe("lo que impide cerrar una orden", () => {
   it("compara el anio y no solo el dia", () => {
     expect(loQueImpideCerrar("2026-01-05", "2025-12-30")).toHaveLength(1);
     expect(loQueImpideCerrar("2025-12-30", "2026-01-05")).toEqual([]);
+  });
+
+  /**
+   * El 12/11/2026 la segunda regla cede: se pidio poder cerrar antes del inicio
+   * diciendo por que. Los tests de arriba siguen tal cual porque ninguno pasa un
+   * tercer argumento, y sin el la regla se comporta como el 05/11/2026.
+   */
+  it("con una justificacion que explica, el cierre anterior al inicio deja de impedir", () => {
+    expect(loQueImpideCerrar("2026-11-06", "2026-11-04", "El equipo fallo antes y se intervino"))
+      .toEqual([]);
+  });
+
+  /** La guarda es `justificacionQueExplica`, el mismo filtro que usa Compras. */
+  it("una no-respuesta no levanta el impedimento", () => {
+    for (const texto of ["", "x", "no", "   ", undefined]) {
+      expect(loQueImpideCerrar("2026-11-06", "2026-11-04", texto)).toHaveLength(1);
+    }
+  });
+
+  /**
+   * La otra mitad de la regla NO cede: una orden sin fecha de inicio no se
+   * cierra, con justificacion o sin ella. De esa fecha salen el atraso, el MTBF
+   * y la ventana del equipo, y no es lo que se pidio dar vuelta.
+   */
+  it("sin fecha de inicio sigue impidiendo, aunque haya justificacion", () => {
+    expect(loQueImpideCerrar(null, "2026-11-04", "El equipo fallo antes y se intervino"))
+      .toHaveLength(1);
+  });
+
+  /** Una justificacion no vuelve valido lo que ya era valido: sigue sin opinar. */
+  it("con el cierre despues del inicio no opina, haya justificacion o no", () => {
+    expect(loQueImpideCerrar("2026-11-04", "2026-11-06", "x")).toEqual([]);
+  });
+});
+
+describe("la justificacion del cierre en lo que hay que exportar", () => {
+  it("la justificacion del cierre se puede rearmar desde la fila", () => {
+    expect(loQueHayQueExportar({
+      estado: "REALIZADO", fecha_cierre: "2026-11-04", horas: 4,
+      contratista: null, operario_1: "Aguirre", operario_2: null, operario_3: null,
+      cierre_justificacion: "Se rompio antes",
+    })).toMatchObject({ cierre_justificacion: "Se rompio antes" });
+  });
+
+  // Lo que esta vacio no viaja: vaciar una celda que nadie lleno es escribir de
+  // mas en una planilla que mira gente.
+  it("una orden sin justificacion no la manda", () => {
+    expect(loQueHayQueExportar({
+      estado: "REALIZADO", fecha_cierre: "2026-11-04", horas: 4,
+      contratista: null, operario_1: "Aguirre", operario_2: null, operario_3: null,
+      cierre_justificacion: null,
+    })).not.toHaveProperty("cierre_justificacion");
+  });
+});
+
+/**
+ * Dar una orden por realizada exige decir cuando se termino. Es mas chica que
+ * "toda orden realizada tiene fecha" a proposito, y lo que decide es un dato:
+ * el 16/11/2026, de las 2.415 realizadas, 220 no tenian fecha de cierre y UNA
+ * SOLA la creo la app. Las otras 219 entran por la planilla, que manda.
+ */
+describe("lo que falta para dar una orden por realizada", () => {
+  it("REALIZADO sin fecha pide la fecha", () => {
+    expect(loQueFaltaParaDarPorRealizada("REALIZADO", null)).toEqual(["la fecha de cierre"]);
+    expect(loQueFaltaParaDarPorRealizada("REALIZADO", "")).toEqual(["la fecha de cierre"]);
+    expect(loQueFaltaParaDarPorRealizada("REALIZADO", "   ")).toEqual(["la fecha de cierre"]);
+  });
+
+  it("REALIZADO con fecha no pide nada", () => {
+    expect(loQueFaltaParaDarPorRealizada("REALIZADO", "2026-11-16")).toEqual([]);
+  });
+
+  /**
+   * El modal manda la fecha en los tres resultados, pero solo "completado"
+   * termina en REALIZADO. Los otros dos no son este control: ahi la fecha es
+   * obligatoria por la ejecucion, que es otra regla y vive en la pantalla.
+   */
+  it("los otros estados no los mira", () => {
+    for (const estado of ["EN_PROCESO", "SUSPENDIDA", "POR_HACER", "ATRASADO", "", null]) {
+      expect(loQueFaltaParaDarPorRealizada(estado, null)).toEqual([]);
+    }
+  });
+
+  /** Un PATCH que no toca el estado no esta dando nada por realizado. */
+  it("sin estado en el pedido no opina", () => {
+    expect(loQueFaltaParaDarPorRealizada(undefined, null)).toEqual([]);
+  });
+
+  it("no le importa como venga escrito el estado", () => {
+    expect(loQueFaltaParaDarPorRealizada("realizado", null)).toEqual(["la fecha de cierre"]);
+    expect(loQueFaltaParaDarPorRealizada("  Realizado  ", null)).toEqual(["la fecha de cierre"]);
+  });
+
+  /**
+   * Y no se confunde con `loQueFaltaParaCerrar`, que es la que exige horas y
+   * operarios: aquella se calla sin fecha —en el alta, una orden que todavia
+   * no se hizo no tiene por que traerlas— y ese silencio es justo el agujero
+   * que esta cierra.
+   */
+  it("es la que habla cuando la otra se calla", () => {
+    const sinNada = {
+      fecha_cierre: null, horas: null, quien: "INTERNO",
+      contratista: null, operario_1: null, operario_2: null, operario_3: null,
+    };
+    expect(loQueFaltaParaCerrar(sinNada)).toEqual([]);
+    expect(loQueFaltaParaDarPorRealizada("REALIZADO", sinNada.fecha_cierre))
+      .toEqual(["la fecha de cierre"]);
   });
 });

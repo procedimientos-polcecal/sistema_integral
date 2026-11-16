@@ -373,6 +373,41 @@ Dar por realizada una OT sin decir qué se hizo pierde justamente lo que sirve
 después. Marcarla como "Realizado" abre el registro: cómo salió, cuándo, cuántas
 horas, quiénes, y qué se encontró.
 
+**La fecha —«Cuándo»— es obligatoria y no se precarga con hoy** (16/11/2026, a
+pedido). Arranca con la que la orden ya tenga, y **vacía si no tiene**. Las dos
+mitades arreglan cosas distintas y conviene no juntarlas: precargar la propia
+evita que reabrir una OT para corregirle las horas le mueva el cierre en
+silencio; no poner hoy evita lo contrario, que es el motivo del pedido — **una
+fecha puesta por el sistema no se distingue de una elegida**, así que quien
+registra el jueves un lunes aceptaba el lunes sin mirar y la orden quedaba
+cerrada el día que alguien la cargó. De esa fecha viven el MTTR y el historial
+del equipo.
+
+Lo que no se deduce del código es que **son dos reglas y no una**:
+
+- **En la pantalla la fecha se exige en los tres resultados** —completado,
+  parcial y cancelado— porque lo que dice ese campo es qué día se trabajó, y la
+  **ejecución** se guarda en los tres. Sin ella, `executed_at` sale de
+  `"T00:00"`: una fecha inválida que rebota después de no haber guardado nada.
+- **En el servidor se exige sólo cuando el pedido pone la orden en
+  `REALIZADO`** (`loQueFaltaParaDarPorRealizada`), que es el único de los tres
+  que llega a ese estado.
+
+Y la regla **no** es «toda orden realizada tiene fecha», que sería imposible de
+sostener: medido el 16/11/2026 sobre las 2.466 órdenes, **220 de las 2.415
+realizadas no tienen fecha de cierre y una sola la creó la app**. Las otras 219
+entran por la planilla, donde manda la planilla. Lo que esto cierra es que la
+app cree una más — y el agujero estaba del lado del servidor, porque un PATCH
+que sólo cambiaba el estado **pasaba de largo por todas las comprobaciones del
+cierre**. Ahora `estado: "REALIZADO"` entra a esa puerta aunque no mande
+ninguna fecha; el costo es una lectura más en ese pedido y en ningún otro.
+
+Ojo con una cosa al tocar esa puerta: las dos banderas de ahí son **dos y no
+una**. `tocaElCierre` —que el pedido traiga fecha o justificación— decide
+además si se reescribe la columna W de la planilla, así que ensancharla haría
+que un simple cambio de estado se lleve las observaciones. La que se ensanchó
+es `hayQueMirarElCierre`, que sólo gobierna las comprobaciones.
+
 Queda de los dos lados. En el sistema como **ejecución**
 (`mantenimientos_ejecuciones`), que hasta ahora sólo podía colgar de un
 mantenimiento programado —la **migración 031** le suma `work_order_id`, porque
@@ -2803,6 +2838,134 @@ Tres cosas de esa decisión que no se deducen del código:
   esa grilla es de dos columnas y el mensaje, que nombra las dos fechas
   enteras, entraba partido en pedazos de 150 px.
 
+## El cierre anterior al inicio (12/11/2026)
+
+**Antes de desplegar: la columna `ordenes_trabajo.cierre_justificacion` no existe en producción hasta que alguien corra a mano la migración `20261112095357_…`.** Sin ella no falla sólo el alta de OT (el 400 de PostgREST): el `select` de `exportarLoPendiente` nombra la columna y su llamador, en `lib/mantenimiento/sincronizar.ts`, destructura `{ data: todos }` sin mirar `error`, así que `todos` queda `undefined`, `sinExportar` queda vacío y **la sincronización pisa con la planilla lo que el sistema acaba de registrar** —justo lo que `pendienteDeLaOT.ts` existe para evitar—, sin un solo error visible. Que ese `error` se ignore es anterior a esta rama y no se tocó.
+
+Una OT **se puede** cerrar con fecha anterior a su fecha de inicio, pero sólo si
+alguien dice por qué. La regla vive en
+[lib/mantenimiento/cierreAnteriorAlInicio.ts](../lib/mantenimiento/cierreAnteriorAlInicio.ts)
+y el texto lo valida `justificacionQueExplica()` del núcleo —el mismo filtro de
+no-respuestas con el que Compras deniega—, que rechaza «no», «x» y «prueba» y
+acepta «Duplicado». El diseño está en
+[el spec](superpowers/specs/2026-11-12-mantenimiento-cierre-anterior-al-inicio-design.md)
+y los pasos en [el plan](superpowers/plans/2026-11-12-mantenimiento-cierre-anterior-al-inicio.md).
+
+**Esto dio vuelta una regla de siete días antes, y sólo la mitad.** La sección
+de arriba —`loQueImpideCerrar`, 05/11/2026, a pedido— rechazaba con 400 **todos**
+estos casos. El 12/11/2026, también a pedido, **cede su segunda regla** cuando
+hay una justificación que explica. **La primera no cedió, y no por omisión:**
+una OT sin fecha de inicio sigue sin poder cerrarse, con justificación o sin
+ella, porque de esa fecha salen el atraso, el MTBF y la ventana del equipo, y no
+hay texto que haga calculable un intervalo sin un extremo. Las dos mediciones
+del 05/11 siguen escritas en el docstring de esa función y siguen siendo
+ciertas: lo que cambió no es el dato sino qué se hace con él.
+
+**Y el spec arrancó de una premisa falsa, que es lo que más conviene saber de
+toda esta historia.** Su sección «Qué se pide, y qué parte ya existe» dice que
+«hoy no hay ninguna regla que lo frene, en ningún lado», que `loQueSeContradice`
+no mira la fecha de cierre y que el PATCH no valida fechas. Las tres habían
+dejado de ser ciertas **siete días antes de escribirlo**, con la regla del
+05/11: la frase sobrevivió de haber leído el archivo en una rama anterior a ese
+commit. Con esa premisa en pie la función entera era inalcanzable —quien cargaba
+iba a ver a la vez el campo que pide el motivo y el cartel que decía que igual
+no se podía guardar—, y se descubrió a mitad de la rama. En total se corrigieron
+**cinco** afirmaciones de esa clase; otra decía que un cierre adelantado rompe
+el MTBF, que es falso: `fechaDeFalla` es `fecha_ejecucion` y, si falta, la
+`fecha` de la orden — ni el MTBF ni el MTTR leen `fecha_cierre` para fechar
+nada. La moraleja operativa es barata: **antes de escribir
+«hoy nada lo frena», mirar el historial del archivo.**
+
+**Lo que se perdió a propósito: el calendario en gris.** El `min` de los tres
+`<input type="date">` de cierre impedía elegir un día anterior al inicio, y eso
+también atajaba el dedo que erra por uno. Se sacó, porque ahora ese día es
+elegible. Lo reemplaza tener que escribir el motivo: la trampa de la fecha dada
+vuelta sigue existiendo, pero dejó de ser muda.
+
+**Lo medido el 12/11/2026 contra las 2.442 OT de producción**, que es lo que
+ordena las expectativas: de las **2.176 que tienen las dos fechas, 66 ya están
+así** —44 PROGRAMADO y 22 CORRECTIVO, o sea que el caso más frecuente no es el
+que motivó el pedido—, el adelanto típico es de **2 días** y 57 de las 66 caen
+dentro de la semana. Y **sólo 3 de las 66 entraron por la app**: las otras 63
+vinieron del formulario o de la planilla. O sea que **lo que entra por la
+planilla va a seguir cerrándose antes sin explicar nada**, porque ahí no hay
+dónde preguntar y la sincronización no corre ninguna de estas reglas — es la
+misma línea que ya tiene la fecha de fin, que también se controla sólo en el
+alta. Las 66 quedan en null a propósito: nadie escribió esa justificación, y
+rellenarla haría parecer explicado algo que no lo está.
+
+Seis cosas que no se deducen del código:
+
+1. **El PATCH compara contra la fecha guardada, no contra «vino el campo».**
+   `RegistrarOTModal` manda la fecha de cierre en **todos** sus guardados, así
+   que «vino la clave» sería siempre cierto y le pediría justificación a quien
+   sólo está corrigiendo las horas. Lo contesta `elCierreCambio`.
+2. **La celda W se compone desde la fila guardada y no desde el cuerpo del
+   pedido.** Por eso `repartirRegistroDeOT` manda `cierre_justificacion` al
+   `update` y **no** al `registro`: si viajara con el cuerpo, el segundo registro
+   de una OT —que no la trae— reescribiría la W sin el renglón «Cerrada antes
+   del inicio: …» y nadie se enteraría.
+3. **El drenaje de la cola arma la W con la justificación sola.** El registro se
+   rearma desde la fila y las observaciones no tienen columna propia en la base
+   desde la cual rearmarse, así que ese drenaje se lleva esa parte. Se acepta: la
+   alternativa era que la justificación de un alta no llegara nunca a la
+   planilla, porque la fila del master llega por `IMPORTRANGE` y tarda —de la K
+   en adelante, entre 3 y 53 horas medido el 21/10/2026—, así que la primera
+   escritura falla casi siempre. El dato no se pierde: las observaciones viven
+   en `mantenimientos_ejecuciones.observations`.
+4. **La columna se vacía cuando las fechas dejan de contradecirse.**
+   `laJustificacionQueSeGuarda` devuelve `null` si el cierre ya no es anterior al
+   inicio, y el disparador de la escritura en la planilla es «este PATCH tocó el
+   cierre» y no «vino la justificación». Dejarla llena sería que la ficha y la
+   planilla sigan diciendo «Cerrada antes del inicio» de una orden que ya no lo
+   está — el mismo argumento que ya estaba escrito en `celdaDeObservacionPrevia`.
+5. **El `select` de `exportarLoPendiente` es una lista de columnas escrita a
+   mano.** Si `cierre_justificacion` no está ahí, la cola rearma el registro sin
+   ella, la justificación de un alta **no llega nunca** a la planilla, y no falla
+   ni avisa nada: `loQueHayQueExportar` simplemente no ve la clave.
+6. **El orden de los dos chequeos está elegido a propósito, en las dos rutas y
+   en las tres pantallas: primero el faltante, después el impedimento.** Quien no
+   manda justificación tiene que leer «Falta cargar por qué se cerró antes de la
+   fecha de inicio», que nombra el campo que destraba el guardado, y no «No se
+   puede guardar porque…», que decía que no había nada que hacer — cierto
+   mientras valió la regla del 05/11 y falso desde el 12. En el PATCH
+   `loQueImpideCerrar` corría primero y hubo que moverlo: contestaba distinto
+   que el POST por el mismo hecho.
+
+**Y un cambio de comportamiento que nadie pidió, y que conviene saber.**
+«Registrar el trabajo» ahora precarga la fecha de cierre con la que la orden ya
+tiene; antes arrancaba siempre en **hoy**, así que reabrir una OT cerrada para
+corregirle las horas **le movía la fecha de cierre al día de hoy, en silencio**.
+También precarga la justificación guardada, y eso no es cosmético: sin ella ese
+mismo guardado mandaría el campo vacío y recibiría un 400, o borraría el motivo
+que había. Por eso el listado tiene que seguir trayendo `fecha_cierre` y
+`cierre_justificacion` — si dejara de hacerlo no habría un solo error de tipos.
+
+**El hueco que queda, y no es teórico: se llega por Postergar.** Los dos
+chequeos se disparan con `fecha_cierre` o `cierre_justificacion`, así que lo que
+mueva **sólo** la fecha de inicio pasa de largo por los dos. Por el PATCH eso no
+se puede —`repartirRegistroDeOT` es lista blanca y no nombra `fecha_ejecucion`—,
+pero **`app/api/mantenimiento/ordenes/[id]/postergar` sí la mueve, y hacia
+adelante** (`loQueFaltaParaPostergar` rechaza `dias <= 0`). Esa ruta **trae
+`estado` en su `select` y después no lo mira nunca**: pide que la orden exista,
+que sea `app_created` y que tenga fecha de ejecución, y actualiza. O sea que un
+POST sobre una orden ya REALIZADO y con fecha de cierre le corre el inicio y la
+deja con el cierre anterior al inicio, sin justificación y sin que nada pregunte.
+
+**Otro hueco, éste del lado de la planilla: la sincronización puede mover la fecha de inicio hacia atrás.**
+`lib/mantenimiento/sincronizar.ts` hace `upsert` de `fecha_ejecucion` desde la
+planilla (en el armado de `registros`), y si alguien la corrige allá la OT deja de
+tener el cierre adelantado mientras `cierre_justificacion` se queda llena: la
+ficha sigue diciendo «Por qué se cerró antes del inicio» de una orden que ya no
+lo está. Es poco probable y es el borde de «la planilla manda»; no se cerró.
+
+**Lo único que lo frena hoy es que la pantalla esconde el botón** en las órdenes
+realizadas —`pideJustificacion(o.estado)` en `OrdenesClient`, que es
+`!== "REALIZADO"`—, y una guarda de pantalla no frena a quien llame la ruta.
+**No se cerró a propósito**: taparlo es inventar una regla que nadie pidió sobre
+una ruta que hace otra cosa. Queda escrito como lo que es, que es por dónde se
+rompe.
+
 ## El catálogo de tareas preventivas (12/11/2026)
 
 El motor de planes periódicos tiene **un plan cargado** y, al mismo tiempo, el
@@ -2948,22 +3111,43 @@ ruta PATCH vería una minoría de los cierres. Es una reconciliación —`ciclos
 `SINCRONIZACIONES`, después de `ordenes` sí o sí— y la idempotencia la da el
 dato: si la última del ciclo está abierta no se hace nada.
 
-### Qué falta para que esto genere algo
+### El arranque lo trae un cambio de martillos (13/11/2026)
 
-**Los cuatro ciclos nacen con `desde` y `vuelta_desde` en null, y así no generan
-ninguna OT.** El punto de arranque lo carga una persona desde la ficha de cada
-equipo, y es el único dato del mecanismo que no sale de otro dato.
+**Los cuatro ciclos nacen con `desde` y `vuelta_desde` en null, y arrancan solos
+con el primer «Cambio de martillos» que se cierre a partir del día en que se
+configuraron.** Hasta entonces no generan ninguna OT.
 
-Se intentó deducirlo y no da: contando rotaciones cerradas desde el último
-cambio, **dos de los cuatro equipos dan 6 rotaciones de un ciclo de 3**, porque
-el texto libre mezcla rotaciones con revisiones («Revisión de rompedora y ver si
-es necesario rotar martillos»). La cara que el texto nombra sí sirve —la OT 3067
-del 11/11/2026 dice «a 4ta cara»— pero no todas la nombran.
+Es **la única parte de todo el mecanismo donde el texto de una descripción
+decide algo**, y eso es deliberado: la versión anterior pedía las cuatro fechas
+tipeadas, y lo que depende de que alguien se acuerde no pasa —el preventivo
+tenía pantalla, botón y cero OT generadas en toda la historia—. Peor: un ciclo
+sin arrancar **no genera órdenes, así que nada se atrasa** y `mant-atrasadas` no
+puede avisarlo. Se habría desplegado dormido.
 
-Y ojo con esto: **un ciclo sin arrancar no genera ninguna OT, así que nada se
-atrasa y `mant-atrasadas` no puede verlo.** Se informa en el resultado de cada
-corrida (`sin_arrancar`) y la ficha del equipo lo dice con todas las letras,
-pero si nadie carga esas cuatro fechas la función queda desplegada y dormida.
+Lo que lo hace sostenible: decide *cuándo* arrancar y no *qué existe* (el ciclo
+ya lo configuró una persona); la orden que nace lleva escrita la fecha en que
+se basa, así que se puede desmentir; el botón de la ficha lo corrige en un clic;
+y la corrida informa `arrancados` con la OT que arrancó cada ciclo.
+
+**Mira hacia adelante y nunca hacia atrás**, y eso no es prudencia: medido el
+13/11/2026, arrancando del último cambio histórico los cuatro ciclos nacían con
+su primera rotación **atrasada 7, 21, 21 y 3 días**, y PY-B1-06 —que está en 4ª
+cara— recibiría «Rotación de Martillos — a 2ª cara» fechada el 23/10. Mirar
+hacia atrás produce exactamente el anti-objetivo.
+
+**Para verlo sin esperar a que alguien cambie unos martillos:**
+
+```bash
+npx tsx scripts/que-haria-el-ciclo.mts                  # qué haría la próxima corrida
+npx tsx scripts/que-haria-el-ciclo.mts --desde=2026-10-01   # «¿y si ya hubiera pasado?»
+```
+
+No escribe nada. El `--desde` corre el piso hacia atrás **sólo en la
+simulación**; la corrida de verdad usa siempre la fecha de configuración del
+ciclo.
+
+La carga a mano sigue existiendo en la ficha del equipo, para quien no quiera
+esperar al próximo cambio. Dejó de ser el camino principal y pasó a ser el atajo.
 
 ## Los datos: qué está y qué no
 

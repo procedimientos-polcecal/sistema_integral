@@ -24,9 +24,12 @@
  *    tiene que poder distinguirlos: `cancelado: true` es "alguien lo borró",
  *    `null` es "ese id no es de nadie".
  *
- * `sendUpdates=all` va en todas las escrituras: es lo que hace que al invitado
- * le llegue el correo de la invitación, de la modificación o de la cancelación.
- * Sin eso el evento aparece en su calendario pero nadie le avisa.
+ * **`sendUpdates` lo elige quien llama, y no es `all` siempre.** Es lo que
+ * decide si al invitado le llega el correo de la invitación, de la modificación
+ * o de la cancelación; con `none` el evento aparece igual en su calendario y
+ * nadie le avisa. Desde el 13/11/2026 el evento de una OT va con `none` y el
+ * que crea una persona con `all` — el porqué está en `AvisoAInvitados`, acá
+ * abajo.
  *
  * Un fallo de escritura se propaga con lo que dijo Google, sin traducir
  * (`mensajeDeGoogle`): nunca se traga con un `console.warn`.
@@ -42,13 +45,42 @@ const BASE = "https://www.googleapis.com/calendar/v3";
 const EVENTOS = `${BASE}/calendars/primary/events`;
 
 /**
+ * Si Google le avisa a los invitados, o escribe en sus calendarios en silencio.
+ *
+ * **Es un parámetro obligatorio y no tiene valor por omisión, a propósito.** Las
+ * cuatro funciones de escritura lo tenían fijo en `all`, y con eso cada OT que
+ * entraba sola al calendario le mandaba un correo a cuatro personas y les hacía
+ * sonar el celular. Medido el 13/11/2026: **30 eventos de OT y 120
+ * invitaciones** en ocho días, de las cuales `gerencia@`, `produccion@` y
+ * `nicolaslenzetti@` recibieron **30 cada uno**. El 12/11/2026 se pidió
+ * sacarlas.
+ *
+ * Lo que NO se hizo, y es la diferencia que importa: no se sacaron los
+ * invitados ni se dejó de crear el evento. El evento sigue apareciendo en los
+ * cinco calendarios —que es para lo que se construyó—, sólo que llega sin
+ * avisar. Lo que `none` apaga es el correo de Google; **el recordatorio propio
+ * del calendario, el día del evento, no lo apaga esto** y sigue sonando.
+ *
+ * Sin valor por omisión porque las dos respuestas son razonables y la correcta
+ * depende de quién escribe: un evento que una persona crea en la Agenda **sí**
+ * tiene que avisarle a quien invitó —es el punto de invitarlo—, y uno que nace
+ * de una OT no. Dejarlo opcional haría que el próximo camino de escritura
+ * heredara una de las dos sin que nadie lo decidiera, que es exactamente cómo
+ * esto llegó a ser `all` en los cuatro lugares.
+ */
+export type AvisoAInvitados = "all" | "none";
+
+/**
  * Fechas como "2026-11-03T08:00:00", sin offset: la zona la pone ZONA_ARGENTINA.
  *
  * `id` es el que elige el SdG, y **sólo cuenta al crear** (un PATCH lo ignora).
  * Sirve para que crear se pueda reintentar sin duplicar: un POST que cortó a los
  * 30 segundos puede haberse creado igual, y el reintento (la cola de escrituras
- * fallidas) con `sendUpdates=all` le mandaría la invitación otra vez a cada
- * invitado. Con el mismo id, Google contesta 409 y `crearEvento` lo toma como
+ * fallidas) **con `sendUpdates=all`** le mandaría la invitación otra vez a cada
+ * invitado. Sigue valiendo para el evento que crea una persona; el de una OT va
+ * con `none` desde el 13/11/2026 y ahí ese daño concreto no existe, pero el id
+ * se elige igual porque lo que evita es el evento duplicado, no sólo el correo.
+ * Con el mismo id, Google contesta 409 y `crearEvento` lo toma como
  * "ya estaba". Google exige base32hex: sólo `a`–`v` y `0`–`9` en minúscula, de 5
  * a 1024 caracteres. Un uuid sin guiones sirve (los dígitos hex son `0`–`9` y
  * `a`–`f`, todos dentro de `a`–`v`); con guiones o en mayúscula, no.
@@ -231,7 +263,11 @@ const ID_VALIDO = /^[a-v0-9]{5,1024}$/;
  * evento con `cancelado: true`; quien llama tiene que mirarlo. Sin `id`, un 409
  * se propaga como cualquier otro error.
  */
-export async function crearEvento(casilla: string, evento: EventoParaGoogle): Promise<EventoEnGoogle> {
+export async function crearEvento(
+  casilla: string,
+  evento: EventoParaGoogle,
+  avisar: AvisoAInvitados
+): Promise<EventoEnGoogle> {
   if (evento.id !== undefined && !ID_VALIDO.test(evento.id)) {
     throw new Error(
       `El id de evento "${evento.id}" no es válido para Google: tiene que ser base32hex ` +
@@ -239,7 +275,7 @@ export async function crearEvento(casilla: string, evento: EventoParaGoogle): Pr
     );
   }
   const token = await obtenerToken([SCOPE_CALENDAR], casilla);
-  const res = await pedir(`${EVENTOS}?sendUpdates=all`, {
+  const res = await pedir(`${EVENTOS}?sendUpdates=${avisar}`, {
     method: "POST",
     headers: comoJson(token),
     body: JSON.stringify({ ...(evento.id ? { id: evento.id } : {}), ...cuerpoDeEvento(evento) }),
@@ -278,10 +314,11 @@ export async function leerEvento(casilla: string, idEvento: string): Promise<Eve
 export async function actualizarEvento(
   casilla: string,
   idEvento: string,
-  evento: Partial<EventoParaGoogle>
+  evento: Partial<EventoParaGoogle>,
+  avisar: AvisoAInvitados
 ): Promise<EventoEnGoogle> {
   const token = await obtenerToken([SCOPE_CALENDAR], casilla);
-  const res = await pedir(`${EVENTOS}/${encodeURIComponent(idEvento)}?sendUpdates=all`, {
+  const res = await pedir(`${EVENTOS}/${encodeURIComponent(idEvento)}?sendUpdates=${avisar}`, {
     method: "PATCH",
     headers: comoJson(token),
     body: JSON.stringify(cuerpoDeEvento(evento)),
@@ -315,10 +352,11 @@ export async function actualizarEvento(
 export async function restaurarEvento(
   casilla: string,
   idEvento: string,
-  evento: EventoParaGoogle
+  evento: EventoParaGoogle,
+  avisar: AvisoAInvitados
 ): Promise<EventoEnGoogle> {
   const token = await obtenerToken([SCOPE_CALENDAR], casilla);
-  const res = await pedir(`${EVENTOS}/${encodeURIComponent(idEvento)}?sendUpdates=all`, {
+  const res = await pedir(`${EVENTOS}/${encodeURIComponent(idEvento)}?sendUpdates=${avisar}`, {
     method: "PUT",
     headers: comoJson(token),
     body: JSON.stringify({ ...cuerpoDeEvento(evento), status: "confirmed" }),
@@ -348,9 +386,13 @@ export async function restaurarEvento(
  * de borrado o porque desapareció la OT que lo originó. Tirar ahí sería un fallo
  * inventado sobre algo que ya está como se quería.
  */
-export async function borrarEvento(casilla: string, idEvento: string): Promise<void> {
+export async function borrarEvento(
+  casilla: string,
+  idEvento: string,
+  avisar: AvisoAInvitados
+): Promise<void> {
   const token = await obtenerToken([SCOPE_CALENDAR], casilla);
-  const res = await pedir(`${EVENTOS}/${encodeURIComponent(idEvento)}?sendUpdates=all`, {
+  const res = await pedir(`${EVENTOS}/${encodeURIComponent(idEvento)}?sendUpdates=${avisar}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });

@@ -1,5 +1,5 @@
 /**
- * El fondo de mapa de Remises, en un solo lugar.
+ * El fondo de mapa de Remises y su centro por defecto, en un solo lugar.
  *
  * Vive acá y no adentro de cada mapa porque son **dos** —`PinMap` y
  * `RoutesMap`— y hasta el 31/10/2026 cada uno tenía su copia del bloque. Y hay
@@ -70,3 +70,31 @@ export const TILES = {
  * archivos hablan del mismo servidor.
  */
 export const TILES_HOST = "tile.openstreetmap.org";
+
+/**
+ * Dónde abre el mapa cuando todavía no hay nada que mostrar.
+ *
+ * Hasta el 14/11/2026 esto era el Obelisco —`[-34.6037, -58.3816]`, escrito a
+ * mano en los dos mapas— y la planta está en Olavarría, **309 km** al
+ * sudoeste. Así que la ficha de un empleado sin geocodificar abría sobre
+ * Buenos Aires y había que cruzar la provincia a mano antes de poder marcar
+ * una dirección. No es un fallo que avise: el mapa carga, se ve un mapa, y
+ * sólo quien conoce el lugar nota que no es el lugar.
+ *
+ * El punto es el de Olavarría ciudad según Nominatim —el mismo servicio con
+ * el que el módulo geocodifica— y **no una coordenada de memoria**. Se lo
+ * confirma una segunda fuente independiente: la mediana de los 25 domicilios
+ * ya cargados cae a **440 m** de acá (medido el 14/11/2026). Que dos cosas
+ * que no se miran entre sí den lo mismo es lo que lo vuelve confiable.
+ *
+ * **Por qué la ciudad y no la fábrica**, que el sistema ya tiene configurada:
+ * la fábrica está en Sierras Bayas, a **15,3 km** de donde vive la gente, y
+ * este centro lo usa sobre todo la ficha de un empleado. Centrando en la
+ * fábrica, con el zoom 12 que usa `PinMap` —unos 8 km de alto—, la ciudad
+ * entera quedaría fuera de la pantalla. El caso de la fábrica no lo necesita:
+ * cuando ya tiene coordenadas, `PinMap` centra en ellas y nunca llega acá.
+ *
+ * Es un respaldo y no la configuración: lo que manda, cuando existe, son las
+ * coordenadas que le llegan al mapa.
+ */
+export const CENTRO_POR_DEFECTO: [number, number] = [-36.893875, -60.323168];

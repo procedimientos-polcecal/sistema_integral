@@ -73,8 +73,32 @@ export function guardaDe(fuente: string): Guarda {
 
   // Las formas de preguntar por un permiso que hay en el repo. `es_admin_check`
   // entra acá y no en una clase propia: es un permiso, el más alto que hay.
+  //
+  // ── LAS DOS FAMILIAS QUE FALTABAN, Y QUÉ COSTABAN ──────────
+  //
+  // Hasta el 13/11/2026 esto conocía `puede*`, `nivelEnModulo`, `nivel*De` y
+  // `es_admin_check`, pero **no** `tieneAcceso*` ni `esAdmin*`, que son las dos
+  // mitades que a varios módulos les alcanzan solas: una ruta que sólo lee pide
+  // `tieneAccesoCalidad()` y nada más, y una que sólo administra pide
+  // `esAdminCantera()`.
+  //
+  // El efecto no era que la ruta quedara abierta —el permiso se comprobaba
+  // igual— sino que **el mapa decía «sesión» de algo que pide permiso de
+  // módulo**, y este documento existe para que alguien razone sobre permisos
+  // leyéndolo. Medido ese día sobre `app/api`: **44 rutas en 11 módulos** caían
+  // en esa situación, entre ellas el padrón de empleados de RRHH, los
+  // catálogos de Cantera y los tres exportadores de informes.
+  //
+  // Se subestimaba y nunca al revés, que es el lado bueno del error: nadie
+  // habría creído que una ruta abierta estaba protegida. Pero una columna que
+  // miente para abajo igual hace perder el tiempo del que la audita.
+  //
+  // Un `import` no alcanza para matchear: el `\s*\(` exige la llamada. Lo que
+  // sí matchea es un comentario que nombre la función con paréntesis, y eso ya
+  // pasaba con `puede*` — es la misma limitación conocida que hace que
+  // `/api/mantenimiento/ordenes/[id]/gut` figure como que audita sin auditar.
   const permiso = fuente.match(
-    /\b(puede[A-Z][A-Za-z]*|nivelEnModulo|nivel[A-Z][A-Za-z]*De|es_admin_check)\s*\(/,
+    /\b(puede[A-Z][A-Za-z]*|tieneAcceso[A-Z][A-Za-z]*|esAdmin[A-Z][A-Za-z]*|nivelEnModulo|nivel[A-Z][A-Za-z]*De|es_admin_check)\s*\(/,
   );
   if (permiso) return { clase: "permiso", detalle: permiso[1] };
 

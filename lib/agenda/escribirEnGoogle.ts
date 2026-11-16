@@ -1,6 +1,6 @@
 import {
   crearEvento, actualizarEvento, restaurarEvento, borrarEvento, leerEvento,
-  type EventoParaGoogle, type EventoEnGoogle,
+  type EventoParaGoogle, type EventoEnGoogle, type AvisoAInvitados,
 } from "@/lib/core/calendar";
 import { instanteDe } from "./evento";
 import { invitadosLimpios } from "./pedido";
@@ -20,6 +20,31 @@ export interface FilaParaGoogle {
   google_event_id: string | null;
   inicio: string;
   fin: string;
+  /**
+   * La OT de la que nació el evento, o `null` si lo creó una persona en la
+   * Agenda. **Es lo único que decide si Google le avisa a los invitados**
+   * (`avisaALosInvitados`), y por eso es obligatorio: así `tsc` obliga a cada
+   * camino de escritura a decir cuál es, en vez de heredar un silencio.
+   */
+  ot_id: string | null;
+}
+
+/**
+ * Si Google manda el correo de invitación, decidido por el origen del evento.
+ *
+ * **Un evento de OT no avisa; uno que una persona creó, sí.** La asimetría es
+ * el pedido del 12/11/2026 y no una inconsistencia: invitar a alguien a una
+ * reunión que uno arma y no avisarle no tiene sentido, mientras que una OT que
+ * entra sola al calendario no debería hacer sonar cuatro teléfonos. Medido el
+ * 13/11/2026, antes del cambio: 30 eventos de OT y **120 invitaciones** en ocho
+ * días, con `gerencia@`, `produccion@` y `nicolaslenzetti@` recibiendo 30 cada
+ * uno.
+ *
+ * El evento se sigue creando y los invitados siguen estando: lo que se apaga es
+ * el aviso, no la visibilidad.
+ */
+export function avisaALosInvitados(fila: Pick<FilaParaGoogle, "ot_id">): AvisoAInvitados {
+  return fila.ot_id === null ? "all" : "none";
 }
 
 /**
@@ -105,10 +130,11 @@ export async function escribirEnGoogle(
   fila: FilaParaGoogle,
   evento?: EventoParaGoogle
 ): Promise<ResultadoDeEscritura> {
+  const avisar = avisaALosInvitados(fila);
   try {
     if (accion === "borrar") {
       const id = fila.google_event_id ?? evento?.id;
-      if (id) await borrarEvento(fila.casilla, id);
+      if (id) await borrarEvento(fila.casilla, id, avisar);
       return {};
     }
 
@@ -118,12 +144,12 @@ export async function escribirEnGoogle(
 
     if (accion === "crear") {
       const id = evento.id ?? fila.google_event_id ?? undefined;
-      const creado = await crearEvento(fila.casilla, { ...evento, id });
+      const creado = await crearEvento(fila.casilla, { ...evento, id }, avisar);
       // Un alta nueva se anota tal cual. Si ya estaba, o está cancelado (un id
       // reservado y borrado), lo que volvió NO es lo que se pidió: se pisa
       // entero con el `PUT`. Ver el docstring.
       if (creado.yaEstaba || creado.cancelado) {
-        return await restaurar(fila.casilla, creado.id, evento);
+        return await restaurar(fila.casilla, creado.id, evento, avisar);
       }
       return comoEscrito(creado);
     }
@@ -133,9 +159,9 @@ export async function escribirEnGoogle(
       return { pendiente: `El evento todavía no está en Google, así que no hay nada que ${accion}` };
     }
 
-    if (accion === "restaurar") return await restaurar(fila.casilla, id, evento);
+    if (accion === "restaurar") return await restaurar(fila.casilla, id, evento, avisar);
 
-    const actualizado = await actualizarEvento(fila.casilla, id, evento);
+    const actualizado = await actualizarEvento(fila.casilla, id, evento, avisar);
     if (actualizado.cancelado) return { google_event_id: id, divergencia: "borrado" };
     return comoEscrito(actualizado);
   } catch (e) {
@@ -173,7 +199,12 @@ export async function escribirEnGoogle(
  *   `moverElEvento` ya daba una capa más arriba, que con esto queda redundante
  *   pero inofensiva.
  */
-async function restaurar(casilla: string, id: string, evento: EventoParaGoogle): Promise<ResultadoDeEscritura> {
+async function restaurar(
+  casilla: string,
+  id: string,
+  evento: EventoParaGoogle,
+  avisar: AvisoAInvitados
+): Promise<ResultadoDeEscritura> {
   if (evento.invitados === undefined) {
     try {
       const enGoogle = await leerEvento(casilla, id);
@@ -197,7 +228,7 @@ async function restaurar(casilla: string, id: string, evento: EventoParaGoogle):
 
   let r: EventoEnGoogle;
   try {
-    r = await restaurarEvento(casilla, id, evento);
+    r = await restaurarEvento(casilla, id, evento, avisar);
   } catch (e) {
     return { google_event_id: id, pendiente: textoDelFallo(e) || SIN_MENSAJE };
   }
