@@ -405,11 +405,29 @@ export default function OrdenesClient({
     }
 
     const meta = estadoMeta(estado);
-    const ok = await confirm({
-      title: "Cambiar estado de la OT",
-      message: `La orden pasará al estado "${meta.label}". ¿Confirmás?`,
-      confirmText: "Cambiar estado",
-    });
+    // Sacar una orden de CANCELADA no es un cambio de estado cualquiera: da
+    // vuelta una decisión que alguien justificó por escrito. Se permite a
+    // propósito —la planilla también lo permite, y «no se hace nunca» es un
+    // juicio que se revisa—, pero el confirm tiene que decir qué se está
+    // haciendo y qué pasa con el motivo.
+    const actual = buscar()?.estado;
+    const reabre = actual === ESTADO_CANCELADA;
+    const ok = await confirm(
+      reabre
+        ? {
+            title: "Reabrir la OT cancelada",
+            message:
+              `Esta orden está cancelada y vas a reabrirla: pasará al estado "${meta.label}". ` +
+              `El motivo de la cancelación queda en el historial de la orden, ` +
+              `pero desde ahí se va a poder borrar como cualquier otra justificación. ¿Confirmás?`,
+            confirmText: "Reabrir",
+          }
+        : {
+            title: "Cambiar estado de la OT",
+            message: `La orden pasará al estado "${meta.label}". ¿Confirmás?`,
+            confirmText: "Cambiar estado",
+          }
+    );
     if (!ok) return;
     const res = await fetch("/api/mantenimiento/ordenes", {
       method: "PATCH",
@@ -1002,11 +1020,15 @@ function OTDetail({
   /** Se agregó o se borró una justificación: el cartel de la fila cambió. */
   onJustificacion?: () => void;
 }) {
-  // Cancelar sólo se ofrece desde donde la ruta lo deja: una realizada tiene
-  // cierre, y una ya cancelada se vuelve a justificar en la lista de arriba.
+  // Cancelar sólo se ofrece como destino desde donde la ruta lo deja: una
+  // realizada tiene cierre.
   const ESTADO_OPTIONS = [
     "POR_HACER", "EN_PROCESO", "REALIZADO", "ATRASADO",
-    ...(SE_CANCELA_DESDE.includes(o.estado) ? [ESTADO_CANCELADA] : []),
+    // También cuando ya está cancelada, para que la orden muestre su estado
+    // como chip (deshabilitado, como el actual de cualquier otra). Sin eso una
+    // cancelada se vería con cuatro chips y ninguno marcado.
+    ...(SE_CANCELA_DESDE.includes(o.estado) || o.estado === ESTADO_CANCELADA
+      ? [ESTADO_CANCELADA] : []),
   ];
   return (
     <div className="px-4 pb-4 pt-2 bg-slate-50 border-t border-slate-100 space-y-3">
@@ -1139,9 +1161,9 @@ function KanbanCard({ order: o, canEdit, onChangeEstado }: {
 }) {
   const [menu, setMenu] = useState(false);
   const NEXT: Record<string, string[]> = {
-    POR_HACER:  ["EN_PROCESO", "ATRASADO", "CANCELADA"],
-    EN_PROCESO: ["REALIZADO", "ATRASADO", "CANCELADA"],
-    ATRASADO:   ["EN_PROCESO", "REALIZADO", "CANCELADA"],
+    POR_HACER:  ["EN_PROCESO", "ATRASADO", ESTADO_CANCELADA],
+    EN_PROCESO: ["REALIZADO", "ATRASADO", ESTADO_CANCELADA],
+    ATRASADO:   ["EN_PROCESO", "REALIZADO", ESTADO_CANCELADA],
     REALIZADO:  ["EN_PROCESO"],
   };
   const nextOptions = NEXT[o.estado] ?? [];
