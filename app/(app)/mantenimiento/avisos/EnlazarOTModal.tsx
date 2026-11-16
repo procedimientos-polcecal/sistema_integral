@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import type { Aviso } from "@/lib/mantenimiento/types";
+import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import {
   comoSeLeeLaOT, type OTAEnlazar,
 } from "@/lib/mantenimiento/enlazarOtAlAviso";
@@ -25,7 +28,21 @@ export default function EnlazarOTModal({ aviso, onClose, onEnlazada }: {
   onClose: () => void;
   onEnlazada: (mensaje: string) => void;
 }) {
-  const [numero, setNumero] = useState("");
+  /*
+   * El número tipeado, recordado por aviso. Es un solo campo corto, así que lo
+   * que se recupera es poco; se hace igual porque la regla es la misma para
+   * todos y una excepción por pantalla es lo que vuelve impredecible al cartel.
+   *
+   * La orden encontrada **no** entra en el borrador, a propósito: volver a
+   * abrirlo devuelve el número pero obliga a buscar otra vez, y ese es el
+   * contrato de esta pantalla — no se confirma lo que no se vio.
+   */
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-enlazar-ot", { tipo: "aviso", id: aviso.id }),
+    { numero: "" },
+  );
+  const { numero } = valores;
+
   const [buscando, setBuscando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -38,7 +55,7 @@ export default function EnlazarOTModal({ aviso, onClose, onEnlazada }: {
   /** Cambiar el número descarta la orden que estaba en pantalla: si no, se
    *  podría enlazar la 2814 mientras el campo dice 2815. */
   function escribirNumero(v: string) {
-    setNumero(v);
+    cambiar({ numero: v });
     setEncontrada(null);
     setError("");
   }
@@ -67,16 +84,18 @@ export default function EnlazarOTModal({ aviso, onClose, onEnlazada }: {
     setGuardando(false);
 
     if (!res.ok) { setError(body.error ?? "No se pudo enlazar la OT."); return; }
+    // Recién con el enlace hecho no hay nada que recordar.
+    tirar();
     onEnlazada(body.mensaje);
   }
 
   const impedida = (encontrada?.impide.length ?? 0) > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4">
-      <div className="my-8 w-full max-w-lg rounded-lg bg-white p-5 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-900">Enlazar una OT que ya existe</h2>
-        <p className="mt-1 text-sm text-slate-500">
+    // El fondo, la X y Escape salen conservando: el número tipeado queda y
+    // aparece igual al volver a abrir. Sólo «Cancelar» tira.
+    <Modal titulo="Enlazar una OT que ya existe" alSalir={onClose} tocado={tocado}>
+        <p className="text-sm text-slate-500">
           Para el aviso {aviso.oa_number ?? "—"}. Es para cuando el trabajo ya se cargó
           por otro lado: no se crea ninguna orden y la que elijas no se toca.
         </p>
@@ -150,8 +169,9 @@ export default function EnlazarOTModal({ aviso, onClose, onEnlazada }: {
           </p>
         )}
 
-        <div className="mt-5 flex items-center justify-end gap-2">
-          <button onClick={onClose} className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-slate-100">
+        <PieDeModal className="mt-5 flex items-center justify-end gap-2">
+          {/* El único que tira. */}
+          <button onClick={() => { tirar(); onClose(); }} className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-slate-100">
             Cancelar
           </button>
           <button
@@ -165,8 +185,7 @@ export default function EnlazarOTModal({ aviso, onClose, onEnlazada }: {
                 ? `Enlazar la OT #${encontrada.ot.ot_number}`
                 : "Enlazar"}
           </button>
-        </div>
-      </div>
-    </div>
+        </PieDeModal>
+    </Modal>
   );
 }

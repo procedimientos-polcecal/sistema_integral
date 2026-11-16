@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 
 /**
  * Empezar una orden de trabajo.
@@ -34,8 +37,18 @@ export default function IniciarOTModal({
   onCerrar: () => void;
   onIniciada: () => void;
 }) {
-  const [elegido, setElegido] = useState(estadoActual ?? "OPERATIVO");
-  const [motivo, setMotivo] = useState("");
+  /*
+   * Lo que se elige acá: en qué estado queda el equipo y por qué. Nace en el
+   * estado que el equipo ya tiene, así que abrir y cerrar sin tocar nada no
+   * cuenta como escrito — `hayAlgoEscrito` compara contra cómo nació y no
+   * contra vacío.
+   */
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-iniciar-ot", { tipo: "ot", id: orden.id }),
+    { elegido: estadoActual ?? "OPERATIVO", motivo: "" },
+  );
+  const { elegido, motivo } = valores;
+
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
@@ -85,16 +98,18 @@ export default function IniciarOTModal({
     }
 
     setGuardando(false);
+    // Recién acá, con las dos escrituras en verde: si la del equipo hubiera
+    // fallado, el modal queda abierto con el error y el motivo tiene que seguir.
+    tirar();
     onIniciada();
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div>
-          <h2 className="text-base font-bold text-slate-900">Iniciar OT #{orden.ot_number ?? "—"}</h2>
-          <p className="mt-0.5 text-xs text-slate-400">{orden.equipo_raw ?? orden.descripcion ?? ""}</p>
-        </div>
+    // El fondo, la X y Escape salen conservando: el estado elegido y el motivo
+    // quedan y aparecen igual al volver a abrir. Sólo «Cancelar» tira.
+    <Modal titulo={`Iniciar OT #${orden.ot_number ?? "—"}`} alSalir={onCerrar} tocado={tocado}>
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-400">{orden.equipo_raw ?? orden.descripcion ?? ""}</p>
 
         {estadoActual === null ? (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -116,7 +131,7 @@ export default function IniciarOTModal({
                 return (
                   <button
                     key={e.valor}
-                    onClick={() => { setElegido(e.valor); setError(""); }}
+                    onClick={() => { cambiar({ elegido: e.valor }); setError(""); }}
                     className="rounded-xl border-2 px-3 py-2.5 text-center text-xs font-semibold"
                     style={{
                       borderColor: seleccionado ? e.color : "#E2E8F0",
@@ -140,7 +155,7 @@ export default function IniciarOTModal({
                 </label>
                 <input
                   value={motivo}
-                  onChange={(e) => setMotivo(e.target.value)}
+                  onChange={(e) => cambiar({ motivo: e.target.value })}
                   placeholder="Por qué el equipo queda en ese estado…"
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
                 />
@@ -157,7 +172,7 @@ export default function IniciarOTModal({
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <div className="flex gap-2 pt-1">
+        <PieDeModal className="flex gap-2">
           <button
             onClick={confirmar}
             disabled={guardando}
@@ -165,14 +180,15 @@ export default function IniciarOTModal({
           >
             {guardando ? "Guardando…" : "Iniciar OT"}
           </button>
+          {/* El único que tira. */}
           <button
-            onClick={onCerrar}
+            onClick={() => { tirar(); onCerrar(); }}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cancelar
           </button>
-        </div>
+        </PieDeModal>
       </div>
-    </div>
+    </Modal>
   );
 }

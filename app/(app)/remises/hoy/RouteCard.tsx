@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { Modal } from "@/components/Modal";
 import { gmapsLink, wazeLink, textoRuta, whatsappLink, emailLink, type HojaTexto } from "@/lib/remises/shareText";
 
 const COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
@@ -183,9 +184,8 @@ export default function RouteCard({
       )}
 
       {shareOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShareOpen(false)}>
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-medium text-slate-800 mb-3">Compartir ruta — {hoja.vehiculos?.nombre}</h3>
+        // Un visor: el textarea es `readOnly` y «Cerrar» no tira nada.
+        <Modal titulo={`Compartir ruta — ${hoja.vehiculos?.nombre}`} alSalir={() => setShareOpen(false)} soloLectura>
             <textarea readOnly value={textoRuta(hojaTexto, fecha)} rows={8}
               className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-xs font-mono mb-3" />
             <div className="flex gap-2 flex-wrap">
@@ -195,8 +195,7 @@ export default function RouteCard({
                 className="border border-slate-300 rounded-md px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Copiar</button>
               <button onClick={() => setShareOpen(false)} className="ml-auto text-sm text-slate-500 hover:underline">Cerrar</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

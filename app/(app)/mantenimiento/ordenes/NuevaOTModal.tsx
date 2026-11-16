@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
+import {
+  elCierreEsAnteriorAlInicio, loQueFaltaPorElCierreAdelantado,
+} from "@/lib/mantenimiento/cierreAnteriorAlInicio";
 import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -83,9 +89,6 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
   onCreated: (aviso?: string | null) => void;
 }) {
   const [saving, setSaving] = useState(false);
-  // Sólo se pregunta si la orden nace cerrada: en una que recién se pide, la
-  // falla todavía no pasó.
-  const [falla, setFalla] = useState<LaFalla>(FALLA_VACIA);
   const [error, setError]   = useState("");
   /** Cómo salió el envío. El `error` de arriba es sólo lo que se valida acá adentro. */
   const [resultado, setResultado] = useState<Resultado | null>(null);
@@ -98,7 +101,6 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
   const [numeroViejo, setNumeroViejo] = useState("");
   const [trayendo, setTrayendo] = useState(false);
   const [errorAlTraer, setErrorAlTraer] = useState("");
-  const [vieneDe, setVieneDe] = useState<string | null>(null);
 
   async function traerLaVieja() {
     const numero = numeroDeOT(numeroViejo);
@@ -112,11 +114,15 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
       if (!res.ok) { setErrorAlTraer(body.error ?? "No se pudo traer esa OT."); return; }
 
       const { campos, lineas, noEntraron } = copiarDeLaOT(body.data, VOCABULARIO);
-      setForm(prev => ({ ...prev, ...campos }));
-      // Un renglón vacío y no una lista vacía: el formulario tiene que quedar
-      // listo para escribir, igual que recién abierto.
-      setRepuestos(lineas.length > 0 ? lineas : [{ cantidad: "", nombre: "" }]);
-      setVieneDe(avisoDeReutilizada(numero, noEntraron));
+      cambiar({
+        campos: { ...form, ...campos },
+        // Un renglón vacío y no una lista vacía: el formulario tiene que quedar
+        // listo para escribir, igual que recién abierto.
+        lineas: lineas.length > 0 ? lineas : [{ cantidad: "", nombre: "" }],
+        // Viaja con el borrador: restaurar los campos copiados sin la barra
+        // dejaría en pantalla una orden que nadie escribió y nada que lo diga.
+        vieneDe: avisoDeReutilizada(numero, noEntraron),
+      });
     } catch {
       setErrorAlTraer("No se pudo traer esa OT.");
     } finally {
@@ -149,58 +155,99 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     return () => { vigente = false; };
   }, []);
 
-  /*
-   * Los repuestos van aparte de `form` y no adentro: `form` se derrama entero
-   * al cuerpo del POST con `...form`, y una lista no es un campo de texto.
-   * Arranca con un renglón vacío para que el formulario se vea como antes —un
-   * campo listo para escribir— y no como una lista que hay que estrenar.
-   */
-  const [repuestos, setRepuestos] = useState<LineaDeRepuesto[]>([{ cantidad: "", nombre: "" }]);
-
   /** El calendario que se abre desde la fecha de inicio para ver qué tiene cada día. */
   const [verCalendario, setVerCalendario] = useState(false);
 
-  const [form, setForm] = useState({
-    equipment_id:   "",
-    sector_id:      "",
-    especialidad:   "",
-    tipo:           "CORRECTIVO",
-    quien:          "INTERNO",
-    descripcion:    "",
-    fecha:          hoyEnArgentina(),
-    fecha_ejecucion: "",
-    fecha_fin:      "",
-    fecha_cierre:   "",
-    estado:         "POR_HACER",
-    contratista:    "",
-    horas:          "",
-    operario_1:     "",
-    operario_2:     "",
-    operario_3:     "",
-    prioridad:      "🟡 Media",
-    // Las tres notas GUT arrancan VACÍAS, y no a la manera de `prioridad`
-    // (que arranca en Media y no tiene opción vacía): tres desplegables en 3
-    // fabricarían un 27 que nadie contestó, impreso como si fuera una medición.
-    gut_gravedad:   "",
-    gut_urgencia:   "",
-    gut_tendencia:  "",
-    requiere_parada_sector: false,
-  });
+  /*
+   * El formulario entero, recordado mientras la app esté abierta.
+   *
+   * Va en cuatro pedazos y no en uno plano por una razón de forma: `campos` se
+   * derrama entero al cuerpo del POST con `...form`, así que los repuestos —una
+   * lista—, la falla y la barra de «reutilizada» tienen que quedar afuera de ese
+   * derrame. Son los mismos tres que ya vivían en estados aparte.
+   *
+   * Los cuatro pedazos se guardan **enteros** y no campo por campo, y acá es
+   * correcto porque esto es un alta: no hay registro del servidor debajo al que
+   * se le pueda pisar un campo que otro corrigió mientras tanto. Donde sí lo hay
+   * —registrar el trabajo, el GUT— los campos van planos, justamente para eso.
+   *
+   * La clave no lleva origen: esta pantalla no nace prellenada desde ningún
+   * registro. Lo que copia una OT vieja es el botón «Traer», que es otra cosa
+   * —pasa adentro del mismo formulario— y queda anotado en `vieneDe`.
+   */
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-nueva-ot"),
+    {
+      campos: {
+        equipment_id:   "",
+        sector_id:      "",
+        especialidad:   "",
+        tipo:           "CORRECTIVO",
+        quien:          "INTERNO",
+        descripcion:    "",
+        fecha:          hoyEnArgentina(),
+        fecha_ejecucion: "",
+        fecha_fin:      "",
+        fecha_cierre:   "",
+        cierre_justificacion: "",
+        estado:         "POR_HACER",
+        contratista:    "",
+        horas:          "",
+        operario_1:     "",
+        operario_2:     "",
+        operario_3:     "",
+        prioridad:      "🟡 Media",
+        // Las tres notas GUT arrancan VACÍAS, y no a la manera de `prioridad`
+        // (que arranca en Media y no tiene opción vacía): tres desplegables en 3
+        // fabricarían un 27 que nadie contestó, impreso como si fuera una medición.
+        gut_gravedad:   "",
+        gut_urgencia:   "",
+        gut_tendencia:  "",
+        requiere_parada_sector: false,
+      },
+      // Arranca con un renglón vacío para que el formulario se vea como antes
+      // —un campo listo para escribir— y no como una lista que hay que estrenar.
+      lineas: [{ cantidad: "", nombre: "" }] as LineaDeRepuesto[],
+      // Sólo se pregunta si la orden nace cerrada: en una que recién se pide, la
+      // falla todavía no pasó.
+      falla: FALLA_VACIA as LaFalla,
+      vieneDe: null as string | null,
+    },
+  );
+  const { campos: form, lineas: repuestos, falla, vieneDe } = valores;
 
-  function f(key: string, value: string | boolean) {
-    setForm(p => {
-      const next: any = { ...p, [key]: value };
-      if (key === "equipment_id" && value) {
-        const eq = equipos.find((e: any) => e.id === value);
-        if (eq) next.sector_id = eq.sector_id ?? "";
-      }
-      return next;
-    });
+  function f(key: keyof typeof form, value: string | boolean) {
+    const next = { ...form, [key]: value };
+    if (key === "equipment_id" && value) {
+      const eq = equipos.find((e: any) => e.id === value);
+      if (eq) next.sector_id = eq.sector_id ?? "";
+    }
+    cambiar({ campos: next });
   }
 
   /** Si esta orden nace cerrada. Lo decide la fecha, no el desplegable. */
   const cierraAlCrearse = estadoSegunElCierre(form.fecha_cierre, form.estado) === "REALIZADO"
     && Boolean(form.fecha_cierre.trim());
+
+  /** Si el cierre cae antes del inicio: entonces hay que decir por qué. */
+  const cierreAdelantado = elCierreEsAnteriorAlInicio(form.fecha_cierre, form.fecha_ejecucion);
+
+  /**
+   * Y si además todavía no lo dice, **que el cartel pida eso y no otra cosa**.
+   *
+   * Es la misma elección que hicieron las dos rutas el 12/11/2026 —primero el
+   * faltante, después la contradicción— traída al único lugar donde la gente la
+   * mira. Sin esto, entre que alguien elige la fecha y escribe el motivo ve
+   * «No se puede guardar porque la fecha de cierre … es anterior a la de
+   * inicio» **al lado del campo que lo levanta**: el cartel dice que no hay
+   * nada que hacer y abajo está exactamente lo que hay que hacer.
+   *
+   * Habla sólo de la justificación y no de todo lo que falta —para eso está
+   * `loQueFaltaParaCrear`, en el submit—, porque esto corre en cada render:
+   * gritar «falta el sector» mientras se completa el formulario es lo que
+   * convierte una alerta en un cartel que está siempre.
+   */
+  const faltaElPorQue = loQueFaltaPorElCierreAdelantado(form);
 
   /**
    * Lo que el formulario dice y se contradice, **calculado en cada render**.
@@ -234,7 +281,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
       return;
     }
     // Y después, con otro verbo: acá los datos están y lo que no cierra es lo
-    // que dicen entre ellos —una fecha de fin o de cierre anterior al inicio—.
+    // que dicen entre ellos —una fecha de fin anterior al inicio—.
     // La misma función que corre la ruta, que hasta hoy era la única que la
     // corría: el formulario mandaba la orden y se enteraba por un 400.
     if (contradicciones.length > 0) {
@@ -288,22 +335,21 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     // `repuestos_error` por su cuenta y redactaba lo de la planilla aparte, así
     // que la misma OT contaba una cosa cargada con la app abierta y otra
     // cuando salía de la cola.
+    // Recién con la orden adentro no hay nada que recordar. Lo que quedó
+    // esperando o se rechazó salió por el `return` de arriba, con el modal
+    // abierto y lo cargado en su lugar.
+    tirar();
     onCreated(salida.advertencia);
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto">
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl my-8">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900">Nueva Orden de Trabajo</h2>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <form onSubmit={submit} className="p-6 space-y-5">
+    <>
+      {/* El fondo, la X y Escape salen conservando: lo cargado queda y aparece
+          igual al volver a abrir. Sólo «Cancelar» tira. El formulario es un
+          `<form>` de verdad, y el pie va adentro: el botón «Crear OT» es su
+          submit. */}
+      <Modal titulo="Nueva Orden de Trabajo" alSalir={onClose} tocado={tocado} ancho="ancho">
+        <form onSubmit={submit} className="space-y-5">
           {/* Arriba de todo y no escondido entre los campos: es lo primero que
               se hace cuando se carga una tanda de órdenes del mismo día. */}
           <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-2">
@@ -393,7 +439,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
                 componente con la búsqueda apagada — ver su encabezado. */}
             <RepuestosDeLaOT
               lineas={repuestos}
-              onCambiar={setRepuestos}
+              onCambiar={(lineas) => cambiar({ lineas })}
               deshabilitado={saving}
               buscarEnInventario
             />
@@ -428,18 +474,25 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
                 termina; lo que se gana al exigirla es que toda OT cargada a
                 mano tenga ventana. Quién la exige es `loQueFaltaParaCrear`, no
                 este `required`, que sólo pinta el asterisco. */}
-            {/* El `min` de las dos es la fecha de inicio: el calendario del
-                navegador deja en gris los días anteriores, así que el dedo que
-                erra por un día no llega ni a elegirlos. Es la primera defensa y
-                no la regla —un `min` se saltea tipeando—: quien decide es
-                `loQueSeContradice`, en el submit y en el servidor. Vacío no
-                limita nada, que es lo que corresponde cuando todavía no se
-                eligió el inicio. */}
+            {/* El `min` es la fecha de inicio: el calendario del navegador deja
+                en gris los días anteriores, así que el dedo que erra por un día
+                no llega ni a elegirlos. Es la primera defensa y no la regla —un
+                `min` se saltea tipeando—: quien decide es `loQueSeContradice`,
+                en el submit y en el servidor. Vacío no limita nada, que es lo
+                que corresponde cuando todavía no se eligió el inicio.
+
+                **Lo lleva la de fin y ya no la de cierre** (12/11/2026). Son
+                dos reglas distintas: la de fin es la ventana estimada, que
+                nadie pidió poder prometer al revés; la de cierre se puede dar
+                vuelta desde que se explica por qué, y con el `min` puesto el
+                camino normal al campo del motivo quedaba cerrado —el calendario
+                no ofrece los días en gris, así que llegaba sólo quien tipeara
+                la fecha a mano—. */}
             <F label="Fecha de fin (estimada)" required>
               <input type="date" value={form.fecha_fin} min={form.fecha_ejecucion || undefined} onChange={e => f("fecha_fin", e.target.value)} className="input" />
             </F>
             <F label="Fecha cierre">
-              <input type="date" value={form.fecha_cierre} min={form.fecha_ejecucion || undefined} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
+              <input type="date" value={form.fecha_cierre} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
             </F>
           </div>
 
@@ -448,18 +501,46 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               completar: el cartel de error de este modal vive abajo de todo,
               al lado de los botones, y en un teléfono eso son dos pantallas.
               Los dos dicen la misma frase a propósito — éste cuando pasa, y
-              aquél si alguien aprieta guardar igual. */}
-          {contradicciones.length > 0 && (
+              aquél si alguien aprieta guardar igual.
+
+              **Y cuál de las dos frases, en el mismo orden que el submit y que
+              las dos rutas**: si lo que pasa es que falta el motivo, se dice
+              eso; el impedimento queda para lo que de verdad impide —una fecha
+              de fin dada vuelta—, que no lo arregla ningún texto. Mientras
+              falta el motivo el impedimento no se muestra, igual que el submit
+              se detiene en el faltante y no llega a nombrar la contradicción.
+
+              En ámbar y no en rojo: lo que falta es un campo por completar, que
+              está acá abajo, y no un guardado trabado. */}
+          {faltaElPorQue.length > 0 ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+              Falta cargar {faltaElPorQue.join(", ")}.
+            </div>
+          ) : contradicciones.length > 0 ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
               No se puede guardar porque {contradicciones.join(", ")}.
             </div>
+          ) : null}
+
+          {/* Debajo de las fechas y arriba de la falla: lo hacen aparecer las
+              fechas, y en un teléfono una sección que se abre más arriba empuja
+              hacia abajo el campo que se está completando. */}
+          {cierreAdelantado && (
+            <F label="Por qué se cierra antes de la fecha de inicio" required>
+              <textarea
+                value={form.cierre_justificacion}
+                onChange={e => f("cierre_justificacion", e.target.value)}
+                className="input min-h-20"
+                required
+              />
+            </F>
           )}
 
           {/* Debajo de la fecha de cierre y no arriba: es ella la que lo hace
               aparecer, y en un teléfono una sección que se abre más arriba
               empuja hacia abajo el campo que se está completando. */}
           {cierraAlCrearse && (
-            <FallaDeLaOT falla={falla} onCambiar={setFalla} deshabilitado={saving} />
+            <FallaDeLaOT falla={falla} onCambiar={(falla) => cambiar({ falla })} deshabilitado={saving} />
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -579,19 +660,23 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           <CartelDelResultado tipo="orden" resultado={resultado} />
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <div className="flex gap-2 pt-1 border-t border-slate-100">
+          <PieDeModal className="flex gap-2">
             <button type="submit" disabled={saving}
-              className="btn-primary disabled:opacity-50">
+              className="btn-primary">
               {saving ? "Guardando..." : "Crear OT"}
             </button>
-            <button type="button" onClick={onClose}
+            {/* El único que tira. */}
+            <button type="button" onClick={() => { tirar(); onClose(); }}
               className="rounded-lg border border-slate-300 px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               Cancelar
             </button>
-          </div>
+          </PieDeModal>
         </form>
-      </div>
+      </Modal>
 
+      {/* Hermano del modal y no hijo: así sus eventos no suben por el `<form>`
+          (un clic del calendario no puede disparar el `onSubmit`), y se monta
+          después, que es lo que lo pone arriba en la pila de Escape. */}
       {verCalendario && (
         <CalendarioDeFecha
           valor={form.fecha_ejecucion}
@@ -599,7 +684,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           onCerrar={() => setVerCalendario(false)}
         />
       )}
-    </div>
+    </>
   );
 }
 

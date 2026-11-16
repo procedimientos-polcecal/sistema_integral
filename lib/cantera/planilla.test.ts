@@ -7,6 +7,7 @@ import {
   filaVoladura,
   filaBochon,
 } from "./planilla";
+import { serialDelDia } from "@/lib/core/fechaDeSheets";
 import type { Bochon, Voladura, Yacimiento } from "./types";
 
 function voladura(p: Partial<Voladura>): Voladura {
@@ -91,11 +92,11 @@ describe("filaPerforacion", () => {
     const fila = filaPerforacion(v, yacimiento);
     expect(fila).toHaveLength(13);
     expect(fila[0]).toBe("V01D625");
-    expect(fila[1]).toBe("19/9/2025");
+    expect(fila[1]).toBe(serialDelDia("2025-09-19")); // el serial, no el texto: un número no se interpreta
     expect(fila[3]).toBe("D6");
-    expect(fila[4]).toBe("3"); // profundidad promedio
-    expect(fila[5]).toBe("36"); // pozos
-    expect(fila[6]).toBe("108"); // metros totales
+    expect(fila[4]).toBe(3); // profundidad promedio
+    expect(fila[5]).toBe(36); // pozos
+    expect(fila[6]).toBe(108); // metros totales
     expect(fila[10]).toBe("FC A 0002-00002748");
   });
 
@@ -118,17 +119,17 @@ describe("filaVoladura", () => {
     const consumos = [{ insumo: "Emulex", cantidad: 48.5, precio_usd: 4.24, tipo: "detonador" }];
     const fila = filaVoladura(v, yacimiento, consumos);
     expect(fila).toHaveLength(19);
-    expect(fila[4]).toBe("36"); // Pozos
-    expect(fila[13]).toBe("36"); // Pozos volados = igual, sin override
-    expect(fila[14]).toBe("108"); // Metros volados = igual
-    expect(fila[7]).toBe("Emulex: 48.5"); // Explosivos
+    expect(fila[4]).toBe(36); // Pozos
+    expect(fila[13]).toBe(36); // Pozos volados = igual, sin override
+    expect(fila[14]).toBe(108); // Metros volados = igual
+    expect(fila[7]).toBe("Emulex: 48,5"); // Explosivos: coma decimal, como la escribe la planilla
     expect(Number(fila[18])).toBeCloseTo(18.55, 5); // Factor t/m = densidad × burden × espaciamiento
   });
 
   it("prioriza toneladas_planilla sobre la fórmula, para no pisar el histórico", () => {
     const v = voladura({ perf_tramos: [{ pozos: 36, metros: 3 }], densidad_t_m3: 2.65, toneladas_planilla: 1687 });
     const fila = filaVoladura(v, yacimiento, []);
-    expect(fila[6]).toBe("1687"); // Toneladas
+    expect(fila[6]).toBe(1687); // Toneladas
   });
 });
 
@@ -137,8 +138,8 @@ describe("filaBochon", () => {
     const b = bochon({ cantidad: 197, metros_perforados: 1, precio_usd_m: 5.07, tc_usd: 1515 });
     const fila = filaBochon(b, yacimiento);
     expect(fila).toHaveLength(13);
-    expect(fila[6]).toBe("1"); // "Metros perf." = metros_perforados
-    expect(fila[7]).toBe("197"); // "Perforaciones" = cantidad
+    expect(fila[6]).toBe(1); // "Metros perf." = metros_perforados
+    expect(fila[7]).toBe(197); // "Perforaciones" = cantidad
   });
 });
 
@@ -168,6 +169,36 @@ describe("las observaciones no entran como formula", () => {
   it("el codigo y los numeros no se tocan", () => {
     const v = voladura({ codigo: "V01D625", vol_tc_usd: 1350 });
     expect(filaVoladura(v, yac, [])[0]).toBe("V01D625");
-    expect(filaVoladura(v, yac, [])[8]).not.toMatch(/^'/);
+    expect(filaVoladura(v, yac, [])[8]).toBe(1350); // y viajan como número
+  });
+});
+
+/*
+ * El 13/11/2026 la primera escritura real del espejo dejó la planilla (es_AR)
+ * con "5.5" como la fecha del 5 de mayo (46147), "415.8" como 4158 y toneladas
+ * de 41.579.999.999.999.900. Un decimal tiene que viajar como número, nunca
+ * como un texto con punto.
+ */
+describe("los decimales y las fechas viajan como número", () => {
+  const yac: Yacimiento = { ...yacimiento, burden_m: 2.5, espaciamiento_m: 2.7, densidad_t_m3: 2.7 };
+
+  it("ninguna celda numérica es un texto con punto decimal", () => {
+    const v = voladura({
+      perf_inicio: "2026-10-23", perf_fin: "2026-10-23", vol_fecha_carga: "2026-10-23", vol_fecha: "2026-10-23",
+      perf_tramos: [{ pozos: 4, metros: 5.5 }], perf_precio_usd_m: 12.81, perf_tc_usd: 1550, vol_tc_usd: 1550,
+    });
+    const consumos = [{ insumo: "Emulex", cantidad: 62.5, precio_usd: 4.24, tipo: "detonador" }];
+    for (const celda of [...filaPerforacion(v, yac), ...filaVoladura(v, yac, consumos)]) {
+      if (typeof celda === "string") expect(celda).not.toMatch(/^-?\d+\.\d+$/);
+    }
+    expect(filaPerforacion(v, yac)[4]).toBe(5.5);
+    expect(filaPerforacion(v, yac)[8]).toBe(12.81);
+    expect(filaVoladura(v, yac, consumos)[15]).toBe(2.5); // burden
+  });
+
+  it("un año de menos de 2000 (un 26 mal tipeado) deja la celda vacía y no un serial negativo", () => {
+    const v = voladura({ vol_fecha_carga: "0026-10-16", vol_fecha: "2026-10-16" });
+    expect(filaVoladura(v, yac, [])[1]).toBe("");
+    expect(filaVoladura(v, yac, [])[2]).toBe(serialDelDia("2026-10-16"));
   });
 });

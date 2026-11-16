@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { Modal, PieDeModal } from "@/components/Modal";
 import CuerpoDeEvento, { type Props } from "./CuerpoDeEvento";
 
 /**
@@ -19,7 +19,7 @@ import CuerpoDeEvento, { type Props } from "./CuerpoDeEvento";
  * que la pantalla muestre después. Es quien lo monta el que lo cierra cuando
  * la acción termina.
  *
- * **Escape se escucha en `document`, así que no sabe si hay otro modal encima.**
+ * **Escape se escucha en `document` (lo hace el `Modal`), así que no sabe si hay otro modal encima.**
  * Quien lo monta lo resuelve: no lo mantiene montado mientras abre el editor, y
  * ignora el cierre mientras hay una confirmación abierta (que no atiende Escape:
  * un oyente global cerraría el detalle que queda debajo de ella). Se probó en el
@@ -31,48 +31,19 @@ export default function DetalleDeEvento({
 }: Props & { onCerrar: () => void }) {
   const cerrar = () => { if (!cuerpo.ocupado) onCerrar(); };
 
-  // Escape cierra el detalle. Sin lista de dependencias: `cerrar` lee `ocupado`
-  // y tiene que ser el de este render.
-  useEffect(() => {
-    const alTeclear = (e: KeyboardEvent) => { if (e.key === "Escape") cerrar(); };
-    document.addEventListener("keydown", alTeclear);
-    return () => document.removeEventListener("keydown", alTeclear);
-  });
-
+  // Es un visor: no hay nada cargado que tirar, así que sale derecho. El `Modal`
+  // atiende Escape, el fondo y la X; `cerrar` sigue frenando mientras hay una
+  // acción en curso.
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={(ev) => { if (ev.target === ev.currentTarget) cerrar(); }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="detalle-de-evento-titulo"
-        className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3">
-          <h2 id="detalle-de-evento-titulo" className="min-w-0 break-words text-base font-bold text-slate-900">
-            {cuerpo.evento.titulo}
-          </h2>
-          <button
-            type="button"
-            aria-label="Cerrar"
-            disabled={cuerpo.ocupado}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 disabled:opacity-40"
-            onClick={cerrar}
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="overflow-y-auto">
-          <CuerpoDeEvento {...cuerpo} sinTitulo />
-        </div>
-
-        <div className="flex justify-end border-t border-slate-200 px-4 py-3">
-          <button type="button" className="btn-secondary disabled:opacity-50" disabled={cuerpo.ocupado} onClick={cerrar}>Cerrar</button>
-        </div>
+    <Modal titulo={cuerpo.evento.titulo} alSalir={cerrar} soloLectura>
+      {/* `CuerpoDeEvento` trae su propio `p-4`: se descuenta el margen lateral
+          del cuerpo del modal para que el texto no quede doblemente sangrado. */}
+      <div className="-mx-4">
+        <CuerpoDeEvento {...cuerpo} sinTitulo />
       </div>
-    </div>
+      <PieDeModal>
+        <button type="button" className="btn-secondary disabled:opacity-50" disabled={cuerpo.ocupado} onClick={cerrar}>Cerrar</button>
+      </PieDeModal>
+    </Modal>
   );
 }

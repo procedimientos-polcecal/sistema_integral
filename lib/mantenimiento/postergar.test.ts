@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { laNuevaFecha, loQueFaltaParaPostergar, MAXIMO_DE_DIAS } from "./postergar";
+import {
+  laNuevaFecha, laRazonQueSeGuarda, loQueFaltaParaPostergar, MAXIMO_DE_DIAS,
+} from "./postergar";
 
 describe("laNuevaFecha", () => {
   it("corre la fecha los días que se le pidan", () => {
@@ -59,5 +61,22 @@ describe("loQueFaltaParaPostergar", () => {
     expect(loQueFaltaParaPostergar({ ...completo, dias: MAXIMO_DE_DIAS + 1 }))
       .toEqual(["cuántos días"]);
     expect(loQueFaltaParaPostergar({ ...completo, dias: MAXIMO_DE_DIAS })).toEqual([]);
+  });
+});
+
+describe("laRazonQueSeGuarda", () => {
+  // La razón y los días vienen puestos desde la configuración, que llega
+  // después de montar el modal: por eso el borrador usa `null` para decir
+  // «todavía no lo tocó nadie» y el valor por omisión se deriva al pintar.
+  it("elegir la razón que ya estaba mostrada no cuenta como tocar nada", () => {
+    expect(laRazonQueSeGuarda("FALTA_REPUESTO", "FALTA_REPUESTO")).toBeNull();
+  });
+
+  it("elegir otra sí se guarda", () => {
+    expect(laRazonQueSeGuarda("FALTA_PERSONAL", "FALTA_REPUESTO")).toBe("FALTA_PERSONAL");
+  });
+
+  it("sin configuración todavía, cualquier elección cuenta", () => {
+    expect(laRazonQueSeGuarda("FALTA_REPUESTO", undefined)).toBe("FALTA_REPUESTO");
   });
 });

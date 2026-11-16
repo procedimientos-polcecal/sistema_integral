@@ -6,6 +6,7 @@ import type { RenglonDePapel, Familia } from "@/lib/produccion/types";
 import type { Producto } from "@/lib/core/types";
 import { clasificacionDelProducto, textoDeClasificacion } from "@/lib/core/productos";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 const FAMILIAS: { valor: Familia; label: string }[] = [
   { valor: "filler", label: "Filler" },
@@ -249,7 +250,7 @@ function ModalRenglon({
   }
 
   return (
-    <Modal titulo={renglon ? "Editar el renglón" : "Nuevo renglón"} onClose={onClose}>
+    <Modal titulo={renglon ? "Editar el renglón" : "Nuevo renglón"} alSalir={onClose}>
       <form onSubmit={enviar} className="space-y-3">
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Nombre, como está en el papel</span>
@@ -294,7 +295,7 @@ function ModalRenglon({
 
         {error && <p className="text-sm text-red-700">{error}</p>}
 
-        <div className="flex justify-end gap-2">
+        <PieDeModal>
           <button type="button" onClick={onClose} className="text-sm text-slate-500 hover:text-slate-700">
             Cancelar
           </button>
@@ -305,7 +306,7 @@ function ModalRenglon({
           >
             {guardando ? "Guardando…" : "Guardar"}
           </button>
-        </div>
+        </PieDeModal>
       </form>
     </Modal>
   );
@@ -355,7 +356,8 @@ function ModalEnlaces({
   }
 
   return (
-    <Modal titulo={`Productos de "${renglon.nombre}"`} onClose={onClose}>
+    <Modal titulo={`Productos de "${renglon.nombre}"`} alSalir={onClose}>
+      <div className="space-y-3">
       <p className="text-sm text-slate-500">
         Lo que este renglón del papel cuenta. Pueden ser varios: si el papel
         junta las variantes de un producto en un solo renglón, se marcan todas y
@@ -398,7 +400,7 @@ function ModalEnlaces({
 
       {error && <p className="text-sm text-red-700">{error}</p>}
 
-      <div className="flex justify-end gap-2">
+      <PieDeModal>
         <button type="button" onClick={onClose} className="text-sm text-slate-500 hover:text-slate-700">
           Cancelar
         </button>
@@ -409,29 +411,8 @@ function ModalEnlaces({
         >
           {guardando ? "Guardando…" : `Guardar (${seleccion.size})`}
         </button>
+      </PieDeModal>
       </div>
     </Modal>
-  );
-}
-
-function Modal({
-  titulo, onClose, children,
-}: {
-  titulo: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-lg space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-lg">
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="font-semibold text-slate-900">{titulo}</h2>
-          <button onClick={onClose} className="text-sm text-slate-500 hover:text-slate-700">
-            Cerrar
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
   );
 }

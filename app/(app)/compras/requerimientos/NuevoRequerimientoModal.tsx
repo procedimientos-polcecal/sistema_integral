@@ -10,6 +10,7 @@ import {
 import { PRIORIDADES, PRIORIDAD_LABELS } from "@/lib/compras/constants";
 import { recortarParaPantalla } from "@/lib/compras/texto";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 type Opcion = { id: string; nombre: string };
 
@@ -385,22 +386,16 @@ export default function NuevoRequerimientoModal({
   }
 
   return (
-    <div
-      onClick={cerrar}
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="mt-10 w-full max-w-2xl rounded-xl bg-white shadow-xl"
-      >
-        <div className="border-b border-slate-200 px-6 py-4">
-          <h2 className="text-lg font-bold text-slate-900">Nuevo requerimiento interno</h2>
-          <p className="text-sm text-slate-500">
+    // El fondo, la X y Escape salen conservando porque no hay nada que tirar:
+    // este formulario no pasa por `useBorrador` y pierde lo cargado al salir,
+    // como antes. Hoy los dos llaman a `cerrar`, que además recarga si
+    // el pedido ya se creó (ver más arriba).
+    <Modal titulo="Nuevo requerimiento interno" alSalir={cerrar} ancho="ancho">
+        <form onSubmit={enviar} className="space-y-4">
+          <p className="-mt-2 text-sm text-slate-500">
             El N° de RI se asigna solo y el pedido queda pendiente de aprobación.
           </p>
-        </div>
 
-        <form onSubmit={enviar} className="space-y-4 px-6 py-5">
           {/* Arriba de todo: es lo último que se puede mirar antes de que el
               pedido exista. */}
           {advertencia}
@@ -591,7 +586,9 @@ export default function NuevoRequerimientoModal({
             </div>
           )}
 
-          <div className="flex justify-end gap-2 pt-1">
+          {/* Pegados al pie: «Cancelar» y
+              «Crear requerimiento» siempre están a mano en un formulario largo. */}
+          <PieDeModal>
             <button
               type="button"
               onClick={cerrar}
@@ -607,10 +604,9 @@ export default function NuevoRequerimientoModal({
             >
               {guardando ? "Guardando…" : creado ? "Ya se creó" : "Crear requerimiento"}
             </button>
-          </div>
+          </PieDeModal>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

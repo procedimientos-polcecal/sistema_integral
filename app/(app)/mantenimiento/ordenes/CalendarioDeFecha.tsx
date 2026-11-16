@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Select from "@/components/Select";
+import { Modal } from "@/components/Modal";
 import { norm } from "@/lib/core/texto";
 import {
   comoSeLee, diaDeLaSemana, hoyEnArgentina, mesRelativo, rangoDelMes, semanaDe,
@@ -155,13 +156,6 @@ function CalendarioDeFecha({
     return () => { cancelado = true; };
   }, [desde, hasta, mes, intento]);
 
-  // Escape cierra, como en los otros modales.
-  useEffect(() => {
-    const alTeclear = (e: KeyboardEvent) => { if (e.key === "Escape") onCerrar(); };
-    window.addEventListener("keydown", alTeclear);
-    return () => window.removeEventListener("keydown", alTeclear);
-  }, [onCerrar]);
-
   // En el teléfono el panel queda debajo de la grilla: al abrirlo hay que verlo.
   useEffect(() => {
     if (diaAbierto) panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -210,29 +204,15 @@ function CalendarioDeFecha({
   const [anio, nroMes] = mes.split("-").map(Number);
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/50 p-2 overflow-y-auto"
-      onClick={(e) => { if (e.target === e.currentTarget) onCerrar(); }}
-    >
-      <div
-        role="dialog"
-        aria-label="Calendario de órdenes de trabajo"
-        className="w-full max-w-3xl rounded-2xl bg-white shadow-xl my-4 p-3"
-      >
-        <div className="flex items-center justify-between gap-2 pb-2">
-          <h3 className="text-sm font-bold text-slate-900">Elegir la fecha de ejecución</h3>
-          <button
-            type="button"
-            onClick={onCerrar}
-            aria-label="Cerrar el calendario"
-            className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
+    // Es un selector de fecha: nada que descartar (lo único «cargado» son los
+    // filtros y el mes que se está mirando), así que sale derecho y nunca
+    // pregunta. Escape, el fondo y la X lo cierran; el cierre por Escape lo hace
+    // el `Modal` y por eso ya no hay un listener propio acá.
+    //
+    // Se abre **encima** de otro formulario (`NuevaOTModal`). Antes iba con
+    // `z-[60]` para quedar sobre el panel de abajo; ahora el `Modal` va en un
+    // portal a `body` y, al montarse después, queda apilado encima del primero.
+    <Modal titulo="Elegir la fecha de ejecución" alSalir={onCerrar} soloLectura ancho="ancho">
         {/* Los filtros cambian lo que se pinta, no lo que se pidió. */}
         <div className="flex flex-wrap gap-2 pb-2">
           <div className="flex-1 basis-28">
@@ -381,8 +361,7 @@ function CalendarioDeFecha({
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

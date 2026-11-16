@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import Select from "@/components/Select";
+import { Modal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import { sumarDias } from "@/lib/core/fechas";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import {
@@ -40,14 +43,67 @@ export default function HojaDePersona({
   alMover: (empleadoId: string, dia: string, turno: Turno) => Promise<string | null>;
   alVolverAlCiclo: (empleadoId: string, dia: string) => Promise<string | null>;
 }) {
-  const [hasta, setHasta] = useState(dia);
-  const [eligioOtra, setEligioOtra] = useState(false);
-  const [motivo, setMotivo] = useState("");
-  const [corrigiendo, setCorrigiendo] = useState(false);
-  const [tipoNuevo, setTipoNuevo] = useState(propia?.tipo ?? "ENFERMEDAD_ACCIDENTE_INCULPABLE");
-  const [desdeNuevo, setDesdeNuevo] = useState(propia?.fecha_desde ?? dia);
-  const [hastaNuevo, setHastaNuevo] = useState(propia?.fecha_hasta ?? dia);
-  const [motivoNuevo, setMotivoNuevo] = useState(propia?.observaciones ?? "");
+  /*
+   * LO QUE SE PUEDE DEJAR A MEDIO ESCRIBIR, Y QUIÉN LO DESCARTA
+   *
+   * La hoja tiene dos formularios chicos que conviven: «No viene este día»
+   * —hasta, el panel de «Otra» y su motivo— y la corrección de la ausencia
+   * propia —tipo, desde, hasta y observaciones—. Los dos entran en un solo
+   * borrador porque los dos son la misma hoja de la misma persona el mismo día,
+   * y la clave lleva las dos cosas: la hoja de otro día de la misma persona es
+   * otro formulario.
+   *
+   * **La hoja no tiene botón negativo propio**, y por eso los que tira no la
+   * cierran: cada panel descarta lo suyo con su «Cancelar», devolviendo sus
+   * campos al valor con el que nacieron —y un campo que vuelve a su valor
+   * inicial sale solo del borrador—. El de la corrección ya existía y sólo
+   * plegaba; el de «Otra» se agregó para que ese panel también tenga quién lo
+   * descarte, que es lo que la regla pide.
+   */
+  // Congelado en el primer render, igual que lo que el borrador guardó como
+  // «cómo nació»: los «Cancelar» devuelven los campos a **estos** valores, y si
+  // se recalcularan contra un `propia` que cambió abajo, cancelar dejaría en el
+  // borrador un valor que ya no es el inicial y la hoja seguiría figurando
+  // tocada. Es un `useState` que nadie actualiza y no un `useRef` porque se lee
+  // durante el render (`react-hooks/refs`).
+  //
+  // ── ESTA ES UNA SEGUNDA VARA, Y HAY UNA CONDICIÓN QUE LA MANTIENE SANA ────
+  //
+  // El borrador tiene la suya adentro («cómo nació»), así que acá hay dos. Son
+  // la misma mientras **nadie llame a `asentar()` en este archivo**: `asentar()`
+  // mueve la del hook a lo que está en pantalla y no toca ésta, y ahí los
+  // «Cancelar» empezarían a devolver los campos a lo de antes de guardar, con el
+  // formulario quedando tocado y el próximo guardado mandando lo viejo encima.
+  // Eso ya pasó en `DetalleOS`, que tenía esta misma forma; allá se arregló
+  // dejando una sola vara, y acá **no se puede**: los dos «Cancelar» revierten
+  // sólo su panel y `tirar()` se llevaría también lo que se esté escribiendo en
+  // el otro, que es justo el bug que esta hoja acaba de arreglar.
+  //
+  // Hoy la hoja termina siempre en `tirar()` y cierra, así que la condición se
+  // cumple. Si alguna acción pasa a dejar la hoja abierta después de guardar,
+  // **no alcanza con cambiarle el final**: hay que resolver antes cómo revierte
+  // un panel solo.
+  const [INICIAL] = useState({
+    hasta: dia,
+    eligioOtra: false,
+    motivo: "",
+    corrigiendo: false,
+    tipoNuevo: propia?.tipo ?? "ENFERMEDAD_ACCIDENTE_INCULPABLE",
+    desdeNuevo: propia?.fecha_desde ?? dia,
+    hastaNuevo: propia?.fecha_hasta ?? dia,
+    motivoNuevo: propia?.observaciones ?? "",
+  });
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-hoja-de-persona", {
+      tipo: "persona-dia",
+      id: `${persona.empleadoId}|${dia}`,
+    }),
+    INICIAL,
+  );
+  const {
+    hasta, eligioOtra, motivo, corrigiendo, tipoNuevo, desdeNuevo, hastaNuevo, motivoNuevo,
+  } = valores;
+
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,14 +125,39 @@ export default function HojaDePersona({
   const MAX_DIAS = 90;
   const topeDesde = (desde: string) => sumarDias(desde, MAX_DIAS - 1);
 
-  /** Corre una acción con los botones apagados y deja el error a la vista si falla. */
-  async function hacer(accion: () => Promise<string | null>) {
+  /**
+   * Corre una acción con los botones apagados y deja el error a la vista si falla.
+   *
+   * **`loCargado` no tiene valor por omisión a propósito**, y es lo que evita el
+   * bug que tuvo esta hoja: con un `tirar()` al final de todas las acciones,
+   * mover a alguien de turno —que no tiene nada que ver con los formularios—
+   * borraba el motivo que se estaba escribiendo en el panel de «Otra», sin una
+   * palabra. Los dos paneles comparten un solo borrador, así que cualquier
+   * acción que lo tire se lleva lo que se esté escribiendo en el otro.
+   *
+   * `"se-tira"` es para las acciones que **son** el formulario —anotar la falta,
+   * corregirla, sacarla—: lo que se cargó ya quedó guardado. `"se-queda"` es
+   * para las que pasan al lado —mover de turno, volver al ciclo—, que cierran la
+   * hoja igual, así que lo escrito vuelve a aparecer al reabrirla.
+   *
+   * Sin valor por omisión, la próxima acción que se agregue **no compila** hasta
+   * contestar la pregunta, que es la única defensa que esto puede tener: ningún
+   * test de este repo mira una pantalla.
+   *
+   * El borrador se tira sólo si salió bien, y no al apretar: un error deja la
+   * hoja abierta y lo escrito tiene que seguir donde estaba.
+   */
+  async function hacer(
+    accion: () => Promise<string | null>,
+    loCargado: "se-tira" | "se-queda",
+  ) {
     if (enviando) return;
     setEnviando(true);
     setError(null);
     const e = await accion();
     setEnviando(false);
-    if (e) setError(e);
+    if (e) { setError(e); return; }
+    if (loCargado === "se-tira") tirar();
   }
 
   function anotar(tipo: string, obs: string | null) {
@@ -84,35 +165,26 @@ export default function HojaDePersona({
       setError("La fecha hasta no puede ser anterior al día de la falta");
       return;
     }
-    void hacer(() => alAnotar(persona.empleadoId, dia, hasta, tipo, obs));
+    void hacer(() => alAnotar(persona.empleadoId, dia, hasta, tipo, obs), "se-tira");
   }
 
   const turnoActual = asignacion?.turno;
   const oficio = falta?.oficio ?? persona.oficio;
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/45 sm:items-center"
-      onClick={alCerrar}
-    >
-      <div
-        role="dialog"
-        aria-label={`Ausencia de ${persona.nombre}`}
-        onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:max-w-md sm:rounded-2xl"
-      >
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-base font-bold text-slate-900">{persona.nombre}</h2>
-            <p className="text-xs capitalize text-slate-500">
-              {OFICIO_TEXTO[oficio]}
-              {turnoActual && ` · ${TURNO_TEXTO[turnoActual]}`} · {diaLargo(dia)}
-            </p>
-          </div>
-          <button type="button" className="shrink-0 px-2 text-2xl leading-none text-slate-500" aria-label="Cerrar" onClick={alCerrar}>
-            ×
-          </button>
-        </div>
+    // No es un visor, aunque casi todo se anote con un toque: tiene el motivo de
+    // «Otra», los tres campos de fecha y las observaciones de la corrección, que
+    // se pueden dejar a medio escribir. Por eso va **sin** `soloLectura`, que es
+    // la exclusión permanente de la pregunta al salir: el fondo, la X y Escape
+    // salen conservando, y lo que se deje escrito aparece igual al volver a
+    // abrir esta hoja. Quién lo descarta está arriba, en el comentario de
+    // `INICIAL`: los «Cancelar» de los dos paneles, que son los únicos que tiran.
+    <Modal titulo={persona.nombre} alSalir={alCerrar} tocado={tocado}>
+      <div>
+        <p className="-mt-2 mb-3 text-xs capitalize text-slate-500">
+          {OFICIO_TEXTO[oficio]}
+          {turnoActual && ` · ${TURNO_TEXTO[turnoActual]}`} · {diaLargo(dia)}
+        </p>
 
         {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>}
 
@@ -132,7 +204,7 @@ export default function HojaDePersona({
                   min={dia}
                   max={topeDesde(dia)}
                   value={hasta}
-                  onChange={(e) => setHasta(e.target.value || dia)}
+                  onChange={(e) => cambiar({ hasta: e.target.value || dia })}
                   className="input"
                 />
               </div>
@@ -148,7 +220,7 @@ export default function HojaDePersona({
                   onClick={() => {
                     // "Otra" no se puede anotar sin motivo: la ruta contesta 400.
                     // Los otros tres quedan anotados con este mismo toque.
-                    if (t.valor === "OTRA") setEligioOtra(true);
+                    if (t.valor === "OTRA") cambiar({ eligioOtra: true });
                     else anotar(t.valor, null);
                   }}
                   className={`min-h-[48px] rounded-lg border px-3 py-2 text-sm font-medium ${
@@ -173,17 +245,31 @@ export default function HojaDePersona({
                   autoFocus
                   rows={2}
                   value={motivo}
-                  onChange={(e) => setMotivo(e.target.value)}
+                  onChange={(e) => cambiar({ motivo: e.target.value })}
                   className="input"
                 />
-                <button
-                  type="button"
-                  disabled={enviando || !motivo.trim()}
-                  onClick={() => anotar("OTRA", motivo.trim())}
-                  className="btn-primary w-full"
-                >
-                  Anotar la falta
-                </button>
+                <div className="flex gap-2">
+                  {/* El que tira lo de este panel: lo pliega y descarta el
+                      motivo, devolviéndolo a como nació. Sin él, este panel
+                      sería el único que pide conservar y no tiene con qué
+                      descartar. */}
+                  <button
+                    type="button"
+                    className="btn-secondary flex-1"
+                    disabled={enviando}
+                    onClick={() => cambiar({ eligioOtra: false, motivo: INICIAL.motivo })}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={enviando || !motivo.trim()}
+                    onClick={() => anotar("OTRA", motivo.trim())}
+                    className="btn-primary flex-1"
+                  >
+                    Anotar la falta
+                  </button>
+                </div>
               </div>
             )}
           </section>
@@ -204,10 +290,10 @@ export default function HojaDePersona({
 
                 {!corrigiendo ? (
                   <div className="flex gap-2">
-                    <button type="button" className="btn-secondary flex-1" disabled={enviando} onClick={() => setCorrigiendo(true)}>
+                    <button type="button" className="btn-secondary flex-1" disabled={enviando} onClick={() => cambiar({ corrigiendo: true })}>
                       Corregir
                     </button>
-                    <button type="button" className="btn-danger flex-1" disabled={enviando} onClick={() => void hacer(() => alBorrar(propia))}>
+                    <button type="button" className="btn-danger flex-1" disabled={enviando} onClick={() => void hacer(() => alBorrar(propia), "se-tira")}>
                       Sacar
                     </button>
                   </div>
@@ -215,7 +301,7 @@ export default function HojaDePersona({
                   <div className="space-y-2 rounded-lg border border-slate-200 p-3">
                     <div>
                       <label htmlFor="corregir-tipo" className="mb-1 block text-xs text-slate-500">Tipo</label>
-                      <Select id="corregir-tipo" className="input" value={tipoNuevo} onChange={(e) => setTipoNuevo(e.target.value)}>
+                      <Select id="corregir-tipo" className="input" value={tipoNuevo} onChange={(e) => cambiar({ tipoNuevo: e.target.value })}>
                         {TIPOS.map((t) => (
                           <option key={t.valor} value={t.valor}>{t.etiqueta}</option>
                         ))}
@@ -236,7 +322,7 @@ export default function HojaDePersona({
                           type="date"
                           max={hastaNuevo}
                           value={desdeNuevo}
-                          onChange={(e) => setDesdeNuevo(e.target.value || propia.fecha_desde)}
+                          onChange={(e) => cambiar({ desdeNuevo: e.target.value || propia.fecha_desde })}
                           className="input"
                         />
                       </div>
@@ -248,7 +334,7 @@ export default function HojaDePersona({
                           min={desdeNuevo}
                           max={topeDesde(desdeNuevo)}
                           value={hastaNuevo}
-                          onChange={(e) => setHastaNuevo(e.target.value || propia.fecha_hasta)}
+                          onChange={(e) => cambiar({ hastaNuevo: e.target.value || propia.fecha_hasta })}
                           className="input"
                         />
                       </div>
@@ -261,12 +347,25 @@ export default function HojaDePersona({
                         id="corregir-motivo"
                         rows={2}
                         value={motivoNuevo}
-                        onChange={(e) => setMotivoNuevo(e.target.value)}
+                        onChange={(e) => cambiar({ motivoNuevo: e.target.value })}
                         className="input"
                       />
                     </div>
                     <div className="flex gap-2">
-                      <button type="button" className="btn-secondary flex-1" disabled={enviando} onClick={() => setCorrigiendo(false)}>
+                      {/* El que tira lo de este panel: lo pliega y devuelve
+                          los cuatro campos a lo que decía la ausencia. */}
+                      <button
+                        type="button"
+                        className="btn-secondary flex-1"
+                        disabled={enviando}
+                        onClick={() => cambiar({
+                          corrigiendo: false,
+                          tipoNuevo: INICIAL.tipoNuevo,
+                          desdeNuevo: INICIAL.desdeNuevo,
+                          hastaNuevo: INICIAL.hastaNuevo,
+                          motivoNuevo: INICIAL.motivoNuevo,
+                        })}
+                      >
                         Cancelar
                       </button>
                       <button
@@ -274,13 +373,15 @@ export default function HojaDePersona({
                         className="btn-primary flex-1"
                         disabled={enviando || sinCambios || (tipoNuevo === "OTRA" && !motivoNuevo.trim())}
                         onClick={() =>
-                          void hacer(() =>
-                            alCorregir(propia.id, {
-                              tipo: tipoNuevo,
-                              fechaDesde: desdeNuevo,
-                              fechaHasta: hastaNuevo,
-                              observaciones: motivoNuevo.trim() || null,
-                            })
+                          void hacer(
+                            () =>
+                              alCorregir(propia.id, {
+                                tipo: tipoNuevo,
+                                fechaDesde: desdeNuevo,
+                                fechaHasta: hastaNuevo,
+                                observaciones: motivoNuevo.trim() || null,
+                              }),
+                            "se-tira",
                           )
                         }
                       >
@@ -317,7 +418,7 @@ export default function HojaDePersona({
                           type="button"
                           disabled={enviando}
                           className="btn-secondary shrink-0"
-                          onClick={() => void hacer(() => alMover(c, dia, falta.turno))}
+                          onClick={() => void hacer(() => alMover(c, dia, falta.turno), "se-queda")}
                         >
                           Pasar a {TURNO_TEXTO[falta.turno]}
                         </button>
@@ -346,7 +447,7 @@ export default function HojaDePersona({
                   type="button"
                   disabled={enviando}
                   className="btn-secondary"
-                  onClick={() => void hacer(() => alMover(persona.empleadoId, dia, t))}
+                  onClick={() => void hacer(() => alMover(persona.empleadoId, dia, t), "se-queda")}
                 >
                   {TURNO_TEXTO[t]}
                 </button>
@@ -356,7 +457,7 @@ export default function HojaDePersona({
                   type="button"
                   disabled={enviando}
                   className="btn-ghost"
-                  onClick={() => void hacer(() => alVolverAlCiclo(persona.empleadoId, dia))}
+                  onClick={() => void hacer(() => alVolverAlCiclo(persona.empleadoId, dia), "se-queda")}
                 >
                   Volver al ciclo
                 </button>
@@ -371,13 +472,13 @@ export default function HojaDePersona({
             type="button"
             disabled={enviando}
             className="btn-ghost mt-2"
-            onClick={() => void hacer(() => alVolverAlCiclo(persona.empleadoId, dia))}
+            onClick={() => void hacer(() => alVolverAlCiclo(persona.empleadoId, dia), "se-queda")}
           >
             Volver al turno del ciclo
           </button>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
 

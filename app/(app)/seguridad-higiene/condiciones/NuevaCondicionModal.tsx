@@ -22,6 +22,7 @@
  */
 
 import FormularioCondicionOffline from "@/app/cargar/FormularioCondicionOffline";
+import { Modal } from "@/components/Modal";
 import { mandarOEncolar } from "@/lib/core/mandarOEncolar";
 import type { Catalogos } from "./FichaDeCondicion";
 
@@ -37,33 +38,14 @@ export default function NuevaCondicionModal({
   onCargada: () => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center"
-      onClick={onCerrar}
-    >
-      <div
-        className="max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">Nueva condición insegura</h2>
-            <p className="mt-0.5 text-xs text-slate-400">
-              El número se lo pone el sistema. La evaluación del riesgo y el responsable
-              se completan después, desde la ficha.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onCerrar}
-            className="shrink-0 rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100"
-            aria-label="Cerrar"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+    // El formulario no tiene botón «Cancelar» propio: sale por la X, el fondo o
+    // Escape, y ninguna de las tres destruye nada que no se perdiera igual.
+    <Modal titulo="Nueva condición insegura" alSalir={onCerrar}>
+      <div className="space-y-4">
+        <p className="text-xs text-slate-400">
+          El número se lo pone el sistema. La evaluación del riesgo y el responsable
+          se completan después, desde la ficha.
+        </p>
 
         <FormularioCondicionOffline
           /*
@@ -94,6 +76,6 @@ export default function NuevaCondicionModal({
           }}
         />
       </div>
-    </div>
+    </Modal>
   );
 }

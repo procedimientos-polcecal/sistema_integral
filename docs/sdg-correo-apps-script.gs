@@ -1,9 +1,26 @@
 /**
  * Apps Script que manda los correos del SdG.
  *
- * Hoy manda uno solo: el aviso de que una carga hecha sin señal en la planta
- * fue rechazada cuando el teléfono la mandó solo, con la app cerrada. Quien lo
- * llama es `lib/core/correo.ts`.
+ * Manda el aviso de una carga rechazada, el de una mención en un hilo y el
+ * resumen de novedades de RR.HH. del cierre del día. Quien lo llama es
+ * `lib/core/correo.ts`.
+ *
+ * ## ESTE ARCHIVO SE PUBLICA DOS VECES, DESDE DOS CUENTAS
+ *
+ * No son dos scripts distintos: es el mismo código pegado en dos proyectos,
+ * cada uno con su `SECRETO` y su url.
+ *
+ *   - **La casilla del sistema**, publicada por quien administra el SdG.
+ *     Sus variables son `SDG_CORREO_URL` y `SDG_CORREO_SECRET`.
+ *   - **La casilla de RR.HH.**, publicada desde `gestiondepersonas@polcecal.com`
+ *     (16/11/2026). Sus variables son `SDG_CORREO_RRHH_URL` y
+ *     `SDG_CORREO_RRHH_SECRET`.
+ *
+ * Hacen falta dos porque **una aplicación web se ejecuta como su dueño**: el
+ * remitente no se elige desde el pedido, lo decide qué cuenta publicó. Y que
+ * no se pueda elegir es deliberado —si el `doPost` aceptara un `from`, una url
+ * filtrada podría falsear el remitente—, así que mandar desde otra casilla es
+ * publicar desde esa otra casilla y no agregarle un parámetro a ésta.
  *
  * ## Por qué un script acá y no que el servidor mande el correo
  *

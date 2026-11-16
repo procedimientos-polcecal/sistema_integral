@@ -7,6 +7,7 @@ import { diaDeLaSalida, problemaDeLaFila } from "@/lib/rrhh/fichadas/turnoDeNoch
 import type { TurnoLike } from "@/lib/rrhh/engine/recalcular-puro";
 import { useCargar } from "@/lib/core/useCargar";
 import AcreditadoDeFichada from "./AcreditadoDeFichada";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 interface Fichada {
   id: string;
@@ -263,9 +264,10 @@ export default function FichadaEditModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-slate-800 mb-1">Corregir fichada</h3>
+    // El fondo, la X y Escape salen conservando porque no hay nada que tirar:
+    // este formulario no pasa por `useBorrador` y pierde lo cargado al salir,
+    // como antes. Hoy los dos llaman a `onClose`.
+    <Modal titulo="Corregir fichada" alSalir={onClose}>
         <p className="text-sm text-slate-500 mb-4">
           {empleadoNombre} · {new Date(`${fecha}T00:00:00`).toLocaleDateString("es-AR", { timeZone: "UTC" })}
         </p>
@@ -380,7 +382,10 @@ export default function FichadaEditModal({
           </p>
         )}
 
-        <div className="flex justify-end gap-2 mt-4">
+        {/* El cuerpo del modal es el que scrollea: con varias marcaciones los
+            botones se iban abajo del todo. Pegados al pie, «Cancelar» y «Guardar»
+            siempre están a mano. */}
+        <PieDeModal className="flex justify-end gap-2 mt-4">
           {diaSinProteger && !error ? (
             <button onClick={onClose} type="button" className="btn-primary">
               Entendido
@@ -395,8 +400,7 @@ export default function FichadaEditModal({
               </button>
             </>
           )}
-        </div>
-      </div>
-    </div>
+        </PieDeModal>
+    </Modal>
   );
 }

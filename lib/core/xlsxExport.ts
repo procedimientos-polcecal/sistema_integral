@@ -60,3 +60,18 @@ export async function xlsxMultiSheetResponse(
   }));
   return respuestaDeDescarga(filename, await libroXlsx(hojas));
 }
+
+/**
+ * Igual que `xlsxMultiSheetResponse` pero con la hoja entera, para quien
+ * necesita ponerle imágenes (`HojaAEscribir.imagenes`).
+ *
+ * Es otra función y no un parámetro más de las que ya hay a propósito: las diez
+ * rutas que descargan un libro no se tocan, y la cabecera de descarga sale del
+ * mismo `respuestaDeDescarga`.
+ */
+export async function xlsxConImagenesResponse(
+  filename: string,
+  hojas: HojaAEscribir[]
+): Promise<Response> {
+  return respuestaDeDescarga(filename, await libroXlsx(hojas));
+}

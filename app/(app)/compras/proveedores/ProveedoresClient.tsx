@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { moneda } from "@/lib/compras/constants";
 import type { Proveedor } from "@/lib/compras/types";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 type Estadistica = { pedidos: number; monto: number };
 
@@ -282,15 +283,11 @@ function ModalProveedor({
   }
 
   return (
-    <div onClick={onClose} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4">
-      <div onClick={(e) => e.stopPropagation()} className="mt-10 w-full max-w-xl rounded-xl bg-white shadow-xl">
-        <div className="border-b border-slate-200 px-6 py-4">
-          <h2 className="text-lg font-bold text-slate-900">
-            {proveedor ? "Editar proveedor" : "Nuevo proveedor"}
-          </h2>
-        </div>
-
-        <form onSubmit={enviar} className="space-y-4 px-6 py-5">
+    // El fondo, la X y Escape salen conservando porque no hay nada que tirar:
+    // este formulario no pasa por `useBorrador` y pierde lo cargado al salir,
+    // como antes. Hoy los dos llaman a `onClose`.
+    <Modal titulo={proveedor ? "Editar proveedor" : "Nuevo proveedor"} alSalir={onClose} ancho="ancho">
+        <form onSubmit={enviar} className="space-y-4">
           <Campo label="Nombre" requerido>
             <input
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -345,7 +342,9 @@ function ModalProveedor({
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
           )}
 
-          <div className="flex justify-end gap-2">
+          {/* Pegados al pie: «Cancelar» y
+              «Guardar» siempre están a mano. */}
+          <PieDeModal>
             <button type="button" onClick={onClose} disabled={guardando}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
               Cancelar
@@ -354,10 +353,9 @@ function ModalProveedor({
               className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50">
               {guardando ? "Guardando…" : "Guardar"}
             </button>
-          </div>
+          </PieDeModal>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

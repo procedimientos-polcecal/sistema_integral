@@ -7,6 +7,9 @@ import {
   type EstadoProduccion,
 } from "@/lib/mantenimiento/produccion";
 import { useCargar } from "@/lib/core/useCargar";
+import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 
 /**
  * La grilla de producción: sectores por los siete días de una semana.
@@ -132,9 +135,16 @@ export default function ProduccionClient({
     [planes]
   );
 
-  /** Guarda el plan entero del sector: es como está guardado en la base. */
-  async function guardar(sectorId: string, plan: Plan) {
-    if (!puedeEditar) return;
+  /**
+   * Guarda el plan entero del sector: es como está guardado en la base.
+   *
+   * Devuelve **si entró**, y eso no es cosmético: de acá sale si el borrador de
+   * la celda se puede tirar. Antes no devolvía nada, así que el editor lo tiraba
+   * al apretar «Guardar» y un PUT que fallaba se llevaba lo cargado dejando sólo
+   * un cartel rojo en la pantalla de atrás.
+   */
+  async function guardar(sectorId: string, plan: Plan): Promise<boolean> {
+    if (!puedeEditar) return false;
     setGuardando(sectorId);
     setError("");
 
@@ -147,18 +157,29 @@ export default function ProduccionClient({
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? "No se pudo guardar.");
+      return false;
     }
+    return true;
   }
 
-  /** Cambia el plan en pantalla; `persistir` en false es para escribir en un input. */
-  function cambiar(sectorId: string, parche: Partial<Plan>, persistir = true) {
+  /**
+   * Cambia el plan en pantalla; `persistir` en false es para escribir en un
+   * input. Devuelve si quedó guardado: sin persistir es `true` porque no había
+   * nada que guardar, y quien no lo mire no cambia de comportamiento.
+   */
+  async function cambiar(
+    sectorId: string, parche: Partial<Plan>, persistir = true,
+  ): Promise<boolean> {
     const plan = { ...planDe(sectorId), ...parche };
     setPlanes((p) => ({ ...p, [sectorId]: plan }));
-    if (persistir) guardar(sectorId, plan);
+    return persistir ? guardar(sectorId, plan) : true;
   }
 
-  function guardarDia(estado: EstadoProduccion, turnos: string, motivo: string) {
-    if (!editando) return;
+  /** Devuelve si el día quedó guardado: el editor tira su borrador sólo con eso. */
+  async function guardarDia(
+    estado: EstadoProduccion, turnos: string, motivo: string,
+  ): Promise<boolean> {
+    if (!editando) return false;
     const { sectorId, dia } = editando;
     const plan = planDe(sectorId);
 
@@ -166,8 +187,11 @@ export default function ProduccionClient({
     const turnosArr = [...plan.turnos]; turnosArr[dia] = turnos;
     const motivos = [...plan.motivos]; motivos[dia] = motivo;
 
-    cambiar(sectorId, { days, turnos: turnosArr, motivos });
+    // El editor se cierra igual —eso es de antes— y por eso importa lo que
+    // devuelve: lo que no entró se queda en el borrador y vuelve a aparecer al
+    // abrir esa celda, en vez de perderse con un cartel en la pantalla de atrás.
     setEditando(null);
+    return cambiar(sectorId, { days, turnos: turnosArr, motivos });
   }
 
   function moverSemana(semanas: number) {
@@ -412,6 +436,9 @@ export default function ProduccionClient({
         const sector = sectores.find((s) => s.id === editando.sectorId);
         return (
           <EditorDeDia
+            /* La identidad de la celda, que los rótulos de abajo no tienen: el
+               borrador de un día de un sector no puede aparecer en otro. */
+            clave={`${editando.sectorId}|${editando.dia}`}
             sector={sector?.nombre ?? ""}
             dia={`${DIAS[editando.dia]} ${diaCorto(fechas[editando.dia])}`}
             estado={plan.days[editando.dia]}
@@ -442,18 +469,11 @@ function PendientesDelSector({
   onCerrar: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div
-        className="max-h-[85vh] w-full max-w-md space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">Pendiente en {sector}</h2>
-            <p className="mt-0.5 text-xs text-slate-400">Para aprovechar la ventana de parada.</p>
-          </div>
-          <button onClick={onCerrar} className="text-xl leading-none text-slate-400 hover:text-slate-600">×</button>
-        </div>
+    // Un visor: una lista de lo pendiente, sin campos ni botón negativo. Sale
+    // derecho por el fondo, la X y Escape, y nunca va a preguntar.
+    <Modal titulo={`Pendiente en ${sector}`} alSalir={onCerrar} soloLectura>
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-400">Para aprovechar la ventana de parada.</p>
 
         <div>
           <p className="mb-1 text-xs font-semibold text-slate-500">Órdenes de trabajo ({ot.length})</p>
@@ -493,41 +513,51 @@ function PendientesDelSector({
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
 function EditorDeDia({
-  sector, dia, estado, turnos, motivo, onGuardar, onCerrar,
+  clave, sector, dia, estado, turnos, motivo, onGuardar, onCerrar,
 }: {
+  /** Qué celda es: sector y día, que es lo que distingue un borrador de otro. */
+  clave: string;
   sector: string;
   dia: string;
   estado: EstadoProduccion;
   turnos: string;
   motivo: string;
-  onGuardar: (estado: EstadoProduccion, turnos: string, motivo: string) => void;
+  /** Devuelve si entró: el borrador se tira sólo cuando sí. */
+  onGuardar: (estado: EstadoProduccion, turnos: string, motivo: string) => Promise<boolean>;
   onCerrar: () => void;
 }) {
-  const [est, setEst] = useState<EstadoProduccion>(estado);
-  const [tur, setTur] = useState(turnos);
-  const [mot, setMot] = useState(motivo);
+  /*
+   * Lo que se edita de la celda, recordado mientras la app esté abierta. Nace
+   * con lo que el plan ya dice, así que abrirla y cerrarla sin tocar nada no
+   * pregunta nada; y va campo por campo, que es lo que hace que escribir el
+   * motivo no se lleve puesto un turno que cambió abajo.
+   */
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-produccion-dia", { tipo: "celda", id: clave }),
+    { est: estado as EstadoProduccion, tur: turnos, mot: motivo },
+  );
+  const { est, tur, mot } = valores;
 
   // Los turnos se guardan como una cadena — "MT" —, siempre en el orden
   // mañana/tarde/noche para que se lean igual en todas las celdas.
   const alternarTurno = (t: string) =>
-    setTur((prev) =>
-      TURNOS.map((x) => x.valor as string)
-        .filter((x) => (x === t ? !prev.includes(x) : prev.includes(x)))
-        .join("")
-    );
+    cambiar({
+      tur: TURNOS.map((x) => x.valor as string)
+        .filter((x) => (x === t ? !tur.includes(x) : tur.includes(x)))
+        .join(""),
+    });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div>
-          <h2 className="text-base font-bold text-slate-900">{sector}</h2>
-          <p className="mt-0.5 text-xs text-slate-400">{dia}</p>
-        </div>
+    // El fondo, la X y Escape salen conservando: lo elegido queda y aparece
+    // igual al volver a abrir esta celda. Sólo «Cancelar» tira.
+    <Modal titulo={sector} alSalir={onCerrar} tocado={tocado} ancho="chico">
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-400">{dia}</p>
 
         <div className="space-y-1">
           <label className="block text-xs font-medium text-slate-600">Estado</label>
@@ -538,7 +568,7 @@ function EditorDeDia({
               return (
                 <button
                   key={k}
-                  onClick={() => setEst(k)}
+                  onClick={() => cambiar({ est: k })}
                   className="rounded-xl border-2 px-2 py-2 text-xs font-semibold"
                   style={{
                     borderColor: elegido ? m.color : "#E2E8F0",
@@ -577,23 +607,26 @@ function EditorDeDia({
           </label>
           <input
             value={mot}
-            onChange={(e) => setMot(e.target.value)}
+            onChange={(e) => cambiar({ mot: e.target.value })}
             placeholder={est === "EN_PRODUCCION" ? "Sin parada" : "Mantenimiento, falta de insumo, feriado…"}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
           />
         </div>
 
-        <div className="flex gap-2 pt-1">
+        <PieDeModal className="flex gap-2">
           <button
-            onClick={() => onGuardar(est, tur, mot)}
+            onClick={async () => { if (await onGuardar(est, tur, mot)) tirar(); }}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
           >Guardar</button>
+          {/* El único camino de salida que descarta. El guardado exitoso de
+              arriba también llama a `tirar()`, pero eso es limpiar lo ya
+              guardado y no salir. */}
           <button
-            onClick={onCerrar}
+            onClick={() => { tirar(); onCerrar(); }}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >Cancelar</button>
-        </div>
+        </PieDeModal>
       </div>
-    </div>
+    </Modal>
   );
 }
