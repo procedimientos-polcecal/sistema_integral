@@ -41,6 +41,8 @@ export interface PendienteLeido {
   casilla: string;
   google_event_id: string | null;
   divergencia: string | null;
+  /** De qué OT es, o null si lo creó una persona: decide si Google avisa. */
+  ot_id: string | null;
 }
 
 /**
@@ -113,7 +115,11 @@ export async function reintentarLosPendientes(
   const filas = await traerTodo<PendienteLeido>((desde, hasta) =>
     supabase
       .from("agenda_eventos")
-      .select("id, titulo, descripcion, lugar, inicio, fin, casilla, google_event_id, divergencia")
+      // `ot_id` entra sólo para decidir si Google avisa a los invitados
+      // (`avisaALosInvitados`): esta cola reintenta tanto eventos de OT como
+      // los que creó una persona, y confundirlos le mandaría un correo a
+      // cuatro casillas por cada OT que se reintenta.
+      .select("id, titulo, descripcion, lugar, inicio, fin, casilla, google_event_id, divergencia, ot_id")
       .not("google_pendiente", "is", null)
       .order("id")
       .range(desde, hasta)
@@ -167,7 +173,7 @@ export async function reintentarLosPendientes(
 
     const enGoogle = await escribirEnGoogle(
       f.google_event_id ? "actualizar" : "crear",
-      { casilla: f.casilla, google_event_id: f.google_event_id, inicio: f.inicio, fin: f.fin },
+      { casilla: f.casilla, google_event_id: f.google_event_id, inicio: f.inicio, fin: f.fin, ot_id: f.ot_id },
       evento
     );
 

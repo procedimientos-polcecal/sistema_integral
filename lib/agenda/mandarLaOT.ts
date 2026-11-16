@@ -396,7 +396,7 @@ export async function mandarLaOTAlCalendario(
   // ── Google ────────────────────────────────────────────────────────────────
   const enGoogle = await escribirEnGoogle(
     "crear",
-    { casilla: dueno.casilla, google_event_id: actual?.google_event_id ?? null, inicio, fin },
+    { casilla: dueno.casilla, google_event_id: actual?.google_event_id ?? null, inicio, fin, ot_id: ordenId },
     eventoParaGoogle(fila, invitados, dueno.casilla)
   );
 

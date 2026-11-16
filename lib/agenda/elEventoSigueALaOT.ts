@@ -754,7 +754,7 @@ async function moverElEvento(
   // con id, `actualizar` es el PATCH.
   const enGoogle = await escribirEnGoogle(
     f.google_event_id ? "actualizar" : "crear",
-    { casilla: f.casilla, google_event_id: f.google_event_id, inicio, fin },
+    { casilla: f.casilla, google_event_id: f.google_event_id, inicio, fin, ot_id: f.ot_id },
     evento
   );
 
@@ -860,6 +860,7 @@ export async function borrarLosEventosDeLasOT(
         google_event_id: ev.google_event_id ?? idDeGoogleDe(ev.id),
         inicio: ev.inicio,
         fin: ev.fin,
+        ot_id: ev.ot_id,
       });
       // El primero que deja el presupuesto agotado es quien se lo comió: sea porque
       // falló o porque salió bien pero lento, es el que hay que ir a mirar.
