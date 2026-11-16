@@ -107,6 +107,18 @@
  *      **Tiene que terminar en `/exec`**: la que termina en `/dev` es la de
  *      prueba, cambia con cada edición y exige sesión.
  *      Vercel no aplica una variable nueva hasta el próximo despliegue.
+ *
+ *      **LA FORMA DE LA URL DELATA EL ACCESO, y es el diagnóstico más rápido
+ *      que hay.** Si sale
+ *      `script.google.com/a/macros/<dominio>/s/<id>/exec`, con ese
+ *      `/a/macros/<dominio>/` en el medio, el paso 5 quedó restringido al
+ *      dominio: Google no ejecuta nada y redirige a `ServiceLogin`, así que el
+ *      SdG recibe **HTML y un 401** en vez del JSON del script. La abierta es
+ *      `script.google.com/macros/s/<id>/exec`, sin el dominio. Medido el
+ *      16/11/2026 al publicar la de RR.HH., que salió restringida: una vez
+ *      corregido el acceso **las dos formas funcionan** —es la misma
+ *      implementación— así que no hace falta volver a copiar la URL; lo que
+ *      hay que cambiar es el acceso, no la variable.
  *   7. Probar con `mandarmeUnoDePrueba`, que se manda un correo a la propia
  *      casilla sin pasar por el SdG.
  *
