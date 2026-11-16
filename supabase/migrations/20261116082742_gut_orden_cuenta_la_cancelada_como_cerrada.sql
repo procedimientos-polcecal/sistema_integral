@@ -18,7 +18,7 @@
 -- Tampoco se edita la `20261021104750`, que fue la que la creó: una migración
 -- aplicada no se edita, se corrige con otra. Esta es esa otra.
 --
--- Rehacerla recalcula las ~2.450 filas de la tabla (una reescritura de tabla):
+-- Rehacerla recalcula las 2.453 filas de la tabla (una reescritura de tabla):
 -- es chica y la corre una persona a mano, así que se espera lo que tarde.
 --
 -- ── QUÉ CAMBIA, Y QUÉ NO ─────────────────────────────────────────────────────
@@ -39,9 +39,22 @@
 -- ── MIENTRAS NO SE APLIQUE ───────────────────────────────────────────────────
 --
 -- El TypeScript ya dice que una cancelada está cerrada, pero la base no: una
--- orden cancelada cae en el `else`, cuenta como abierta y suma el +1000. O sea
--- que **el tablero GUT muestra las canceladas arriba de todo** hasta que
--- alguien corra esta migración en el editor SQL de Supabase.
+-- orden cancelada cae en el `else`, cuenta como abierta y suma el +1000.
+--
+-- Y eso no se queda en un tablero aparte, porque `gut_orden` **es el orden por
+-- defecto del listado entero de OT**: `app/api/mantenimiento/ordenes/route.ts`
+-- cae en `.order("gut_orden", …)` para cualquier `?orden=` que no sea
+-- `numero`, y `lib/mantenimiento/filtrosOt.ts` lo documenta como el sugerido.
+-- Así que hasta que alguien corra esta migración en el editor SQL de Supabase,
+-- **una orden recién cancelada se queda ordenada entre las abiertas en
+-- `/mantenimiento/ordenes`**, con su +1000 y su puntaje: sube en vez de
+-- correrse al final, que es lo contrario de lo que espera quien la acaba de
+-- cancelar. El Asistente ordena por la misma columna (`lib/asistente/notas.ts`),
+-- así que ahí se ve igual.
+--
+-- No se pierde nada mientras tanto —el filtro por estado sigue sacándolas, y
+-- `claveDeOrdenGut` en TypeScript ya da 27— pero está en el lugar equivocado,
+-- y ése es justo el ruido que este estado venía a sacar del tablero.
 --
 -- ── LO QUE NO HACE FALTA ─────────────────────────────────────────────────────
 --
