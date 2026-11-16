@@ -3217,7 +3217,8 @@ están cubiertas y cuántas falta pedir. El diseño está en
 y el plan en [su plan](superpowers/plans/2026-11-13-mantenimiento-linkear-ri-y-descripcion.md).
 La aritmética vive en `lib/mantenimiento/loQueViene.ts`, las rutas en
 `app/api/mantenimiento/repuestos/[id]/{ri,articulo}` y la pantalla en
-`RepuestosOTModal.tsx`. La migración es `20261116082907_ri_de_repuesto.sql`.
+`RepuestosOTModal.tsx`. La migración es `20261116082907_ri_de_repuesto.sql` y **va antes del código**:
+sin la columna `articulo_id`, todo `select` que la nombra falla.
 
 ### Lo que no se deduce del código
 
@@ -3231,7 +3232,7 @@ cantidad.
 pegado a un artículo vale para toda OT que lo pida; uno pegado a un repuesto
 suelto vale sólo para ese renglón. **Agrupar los sueltos por texto parecido se
 descartó a propósito**: «grillas» está escrito de cinco maneras en las órdenes
-(«de 2mm», «de 2 mm», «4mm», «4 mm»…), y el RI de las de 2 mm aparecería en la
+(«Grillas de 2mm», «Grillas de 2 mm», «Grillas 4mm», «Grillas 4 mm», «grillas de 4mm»), y el RI de las de 2 mm aparecería en la
 orden que pide las de 4. Es la regla de la casa —*enlazar al que se le parece
 es peor que dejar en null*—. El costo, aceptado: si dos OT piden la misma
 grilla, alguien pega el número dos veces.
@@ -3253,9 +3254,14 @@ cerrada: 16 de las 20 OT con repuestos están realizadas.
 **6. El empate se rompe por número de OT, de menor a mayor.** No es un detalle
 mecánico: la única competencia real en producción es un empate triple —las
 órdenes 2896, 2897 y 2898 tienen las tres `fecha = 2026-10-26`—, y sin regla el
-orden lo decide PostgREST y la misma pantalla diría cosas distintas. Y desde que
-se arregló el cruce con el pañol (punto siguiente) esas tres comparten un
-**artículo** —el niple, código 01221— y por eso su link es global.
+orden lo decide PostgREST y la misma pantalla diría cosas distintas. Esas tres
+piden el mismo niple y la misma tapa, que desde el arreglo del cruce (punto
+siguiente) resuelven a los códigos 01221 y 01220. **Eso no vuelve global su
+link**: el destino sale del `articulo_id` guardado en el renglón, que sólo
+escribe una persona al elegir el artículo (`PUT /articulo`), y medido el
+16/11/2026 hay 0 de 26 renglones con uno. El arreglo hizo que el artículo se
+pueda **elegir**; el link es global para cada una de las tres cuando alguien lo
+elige en ella.
 
 **7. Arreglar el cruce con el pañol fue parte del trabajo.** La OT dice
 `Niple galvanizado ø 3 " x 300 mm` y el pañol `01221 NIPLE GALVANIZADO 3" X

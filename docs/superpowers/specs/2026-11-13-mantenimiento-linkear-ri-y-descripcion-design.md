@@ -31,7 +31,8 @@ No es una muestra: es la población entera.
   `REALIZADO`, así que la etiqueta decía una cosa y la cuenta hacía otra. Ya
   está arreglado, y vale anotarlo porque el número equivocado llegó a un diseño.*
 - **El código es lo que decide**: los 4 repuestos con código anotado reconocen
-  su artículo; de los 22 sin código, **fallan 19**.
+  su artículo; de los 22 sin código, **fallan 19**. *(Cifras de antes del
+  arreglo del cruce; las de hoy están en la corrección de más abajo.)*
 - Las 19 fallas **no son la misma cosa**, y esa división es la que ordena el
   trabajo:
   - **6 están en el pañol y el cruce las pierde.** La OT dice
@@ -59,11 +60,16 @@ No es una muestra: es la población entera.
   *Corrección del 16/11/2026: esto decía que **cuatro** de los cinco se agrupaban
   por texto, y dejó de ser cierto cuando se arregló el cruce con el pañol (la
   tarea 1). Medido de nuevo contra producción: el cruce pasó de **7 a 13 de 26
-  reconocidos, sin perder ninguno**, y el niple que piden 2896, 2897 y 2898
-  resuelve ahora al código **01221**. Esas tres, la única competencia real que
-  hay hoy, comparten entonces un **artículo** y su link es **global** y no del
-  renglón —que es justo lo que el diseño quería—. Lo que sigue agrupándose por
-  texto son los que no están en el pañol, como las grillas.*
+  reconocidos, sin perder ninguno**, y ahora son **dos** los que se agrupan por
+  texto, las dos grillas: el niple que piden 2896, 2897 y 2898 se agrupa por el
+  código **01221** y la tapa por el **01220**. Ojo con lo que eso no es: **no
+  volvió global el link de esas tres.** El destino sale del `articulo_id`
+  guardado en el renglón, que sólo escribe una persona al elegir el artículo,
+  y hoy hay **0 de 26** renglones con uno. Lo que el arreglo hizo es que el
+  01221 y el 01220 se puedan **elegir**: la pantalla los ofrece como el
+  artículo reconocido. El link pasa a ser global para esas tres órdenes recién
+  cuando alguien lo elige en cada una —el objetivo 2: un repuesto con artículo
+  elegido queda enganchado—.*
 
 ## Objetivos
 
@@ -247,6 +253,7 @@ dice, no cómo se construye. Si alguna está mal, se discute antes de planificar
 ## Lo que sólo se puede comprobar con datos reales
 
 El cruce se mide con `scripts/medir-cruce-de-repuestos.mts`, que lee producción
-y no toca nada. Daba 7 de 26 reconocidos antes del arreglo del cruce (hoy da 13); cualquier cambio al cruce se juzga
+y no toca nada. Daba 7 de 26 reconocidos antes del arreglo del cruce (hoy da
+13); cualquier cambio al cruce se juzga
 contra ese número **y contra la lista de los que deja de reconocer**, que es la
 mitad que un porcentaje solo no muestra.
