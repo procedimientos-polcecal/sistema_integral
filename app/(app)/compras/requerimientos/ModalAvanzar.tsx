@@ -117,8 +117,9 @@ export default function ModalAvanzar({
   }
 
   return (
-    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-    // hay borrador, así que hoy los dos llaman a `onClose`.
+    // El fondo, la X y Escape salen conservando porque no hay nada que tirar:
+    // este formulario no pasa por `useBorrador` y pierde lo cargado al salir,
+    // como antes. Hoy los dos llaman a `onClose`.
     <Modal titulo={esComparativa ? "Comparativa lista" : "Registrar el pedido"} alSalir={onClose}>
         <div className="space-y-4">
           <p className="-mt-2 text-sm text-slate-500">RI {r.nro_ri} · {r.descripcion}</p>

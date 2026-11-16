@@ -106,6 +106,14 @@ import {
  * hoy su propio componente. Si un formulario nuevo no puede montarse por
  * apertura, no uses el hook arriba: sacá el cuerpo del modal a un componente.
  *
+ * Hay una segunda consecuencia, y ésa no es de comodidad sino de seguridad: el
+ * borrador se lee **una sola vez, al montar**, pero el efecto que lo escribe
+ * depende de `clave`. Si `clave` cambiara con el hook vivo, lo tipeado para el
+ * registro anterior se escribiría bajo la clave del nuevo, y reaparecería sobre
+ * el registro equivocado, que es justo lo que `claveDelBorrador` existe para
+ * impedir. Por eso la clave no se cambia: otro registro es otro componente, que
+ * se monta de nuevo y lee su propio borrador.
+ *
  * Es de cliente a propósito (`"use client"`): el almacén de borradores es un
  * `Map` de módulo, que durante un render de servidor sería el mismo para todos
  * los pedidos.

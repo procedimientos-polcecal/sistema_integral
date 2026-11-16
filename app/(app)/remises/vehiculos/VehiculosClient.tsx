@@ -142,8 +142,9 @@ function VehiculoModal({ v, choferes, onClose, onSaved }: { v: any | null; chofe
   }
 
   return (
-    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-    // hay borrador que tirar, así que hoy los dos llaman a `onClose`.
+    // El fondo, la X y Escape salen conservando porque no hay nada que tirar:
+    // este formulario no pasa por `useBorrador` y pierde lo cargado al salir,
+    // como antes. Hoy los dos llaman a `onClose`.
     <Modal titulo={v ? "Editar vehículo" : "Nuevo vehículo"} alSalir={onClose}>
         <form onSubmit={guardar} className="space-y-3">
           <div>

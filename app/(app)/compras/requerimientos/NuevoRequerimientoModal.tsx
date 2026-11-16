@@ -386,8 +386,9 @@ export default function NuevoRequerimientoModal({
   }
 
   return (
-    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-    // hay borrador, así que hoy los dos llaman a `cerrar`, que además recarga si
+    // El fondo, la X y Escape salen conservando porque no hay nada que tirar:
+    // este formulario no pasa por `useBorrador` y pierde lo cargado al salir,
+    // como antes. Hoy los dos llaman a `cerrar`, que además recarga si
     // el pedido ya se creó (ver más arriba).
     <Modal titulo="Nuevo requerimiento interno" alSalir={cerrar} ancho="ancho">
         <form onSubmit={enviar} className="space-y-4">

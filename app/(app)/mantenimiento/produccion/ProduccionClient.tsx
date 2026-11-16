@@ -618,7 +618,9 @@ function EditorDeDia({
             onClick={async () => { if (await onGuardar(est, tur, mot)) tirar(); }}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
           >Guardar</button>
-          {/* El único que tira. */}
+          {/* El único camino de salida que descarta. El guardado exitoso de
+              arriba también llama a `tirar()`, pero eso es limpiar lo ya
+              guardado y no salir. */}
           <button
             onClick={() => { tirar(); onCerrar(); }}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"

@@ -207,7 +207,7 @@ export default function DetalleOS({
               <Select
                 value={estado}
                 onChange={(e) => cambiar({ estado: e.target.value })}
-                disabled={!puedeEditar}
+                disabled={!puedeEditar || guardando}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
               >
                 <option value="">Sin estado</option>
@@ -222,7 +222,7 @@ export default function DetalleOS({
               <input
                 value={proveedor}
                 onChange={(e) => cambiar({ proveedor: e.target.value })}
-                disabled={!puedeEditar}
+                disabled={!puedeEditar || guardando}
                 placeholder="—"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
               />
@@ -232,7 +232,7 @@ export default function DetalleOS({
                 type="date"
                 value={fechaPedido?.slice(0, 10) ?? ""}
                 onChange={(e) => cambiar({ fechaPedido: e.target.value })}
-                disabled={!puedeEditar}
+                disabled={!puedeEditar || guardando}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
               />
             </Campo>
@@ -241,7 +241,7 @@ export default function DetalleOS({
                 type="date"
                 value={fechaRealizacion?.slice(0, 10) ?? ""}
                 onChange={(e) => cambiar({ fechaRealizacion: e.target.value })}
-                disabled={!puedeEditar}
+                disabled={!puedeEditar || guardando}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
               />
             </Campo>
@@ -251,7 +251,7 @@ export default function DetalleOS({
             <textarea
               value={observaciones}
               onChange={(e) => cambiar({ observaciones: e.target.value })}
-              disabled={!puedeEditar}
+              disabled={!puedeEditar || guardando}
               rows={2}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
             />
@@ -265,7 +265,7 @@ export default function DetalleOS({
               <textarea
                 value={motivoRechazo}
                 onChange={(e) => cambiar({ motivoRechazo: e.target.value })}
-                disabled={!puedeEditar}
+                disabled={!puedeEditar || guardando}
                 rows={2}
                 autoFocus
                 placeholder="Ej.: lo hace el taller propio"

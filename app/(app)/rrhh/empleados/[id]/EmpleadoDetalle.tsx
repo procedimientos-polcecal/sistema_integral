@@ -837,8 +837,9 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
       )}
 
       {faltaEnEdicion && (
-        // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-        // hay borrador que tirar, así que hoy los dos cierran igual.
+        // El fondo, la X y Escape salen conservando porque no hay nada que tirar:
+        // este formulario no pasa por `useBorrador` y pierde lo cargado al salir,
+        // como antes. Hoy los dos cierran igual.
         <Modal titulo="Clasificar falta" alSalir={() => setFaltaEnEdicion(null)}>
             <p className="text-sm text-slate-500 mb-4">
               {empleado.apellido}, {empleado.nombre} · {new Date(`${faltaEnEdicion}T00:00:00`).toLocaleDateString("es-AR", { timeZone: "UTC" })}

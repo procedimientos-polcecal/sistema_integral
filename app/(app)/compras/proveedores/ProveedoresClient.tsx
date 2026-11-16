@@ -283,8 +283,9 @@ function ModalProveedor({
   }
 
   return (
-    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-    // hay borrador, así que hoy los dos llaman a `onClose`.
+    // El fondo, la X y Escape salen conservando porque no hay nada que tirar:
+    // este formulario no pasa por `useBorrador` y pierde lo cargado al salir,
+    // como antes. Hoy los dos llaman a `onClose`.
     <Modal titulo={proveedor ? "Editar proveedor" : "Nuevo proveedor"} alSalir={onClose} ancho="ancho">
         <form onSubmit={enviar} className="space-y-4">
           <Campo label="Nombre" requerido>

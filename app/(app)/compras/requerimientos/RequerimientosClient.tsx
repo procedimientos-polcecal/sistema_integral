@@ -794,9 +794,10 @@ export default function RequerimientosClient({
           botón avanzaba a ciegas, sin avisar ni dejar cargar nada, mientras la
           bandeja ni siquiera lo ofrecía. */}
       {avanzando?.estado_compra === "PARA_COMPRAR" && (
-        // El fondo, la X y Escape salen conservando; sólo «Cancelar» (el de
-        // `AprobarSinComparativa`) tira. Todavía no hay borrador, así que hoy los
-        // dos cierran el diálogo.
+        // El fondo, la X y Escape salen conservando porque no hay nada que
+        // tirar: este formulario no pasa por `useBorrador` y pierde lo cargado al
+        // salir, como antes. Hoy «Cancelar» (el de `AprobarSinComparativa`) y los
+        // demás caminos cierran el diálogo igual.
         <Modal titulo="Aprobar la compra" alSalir={() => setAvanzando(null)}>
               <p className="-mt-2 mb-4 text-sm text-slate-500">
                 RI {avanzando.nro_ri} · {avanzando.descripcion}

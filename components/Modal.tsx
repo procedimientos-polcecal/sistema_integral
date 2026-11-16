@@ -79,6 +79,16 @@ export function Modal({
         cancelText: "Seguir cargando",
       });
       if (salgo) alSalir();
+    } catch (e) {
+      // `useConfirm()` sin `<ConfirmProvider>` rompe a propósito
+      // (components/ConfirmProvider.tsx), pero `salir` corre con `void`: el
+      // rechazo quedaría sin dueño y el modal simplemente no cerraría, que es
+      // justo la falla muda que ese `throw` existe para evitar. Se sale (nadie
+      // queda atrapado en una capa que no cierra) y el error se vuelve a tirar
+      // fuera de la promesa, para que llegue al `window.onerror` y al overlay de
+      // desarrollo en el primer clic.
+      alSalir();
+      setTimeout(() => { throw e; });
     } finally {
       preguntando.current = false;
     }
@@ -178,8 +188,12 @@ export function Modal({
  * fondo de un formulario largo. Vive acá y no en cada formulario porque **repite
  * el padding del cuerpo** (`px-5 pb-5`): los márgenes negativos lo compensan para
  * que el pie llegue de borde a borde, y si ese padding cambia hay un solo lugar
- * donde corregirlo. Tiene que ser hijo directo del cuerpo (o del `<form>` que lo
- * llena) para que `sticky` encuentre el contenedor que scrollea.
+ * donde corregirlo. No hace falta que sea hijo directo del cuerpo: `sticky` se
+ * ancla al ancestro que scrollea más cercano y `-mx-5` al bloque que lo contiene,
+ * así que puede ir un par de niveles adentro (`<form>`, un `div` de la sección).
+ * La condición real es que **entre el pie y el cuerpo no haya padding horizontal
+ * ni un `overflow` propio**: con padding, los márgenes negativos no llegan al
+ * borde; con `overflow`, `sticky` se ancla a ese contenedor y no al cuerpo.
  *
  * `className` suma la disposición de los botones (`flex justify-end gap-2`).
  */

@@ -728,7 +728,9 @@ y `revisar-exportaciones`: hasta que la lista de excepciones aguante unas
 semanas, un CI rojo por falsos positivos no lo mira nadie. El argumento entero
 para que exista está medido: **entre el 11/11 y el 13/11/2026 los modales pasaron
 de 45 a 48, tres de ellos escritos a mano. Dos días.** Sin algo que lo note, la
-inconsistencia que se acaba de ordenar vuelve sola.
+inconsistencia que se acaba de ordenar vuelve sola. **Esa es la cuenta
+histórica; la de hoy es otra**: al 16/11/2026 el árbol tiene **53** `<Modal>`
+(53 `alSalir=`), y si este número y el árbol discrepan, manda el árbol.
 
 Lo que no se deduce del código:
 

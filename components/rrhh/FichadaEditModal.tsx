@@ -264,8 +264,9 @@ export default function FichadaEditModal({
   }
 
   return (
-    // El fondo, la X y Escape salen conservando; sólo «Cancelar» tira. Todavía no
-    // hay borrador que tirar, así que hoy los dos llaman a `onClose`.
+    // El fondo, la X y Escape salen conservando porque no hay nada que tirar:
+    // este formulario no pasa por `useBorrador` y pierde lo cargado al salir,
+    // como antes. Hoy los dos llaman a `onClose`.
     <Modal titulo="Corregir fichada" alSalir={onClose}>
         <p className="text-sm text-slate-500 mb-4">
           {empleadoNombre} · {new Date(`${fecha}T00:00:00`).toLocaleDateString("es-AR", { timeZone: "UTC" })}
