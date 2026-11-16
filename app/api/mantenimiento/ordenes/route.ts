@@ -8,7 +8,9 @@ import {
   celdasParaRegistrar, repartirRegistroDeOT,
   esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT, type ValorDeCelda,
 } from "@/lib/mantenimiento/ordenes";
-import { esCancelacion, loQueImpideCancelar } from "@/lib/mantenimiento/cancelacion";
+import {
+  esCancelacion, loQueImpideCancelar, ESTADO_CANCELADA, SE_CANCELA_DESDE,
+} from "@/lib/mantenimiento/cancelacion";
 import { celdaDeObservacionPrevia } from "@/lib/mantenimiento/notas";
 import { fechaDeLaCarga, type FechaDeLaCarga } from "@/lib/mantenimiento/avisos";
 import { marcarElAviso } from "@/lib/mantenimiento/marcarElAviso";
@@ -711,9 +713,18 @@ export async function PATCH(request: Request) {
   //
   // Hace falta el estado que la orden tiene **hoy**, porque desde dónde se
   // puede cancelar depende de él —desde REALIZADO no, que ya tiene fecha de
-  // cierre— y el cuerpo no lo trae. De paso, un id inventado no llega a
-  // cancelar nada: sin fila el estado actual queda vacío, y la regla no deja
-  // cancelar desde un estado desconocido.
+  // cierre— y el cuerpo no lo trae.
+  //
+  // **Los dos motivos por los que esta lectura puede no traer el estado se
+  // contestan distinto, y ésa es toda la razón del `maybeSingle` y del `if`
+  // de abajo.** Si el error se descartara, una caída pasajera de la base
+  // dejaría `estadoActual` en `undefined` y la regla contestaría «no se puede
+  // cancelar una orden en estado desconocido»: le echaría la culpa a la orden
+  // por un problema del servidor, y a quien está cancelando no le daría ni un
+  // motivo para reintentar. Es la regla escrita del repo —un diagnóstico que
+  // no se distingue de otro no es un diagnóstico— y acá cuesta barato
+  // respetarla: el fallo de lectura es un 500 y la fila que no está es un 404,
+  // con las mismas palabras que usa la ruta de notas.
   //
   // Qué impide cancelar no se decide acá: lo contesta `loQueImpideCancelar`,
   // que es pura y tiene sus tests —una justificación con un estado que no es
@@ -721,15 +732,36 @@ export async function PATCH(request: Request) {
   // texto vacío o demasiado largo—. Acá se le pasa lo que llegó y se obedece
   // el veredicto, una sola vez. Repetir cualquiera de esos chequeos sería
   // tener la regla en dos lugares, que es como una de las dos se queda vieja.
-  const { data: laDeAhora } = await admin
+  const { data: laDeAhora, error: errorDeLaOrden } = await admin
     .from("ordenes_trabajo")
     .select("estado")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
+  if (errorDeLaOrden) {
+    return NextResponse.json(
+      { error: `No se pudo leer la orden: ${errorDeLaOrden.message}` },
+      { status: 500 }
+    );
+  }
+  if (!laDeAhora) {
+    return NextResponse.json({ error: "No existe esa orden de trabajo" }, { status: 404 });
+  }
+
+  // Y una precisión sobre la fecha de cierre, porque lo que el código hace y lo
+  // que suena que hace no son lo mismo: cancelar **nunca pone** una fecha de
+  // cierre —`loQueImpideCancelar` rechaza la que venga con algo adentro—, pero
+  // un `fecha_cierre: null` en el cuerpo **sí pasa**: `vino()` lo cuenta como
+  // «no vino», `repartirRegistroDeOT` lo copia al update y la escritura vacía
+  // la celda K en la misma pasada. Hoy es inofensivo, y el argumento es del
+  // código y no de una medición: una orden con fecha de cierre es REALIZADO
+  // —lo fuerza `estadoSegunElCierre`— y desde REALIZADO no se cancela, así que
+  // lo que se vacía ya estaba vacío. Queda dicho en vez de tapado: escribir que
+  // no se toca sería afirmar algo que no pasó, que es exactamente lo que este
+  // repo ya pagó caro.
   const cancelacion = loQueImpideCancelar({
     estadoPedido: estado,
-    estadoActual: laDeAhora?.estado,
+    estadoActual: laDeAhora.estado,
     justificacion: body.justificacion,
     fechaCierre: body.fecha_cierre,
   });
@@ -806,6 +838,12 @@ export async function PATCH(request: Request) {
       .from("ordenes_trabajo_notas")
       .insert({ orden_id: id, texto: cancelacion.texto, creado_por: user.id });
 
+    // 500 y no 400: que la base no acepte el insert es un fallo del servidor,
+    // y el cuerpo que llegó puede estar perfecto. Vestirlo de error del cliente
+    // le dice «no reintentes» a cualquiera que trate los 4xx como definitivos
+    // —la cola de las cargas sin señal, sin ir más lejos—, y así una
+    // cancelación que sólo necesitaba otro intento se perdería en silencio. El
+    // texto ya decía «probá de nuevo»; ahora el código dice lo mismo.
     if (errorDeLaNota) {
       return NextResponse.json(
         {
@@ -813,7 +851,7 @@ export async function PATCH(request: Request) {
             "La orden no se canceló porque no se pudo guardar el motivo: " +
             `${errorDeLaNota.message}. Probá de nuevo.`,
         },
-        { status: 400 }
+        { status: 500 }
       );
     }
   }
@@ -835,9 +873,52 @@ export async function PATCH(request: Request) {
   // guardar la justificación desde la orden.
   const extra = seCancela ? [celdaDeObservacionPrevia(cancelacion.texto)] : [];
 
-  const { data: updated, error } = await admin
-    .from("ordenes_trabajo").update(update).eq("id", id).select().single();
+  // ── Y EL ESTADO DEL QUE SE CANCELA SE COMPRUEBA AL ESCRIBIR ───────────────
+  //
+  // La regla de arriba leyó el estado y después escribe, y entre las dos cosas
+  // no había nada cuidándolo: un PATCH concurrente que realice la orden —estado
+  // `REALIZADO` y su `fecha_cierre`— justo en esa ventana dejaría la fila
+  // cancelada **y** con fecha de cierre, que es la fila que se contradice a sí
+  // misma y la razón por la que `cancelacion.ts` excluye `REALIZADO`.
+  //
+  // La ventana son milisegundos en una ruta que se usa unas pocas veces por
+  // día, así que esto no es un bug que esté pasando: es la diferencia entre un
+  // invariante probable y uno garantizado, y cuesta un filtro. La misma lista
+  // que mira la regla viaja en el `WHERE` del update, así que comprobar y
+  // escribir pasan a ser una sola operación. `CANCELADA` entra en la lista
+  // porque volver a justificar una ya cancelada tiene que seguir andando.
+  let laEscritura = admin.from("ordenes_trabajo").update(update).eq("id", id);
+  if (seCancela) {
+    laEscritura = laEscritura.in("estado", [...SE_CANCELA_DESDE, ESTADO_CANCELADA]);
+  }
+
+  const { data: updated, error } = await laEscritura.select().maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Cero filas quiere decir dos cosas distintas según si el filtro estaba
+  // puesto, y por eso son dos respuestas.
+  //
+  // **Cancelando**: la orden se leyó hace un instante, así que existir existe;
+  // lo que pasó es que su estado dejó de ser uno de los que se pueden cancelar.
+  // Es el mismo 400 que habría dado la regla. No se promete nada sobre la nota
+  // —quedó escrita, salvo que lo que cambió haya sido un borrado, que se la
+  // lleva en cascada—, y prometerlo sería afirmar algo que no se comprobó.
+  //
+  // **Sin cancelar**: no hay filtro, así que la única explicación es que la
+  // fila ya no esté. Pasa: el borrado de espejo se lleva OT de verdad. Antes
+  // esto salía como un 500 con el código de PostgREST adentro.
+  if (!updated) {
+    return seCancela
+      ? NextResponse.json(
+          {
+            error:
+              "No se canceló: la orden cambió de estado mientras se guardaba el " +
+              "motivo. Mirá cómo quedó antes de volver a cancelarla.",
+          },
+          { status: 400 }
+        )
+      : NextResponse.json({ error: "No existe esa orden de trabajo" }, { status: 404 });
+  }
 
   const planilla_error = await escribirEnLaPlanilla(updated, registro, extra);
 
