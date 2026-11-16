@@ -779,16 +779,19 @@ Lo que no se deduce del código:
   entre una fecha y la otra. Importa porque `useConfirm()` **rompe a propósito**
   sin proveedor —devolver `false` se leería como «el usuario canceló»—, y esa
   mentira dejó muerto el botón «Pedir» de `/inventario/stock` nueve días sin que
-  el build ni los tests lo notaran. `app/cargar/CargarClient.tsx` monta el suyo
+  el build ni los tests lo notaran (el commit que lo arregló es `f58034d7`, y
+  ahí está medido: fallaba en los 62 artículos con un RI abierto y andaba en los
+  otros 1.113, que es por lo que nadie lo vio). `app/cargar/CargarClient.tsx` monta el suyo
   porque vive fuera del grupo `(app)`.
 
 **Tres pantallas quedaron sin borrador a propósito** —el tablero de
 Mantenimiento, `ejecuciones` y `mantenimientos`—, y cada una lo dice al lado de
 su `<Modal>`, que es donde alguien lo va a buscar. El motivo es la forma de esas
 pantallas y no una preferencia: el estado del formulario vive en el componente de
-la página, que no se desmonta; los dos caminos que lo abren lo vacían a
-propósito; y la clave tendría que llevar el registro que se está editando, que
-recién se sabe al abrirlo. Una clave fija haría **lo peor de los dos mundos**: lo
+la página, que no se desmonta; **cada camino que lo abre lo reescribe entero**
+—vacío en unos, con los valores del registro que se va a editar en otros—, así
+que lo tipeado antes no sobrevive de todas formas; y la clave tendría que llevar
+el registro que se está editando, que recién se sabe al abrirlo. Una clave fija haría **lo peor de los dos mundos**: lo
 escrito para un registro reapareciendo sobre otro, que es justo lo que la clave
 existe para impedir. Migrarlas es sacar el cuerpo del modal a su propio
 componente, que se monte por registro — y es la misma razón por la que el hook va
