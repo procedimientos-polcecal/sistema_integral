@@ -71,9 +71,9 @@ export const NOTAS: Record<string, string> = {
     "lleva 27 para las órdenes sin puntuar y +1000 para las que siguen abiertas (una " +
     "abierta sin puntuar tiene 1027). Sirve para ordenar, no para mostrar: no la " +
     "muestres ni la describas como puntaje; si hay que mostrar un puntaje, calculá el " +
-    "producto de las tres notas. Abiertas son las que no están REALIZADO ni SUSPENDIDA, " +
+    "producto de las tres notas. Abiertas son las que no están REALIZADO ni CANCELADA, " +
     "y **'las más urgentes' o 'qué atacar primero' son las abiertas**: filtrá " +
-    "`estado not in ('REALIZADO','SUSPENDIDA')`, porque una realizada de diciembre no es " +
+    "`estado not in ('REALIZADO','CANCELADA')`, porque una realizada de diciembre no es " +
     "urgente aunque tenga 125. Para ordenar usá `order by gut_orden desc`, que es la clave " +
     "correcta (abiertas primero, y entre ellas el mayor puntaje); o, si preferís el " +
     "producto, `order by gut_gravedad * gut_urgencia * gut_tendencia desc nulls last`: " +

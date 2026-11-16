@@ -80,7 +80,7 @@ describe("que ordenes piden justificacion", () => {
   });
 
   it("todas las abiertas si", () => {
-    for (const e of ["POR_HACER", "ATRASADO", "EN_PROCESO", "SUSPENDIDA"]) {
+    for (const e of ["POR_HACER", "ATRASADO", "EN_PROCESO", "CANCELADA"]) {
       expect(pideJustificacion(e)).toBe(true);
     }
   });
