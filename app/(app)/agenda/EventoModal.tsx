@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { esCorreo } from "@/lib/agenda/evento";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import {
@@ -129,12 +130,13 @@ export default function EventoModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <form
-        onSubmit={guardar}
-        className="max-h-[90dvh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-      >
-        <h2 className="text-base font-bold text-slate-900">{evento ? "Editar el evento" : "Nuevo evento"}</h2>
+    // Mientras guarda no se sale (como «Cancelar», que ya estaba deshabilitado):
+    // cerrar a mitad de la escritura dejaría a la pantalla sin enterarse del resultado.
+    <Modal
+      titulo={evento ? "Editar el evento" : "Nuevo evento"}
+      alSalir={() => { if (!guardando) onCerrar(); }}
+    >
+      <form onSubmit={guardar} className="space-y-4">
 
         {evento?.divergencia && (
           <p className="rounded-lg border px-3 py-2 text-sm text-slate-800" style={{ background: "#FFFBEB", borderColor: "#FCD34D" }}>
@@ -256,13 +258,13 @@ export default function EventoModal({
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{error}</p>
         )}
 
-        <div className="flex justify-end gap-2 pt-1">
+        <PieDeModal>
           <button type="button" className="btn-secondary" onClick={onCerrar} disabled={guardando}>Cancelar</button>
           <button type="submit" className="btn-primary" disabled={guardando || titulo.trim() === ""}>
             {guardando ? "Guardando…" : evento ? "Guardar los cambios" : "Crear el evento"}
           </button>
-        </div>
+        </PieDeModal>
       </form>
-    </div>
+    </Modal>
   );
 }

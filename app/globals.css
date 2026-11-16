@@ -86,6 +86,35 @@ html, body {
   overflow-x: hidden;
 }
 
+/* ─── iPhone / iPad ───
+   Tres cosas que Safari de iOS hace y que no se ven en una computadora.
+
+   1. ZOOM AL ENFOCAR. Safari amplía la página sola cuando se toca un campo de
+      menos de 16 px, y después no la devuelve: la pantalla queda desplazada y
+      hay que pellizcar para volver. `.input` es de 14 px, y el buscador de cada
+      desplegable de diez o más opciones (`Select`, `MultiSelect`) y la caja del
+      asistente son `text-sm` con `autoFocus`, así que pasaba cada vez que se
+      abrían. Se sube a 16 px sólo en iOS: `-webkit-touch-callout` existe en
+      WebKit de iPhone y iPad y no en Safari de escritorio, donde 16 px en una
+      grilla densa sólo estorbaría. Va con `!important` porque `.input` y los
+      `text-sm` de Tailwind tienen más peso que un selector de elemento. Los
+      checkbox, radio, range y file no se tocan: no hacen zoom y su tamaño no
+      es de texto.
+
+   2. TEXTO INFLADO AL GIRAR. Sin `text-size-adjust` Safari agranda el texto de
+      los bloques anchos al pasar a horizontal, y una tabla angosta cambia de
+      tamaño sola.
+
+   3. DOBLE TOQUE. Un `<a>` o `<button>` espera para ver si el segundo toque es
+      un zoom; `touch-action: manipulation` lo quita sin impedir el pellizco. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+a, button, summary, label, select, input, textarea, [role="button"] { touch-action: manipulation; }
+@supports (-webkit-touch-callout: none) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  select,
+  textarea { font-size: 16px !important; }
+}
+
 img, svg, video, canvas { max-width: 100%; }
 p, h1, h2, h3, h4, h5, h6, span, a, td, th, li { overflow-wrap: break-word; }
 

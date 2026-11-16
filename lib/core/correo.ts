@@ -39,6 +39,15 @@
  *    alguien mirando —acaba de apretar «Enviar»— y el `detalle` **no se tira**:
  *    se guarda en `mensajes_menciones.aviso_fallo` y la pantalla lo muestra al
  *    releer el hilo. Es la razón por la que `detalle` existe.
+ * 3. **`app/api/cron/rrhh-novedades/route.ts`** (16/11/2026), el resumen de
+ *    novedades del cierre del día. Es de la familia 1 —no hay nadie mirando a
+ *    las 15:50— pero con una diferencia que el encabezado viejo no preveía y
+ *    que por eso se anota: **manda doce correos en una corrida**, uno por
+ *    destinatario, porque el Apps Script acepta una sola dirección y valida su
+ *    dominio partiendo por `@`. Así que el `console.error` no alcanza solo: la
+ *    ruta devuelve el detalle de cada envío en su JSON, que es lo que queda
+ *    para mirar en el registro de la corrida cuando uno falla y los otros no.
+ *    Y es el primero que usa una casilla que no es la del sistema.
  *
  * ## POR QUÉ UN `console.error` ALCANZA ACÁ
  *
@@ -72,6 +81,37 @@
 const TOPE_DE_ESPERA_MS = 5_000;
 
 /**
+ * DE QUÉ CASILLA SALE EL CORREO, Y POR QUÉ ES UNA ELECCIÓN Y NO UN PARÁMETRO
+ *
+ * Una aplicación web de Apps Script **se ejecuta como su dueño**, así que el
+ * remitente no se elige desde el pedido: lo decide qué cuenta publicó el
+ * script. Por eso mandar desde otra casilla no es pasar un `from` —el script
+ * ni lo mira, a propósito, para que una URL filtrada no pueda falsear el
+ * remitente— sino **publicar un segundo script desde esa otra cuenta**.
+ *
+ * - `"sistema"` es la casilla de quien administra el SdG. Es la de siempre y
+ *   la que usan el rechazo de una carga y el aviso de una mención.
+ * - `"rrhh"` es `gestiondepersonas@polcecal.com`, y la pidió el usuario el
+ *   16/11/2026 para el resumen de novedades del cierre del día: lo manda RR.HH.
+ *   y las respuestas tienen que volver a RR.HH., no a una persona de sistemas.
+ *
+ * **Una casilla sin configurar NO cae a la otra.** Es deliberado y es la
+ * decisión que más importa de este archivo: el remitente es parte del mensaje
+ * —dice quién lo manda y a dónde contestar—, así que mandar desde la casilla
+ * equivocada es peor que no mandar. Quien pide `"rrhh"` y no la tiene
+ * publicada recibe `sin-configurar` y decide qué hacer.
+ */
+export type Casilla = "sistema" | "rrhh";
+
+/** Las dos variables de cada casilla. Van juntas o no van. */
+function variablesDe(casilla: Casilla): { url?: string; secreto?: string } {
+  if (casilla === "rrhh") {
+    return { url: process.env.SDG_CORREO_RRHH_URL, secreto: process.env.SDG_CORREO_RRHH_SECRET };
+  }
+  return { url: process.env.SDG_CORREO_URL, secreto: process.env.SDG_CORREO_SECRET };
+}
+
+/**
  * Si el correo está configurado, para preguntarlo **antes** de juntar los
  * datos del mensaje.
  *
@@ -79,8 +119,9 @@ const TOPE_DE_ESPERA_MS = 5_000;
  * tiempo, y en ese rato cada carga rechazada haría una consulta a `usuarios`
  * para después tirar el resultado. Las dos variables van juntas o no van.
  */
-export function estaConfigurado(): boolean {
-  return Boolean(process.env.SDG_CORREO_URL && process.env.SDG_CORREO_SECRET);
+export function estaConfigurado(casilla: Casilla = "sistema"): boolean {
+  const { url, secreto } = variablesDe(casilla);
+  return Boolean(url && secreto);
 }
 
 export type ResultadoDelCorreo = "enviado" | "sin-configurar" | "fallo";
@@ -102,9 +143,11 @@ export interface Mensaje {
   cuerpo: string;
 }
 
-export async function enviarCorreo(mensaje: Mensaje): Promise<RespuestaDelCorreo> {
-  const url = process.env.SDG_CORREO_URL;
-  const secreto = process.env.SDG_CORREO_SECRET;
+export async function enviarCorreo(
+  mensaje: Mensaje,
+  casilla: Casilla = "sistema"
+): Promise<RespuestaDelCorreo> {
+  const { url, secreto } = variablesDe(casilla);
 
   // Sin configurar **no se intenta y no se loguea**. Entre el deploy de esto y
   // el día que alguien publique el script va a pasar tiempo, y un error por
@@ -138,12 +181,12 @@ export async function enviarCorreo(mensaje: Mensaje): Promise<RespuestaDelCorreo
     // distinguir un secreto mal puesto de un dominio no permitido de un cupo
     // agotado.
     const loQueDijo = dijo.slice(0, 500);
-    console.error("correo: lo rechazó el Apps Script", respuesta.status, loQueDijo);
+    console.error(`correo[${casilla}]: lo rechazó el Apps Script`, respuesta.status, loQueDijo);
     // Con el cuerpo vacío no hay nada que copiar: queda al menos el status.
     return { estado: "fallo", detalle: loQueDijo || `HTTP ${respuesta.status}, sin cuerpo` };
   } catch (e) {
     const detalle = String((e as Error)?.message ?? e);
-    console.error("correo: no se pudo llamar al Apps Script", detalle);
+    console.error(`correo[${casilla}]: no se pudo llamar al Apps Script`, detalle);
     return { estado: "fallo", detalle };
   }
 }

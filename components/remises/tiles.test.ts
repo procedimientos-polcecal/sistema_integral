@@ -1,6 +1,21 @@
 import { describe, it, expect } from "vitest";
 import nextConfig from "@/next.config";
-import { TILES, TILES_HOST } from "./tiles";
+import { TILES, TILES_HOST, CENTRO_POR_DEFECTO } from "./tiles";
+
+/** Distancia en km entre dos puntos, para poder afirmar «está en Olavarría». */
+function km([latA, lngA]: [number, number], [latB, lngB]: [number, number]) {
+  const R = 6371;
+  const rad = (x: number) => (x * Math.PI) / 180;
+  const dLat = rad(latB - latA);
+  const dLng = rad(lngB - lngA);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(latA)) * Math.cos(rad(latB)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+const OLAVARRIA: [number, number] = [-36.893875, -60.323168];
+const OBELISCO: [number, number] = [-34.6037, -58.3816];
 
 /*
  * Lo que se prueba acá no es lógica: es que tres decisiones medidas el
@@ -59,5 +74,39 @@ describe("el fondo de mapa de Remises", () => {
     const grupos = await nextConfig.headers!();
     const csp = grupos.flatMap((g) => g.headers).find((h) => h.key.startsWith("Content-Security-Policy"));
     expect(csp!.value).not.toContain("cartocdn");
+  });
+});
+
+/*
+ * El centro por defecto es un dato geográfico, no una constante cualquiera: si
+ * alguien lo cambia por descuido, nada se rompe —el mapa carga igual— y sólo
+ * quien conoce el lugar nota que abre en otra provincia. Por eso se afirma la
+ * distancia en kilómetros y no la igualdad de dos números, que no diría nada
+ * sobre dónde cae.
+ */
+describe("el centro por defecto del mapa", () => {
+  it("abre en Olavarría, que es donde está la planta", () => {
+    expect(km(CENTRO_POR_DEFECTO, OLAVARRIA)).toBeLessThan(5);
+  });
+
+  it("ya no abre en Buenos Aires, que estaba a 309 km", () => {
+    // Era el valor escrito a mano en los dos mapas hasta el 14/11/2026.
+    expect(km(CENTRO_POR_DEFECTO, OBELISCO)).toBeGreaterThan(100);
+  });
+
+  it("está donde vive la gente: a menos de 20 km de los domicilios cargados", () => {
+    // La mediana de los 25 domicilios geocodificados, medida contra la base el
+    // 14/11/2026. Es la segunda fuente que confirma el punto de Nominatim, y
+    // acá queda fijada para que el día que alguien mueva el centro se vea si
+    // se alejó de los empleados.
+    const medianaDeLosDomicilios: [number, number] = [-36.897805, -60.323101];
+    expect(km(CENTRO_POR_DEFECTO, medianaDeLosDomicilios)).toBeLessThan(20);
+  });
+
+  it("tiene el signo del hemisferio sur y del oeste", () => {
+    // Un signo invertido cae en China o en el Atlántico y el mapa igual carga.
+    const [lat, lng] = CENTRO_POR_DEFECTO;
+    expect(lat).toBeLessThan(0);
+    expect(lng).toBeLessThan(0);
   });
 });

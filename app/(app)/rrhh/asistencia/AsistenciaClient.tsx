@@ -8,6 +8,7 @@ import { TIPOS_AUSENCIA, labelTipoAusencia } from "@/lib/rrhh/tiposAusencia";
 import FichadaEditModal from "@/components/rrhh/FichadaEditModal";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 function firstOfMonth() {
@@ -58,9 +59,10 @@ function ClasificarModal({ seleccion, onClose, onSaved }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-slate-800 mb-1">Clasificar falta</h3>
+    // El fondo, la X y Escape salen conservando porque no hay nada que tirar:
+    // este formulario no pasa por `useBorrador` y pierde lo cargado al salir,
+    // como antes. Hoy los dos llaman a `onClose`.
+    <Modal titulo="Clasificar falta" alSalir={onClose}>
         <p className="text-sm text-slate-500 mb-4">
           {seleccion.nombre} · {new Date(`${seleccion.fecha}T00:00:00`).toLocaleDateString("es-AR", { timeZone: "UTC" })}
         </p>
@@ -81,14 +83,13 @@ function ClasificarModal({ seleccion, onClose, onSaved }: {
           <label className="block text-xs text-slate-500 mb-1">Observaciones {justificada && tipo === "OTRA" ? "(obligatorio: aclarar el motivo)" : ""}</label>
           <textarea value={observaciones} onChange={(e) => setObservaciones(e.target.value)} className="input" rows={2} />
         </div>
-        <div className="flex justify-end gap-2">
+        <PieDeModal>
           <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600">Cancelar</button>
           <button onClick={guardar} disabled={(justificada && tipo === "OTRA" && !observaciones.trim()) || guardando} className="btn-primary disabled:opacity-50">
             {guardando ? "Guardando..." : "Guardar"}
           </button>
-        </div>
-      </div>
-    </div>
+        </PieDeModal>
+    </Modal>
   );
 }
 

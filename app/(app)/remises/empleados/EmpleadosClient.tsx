@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import InfoTip from "@/components/InfoTip";
 import { usePuedeEditarRemises } from "@/lib/remises/context";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 const PinMap = dynamic(() => import("@/components/remises/PinMap"), { ssr: false });
 
@@ -202,9 +203,10 @@ function EmpleadoModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-slate-800 mb-4">{empleado.apellido}, {empleado.nombre}</h3>
+    // El fondo, la X y Escape salen conservando porque no hay nada que tirar:
+    // este formulario no pasa por `useBorrador` y pierde lo cargado al salir,
+    // como antes. Hoy los dos llaman a `onClose`.
+    <Modal titulo={`${empleado.apellido}, ${empleado.nombre}`} alSalir={onClose} ancho="ancho">
         <form onSubmit={guardar} className="space-y-3">
           <div>
             <label className="block text-xs text-slate-500 mb-1">Dirección de recogida</label>
@@ -224,20 +226,26 @@ function EmpleadoModal({
               {turnos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
             </Select>
           </div>
-          <PinMap lat={form.lat} lng={form.lng} popup={`${empleado.apellido}, ${empleado.nombre}`}
-            onChange={(lat, lng) => setForm((f) => ({ ...f, lat, lng }))} />
+          {/* `z-0` abre un contexto de apilado propio: los paneles de Leaflet traen
+              z-index de 400 a 1000 y, sueltos, pasarían por encima del pie pegado. */}
+          <div className="relative z-0">
+            <PinMap lat={form.lat} lng={form.lng} popup={`${empleado.apellido}, ${empleado.nombre}`}
+              onChange={(lat, lng) => setForm((f) => ({ ...f, lat, lng }))} />
+          </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
-          <div className="flex gap-2 pt-2">
+          <PieDeModal className="flex gap-2">
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Guardando..." : "Guardar"}
             </button>
             <button type="button" onClick={onClose} className="border border-slate-300 px-4 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-50">
               Cancelar
             </button>
-          </div>
+          </PieDeModal>
         </form>
 
-        <div className="border-t border-slate-100 mt-4 pt-4">
+        {/* `mt-9` y no `mt-4`: el pie del formulario de arriba lleva `-mb-5` y se
+            come 20 px de este margen. */}
+        <div className="border-t border-slate-100 mt-9 pt-4">
           <h4 className="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1">
             Acceso “Mi remis”
             <InfoTip text="Da acceso al empleado para que vea desde su celular en qué remis viaja y active notificaciones. Se le manda un email para que defina su propia contraseña." />
@@ -257,7 +265,6 @@ function EmpleadoModal({
           )}
           {avisoCuenta && <p className="text-xs text-slate-500 mt-1">{avisoCuenta}</p>}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

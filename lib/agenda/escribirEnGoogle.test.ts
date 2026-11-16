@@ -28,7 +28,12 @@ const FILA = {
   google_event_id: null as string | null,
   inicio: "2026-11-03T11:00:00+00:00",
   fin: "2026-11-03T12:30:00+00:00",
+  // Sin OT: es el alta a mano de la Agenda, donde Google SÍ avisa.
+  ot_id: null as string | null,
 };
+
+/** La misma fila, pero nacida de una OT: ahí Google no tiene que avisar. */
+const FILA_DE_OT = { ...FILA, ot_id: "11111111-1111-4111-8111-111111111111" };
 
 /** Lo que Google devuelve: con offset, que es lo que hay que guardar. */
 const ENGOOGLE = {
@@ -46,6 +51,54 @@ beforeEach(() => {
   vi.mocked(restaurarEvento).mockReset();
   vi.mocked(borrarEvento).mockReset();
   vi.mocked(leerEvento).mockReset();
+});
+
+describe("a quién avisa Google", () => {
+  // Lo que se fija acá es el pedido del 12/11/2026: una OT que entra sola al
+  // calendario no le manda correo ni hace sonar el celular a cuatro casillas.
+  // Lo que NO cambia: el evento se crea igual y los invitados siguen estando.
+  // Por eso los tests miran el cuarto argumento y no la lista de invitados.
+
+  it("el evento de una OT se escribe sin avisarle a los invitados", async () => {
+    vi.mocked(crearEvento).mockResolvedValue(ENGOOGLE);
+    await escribirEnGoogle("crear", FILA_DE_OT, EVENTO);
+    expect(crearEvento).toHaveBeenCalledWith(FILA_DE_OT.casilla, expect.anything(), "none");
+  });
+
+  it("el evento que creó una persona sí les avisa: invitar sin avisar no sirve", async () => {
+    vi.mocked(crearEvento).mockResolvedValue(ENGOOGLE);
+    await escribirEnGoogle("crear", FILA, EVENTO);
+    expect(crearEvento).toHaveBeenCalledWith(FILA.casilla, expect.anything(), "all");
+  });
+
+  it("mover el evento de una OT tampoco avisa", async () => {
+    vi.mocked(actualizarEvento).mockResolvedValue(ENGOOGLE);
+    await escribirEnGoogle("actualizar", { ...FILA_DE_OT, google_event_id: "abc12" }, EVENTO);
+    expect(actualizarEvento).toHaveBeenCalledWith(
+      FILA_DE_OT.casilla, "abc12", expect.anything(), "none"
+    );
+  });
+
+  it("borrar el evento de una OT no manda la cancelación", async () => {
+    await escribirEnGoogle("borrar", { ...FILA_DE_OT, google_event_id: "abc12" });
+    expect(borrarEvento).toHaveBeenCalledWith(FILA_DE_OT.casilla, "abc12", "none");
+  });
+
+  it("resucitar el evento de una OT no reenvía la invitación", async () => {
+    // `restaurar` es el único camino que revive un evento que alguien borró en
+    // Google, y pasa por la ruta de destrabar: sin esto, destrabar una OT le
+    // volvía a tocar el timbre a las cuatro casillas.
+    vi.mocked(restaurarEvento).mockResolvedValue(ENGOOGLE);
+    await escribirEnGoogle("restaurar", { ...FILA_DE_OT, google_event_id: "abc12" }, EVENTO);
+    expect(restaurarEvento).toHaveBeenCalledWith(
+      FILA_DE_OT.casilla, "abc12", expect.anything(), "none"
+    );
+  });
+
+  it("borrar un evento de una persona sí manda la cancelación", async () => {
+    await escribirEnGoogle("borrar", { ...FILA, google_event_id: "abc12" });
+    expect(borrarEvento).toHaveBeenCalledWith(FILA.casilla, "abc12", "all");
+  });
 });
 
 describe("escribirEnGoogle — crear", () => {

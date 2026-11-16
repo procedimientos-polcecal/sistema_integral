@@ -8,6 +8,9 @@ import RepuestosDeLaOT from "@/components/RepuestosDeLaOT";
 import FallaDeLaOT, { FALLA_VACIA, type LaFalla } from "@/components/FallaDeLaOT";
 import { lineasDesdeElCuerpo, type LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { estadoSegunElCierre } from "@/lib/mantenimiento/cierreDeOT";
+import {
+  elCierreEsAnteriorAlInicio, loQueFaltaPorElCierreAdelantado,
+} from "@/lib/mantenimiento/cierreAnteriorAlInicio";
 import { PRIORIDADES_DE_OT, TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -132,6 +135,9 @@ export default function FormularioOTOffline({
     estadoSegunElCierre(form.fecha_cierre, form.estado) === "REALIZADO" &&
     Boolean(form.fecha_cierre.trim());
 
+  /** Si el cierre cae antes del inicio: entonces hay que decir por qué. */
+  const cierreAdelantado = elCierreEsAnteriorAlInicio(form.fecha_cierre, form.fecha_ejecucion);
+
   /**
    * Lo que el formulario dice y se contradice, **calculado en cada render**.
    *
@@ -147,6 +153,24 @@ export default function FormularioOTOffline({
    * mientras se completa.
    */
   const contradicciones = loQueSeContradice(form);
+
+  /**
+   * Y si lo que pasa es que falta el motivo, **que el cartel pida eso**.
+   *
+   * La misma elección que hicieron las dos rutas el 12/11/2026 —primero el
+   * faltante, después la contradicción— traída a la pantalla, que es donde la
+   * gente la mira. Sin esto, entre que alguien elige la fecha y escribe el
+   * motivo ve «No se puede guardar porque la fecha de cierre … es anterior a la
+   * de inicio» justo al lado del campo que lo levanta.
+   *
+   * Acá pesa más que con señal: un cartel que dice que no se puede guardar es,
+   * en esta pantalla, un motivo para no mandar la carga — y la carga es lo
+   * único que quien está en la planta se lleva.
+   *
+   * Habla sólo de la justificación y no de todo lo que falta —de eso se ocupa
+   * `loQueFaltaParaCrear` al mandar—, porque esto corre en cada render.
+   */
+  const faltaElPorQue = loQueFaltaPorElCierreAdelantado(form);
 
   const equiposDelSector = form.sector_id
     ? equipos.filter((e) => e.sector_id === form.sector_id)
@@ -165,7 +189,7 @@ export default function FormularioOTOffline({
       return;
     }
     // Y después, con otro verbo: acá los datos están y lo que no cierra es lo
-    // que dicen entre ellos —una fecha de fin o de cierre anterior al inicio—.
+    // que dicen entre ellos —una fecha de fin anterior al inicio—.
     // Vale el mismo argumento de arriba y con más fuerza: un 400 por esto es
     // definitivo para la cola, o sea una carga parada por algo que se podía
     // decir en el momento, con la pantalla delante.
@@ -362,13 +386,23 @@ export default function FormularioOTOffline({
             ANTES de esa fecha vuelve sin la clave y el servidor la va a
             rechazar nombrando el campo. Es visible y se arregla completándolo;
             medido ese día, las 13 cargas de la tabla estaban resueltas. */}
-        {/* El `min` de las dos es la fecha de inicio: el calendario deja en
-            gris los días anteriores, así que el dedo que erra por un día no
-            llega ni a elegirlos. Acá importa más que con señal, por lo mismo
-            que arriba: sin conexión el que contesta es el servidor horas o
-            días después, y lo que contesta es un 400 definitivo para la cola.
-            Igual no es la regla —un `min` se saltea tipeando—: quien decide es
-            `loQueSeContradice`, en el submit y en el servidor. */}
+        {/* El `min` es la fecha de inicio: el calendario deja en gris los días
+            anteriores, así que el dedo que erra por un día no llega ni a
+            elegirlos. Acá importa más que con señal, por lo mismo que arriba:
+            sin conexión el que contesta es el servidor horas o días después, y
+            lo que contesta es un 400 definitivo para la cola. Igual no es la
+            regla —un `min` se saltea tipeando—: quien decide es
+            `loQueSeContradice`, en el submit y en el servidor.
+
+            **Lo lleva la de fin y ya no la de cierre** (12/11/2026). Son dos
+            reglas distintas: la de fin es la ventana estimada, que nadie pidió
+            poder prometer al revés; la de cierre se puede dar vuelta desde que
+            se explica por qué, y con el `min` puesto el camino normal al campo
+            del motivo quedaba cerrado —el calendario no ofrece los días en
+            gris, así que llegaba sólo quien tipeara la fecha a mano—. El submit
+            sigue
+            frenando lo que no se explica, así que la cola no se lleva nada que
+            el servidor vaya a rechazar por esto. */}
         <F label="Fecha de fin (estimada)" required>
           <input
             type="date"
@@ -383,7 +417,6 @@ export default function FormularioOTOffline({
           <input
             type="date"
             value={form.fecha_cierre}
-            min={form.fecha_ejecucion || undefined}
             onChange={(e) => f("fecha_cierre", e.target.value)}
             disabled={deshabilitado}
             className="input"
@@ -395,11 +428,35 @@ export default function FormularioOTOffline({
           Pegada a las fechas, que es donde está mirando quien las acaba de
           completar, y no abajo de todo con el resto de los errores. Dice la
           misma frase que el cartel de abajo a propósito: éste cuando pasa,
-          aquél si alguien aprieta igual. */}
-      {contradicciones.length > 0 && (
+          aquél si alguien aprieta igual.
+
+          **Y cuál de las dos frases, en el mismo orden que el submit y que las
+          dos rutas**: si lo que pasa es que falta el motivo, se dice eso; el
+          impedimento queda para lo que de verdad impide —una fecha de fin dada
+          vuelta—, que no lo arregla ningún texto. En ámbar y no en rojo porque
+          lo que falta es un campo por completar, que está acá abajo. */}
+      {faltaElPorQue.length > 0 ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          Falta cargar {faltaElPorQue.join(", ")}.
+        </div>
+      ) : contradicciones.length > 0 ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
           No se puede guardar porque {contradicciones.join(", ")}.
         </div>
+      ) : null}
+
+      {/* Debajo de las fechas y arriba de la falla: lo hacen aparecer las
+          fechas, y en un teléfono una sección que se abre más arriba empuja
+          hacia abajo el campo que se está completando. */}
+      {cierreAdelantado && (
+        <F label="Por qué se cierra antes de la fecha de inicio" required>
+          <textarea
+            value={form.cierre_justificacion}
+            onChange={(e) => f("cierre_justificacion", e.target.value)}
+            disabled={deshabilitado}
+            className="input min-h-20"
+          />
+        </F>
       )}
 
       {/* Debajo de la fecha de cierre y no arriba: es ella la que lo hace
@@ -558,6 +615,7 @@ function vacio() {
     fecha_ejecucion: "",
     fecha_fin: "",
     fecha_cierre: "",
+    cierre_justificacion: "",
     estado: "POR_HACER",
     contratista: "",
     horas: "",

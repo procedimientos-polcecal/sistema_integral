@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import InfoTip from "@/components/InfoTip";
 import EmpresasSectoresManager from "@/components/administracion/EmpresasSectoresManager";
+import CorreoDeNovedades from "./CorreoDeNovedades";
 
 export default function ConfiguracionClient() {
   const [config, setConfig] = useState<any | null>(null);
@@ -98,6 +99,13 @@ export default function ConfiguracionClient() {
           {guardado && <span className="ml-3 text-sm text-emerald-600">Guardado.</span>}
         </div>
       )}
+
+      {/*
+        Tarjeta aparte y con su propio botón de guardar: el PUT de arriba
+        dispara un recálculo de todo el período, y cambiarle el saludo a un
+        correo no puede costar eso.
+      */}
+      <CorreoDeNovedades />
 
       <EmpresasSectoresManager />
     </div>

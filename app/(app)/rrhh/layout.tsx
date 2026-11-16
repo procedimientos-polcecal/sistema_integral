@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { nivelEnModulo } from "@/lib/core/access";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 import { NivelRrhhProvider } from "@/lib/rrhh/context";
-import { ConfirmProvider } from "@/components/ConfirmProvider";
 
 export default async function RrhhLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -26,7 +25,7 @@ export default async function RrhhLayout({ children }: { children: React.ReactNo
 
   return (
     <NivelRrhhProvider nivel={nivel}>
-      <ConfirmProvider>{children}</ConfirmProvider>
+      {children}
     </NivelRrhhProvider>
   );
 }

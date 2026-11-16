@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { aFilas, clavesDeEncabezado, leerLibro, libroXlsx, leerPrimeraHoja } from "./excel";
+import { aFilas, abrirLibro, clavesDeEncabezado, leerLibro, libroXlsx, leerPrimeraHoja } from "./excel";
+import { xlsxConImagenesResponse } from "./xlsxExport";
 import JSZip from "jszip";
 
 /**
@@ -222,5 +223,115 @@ describe("leerLibro con el namespace en un prefijo", () => {
   /** Un archivo roto de verdad tiene que seguir fallando, y con su error, no con el del reintento. */
   it("un archivo que no es un .xlsx sigue fallando", async () => {
     await expect(leerLibro(Buffer.from("esto no es un xlsx"))).rejects.toThrow();
+  });
+});
+
+/**
+ * Una hoja puede llevar imagenes (11/11/2026), para la foto del grafico de la
+ * curva granulometrica.
+ *
+ * Todos los casos **releen el archivo escrito**: afirmar sobre el objeto que se
+ * armo en memoria probaria que `addImage` no explota, no que la imagen viajo.
+ * Se mira por dos lados a proposito: lo que `exceljs` entiende al leerlo
+ * (`getImages`) y lo que hay de verdad en el zip (`xl/media/*.png`), que es lo
+ * que va a abrir Excel.
+ */
+describe("una hoja con imagenes", () => {
+  // Un PNG de 1x1: lo minimo que `exceljs` y Excel aceptan como imagen.
+  const PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64"
+  );
+
+  it("una hoja puede llevar una imagen", async () => {
+    const buffer = await libroXlsx([
+      {
+        nombre: "Curva",
+        filas: [["Malla", "Pasante"], ["#4", 98.2]],
+        imagenes: [{ png: PNG, fila: 4, columna: 1, ancho: 300, alto: 200 }],
+      },
+    ]);
+
+    // Lo que ve exceljs al leer el archivo.
+    const libro = await abrirLibro(buffer);
+    expect(libro.model.media).toHaveLength(1);
+    expect(libro.model.media![0].extension).toBe("png");
+    const imagenes = libro.getWorksheet("Curva")!.getImages();
+    expect(imagenes).toHaveLength(1);
+    // La imagen esta donde se pidio: 0-based, como en `ImagenDeLaHoja`.
+    expect(imagenes[0].range.tl.nativeRow).toBe(4);
+    expect(imagenes[0].range.tl.nativeCol).toBe(1);
+
+    // Lo que hay en el zip, que es lo que abre Excel: los bytes del PNG, enteros.
+    const zip = await JSZip.loadAsync(buffer);
+    const medios = Object.keys(zip.files).filter((n) => /^xl\/media\/.+\.png$/.test(n));
+    expect(medios).toHaveLength(1);
+    const guardado = await zip.file(medios[0])!.async("nodebuffer");
+    expect(guardado.equals(PNG)).toBe(true);
+
+    // Y las filas siguen ahi: la imagen no pisa los datos.
+    const [hoja] = await leerLibro(buffer);
+    expect(hoja.matriz).toEqual([["Malla", "Pasante"], ["#4", 98.2]]);
+  });
+
+  it("dos imagenes en una hoja quedan las dos", async () => {
+    const buffer = await libroXlsx([
+      {
+        nombre: "Curva",
+        filas: [["a"]],
+        imagenes: [
+          { png: PNG, fila: 2, columna: 0, ancho: 100, alto: 100 },
+          { png: PNG, fila: 20, columna: 0, ancho: 100, alto: 100 },
+        ],
+      },
+    ]);
+    const libro = await abrirLibro(buffer);
+    expect(libro.getWorksheet("Curva")!.getImages()).toHaveLength(2);
+  });
+
+  it("una imagen va a la hoja que la declara y no a otra", async () => {
+    const buffer = await libroXlsx([
+      { nombre: "Sin", filas: [["a"]] },
+      { nombre: "Con", filas: [["b"]], imagenes: [{ png: PNG, fila: 1, columna: 0, ancho: 50, alto: 50 }] },
+    ]);
+    const libro = await abrirLibro(buffer);
+    expect(libro.getWorksheet("Sin")!.getImages()).toHaveLength(0);
+    expect(libro.getWorksheet("Con")!.getImages()).toHaveLength(1);
+  });
+
+  /** El campo es opcional: las diez descargas que ya existen no lo pasan. */
+  it("una hoja sin imagenes se escribe igual que antes", async () => {
+    const buffer = await libroXlsx([
+      { nombre: "Datos", filas: [["Legajo", "Nombre"], [101, "Juan"]], anchos: [10, 20] },
+    ]);
+    const libro = await abrirLibro(buffer);
+    expect(libro.model.media ?? []).toHaveLength(0);
+    expect(libro.getWorksheet("Datos")!.getImages()).toHaveLength(0);
+    const zip = await JSZip.loadAsync(buffer);
+    expect(Object.keys(zip.files).some((n) => n.startsWith("xl/media/"))).toBe(false);
+    const { filas } = await leerPrimeraHoja(buffer);
+    expect(filas).toEqual([{ Legajo: 101, Nombre: "Juan" }]);
+  });
+
+  it("imagenes: [] es lo mismo que no pasar el campo", async () => {
+    const buffer = await libroXlsx([{ nombre: "Datos", filas: [["a"], [1]], imagenes: [] }]);
+    const zip = await JSZip.loadAsync(buffer);
+    expect(Object.keys(zip.files).some((n) => n.startsWith("xl/media/"))).toBe(false);
+  });
+
+  it("xlsxConImagenesResponse responde una descarga .xlsx con la imagen adentro", async () => {
+    const res = await xlsxConImagenesResponse("curva.xlsx", [
+      {
+        nombre: "Curva",
+        filas: [["a"], [1]],
+        imagenes: [{ png: PNG, fila: 3, columna: 0, ancho: 120, alto: 80 }],
+      },
+    ]);
+    expect(res.headers.get("Content-Type")).toBe(
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    expect(res.headers.get("Content-Disposition")).toContain("curva.xlsx");
+    const libro = await abrirLibro(Buffer.from(await res.arrayBuffer()));
+    expect(libro.getWorksheet("Curva")!.getImages()).toHaveLength(1);
   });
 });

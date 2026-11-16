@@ -303,6 +303,8 @@ export function cuerpoDeLaOT(
     // Se está pidiendo trabajo, no cargando trabajo hecho. Van explícitos para
     // que `loQueFaltaParaCrear` vea lo mismo acá que en el servidor.
     fecha_cierre: "",
+    // Sin fecha de cierre la regla del cierre adelantado no se dispara nunca.
+    cierre_justificacion: "",
     contratista: "",
     operario_2: "",
     operario_3: "",

@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Select from "@/components/Select";
 import HiloDeMensajes from "@/components/HiloDeMensajes";
-import { ConfirmProvider } from "@/components/ConfirmProvider";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { comoSeLee } from "@/lib/core/fechas";
 import { CRITERIOS, clasificar, type Criterio } from "@/lib/seguridadHigiene/riesgo";
 import { estadoDe } from "@/lib/seguridadHigiene/condicion";
@@ -105,6 +105,8 @@ export default function FichaDeCondicion({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  // Lo escrito en la conversación y sin enviar: vive adentro del hilo y avisa acá.
+  const [hayBorradorDelHilo, setHayBorradorDelHilo] = useState(false);
 
   const estado = estadoDe(fila, hoy);
   const faltas = faltasPendientes(fila, hoy);
@@ -115,6 +117,7 @@ export default function FichaDeCondicion({
 
   const cambios = cambiosDe(fila, borrador, esAdmin);
   const hayCambios = Object.keys(cambios).length > 0;
+  const hayAlgoSinGuardar = hayCambios || hayBorradorDelHilo;
 
   function poner<K extends keyof Borrador>(campo: K, valor: Borrador[K]) {
     setBorrador((b) => ({ ...b, [campo]: valor }));
@@ -194,18 +197,18 @@ export default function FichaDeCondicion({
 
   const clase = "input";
 
+  // Con cambios sin guardar o un mensaje sin enviar, el fondo, la X y Escape **no
+  // cierran**: cerrar desmonta la ficha y se lleva el borrador, y hasta que haya
+  // uno que sobreviva (llega con el cartel de «salir») lo único que tira lo
+  // cargado es «Descartar y cerrar». Antes el fondo y Escape no hacían nada.
+  const salir = () => { if (!hayAlgoSinGuardar) onCerrar(); };
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-0 sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Condición ${fila.numero}`}
-    >
-      <div className="w-full max-w-3xl bg-white sm:rounded-xl sm:shadow-xl">
+    <Modal titulo={`Condición N° ${fila.numero}`} alSalir={salir} ancho="ancho">
+      <div>
         {/* Encabezado */}
-        <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-4">
           <div className="min-w-0 space-y-1.5">
-            <h2 className="text-lg font-bold text-slate-900">Condición N° {fila.numero}</h2>
             <div className="flex flex-wrap items-center gap-1.5">
               <InsigniaDeEstado estado={estado} />
               {faltas.map((f) => (
@@ -221,26 +224,23 @@ export default function FichaDeCondicion({
             </p>
           </div>
           <button type="button" onClick={onCerrar} className="btn-secondary shrink-0">
-            {hayCambios ? "Descartar y cerrar" : "Cerrar"}
+            {hayAlgoSinGuardar ? "Descartar y cerrar" : "Cerrar"}
           </button>
         </div>
 
-        <div className="space-y-6 p-4">
+        <div className="space-y-6 pt-4">
           {/* Las fotos viven en su propio componente: tienen estado propio (la
               lista, lo que se está subiendo, el link copiado) y esta ficha ya
-              lleva tres etapas de formulario. Va adentro de un
-              `<ConfirmProvider>` porque sacar una foto la pierde para siempre y
-              `useConfirm()` rompe sin proveedor arriba, que es lo que se
-              quiere. El permiso es el mismo que el de la primera etapa, y no
+              lleva tres etapas de formulario. Sacar una foto la
+              pierde para siempre, y por eso pregunta con `useConfirm()`: el
+              proveedor lo monta el layout de `(app)`. El permiso es el mismo que el de la primera etapa, y no
               por parecido: las policies `syh_fotos_agregar` y `syh_fotos_sacar`
               piden `edicion` y que la condición no esté cerrada. */}
-          <ConfirmProvider>
-            <FotosDeLaCondicion
-              condicionId={fila.id}
-              numero={fila.numero}
-              puedeTocar={puedePrimera}
-            />
-          </ConfirmProvider>
+          <FotosDeLaCondicion
+            condicionId={fila.id}
+            numero={fila.numero}
+            puedeTocar={puedePrimera}
+          />
 
           {/* Primera etapa */}
           <section className="space-y-3">
@@ -557,7 +557,7 @@ export default function FichaDeCondicion({
           )}
 
           {(puedePrimera || esAdmin) && (
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4">
+            <PieDeModal className="flex flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
                 className="btn-primary"
@@ -566,7 +566,7 @@ export default function FichaDeCondicion({
               >
                 {guardando ? "Guardando…" : "Guardar cambios"}
               </button>
-            </div>
+            </PieDeModal>
           )}
 
           {/* La conversación sobre esta condición, fuera del formulario: lo que
@@ -574,14 +574,13 @@ export default function FichaDeCondicion({
               cambios» —se envía solo—, así que no depende de `puedeEditar` ni
               de `esAdmin`: quien puede abrir la ficha puede leer y escribir.
 
-              La ficha es un panel fijo con scroll propio y ningún contenedor
-              entre ésta y el overlay recorta (`overflow-y-auto` sólo en el
-              overlay de arriba, que crece), así que el panel flotante del
-              desplegable de menciones no se corta. */}
+              El `Modal` scrollea en su cuerpo y el panel flotante del
+              desplegable de menciones sale a `body`, así que no se corta. */}
           <HiloDeMensajes
             tipo="condicion_insegura"
             id={fila.id}
             abiertoAlMontar={conversacionAbierta}
+            alCambiarElBorrador={setHayBorradorDelHilo}
             aclaracion={
               "Es una conversación con otras personas, aparte de las «Observaciones» de arriba: " +
               "las observaciones son parte de la condición y los mensajes no la modifican. " +
@@ -591,6 +590,6 @@ export default function FichaDeCondicion({
           />
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

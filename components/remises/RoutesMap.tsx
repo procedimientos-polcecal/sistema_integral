@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { TILES } from "./tiles";
+import { TILES, CENTRO_POR_DEFECTO } from "./tiles";
 
 const COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
 
@@ -28,7 +28,7 @@ export default function RoutesMap({
 
   useEffect(() => {
     if (!elRef.current || mapRef.current) return;
-    const center: [number, number] = fabrica.lat != null ? [fabrica.lat, fabrica.lng!] : [-34.6037, -58.3816];
+    const center: [number, number] = fabrica.lat != null ? [fabrica.lat, fabrica.lng!] : CENTRO_POR_DEFECTO;
     const map = L.map(elRef.current).setView(center, 12);
     L.tileLayer(TILES.url, TILES.opts).addTo(map);
     mapRef.current = map;

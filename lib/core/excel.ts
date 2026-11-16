@@ -374,12 +374,30 @@ export async function leerPrimeraHoja(
   };
 }
 
+/** Una imagen PNG puesta sobre una hoja. */
+export interface ImagenDeLaHoja {
+  png: Buffer;
+  /** Celda de arranque, 0-based, y tamaño en píxeles. */
+  fila: number;
+  columna: number;
+  ancho: number;
+  alto: number;
+}
+
 /** Una hoja a escribir: su nombre, sus filas y, si hace falta, los anchos. */
 export interface HojaAEscribir {
   nombre: string;
   filas: unknown[][];
   /** En caracteres, una entrada por columna. */
   anchos?: number[];
+  /**
+   * Imágenes sobre la hoja (11/11/2026, la foto del gráfico de la curva).
+   *
+   * **Es opcional y lo tiene que seguir siendo**: las diez descargas que
+   * escriben un libro no lo pasan, y una hoja sin este campo se escribe
+   * exactamente igual que antes. Flotan encima de las celdas y no las pisan.
+   */
+  imagenes?: ImagenDeLaHoja[];
 }
 
 /**
@@ -391,10 +409,17 @@ export interface HojaAEscribir {
  */
 export async function libroXlsx(hojas: HojaAEscribir[]): Promise<Buffer> {
   const libro = new ExcelJS.Workbook();
-  for (const { nombre, filas, anchos } of hojas) {
+  for (const { nombre, filas, anchos, imagenes } of hojas) {
     const hoja = libro.addWorksheet(nombre.slice(0, 31));
     if (anchos?.length) hoja.columns = anchos.map((width) => ({ width }));
     for (const fila of filas) hoja.addRow(fila as ExcelJS.CellValue[]);
+    for (const { png, fila, columna, ancho, alto } of imagenes ?? []) {
+      // El cast es por los tipos: `exceljs` declara su propio `Buffer` y el de
+      // Node no le calza, aunque en ejecución es el mismo objeto. `extension`
+      // va explícito porque no lo adivina de los bytes.
+      const id = libro.addImage({ buffer: png as unknown as ExcelJS.Buffer, extension: "png" });
+      hoja.addImage(id, { tl: { col: columna, row: fila }, ext: { width: ancho, height: alto } });
+    }
   }
   return Buffer.from(await libro.xlsx.writeBuffer());
 }

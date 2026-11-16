@@ -9,6 +9,7 @@
  * Dos reglas, y la segunda sale de la primera: si la fecha de cierre dice que
  * ya se hizo, entonces tiene que decir también cuánto llevó y quién la hizo.
  */
+import { justificacionQueExplica } from "@/lib/core/justificacion";
 
 /** Los estados en que puede nacer una orden, como los guarda el sistema. */
 type Estado = string;
@@ -66,6 +67,46 @@ const cargado = (v: string | null | undefined): boolean => String(v ?? "").trim(
  * horas por sector, el costo— y nadie se entera hasta que el informe sale con
  * la mitad de las filas vacías.
  */
+/**
+ * Dar una orden por realizada exige decir **cuándo** se terminó.
+ *
+ * ── POR QUÉ NO ALCANZABA CON `loQueFaltaParaCerrar` ────────────────────────
+ *
+ * Porque aquélla sólo habla **cuando hay fecha de cierre**: sin fecha
+ * devuelve `[]`, a propósito, porque en el alta una orden que todavía no se
+ * hizo no tiene por qué traer horas ni operarios. El agujero que deja es
+ * exactamente el que esto cierra: una orden que pasa a `REALIZADO` **sin**
+ * fecha no dispara ninguna regla, y queda dicha por hecha sin decir qué día.
+ *
+ * ── LO QUE SE MIDIÓ, QUE ES LO QUE DECIDE DÓNDE PUEDE IR ───────────────────
+ *
+ * El 16/11/2026, sobre las 2.466 órdenes: **220 de las 2.415 realizadas no
+ * tienen fecha de cierre (9,1 %)**, y de esas 220 **una sola la creó la app**.
+ * O sea que el hueco no está en la pantalla sino en lo que entra por la
+ * planilla — y ahí no se puede exigir nada, porque la planilla manda y la
+ * sincronización importa lo que haya.
+ *
+ * Por eso la regla **no** es «toda orden realizada tiene fecha». Es más chica
+ * y se puede sostener: **un pedido que pone una orden en `REALIZADO` tiene que
+ * decir el día.** Las 219 de la planilla quedan como están; lo que no vuelve a
+ * pasar es que la app cree una.
+ *
+ * ── Y POR QUÉ MIRA EL ESTADO Y NO EL RESULTADO DE LA PANTALLA ──────────────
+ *
+ * Porque el modal de «Registrar el trabajo» manda la fecha en los tres casos
+ * —completado, parcial y cancelado—, y sólo el primero termina en `REALIZADO`.
+ * Ahí la fecha es obligatoria igual, pero por otro motivo: es la fecha de la
+ * **ejecución**, que se guarda siempre. Esa obligación es de la pantalla; ésta
+ * es la del estado, y son dos cosas que conviene no mezclar.
+ */
+export function loQueFaltaParaDarPorRealizada(
+  estado: string | null | undefined,
+  fechaCierre: string | null | undefined
+): string[] {
+  if (String(estado ?? "").trim().toUpperCase() !== "REALIZADO") return [];
+  return cargado(fechaCierre) ? [] : ["la fecha de cierre"];
+}
+
 export function loQueFaltaParaCerrar(datos: DatosDelCierre): string[] {
   if (!cargado(datos.fecha_cierre)) return [];
 
@@ -115,10 +156,36 @@ export function loQueFaltaParaCerrar(datos: DatosDelCierre): string[] {
  * qué, y la que está mal puede ser cualquiera de las dos.
  *
  * Sin fecha de cierre devuelve `[]` y no mira nada: no se está cerrando.
+ *
+ * ── QUÉ CEDIÓ EL 12/11/2026, Y QUÉ NO ──────────────────────────────────────
+ *
+ * **Cede la segunda regla y sólo ella**, a pedido: «quiero que se pueda poner
+ * una fecha de cierre de una OT anterior a su fecha de inicio, pero que te
+ * pida una justificación obligatoria si eso ocurre». O sea que el bloqueo no
+ * desaparece: se cambia por una guarda. Si el texto pasa
+ * `justificacionQueExplica`, la fecha se acepta; sin él, o con un «no» o una
+ * «x», sigue saliendo el mismo mensaje de siempre.
+ *
+ * **Las mediciones de arriba siguen siendo ciertas y por eso no se borran**:
+ * son el porqué de que la regla naciera el 05/11/2026 y siguen siendo el
+ * porqué de que ahora se pida una explicación en vez de dejarlo pasar. Lo que
+ * cambió no es el dato sino qué se hace con él: antes esas 63 no se podían
+ * repetir, ahora se pueden y queda escrito por qué.
+ *
+ * **La primera regla no se toca**, y no por omisión: cerrar sin fecha de
+ * inicio no es lo que se pidió dar vuelta, y una justificación no reemplaza a
+ * la fecha de la que salen el atraso, el MTBF y la ventana del equipo —no hay
+ * texto que haga calculable un intervalo sin extremo—. Con justificación o sin
+ * ella, esa rama sigue devolviendo lo mismo.
+ *
+ * El tercer parámetro es **opcional** a propósito: los llamadores que no están
+ * cerrando nada no tienen justificación que pasar, y sin él la función se
+ * comporta exactamente como antes del 12/11/2026.
  */
 export function loQueImpideCerrar(
   fechaInicio: string | null | undefined,
-  fechaCierre: string | null | undefined
+  fechaCierre: string | null | undefined,
+  justificacion?: string | null | undefined
 ): string[] {
   const cierre = String(fechaCierre ?? "").trim();
   if (!cierre) return [];
@@ -128,9 +195,10 @@ export function loQueImpideCerrar(
     return ["la orden no dice cuándo empezó, y un trabajo no se cierra antes de empezar"];
   }
 
-  return cierre < inicio
-    ? [`la fecha de cierre (${cierre}) es anterior a la de inicio (${inicio})`]
-    : [];
+  if (cierre >= inicio) return [];
+  if (justificacionQueExplica(justificacion)) return [];
+
+  return [`la fecha de cierre (${cierre}) es anterior a la de inicio (${inicio})`];
 }
 
 /** Lo que una orden recién creada puede tener para la planilla. */
@@ -142,6 +210,8 @@ export interface LoQueLaPlanillaNoSabe {
   operario_1: string | null | undefined;
   operario_2: string | null | undefined;
   operario_3: string | null | undefined;
+  /** Opcional: los generadores automáticos no tienen justificación que mandar. */
+  cierre_justificacion?: string | null;
 }
 
 /**
@@ -193,6 +263,7 @@ export function loQueHayQueExportar(orden: LoQueLaPlanillaNoSabe): Record<string
   if (cargado(orden.operario_1)) registro.operario_1 = orden.operario_1;
   if (cargado(orden.operario_2)) registro.operario_2 = orden.operario_2;
   if (cargado(orden.operario_3)) registro.operario_3 = orden.operario_3;
+  if (cargado(orden.cierre_justificacion)) registro.cierre_justificacion = orden.cierre_justificacion;
 
   // Si lo único que hay es el estado por hacer, no hay nada que exportar: las
   // horas y los operarios tienen que poder viajar solos, sin el estado.

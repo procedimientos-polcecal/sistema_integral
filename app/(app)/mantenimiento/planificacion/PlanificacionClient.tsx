@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmProvider";
 import InfoTip from "@/components/InfoTip";
+import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 function nombreCompleto(u: { nombre?: string; apellido?: string } | null | undefined): string {
@@ -16,8 +19,16 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
   const router = useRouter();
   const confirm = useConfirm();
   const [showNew, setShowNew]   = useState(false);
-  const [fecha, setFecha]       = useState(hoyEnArgentina());
-  const [titulo, setTitulo]     = useState("");
+  /*
+   * Los dos campos del plan nuevo, recordados mientras la app esté abierta. Nace
+   * con la fecha de hoy puesta, así que abrir y cerrar sin escribir nada no
+   * cuenta como tocado.
+   */
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-nuevo-plan"),
+    { fecha: hoyEnArgentina(), titulo: "" },
+  );
+  const { fecha, titulo } = valores;
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -46,6 +57,9 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
     });
     const data = await res.json();
     if (!res.ok) { setError(data.error ?? "Error"); setSaving(false); return; }
+    // El plan existe: ya no hay nada que recordar. Sin esto el borrador
+    // sobrevive a la navegación y vuelve a aparecer en el próximo «Nuevo plan».
+    tirar();
     router.push(`/mantenimiento/planificacion/${data.data.id}`);
   }
 
@@ -130,35 +144,40 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
       )}
 
       {showNew && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl space-y-4">
-            <h2 className="text-base font-bold text-slate-900">Nuevo plan de trabajo</h2>
+        // El fondo, la X y Escape salen conservando: lo cargado queda y aparece
+        // igual al volver a abrir. Sólo «Cancelar» tira.
+        <Modal
+          titulo="Nuevo plan de trabajo"
+          alSalir={() => setShowNew(false)}
+          tocado={tocado}
+          ancho="chico"
+        >
             <form onSubmit={create} className="space-y-4">
               <div className="space-y-1">
                 <label className="block text-xs font-medium text-slate-600">Fecha <span className="text-red-500">*</span></label>
-                <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
+                <input type="date" value={fecha} onChange={e => cambiar({ fecha: e.target.value })}
                   className="input w-full" required />
               </div>
               <div className="space-y-1">
                 <label className="block text-xs font-medium text-slate-600">Título (opcional)</label>
-                <input value={titulo} onChange={e => setTitulo(e.target.value)}
+                <input value={titulo} onChange={e => cambiar({ titulo: e.target.value })}
                   placeholder="Ej: Mantenimiento semanal calcinación"
                   className="input w-full" />
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
-              <div className="flex gap-2 pt-1">
+              <PieDeModal className="flex gap-2">
                 <button type="submit" disabled={saving}
-                  className="btn-primary disabled:opacity-50">
+                  className="btn-primary">
                   {saving ? "Creando..." : "Crear plan"}
                 </button>
-                <button type="button" onClick={() => setShowNew(false)}
+                {/* El único que tira. */}
+                <button type="button" onClick={() => { tirar(); setShowNew(false); }}
                   className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
                   Cancelar
                 </button>
-              </div>
+              </PieDeModal>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

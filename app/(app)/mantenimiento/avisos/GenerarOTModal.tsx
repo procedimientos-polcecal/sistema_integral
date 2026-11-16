@@ -8,6 +8,9 @@ import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { AYUDA_GUT, ESCALAS_GUT } from "@/lib/mantenimiento/gut";
 import InfoTip from "@/components/InfoTip";
+import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
 import {
   cuerpoDeLaOT, loQuePropone, loQueFaltaDelAviso, loQueHayQuePreguntar,
@@ -56,7 +59,16 @@ export default function GenerarOTModal({
   onClose: () => void;
   onCreada: (mensaje: string) => void;
 }) {
-  const [form, setForm] = useState<RespuestasDelAviso>(() =>
+  /*
+   * El formulario entero, recordado mientras la app esté abierta y por aviso: la
+   * clave lleva el id, así que lo escrito para un aviso no puede reaparecer
+   * sobre otro.
+   *
+   * Nace de lo que el aviso propone, que es contra lo que se compara «tocado»:
+   * abrirlo y cerrarlo sin corregir nada no pregunta nada.
+   */
+  const { valores: form, cambiar, tocado, tirar } = useBorrador<RespuestasDelAviso>(
+    claveDelBorrador("mantenimiento-generar-ot-de-aviso", { tipo: "aviso", id: aviso.id }),
     loQuePropone(aviso, {
       // El trabajo lo hace nuestra gente salvo que se diga otra cosa: 759 de
       // las 999 órdenes con `quien` cargado son INTERNO.
@@ -65,16 +77,15 @@ export default function GenerarOTModal({
       // aviso; puesta sin que se vea la dejaría venciendo mañana sin que nadie
       // la haya elegido.
       fecha_ejecucion: hoyEnArgentina(),
-    })
+    }),
   );
+
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
   const preguntas = loQueHayQuePreguntar(aviso);
   const noTrae = loQueElAvisoNoTrae(aviso);
   const falta = loQueFaltaDelAviso(aviso, form);
-
-  const cambiar = (c: Partial<RespuestasDelAviso>) => setForm((p) => ({ ...p, ...c }));
 
   const delSector = useMemo(
     () => equipos.filter((e) => e.sector_id === form.sector_id),
@@ -116,6 +127,8 @@ export default function GenerarOTModal({
 
     if (!res.ok) { setError(body.error ?? "No se pudo generar la OT."); return; }
 
+    // Recién con la OT creada no hay nada que recordar.
+    tirar();
     onCreada(
       [
         `Se generó la OT #${body.ot_number} y el aviso ${aviso.oa_number} quedó marcado.`,
@@ -126,10 +139,10 @@ export default function GenerarOTModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4">
-      <div className="my-8 w-full max-w-2xl rounded-lg bg-white p-5 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-900">Generar la orden de trabajo</h2>
-        <p className="mt-1 text-sm text-slate-500">
+    // El fondo, la X y Escape salen conservando: lo corregido queda y aparece
+    // igual al volver a abrir. Sólo «Cancelar» tira.
+    <Modal titulo="Generar la orden de trabajo" alSalir={onClose} tocado={tocado} ancho="ancho">
+        <p className="text-sm text-slate-500">
           Del aviso {aviso.oa_number}. Viene con lo que el aviso dice; todo se puede
           corregir antes de crearla, y el aviso no se toca.
         </p>
@@ -297,11 +310,12 @@ export default function GenerarOTModal({
           </p>
         )}
 
-        <div className="mt-5 flex items-center justify-end gap-2">
+        <PieDeModal className="mt-5 flex items-center justify-end gap-2">
           {falta.length > 0 && (
             <span className="mr-auto text-xs text-slate-400">Falta {falta.join(", ")}.</span>
           )}
-          <button onClick={onClose} className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-slate-100">
+          {/* El único que tira. */}
+          <button onClick={() => { tirar(); onClose(); }} className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-slate-100">
             Cancelar
           </button>
           <button
@@ -311,9 +325,8 @@ export default function GenerarOTModal({
           >
             {guardando ? "Generando…" : "Generar la OT"}
           </button>
-        </div>
-      </div>
-    </div>
+        </PieDeModal>
+    </Modal>
   );
 }
 

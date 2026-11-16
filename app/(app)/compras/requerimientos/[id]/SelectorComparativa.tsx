@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fechaHora } from "@/lib/compras/constants";
+import { Modal } from "@/components/Modal";
 
 interface Archivo {
   id: string;
@@ -86,14 +87,11 @@ export default function SelectorComparativa({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:p-8">
-      <div className="max-h-full w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <h2 className="font-semibold text-slate-900">Elegir comparativa</h2>
-          <button onClick={onCerrar} className="text-slate-400 hover:text-slate-700">✕</button>
-        </div>
-
-        <div className="space-y-3 p-5">
+    // Es un selector sin nada que descartar —lo único que se escribe es el filtro
+    // de la lista—, así que sale derecho y nunca pregunta. Antes el fondo no lo
+    // cerraba; ahora la X, el fondo y Escape salen, y no se pierde nada.
+    <Modal titulo="Elegir comparativa" alSalir={onCerrar} soloLectura ancho="ancho">
+        <div className="space-y-3">
           <input
             autoFocus
             value={busqueda}
@@ -137,7 +135,6 @@ export default function SelectorComparativa({
             </ul>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

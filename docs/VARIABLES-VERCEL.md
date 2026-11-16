@@ -175,6 +175,34 @@ instrucciones de instalación están en el encabezado del propio archivo, y
 también la propiedad `DOMINIOS`, que es la que impide que una url filtrada se
 convierta en un relay para mandar correo desde la empresa.
 
+## El correo de novedades de RR.HH.
+
+| Variable | Qué es | De dónde sale |
+|---|---|---|
+| `SDG_CORREO_RRHH_URL` | La url de **un segundo** Apps Script, idéntico al de arriba pero publicado desde `gestiondepersonas@polcecal.com` | La da Google al implementar ese script |
+| `SDG_CORREO_RRHH_SECRET` | Lo mismo que el otro secreto, para esta otra implementación | Lo inventás vos, y el mismo valor va en las propiedades de **ese** script |
+
+**Es un segundo script y no un parámetro del primero**, y el motivo no es
+caprichoso: una aplicación web de Apps Script **se ejecuta como su dueño**, así
+que el remitente lo decide qué cuenta la publicó. El script no acepta un `from`
+en el pedido a propósito, para que una url filtrada no pueda falsear el
+remitente. Si lo que se quiere es que el correo salga de RR.HH., la cuenta de
+RR.HH. tiene que publicar su propia implementación.
+
+Es el mismo archivo ([docs/sdg-correo-apps-script.gs](sdg-correo-apps-script.gs)),
+pegado tal cual en un proyecto nuevo **desde la sesión de
+`gestiondepersonas@polcecal.com`**, con su propio `SECRETO` y el mismo
+`DOMINIOS`.
+
+**Sin estas dos, el cron de novedades no manda nada y lo dice** —devuelve 503
+con el motivo— en vez de caer a la casilla del sistema: el remitente es parte
+del mensaje, porque dice a dónde contestar, y mandarlo desde la cuenta
+equivocada es peor que no mandarlo.
+
+Lo otro que hace falta para que ese correo exista es la migración
+`20261116084955_rrhh_correo_de_novedades.sql`, que la aplica una persona en el
+editor SQL de Supabase.
+
 ## Odoo (Contabilidad, Tesorería y la orden de compra)
 
 Si faltan, las rutas de Odoo contestan **503 diciendo cuáles faltan** y el resto
@@ -350,6 +378,8 @@ WEBPUSH_VAPID_PRIVATE_KEY=
 WEBPUSH_CONTACT_EMAIL=
 SDG_CORREO_URL=
 SDG_CORREO_SECRET=
+SDG_CORREO_RRHH_URL=
+SDG_CORREO_RRHH_SECRET=
 ```
 
 `GOOGLE_SERVICE_ACCOUNT_JSON` es la única incómoda: el JSON va **entero y en una

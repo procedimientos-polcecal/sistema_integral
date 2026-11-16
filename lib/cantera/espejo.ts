@@ -59,7 +59,7 @@ async function buscarFilaPorCodigo(planilla: string, pestana: string, codigo: st
  * código YA es la clave, así que buscarlo de nuevo en cada guardado sale una
  * lectura de más y ningún riesgo de escribir en la fila de otro código.
  */
-async function upsertFila(planilla: string, pestana: string, codigo: string, valores: string[]): Promise<void> {
+async function upsertFila(planilla: string, pestana: string, codigo: string, valores: (string | number)[]): Promise<void> {
   const fila = await buscarFilaPorCodigo(planilla, pestana, codigo);
   if (fila !== null) {
     await escribirCeldas(planilla, valores.map((valor, columna) => ({ pestana, columna, fila, valor })));
