@@ -15,7 +15,8 @@ import {
 } from "@/lib/mantenimiento/claveDeCarga";
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import {
-  estadoSegunElCierre, loQueHayQueExportar, loQueImpideCerrar,
+  estadoSegunElCierre, loQueFaltaParaDarPorRealizada, loQueHayQueExportar,
+  loQueImpideCerrar,
 } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
 import {
@@ -816,10 +817,34 @@ export async function PATCH(request: Request) {
   // detectaba, porque cada fecha por separado es válida. Esas 63 **quedan como
   // están**: son dato de la planilla, que es la que manda en este módulo, y
   // corregirlas de este lado las pisa en la próxima sincronización.
+  //
+  // ── Y DESDE EL 16/11/2026, TAMBIÉN CUANDO EL PEDIDO LA DA POR REALIZADA ──
+  //
+  // `estado: "REALIZADO"` entra a esta lista aunque no mande ninguna de las
+  // dos claves, y es lo que cierra el agujero: un PATCH que sólo cambia el
+  // estado pasaba de largo por todo este bloque, así que una orden podía
+  // quedar dicha por hecha **sin decir qué día**. Lo medido el 16/11/2026
+  // sobre las 2.466 órdenes: 220 de las 2.415 realizadas no tienen fecha de
+  // cierre, y **una sola la creó la app** — el resto entra por la planilla,
+  // donde no se puede exigir nada porque la planilla manda.
+  //
+  // El costo de agregarlo es una lectura más **sólo en ese pedido**: los otros
+  // cambios de estado —iniciar una OT, moverla en el kanban— no mandan
+  // `REALIZADO` y siguen sin pagar nada.
+  //
+  // **Son dos y no una, y mezclarlas rompe algo que no se ve.** `tocaElCierre`
+  // conserva su sentido de siempre —el pedido trae alguna de las dos claves—
+  // porque más abajo decide si se reescribe la columna W de la planilla, y
+  // ensancharlo haría que un PATCH que sólo cambia el estado la reescriba y se
+  // lleve las observaciones que hubiera. La que se ensancha es la otra, que
+  // sólo gobierna las comprobaciones.
   const tocaElCierre =
     body.fecha_cierre !== undefined || body.cierre_justificacion !== undefined;
 
-  if (tocaElCierre) {
+  const hayQueMirarElCierre =
+    tocaElCierre || String(body?.estado ?? "").trim().toUpperCase() === "REALIZADO";
+
+  if (hayQueMirarElCierre) {
     const { data: laOrden, error: noSePudoLeer } = await admin
       .from("ordenes_trabajo")
       .select("fecha_ejecucion, fecha_cierre, cierre_justificacion")
@@ -891,6 +916,25 @@ export async function PATCH(request: Request) {
     //
     // El mensaje es el de las altas, letra por letra, para que quien carga vea
     // siempre la misma frase venga de donde venga el pedido.
+    // ── PRIMERO: QUE DIGA CUÁNDO ────────────────────────────────────────────
+    //
+    // Antes que el porqué y que la contradicción, por el orden de siempre —el
+    // faltante primero, que es lo que destraba el guardado— y porque sin fecha
+    // las otras dos no se pueden ni evaluar: el adelanto se mide contra una
+    // fecha y la contradicción compara dos.
+    //
+    // `elCierre` y no `body.fecha_cierre`: lo que se mira es **con qué cierre
+    // queda la orden**, así que un PATCH que la pone en REALIZADO sin mandar
+    // fecha pasa si la orden ya tenía una. Marcar como realizada algo que ya
+    // decía cuándo terminó no es cargar nada nuevo.
+    const faltaElCuando = loQueFaltaParaDarPorRealizada(body?.estado, elCierre);
+    if (faltaElCuando.length > 0) {
+      return NextResponse.json(
+        { error: `Falta cargar ${faltaElCuando.join(", ")}.` },
+        { status: 400 }
+      );
+    }
+
     if (
       elCierreCambio(elCierre, laOrden.fecha_cierre) ||
       body.cierre_justificacion !== undefined

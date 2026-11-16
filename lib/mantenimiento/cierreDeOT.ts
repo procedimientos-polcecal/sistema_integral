@@ -67,6 +67,46 @@ const cargado = (v: string | null | undefined): boolean => String(v ?? "").trim(
  * horas por sector, el costo— y nadie se entera hasta que el informe sale con
  * la mitad de las filas vacías.
  */
+/**
+ * Dar una orden por realizada exige decir **cuándo** se terminó.
+ *
+ * ── POR QUÉ NO ALCANZABA CON `loQueFaltaParaCerrar` ────────────────────────
+ *
+ * Porque aquélla sólo habla **cuando hay fecha de cierre**: sin fecha
+ * devuelve `[]`, a propósito, porque en el alta una orden que todavía no se
+ * hizo no tiene por qué traer horas ni operarios. El agujero que deja es
+ * exactamente el que esto cierra: una orden que pasa a `REALIZADO` **sin**
+ * fecha no dispara ninguna regla, y queda dicha por hecha sin decir qué día.
+ *
+ * ── LO QUE SE MIDIÓ, QUE ES LO QUE DECIDE DÓNDE PUEDE IR ───────────────────
+ *
+ * El 16/11/2026, sobre las 2.466 órdenes: **220 de las 2.415 realizadas no
+ * tienen fecha de cierre (9,1 %)**, y de esas 220 **una sola la creó la app**.
+ * O sea que el hueco no está en la pantalla sino en lo que entra por la
+ * planilla — y ahí no se puede exigir nada, porque la planilla manda y la
+ * sincronización importa lo que haya.
+ *
+ * Por eso la regla **no** es «toda orden realizada tiene fecha». Es más chica
+ * y se puede sostener: **un pedido que pone una orden en `REALIZADO` tiene que
+ * decir el día.** Las 219 de la planilla quedan como están; lo que no vuelve a
+ * pasar es que la app cree una.
+ *
+ * ── Y POR QUÉ MIRA EL ESTADO Y NO EL RESULTADO DE LA PANTALLA ──────────────
+ *
+ * Porque el modal de «Registrar el trabajo» manda la fecha en los tres casos
+ * —completado, parcial y cancelado—, y sólo el primero termina en `REALIZADO`.
+ * Ahí la fecha es obligatoria igual, pero por otro motivo: es la fecha de la
+ * **ejecución**, que se guarda siempre. Esa obligación es de la pantalla; ésta
+ * es la del estado, y son dos cosas que conviene no mezclar.
+ */
+export function loQueFaltaParaDarPorRealizada(
+  estado: string | null | undefined,
+  fechaCierre: string | null | undefined
+): string[] {
+  if (String(estado ?? "").trim().toUpperCase() !== "REALIZADO") return [];
+  return cargado(fechaCierre) ? [] : ["la fecha de cierre"];
+}
+
 export function loQueFaltaParaCerrar(datos: DatosDelCierre): string[] {
   if (!cargado(datos.fecha_cierre)) return [];
 

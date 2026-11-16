@@ -373,6 +373,41 @@ Dar por realizada una OT sin decir qué se hizo pierde justamente lo que sirve
 después. Marcarla como "Realizado" abre el registro: cómo salió, cuándo, cuántas
 horas, quiénes, y qué se encontró.
 
+**La fecha —«Cuándo»— es obligatoria y no se precarga con hoy** (16/11/2026, a
+pedido). Arranca con la que la orden ya tenga, y **vacía si no tiene**. Las dos
+mitades arreglan cosas distintas y conviene no juntarlas: precargar la propia
+evita que reabrir una OT para corregirle las horas le mueva el cierre en
+silencio; no poner hoy evita lo contrario, que es el motivo del pedido — **una
+fecha puesta por el sistema no se distingue de una elegida**, así que quien
+registra el jueves un lunes aceptaba el lunes sin mirar y la orden quedaba
+cerrada el día que alguien la cargó. De esa fecha viven el MTTR y el historial
+del equipo.
+
+Lo que no se deduce del código es que **son dos reglas y no una**:
+
+- **En la pantalla la fecha se exige en los tres resultados** —completado,
+  parcial y cancelado— porque lo que dice ese campo es qué día se trabajó, y la
+  **ejecución** se guarda en los tres. Sin ella, `executed_at` sale de
+  `"T00:00"`: una fecha inválida que rebota después de no haber guardado nada.
+- **En el servidor se exige sólo cuando el pedido pone la orden en
+  `REALIZADO`** (`loQueFaltaParaDarPorRealizada`), que es el único de los tres
+  que llega a ese estado.
+
+Y la regla **no** es «toda orden realizada tiene fecha», que sería imposible de
+sostener: medido el 16/11/2026 sobre las 2.466 órdenes, **220 de las 2.415
+realizadas no tienen fecha de cierre y una sola la creó la app**. Las otras 219
+entran por la planilla, donde manda la planilla. Lo que esto cierra es que la
+app cree una más — y el agujero estaba del lado del servidor, porque un PATCH
+que sólo cambiaba el estado **pasaba de largo por todas las comprobaciones del
+cierre**. Ahora `estado: "REALIZADO"` entra a esa puerta aunque no mande
+ninguna fecha; el costo es una lectura más en ese pedido y en ningún otro.
+
+Ojo con una cosa al tocar esa puerta: las dos banderas de ahí son **dos y no
+una**. `tocaElCierre` —que el pedido traiga fecha o justificación— decide
+además si se reescribe la columna W de la planilla, así que ensancharla haría
+que un simple cambio de estado se lleve las observaciones. La que se ensanchó
+es `hayQueMirarElCierre`, que sólo gobierna las comprobaciones.
+
 Queda de los dos lados. En el sistema como **ejecución**
 (`mantenimientos_ejecuciones`), que hasta ahora sólo podía colgar de un
 mantenimiento programado —la **migración 031** le suma `work_order_id`, porque

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  loQueFaltaParaDarPorRealizada,
   estadoSegunElCierre, loQueFaltaParaCerrar, loQueHayQueExportar, loQueImpideCerrar,
 } from "./cierreDeOT";
 
@@ -312,5 +313,60 @@ describe("la justificacion del cierre en lo que hay que exportar", () => {
       contratista: null, operario_1: "Aguirre", operario_2: null, operario_3: null,
       cierre_justificacion: null,
     })).not.toHaveProperty("cierre_justificacion");
+  });
+});
+
+/**
+ * Dar una orden por realizada exige decir cuando se termino. Es mas chica que
+ * "toda orden realizada tiene fecha" a proposito, y lo que decide es un dato:
+ * el 16/11/2026, de las 2.415 realizadas, 220 no tenian fecha de cierre y UNA
+ * SOLA la creo la app. Las otras 219 entran por la planilla, que manda.
+ */
+describe("lo que falta para dar una orden por realizada", () => {
+  it("REALIZADO sin fecha pide la fecha", () => {
+    expect(loQueFaltaParaDarPorRealizada("REALIZADO", null)).toEqual(["la fecha de cierre"]);
+    expect(loQueFaltaParaDarPorRealizada("REALIZADO", "")).toEqual(["la fecha de cierre"]);
+    expect(loQueFaltaParaDarPorRealizada("REALIZADO", "   ")).toEqual(["la fecha de cierre"]);
+  });
+
+  it("REALIZADO con fecha no pide nada", () => {
+    expect(loQueFaltaParaDarPorRealizada("REALIZADO", "2026-11-16")).toEqual([]);
+  });
+
+  /**
+   * El modal manda la fecha en los tres resultados, pero solo "completado"
+   * termina en REALIZADO. Los otros dos no son este control: ahi la fecha es
+   * obligatoria por la ejecucion, que es otra regla y vive en la pantalla.
+   */
+  it("los otros estados no los mira", () => {
+    for (const estado of ["EN_PROCESO", "SUSPENDIDA", "POR_HACER", "ATRASADO", "", null]) {
+      expect(loQueFaltaParaDarPorRealizada(estado, null)).toEqual([]);
+    }
+  });
+
+  /** Un PATCH que no toca el estado no esta dando nada por realizado. */
+  it("sin estado en el pedido no opina", () => {
+    expect(loQueFaltaParaDarPorRealizada(undefined, null)).toEqual([]);
+  });
+
+  it("no le importa como venga escrito el estado", () => {
+    expect(loQueFaltaParaDarPorRealizada("realizado", null)).toEqual(["la fecha de cierre"]);
+    expect(loQueFaltaParaDarPorRealizada("  Realizado  ", null)).toEqual(["la fecha de cierre"]);
+  });
+
+  /**
+   * Y no se confunde con `loQueFaltaParaCerrar`, que es la que exige horas y
+   * operarios: aquella se calla sin fecha —en el alta, una orden que todavia
+   * no se hizo no tiene por que traerlas— y ese silencio es justo el agujero
+   * que esta cierra.
+   */
+  it("es la que habla cuando la otra se calla", () => {
+    const sinNada = {
+      fecha_cierre: null, horas: null, quien: "INTERNO",
+      contratista: null, operario_1: null, operario_2: null, operario_3: null,
+    };
+    expect(loQueFaltaParaCerrar(sinNada)).toEqual([]);
+    expect(loQueFaltaParaDarPorRealizada("REALIZADO", sinNada.fecha_cierre))
+      .toEqual(["la fecha de cierre"]);
   });
 });

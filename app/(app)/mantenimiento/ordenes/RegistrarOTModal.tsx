@@ -100,15 +100,23 @@ export default function RegistrarOTModal({
 }) {
   const [resultado, setResultado] = useState<string>("completado");
   /*
-   * Arranca en la fecha de cierre que la orden ya tiene, y en hoy sólo si no
-   * tiene. Antes arrancaba siempre en hoy, así que reabrir una OT cerrada para
-   * corregirle las horas le movía la fecha de cierre al día de hoy, en
-   * silencio. Es un cambio de comportamiento en una pantalla que nadie pidió
-   * cambiar, y está acá porque sin él «corregir una OT vieja no la obliga a
-   * justificar nada de nuevo» no se sostiene: una orden cerrada antes de su
-   * inicio se reabriría con la fecha de hoy, que ya no es anterior.
+   * Arranca en la fecha de cierre que la orden ya tiene, y **vacía si no
+   * tiene**. Las dos mitades de eso se pidieron y cada una arregla algo
+   * distinto, así que conviene no juntarlas:
+   *
+   * - **Precargar la de la orden** evita que reabrir una OT cerrada para
+   *   corregirle las horas le mueva la fecha de cierre, en silencio. Sin eso,
+   *   además, «corregir una OT vieja no obliga a justificar de nuevo» no se
+   *   sostiene: una orden cerrada antes de su inicio se reabriría con otra
+   *   fecha, que ya no es anterior.
+   * - **No poner hoy** cuando no hay nada es lo que se pidió el 16/11/2026, y
+   *   el motivo es que una fecha puesta por el sistema no se distingue de una
+   *   elegida: quien registra el trabajo del jueves un lunes aceptaba el lunes
+   *   sin mirar, y la orden quedaba cerrada el día que alguien la cargó y no
+   *   el día que se hizo. De esa fecha viven el MTTR y el historial del
+   *   equipo. Vacía obliga a contestar, y el campo es obligatorio.
    */
-  const [cuando, setCuando] = useState(orden.fecha_cierre ?? hoy());
+  const [cuando, setCuando] = useState(orden.fecha_cierre ?? "");
   // Precargada por lo mismo que la fecha: si arrancara vacía, corregir las
   // horas de una OT adelantada mandaría "" y borraría el motivo guardado.
   const [justificacion, setJustificacion] = useState(orden.cierre_justificacion ?? "");
@@ -222,6 +230,23 @@ export default function RegistrarOTModal({
   async function guardar() {
     if (!observaciones.trim() && resultado !== "completado") {
       setError("Contá qué pasó: un trabajo parcial o cancelado sin explicación no sirve después.");
+      return;
+    }
+
+    // ── LA FECHA, ANTES QUE TODO LO DEMÁS ───────────────────────────────────
+    //
+    // Es lo primero porque sin ella nada de lo que sigue se puede ni evaluar:
+    // el adelanto se mide contra una fecha, la contradicción compara dos, y la
+    // ejecución manda `${cuando}T00:00` — con el campo vacío eso es
+    // `"T00:00"`, una fecha inválida que terminaría en un 400 de la ruta de
+    // ejecuciones **después** de no haber guardado nada, o peor, en un
+    // `executed_at` que nadie eligió.
+    //
+    // Se exige en los tres resultados y no sólo en «completado», aunque el
+    // estado `REALIZADO` salga de ése: lo que se está diciendo con este campo
+    // es **qué día se trabajó**, y la ejecución se guarda igual en los tres.
+    if (!cuando) {
+      setError("Falta cargar la fecha de cierre.");
       return;
     }
 
@@ -358,7 +383,7 @@ export default function RegistrarOTModal({
             </Select>
           </Campo>
 
-          <Campo etiqueta="Cuándo">
+          <Campo etiqueta="Cuándo" obligatorio>
             {/*
               **Sin `min`, desde el 12/11/2026.** Tenía la fecha de inicio de la
               OT para que el calendario dejara los días anteriores en gris, y
@@ -552,10 +577,24 @@ export default function RegistrarOTModal({
   );
 }
 
-function Campo({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+function Campo({
+  etiqueta, obligatorio = false, children,
+}: {
+  etiqueta: string;
+  /**
+   * Pinta el asterisco y nada más. **Quien exige es `guardar()`**, no esto:
+   * un `required` en el `<input>` lo frena el navegador con un mensaje suyo,
+   * en su idioma y sin el «Falta cargar» del resto del sistema.
+   */
+  obligatorio?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block space-y-1">
-      <span className="block text-xs font-medium text-slate-600">{etiqueta}</span>
+      <span className="block text-xs font-medium text-slate-600">
+        {etiqueta}
+        {obligatorio && <span className="ml-0.5 text-red-500">*</span>}
+      </span>
       {children}
     </label>
   );
