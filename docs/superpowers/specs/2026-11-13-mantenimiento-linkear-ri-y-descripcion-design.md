@@ -56,6 +56,14 @@ No es una muestra: es la población entera.
 - Cuatro de esos cinco se agrupan **por texto y no por artículo**, y el texto
   está escrito de cinco formas distintas: «Grillas de 2mm», «Grillas de 2 mm»,
   «Grillas 4mm», «Grillas 4 mm», «grillas de 4mm».
+  *Corrección del 16/11/2026: esto decía que **cuatro** de los cinco se agrupaban
+  por texto, y dejó de ser cierto cuando se arregló el cruce con el pañol (la
+  tarea 1). Medido de nuevo contra producción: el cruce pasó de **7 a 13 de 26
+  reconocidos, sin perder ninguno**, y el niple que piden 2896, 2897 y 2898
+  resuelve ahora al código **01221**. Esas tres, la única competencia real que
+  hay hoy, comparten entonces un **artículo** y su link es **global** y no del
+  renglón —que es justo lo que el diseño quería—. Lo que sigue agrupándose por
+  texto son los que no están en el pañol, como las grillas.*
 
 ## Objetivos
 
@@ -239,6 +247,6 @@ dice, no cómo se construye. Si alguna está mal, se discute antes de planificar
 ## Lo que sólo se puede comprobar con datos reales
 
 El cruce se mide con `scripts/medir-cruce-de-repuestos.mts`, que lee producción
-y no toca nada. Hoy da 7 de 26 reconocidos; cualquier cambio al cruce se juzga
+y no toca nada. Daba 7 de 26 reconocidos antes del arreglo del cruce (hoy da 13); cualquier cambio al cruce se juzga
 contra ese número **y contra la lista de los que deja de reconocer**, que es la
 mitad que un porcentaje solo no muestra.

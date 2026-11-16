@@ -3207,6 +3207,70 @@ ciclo.
 La carga a mano sigue existiendo en la ficha del equipo, para quien no quiera
 esperar al próximo cambio. Dejó de ser el camino principal y pasó a ser el atajo.
 
+## Pegar un RI a un repuesto y cuánto de lo que viene es de cada OT (13/11/2026)
+
+Mantenimiento escribe el número de un RI sobre el repuesto de una OT, y puede
+elegir a qué artículo del pañol se refiere ese repuesto. Cada OT abierta que
+necesita un artículo lee **su parte** de lo que viene: cuántas de las que pidió
+están cubiertas y cuántas falta pedir. El diseño está en
+[el spec](superpowers/specs/2026-11-13-mantenimiento-linkear-ri-y-descripcion-design.md)
+y el plan en [su plan](superpowers/plans/2026-11-13-mantenimiento-linkear-ri-y-descripcion.md).
+La aritmética vive en `lib/mantenimiento/loQueViene.ts`, las rutas en
+`app/api/mantenimiento/repuestos/[id]/{ri,articulo}` y la pantalla en
+`RepuestosOTModal.tsx`. La migración es `20261116082907_ri_de_repuesto.sql`.
+
+### Lo que no se deduce del código
+
+**1. El reparto no se guarda: se calcula cada vez** con los RI pegados y las
+órdenes abiertas. Es la misma forma que «pregunta abierta» en este módulo —una
+sola definición, con tests— y evita el libro de reservas, que dejaría
+reservas viejas que nadie limpia cuando una orden se cierra o cambia de
+cantidad.
+
+**2. El link es global cuando hay artículo, y de ese renglón cuando no.** Un RI
+pegado a un artículo vale para toda OT que lo pida; uno pegado a un repuesto
+suelto vale sólo para ese renglón. **Agrupar los sueltos por texto parecido se
+descartó a propósito**: «grillas» está escrito de cinco maneras en las órdenes
+(«de 2mm», «de 2 mm», «4mm», «4 mm»…), y el RI de las de 2 mm aparecería en la
+orden que pide las de 4. Es la regla de la casa —*enlazar al que se le parece
+es peor que dejar en null*—. El costo, aceptado: si dos OT piden la misma
+grilla, alguien pega el número dos veces.
+
+**3. El stock del pañol no descuenta.** Una orden que necesita 80 con 61 en el
+estante igual toma 80 de lo que viene: pedir sólo el faltante deja el estante en
+cero apenas se hace el trabajo, y Compras repone después de usarlas.
+
+**4. Lo que viene es lo pedido menos lo recibido**, y un RI sin cantidad legible
+aporta cero. Medido el 13/11/2026: 1.653 de 2.304 RI tienen algo recibido
+(contarlo como «en camino» lo cuenta dos veces) y 90 de 2.304 no tienen cantidad.
+
+**5. La cuenta mira sólo los RI pegados a mano, nunca los que el cruce por
+nombre adivina.** Un falso positivo ahí haría que una orden lea «cubierta» por
+un pedido que no es suyo, que es el anti-objetivo de la función. Lo que el
+cruce encuentra se sigue mostrando aparte («Ya pedido»). Tampoco reclama una OT
+cerrada: 16 de las 20 OT con repuestos están realizadas.
+
+**6. El empate se rompe por número de OT, de menor a mayor.** No es un detalle
+mecánico: la única competencia real en producción es un empate triple —las
+órdenes 2896, 2897 y 2898 tienen las tres `fecha = 2026-10-26`—, y sin regla el
+orden lo decide PostgREST y la misma pantalla diría cosas distintas. Y desde que
+se arregló el cruce con el pañol (punto siguiente) esas tres comparten un
+**artículo** —el niple, código 01221— y por eso su link es global.
+
+**7. Arreglar el cruce con el pañol fue parte del trabajo.** La OT dice
+`Niple galvanizado ø 3 " x 300 mm` y el pañol `01221 NIPLE GALVANIZADO 3" X
+300MM`; `normalizar` dejaba pasar el `ø` y los espacios y el `includes` de
+`buscarEnInventario` fallaba. Medido con `scripts/medir-cruce-de-repuestos.mts
+--todas`: **de 7 a 13 de 26 reconocidos, sin perder ninguno**. Es la familia del
+bug de la pulgada del 12/11/2026, en el otro cruce.
+
+**8. Cambiar o soltar el artículo se niega con un 409 mientras haya RI pegados
+al artículo viejo, y el 409 nombra los números que bloquean.** Negar es mejor
+que borrar porque la fila del link no sabe qué renglón la pegó: borrarla se
+llevaría links que pegó otra orden. Y tiene que nombrarlos porque un link cuyo
+RI Compras ya sacó de la planilla sigue bloqueando y no se ve en ningún otro
+lado (`nro_ri` no es una foreign key a propósito).
+
 ## Los datos: qué está y qué no
 
 **Todo lo que viene de las planillas está.** Avisos 138, órdenes de trabajo

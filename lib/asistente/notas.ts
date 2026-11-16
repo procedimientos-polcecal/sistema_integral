@@ -33,6 +33,16 @@ export const NOTAS: Record<string, string> = {
     "Entradas y salidas del pañol. `fecha` puede faltar: el kardex de la planilla " +
     "no siempre la trae, y se dejó nullable en vez de inventarla.",
 
+  ordenes_trabajo_repuestos:
+    "Los repuestos de una OT, en texto libre. `articulo_id` en null quiere decir " +
+    "que nadie lo vinculó, **nunca** que el artículo no exista en el pañol, y no " +
+    "se completa jamás por parecido de nombre.",
+
+  mant_ri_de_repuesto:
+    "El número de RI que Mantenimiento pegó a mano a un artículo o a un repuesto. " +
+    "`nro_ri` **no es una foreign key** a `compras_requerimientos`: cruzarlas con " +
+    "un join pierde en silencio los RI que la planilla de Compras ya dejó de tener.",
+
   avisos:
     "El primer eslabón de Mantenimiento: alguien vio que algo anda mal. De un aviso " +
     "sale después una orden de trabajo.",
