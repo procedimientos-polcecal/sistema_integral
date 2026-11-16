@@ -64,8 +64,14 @@ export function leerNroRi(valor: unknown): { ok: true; nro_ri: number } | { ok: 
   if (valor === undefined || valor === null || (typeof valor === "string" && valor.trim() === "")) {
     return { ok: false, error: "Falta el número de RI" };
   }
-  const n = typeof valor === "number" ? valor : typeof valor === "string" ? Number(valor.trim()) : NaN;
-  if (!Number.isInteger(n) || n <= 0) {
+  // Un texto se acepta sólo si es una tira de dígitos: `Number("0x10")` es 16 y
+  // `Number("1e3")` es 1000, y un `?nro_ri` mal escrito terminaría sacando el
+  // vínculo de OTRO RI con un 200. Y nada que Postgres no guarde en un `integer`.
+  const n =
+    typeof valor === "number" ? valor
+    : typeof valor === "string" && /^\d+$/.test(valor.trim()) ? Number(valor.trim())
+    : NaN;
+  if (!Number.isInteger(n) || n <= 0 || n > 2147483647) {
     return { ok: false, error: "El número de RI tiene que ser un entero mayor que cero" };
   }
   return { ok: true, nro_ri: n };

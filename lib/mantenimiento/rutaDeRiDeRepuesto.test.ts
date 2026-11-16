@@ -297,3 +297,54 @@ describe("cambiar o soltar el artículo con RI pegados al artículo", () => {
     expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBe("B");
   });
 });
+
+describe("el 409 dice qué bloquea", () => {
+  it("lleva los números, aunque Compras ya no tenga ese RI", async () => {
+    // El 777 no está en compras_requerimientos (la planilla lo dejó de tener): la cuenta no lo ve,
+    // pero la fila sigue bloqueando y la pantalla necesita el número para poder sacarlo.
+    base.reiniciar({
+      ...base.estado.tablas,
+      mant_ri_de_repuesto: [
+        { id: "m1", nro_ri: 777, articulo_id: "A", repuesto_id: null },
+        { id: "m2", nro_ri: 500, articulo_id: "A", repuesto_id: null },
+        { id: "m3", nro_ri: 900, articulo_id: "B", repuesto_id: null },
+      ],
+    });
+    const r = await ponerArticulo(pedido("PUT", { articulo_id: "B" }), con("r1"));
+    expect(r.status).toBe(409);
+    const cuerpo = await r.json();
+    expect(cuerpo.ris_pegados).toEqual([500, 777]);
+    expect(cuerpo.error).toContain("500, 777");
+  });
+
+  it("y se puede sacar por número un RI que Compras ya no tiene", async () => {
+    base.reiniciar({
+      ...base.estado.tablas,
+      mant_ri_de_repuesto: [{ id: "m1", nro_ri: 777, articulo_id: "A", repuesto_id: null }],
+    });
+    const r = await sacarRi(pedido("DELETE", undefined, "http://x/api?nro_ri=777"), con("r1"));
+    expect(r.status).toBe(200);
+    expect(base.estado.tablas.mant_ri_de_repuesto).toEqual([]);
+  });
+
+  it("un artículo inexistente gana sobre el bloqueo: 404 y no 409", async () => {
+    base.reiniciar({
+      ...base.estado.tablas,
+      mant_ri_de_repuesto: [{ id: "m1", nro_ri: 500, articulo_id: "A", repuesto_id: null }],
+    });
+    const r = await ponerArticulo(pedido("PUT", { articulo_id: "ZZ" }), con("r1"));
+    expect(r.status).toBe(404);
+  });
+
+  it("un ?nro_ri mal escrito no saca el vínculo de otro RI", async () => {
+    base.reiniciar({
+      ...base.estado.tablas,
+      mant_ri_de_repuesto: [{ id: "m1", nro_ri: 16, articulo_id: "A", repuesto_id: null }],
+    });
+    for (const q of ["0x10", "1e1", "16.0"]) {
+      const r = await sacarRi(pedido("DELETE", undefined, `http://x/api?nro_ri=${q}`), con("r1"));
+      expect(r.status).toBe(400);
+    }
+    expect(base.estado.tablas.mant_ri_de_repuesto).toHaveLength(1);
+  });
+});

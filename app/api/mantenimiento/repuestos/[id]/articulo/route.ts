@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
+import { traerTodo } from "@/lib/core/paginado";
 import { cuentaDeUnRepuesto } from "@/lib/mantenimiento/cuentaDeUnRepuesto";
 
 /**
@@ -31,6 +32,11 @@ import { cuentaDeUnRepuesto } from "@/lib/mantenimiento/cuentaDeUnRepuesto";
  * viejo tenga RI pegados, y se dice cómo seguir: sacarlos primero (con el artículo
  * todavía puesto, el DELETE de `ri` los alcanza). Los RI pegados al *renglón*
  * (`repuesto_id`) se quedan, son suyos. Repetir el mismo artículo no es un cambio.
+ *
+ * **El 409 trae `ris_pegados`**: puede haber un vínculo cuyo RI la planilla ya dejó
+ * de tener (no hay foreign key justamente para eso), y esa fila bloquea aunque la
+ * cuenta no la vea. Con los números la pantalla puede ofrecer sacarlos uno por uno.
+ * Y el 404 de un artículo inexistente gana sobre el 409: ver el comentario abajo.
  */
 
 type Params = { params: Promise<{ id: string }> };
@@ -62,29 +68,43 @@ async function guardar(id: string, articuloId: string | null) {
     .maybeSingle();
   if (!renglon) return NextResponse.json({ error: "No existe ese repuesto" }, { status: 404 });
 
-  const viejo = (renglon.articulo_id as string | null) ?? null;
-  if (viejo !== null && viejo !== articuloId) {
-    const { data: pegados } = await admin
-      .from("mant_ri_de_repuesto").select("nro_ri").eq("articulo_id", viejo).range(0, 0);
-    if (pegados === null) {
-      return NextResponse.json({ error: "No se pudieron comprobar los RI del artículo actual" }, { status: 500 });
-    }
-    if (pegados.length > 0) {
-      return NextResponse.json(
-        {
-          error:
-            "El artículo actual tiene RI pegados, y valen para todas las órdenes que lo usan: " +
-            "sacalos antes de cambiar o soltar el artículo.",
-        },
-        { status: 409 }
-      );
-    }
-  }
-
+  // **Primero se comprueba que el artículo nuevo exista, y recién después qué
+  // bloquea.** Un artículo que no existe es un pedido que no puede salir bien
+  // pase lo que pase: avisar antes de los RI mandaría a la persona a sacar
+  // vínculos para toparse después con un 404.
   if (articuloId !== null) {
     const { data: articulo } = await admin
       .from("inventario_articulos").select("id").eq("id", articuloId).maybeSingle();
     if (!articulo) return NextResponse.json({ error: "No existe ese artículo del pañol" }, { status: 404 });
+  }
+
+  const viejo = (renglon.articulo_id as string | null) ?? null;
+  if (viejo !== null && viejo !== articuloId) {
+    // **Se leen de la tabla de vínculos y no de la cuenta, a propósito.** La
+    // cuenta ignora un RI que la planilla ya no tiene (no trae nada); este
+    // bloqueo no puede ignorarlo, porque la fila sigue ahí y sigue bloqueando.
+    // Por eso el 409 **lleva los números**: la pantalla no los puede sacar de
+    // `cuenta.ris`, y sin ellos la persona tendría que sacar vínculos que no ve.
+    let pegados: { nro_ri: number }[];
+    try {
+      pegados = await traerTodo((d, h) =>
+        admin.from("mant_ri_de_repuesto").select("nro_ri").eq("articulo_id", viejo).range(d, h)
+      );
+    } catch {
+      return NextResponse.json({ error: "No se pudieron comprobar los RI del artículo actual" }, { status: 500 });
+    }
+    if (pegados.length > 0) {
+      const ris = [...new Set(pegados.map((p) => p.nro_ri))].sort((x, y) => x - y);
+      return NextResponse.json(
+        {
+          error:
+            `El artículo actual tiene pegados los RI ${ris.join(", ")}, y valen para todas las órdenes que lo usan: ` +
+            "sacalos antes de cambiar o soltar el artículo.",
+          ris_pegados: ris,
+        },
+        { status: 409 }
+      );
+    }
   }
 
   const { error } = await admin

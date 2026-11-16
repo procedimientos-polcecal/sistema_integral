@@ -146,7 +146,7 @@ describe("leerNroRi", () => {
     }
   });
   it("lo que está mal dice lo que es verdad, en castellano", () => {
-    for (const v of [0, -1, 2.5, "abc", "2.5", NaN, true]) {
+    for (const v of [0, -1, 2.5, "abc", "2.5", NaN, true, "0x10", "1e3", "-5", "+5", "5 6", 2147483648, "99999999999"]) {
       const r = leerNroRi(v);
       expect(r).toEqual({ ok: false, error: "El número de RI tiene que ser un entero mayor que cero" });
     }
