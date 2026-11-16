@@ -80,6 +80,12 @@ export interface OpcionesDeLaBase {
    * `23503` de una nota a la que otra apunta, que vive en la base y no en la ruta.
    */
   alBorrar?: (tabla: string, fila: Fila, filas: readonly Fila[]) => ErrorDeLaBase | null;
+  /**
+   * Si la base se niega a insertar esta fila, y con qué error. Es como se prueba el
+   * `23505` de un índice único, que vive en la base y no en la ruta: el fake no
+   * conoce los índices, así que el test dice cuál es la regla.
+   */
+  alInsertar?: (tabla: string, fila: Fila, filas: readonly Fila[]) => ErrorDeLaBase | null;
 }
 
 /** Cuántas filas devuelve PostgREST como mucho. */
@@ -116,7 +122,7 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
 
   /** El constructor de consultas de supabase-js, con lo que usan las rutas. */
   class Consulta {
-    private accion: "select" | "insert" | "upsert" | "delete" = "select";
+    private accion: "select" | "insert" | "upsert" | "update" | "delete" = "select";
     private igualdades: [string, unknown][] = [];
     private enLista: [string, readonly unknown[]] | null = null;
     private nulas: string[] = [];
@@ -183,6 +189,8 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
       this.conflicto = opciones?.onConflict ?? null;
       return this;
     }
+    /** Un `update` aplica los mismos filtros que un `select`: sólo toca lo que coincide. */
+    update(fila: Fila) { this.accion = "update"; this.fila = fila; return this; }
     delete() { this.accion = "delete"; return this; }
 
     then(resolver: (r: unknown) => unknown, rechazar?: (e: unknown) => unknown) {
@@ -228,6 +236,8 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
       }
 
       if (this.accion === "insert" || this.accion === "upsert") {
+        const seNego = opciones.alInsertar?.(this.tabla, this.fila!, filas) ?? null;
+        if (seNego) return { data: null, error: seNego };
         const nueva = {
           id: `nueva-${filas.length + 1}`, creado_en: "2026-10-31T15:00:00Z", ...this.fila,
         };
@@ -241,6 +251,12 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
         this.nulas.every((c) => esNula(f[c])) &&
         this.noNulas.every((c) => !esNula(f[c])) &&
         (!this.enLista || this.enLista[1].includes(f[this.enLista[0]]));
+
+      if (this.accion === "update") {
+        const aTocar = filas.filter(coincide);
+        for (const f of aTocar) Object.assign(f, this.fila);
+        return { data: aTocar.map((f) => this.proyectar(f)), error: null };
+      }
 
       if (this.accion === "delete") {
         const aBorrar = filas.filter(coincide);

@@ -84,3 +84,26 @@ describe("el `not` del Supabase de mentira", () => {
       .toThrow(/no sabe|sólo sabe/i);
   });
 });
+
+describe("el `update` y el `alInsertar` del Supabase de mentira", () => {
+  it("el update toca sólo lo que coincide con el filtro", async () => {
+    const b = supabaseDeMentira();
+    b.reiniciar({ t: [{ id: "a", x: 1 }, { id: "b", x: 1 }] });
+    const t = b.admin.from("t") as unknown as {
+      update(f: object): { eq(c: string, v: unknown): PromiseLike<unknown> };
+    };
+    await t.update({ x: 9 }).eq("id", "a");
+    expect(b.estado.tablas.t).toEqual([{ id: "a", x: 9 }, { id: "b", x: 1 }]);
+  });
+
+  it("el insert se niega con el error que dice el test, y no agrega nada", async () => {
+    const b = supabaseDeMentira({ alInsertar: () => ({ code: "23505", message: "duplicado" }) });
+    b.reiniciar({ t: [] });
+    const t = b.admin.from("t") as unknown as {
+      insert(f: object): PromiseLike<{ error: { code?: string } | null }>;
+    };
+    const r = await t.insert({ x: 1 });
+    expect(r.error?.code).toBe("23505");
+    expect(b.estado.tablas.t).toEqual([]);
+  });
+});
