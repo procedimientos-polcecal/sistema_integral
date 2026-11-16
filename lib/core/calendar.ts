@@ -24,9 +24,12 @@
  *    tiene que poder distinguirlos: `cancelado: true` es "alguien lo borró",
  *    `null` es "ese id no es de nadie".
  *
- * `sendUpdates=all` va en todas las escrituras: es lo que hace que al invitado
- * le llegue el correo de la invitación, de la modificación o de la cancelación.
- * Sin eso el evento aparece en su calendario pero nadie le avisa.
+ * **`sendUpdates` lo elige quien llama, y no es `all` siempre.** Es lo que
+ * decide si al invitado le llega el correo de la invitación, de la modificación
+ * o de la cancelación; con `none` el evento aparece igual en su calendario y
+ * nadie le avisa. Desde el 13/11/2026 el evento de una OT va con `none` y el
+ * que crea una persona con `all` — el porqué está en `AvisoAInvitados`, acá
+ * abajo.
  *
  * Un fallo de escritura se propaga con lo que dijo Google, sin traducir
  * (`mensajeDeGoogle`): nunca se traga con un `console.warn`.
@@ -73,8 +76,11 @@ export type AvisoAInvitados = "all" | "none";
  * `id` es el que elige el SdG, y **sólo cuenta al crear** (un PATCH lo ignora).
  * Sirve para que crear se pueda reintentar sin duplicar: un POST que cortó a los
  * 30 segundos puede haberse creado igual, y el reintento (la cola de escrituras
- * fallidas) con `sendUpdates=all` le mandaría la invitación otra vez a cada
- * invitado. Con el mismo id, Google contesta 409 y `crearEvento` lo toma como
+ * fallidas) **con `sendUpdates=all`** le mandaría la invitación otra vez a cada
+ * invitado. Sigue valiendo para el evento que crea una persona; el de una OT va
+ * con `none` desde el 13/11/2026 y ahí ese daño concreto no existe, pero el id
+ * se elige igual porque lo que evita es el evento duplicado, no sólo el correo.
+ * Con el mismo id, Google contesta 409 y `crearEvento` lo toma como
  * "ya estaba". Google exige base32hex: sólo `a`–`v` y `0`–`9` en minúscula, de 5
  * a 1024 caracteres. Un uuid sin guiones sirve (los dígitos hex son `0`–`9` y
  * `a`–`f`, todos dentro de `a`–`v`); con guiones o en mayúscula, no.
