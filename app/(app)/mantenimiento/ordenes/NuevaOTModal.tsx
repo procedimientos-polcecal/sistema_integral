@@ -40,9 +40,10 @@ import type { LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
 const PRIORIDADES = PRIORIDADES_DE_OT;
 /**
  * Los estados **sí** son una lista propia, y es a propósito: es un
- * subconjunto de `ESTADOS_DE_OT` —le falta SUSPENDIDA— porque una OT no nace
- * suspendida, y lleva etiquetas de pantalla que el vocabulario no tiene.
- * Ofrecer menos no abre el agujero de arriba; ofrecer de más, sí.
+ * subconjunto de `ESTADOS_DE_OT` —le falta CANCELADA— porque una OT no nace
+ * cancelada (el POST la rechaza), y lleva etiquetas de pantalla que el
+ * vocabulario no tiene. Ofrecer menos no abre el agujero de arriba; ofrecer
+ * de más, sí.
  */
 const ESTADOS_OT = [
   { value: "POR_HACER",  label: "Por hacer" },
