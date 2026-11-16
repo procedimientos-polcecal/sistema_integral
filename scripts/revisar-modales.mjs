@@ -13,7 +13,7 @@
  * escritos a mano —de 45 a 48— y un módulo nuevo sin proveedor de confirmación**.
  * Dos días. Sin esto, la inconsistencia que se acaba de ordenar vuelve sola.
  * (Ésa es la cuenta histórica, la que motiva el chequeo. La de hoy es otra: al
- * 16/11/2026 hay **53** `<Modal>` en `app/` y `components/`, medidos contando
+ * 16/11/2026 hay **56** `<Modal>` en `app/` y `components/`, medidos contando
  * los `alSalir=`; si este número y el árbol discrepan, manda el árbol.)
  *
  * Qué hace: recorre `app/` y `components/` buscando una capa a pantalla completa,

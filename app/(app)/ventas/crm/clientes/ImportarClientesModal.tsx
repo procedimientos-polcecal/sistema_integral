@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { COLUMNAS, type FilaDelPlan, type PlanDeImportacion } from "@/lib/ventas/crm/importarClientes";
 
 /**
@@ -101,19 +102,15 @@ export default function ImportarClientesModal({ onCerrar }: Props) {
   const nuevas = plan?.resumen.nuevas ?? 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-      <div className="card my-8 w-full max-w-3xl space-y-4 p-5" style={{ background: "var(--surface, #fff)" }}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Importar clientes desde Excel</h2>
-            <p className="text-sm text-slate-500">
-              Primero se muestra qué pasaría. Nada se guarda hasta que lo confirmes.
-            </p>
-          </div>
-          <button type="button" onClick={onCerrar} className="btn-ghost text-sm">
-            Cerrar
-          </button>
-        </div>
+    // Sin borrador: este diálogo no tiene nada tipeado que perder (elige un
+    // archivo, mira el plan y confirma), así que la X, el fondo y Escape salen
+    // derecho sin preguntar. No pasa por `useBorrador`, y el archivo elegido sí
+    // se pierde al salir: no hay nada que descartar y por eso no hay «Cancelar».
+    <Modal titulo="Importar clientes desde Excel" ancho="ancho" alSalir={onCerrar}>
+      <div className="space-y-4">
+        <p className="text-sm text-slate-500">
+          Primero se muestra qué pasaría. Nada se guarda hasta que lo confirmes.
+        </p>
 
         {error && (
           <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
@@ -142,7 +139,7 @@ export default function ImportarClientesModal({ onCerrar }: Props) {
                 </ul>
               </div>
             )}
-            <div className="flex justify-end">
+            <PieDeModal>
               <button
                 type="button"
                 onClick={() => window.location.reload()}
@@ -150,7 +147,7 @@ export default function ImportarClientesModal({ onCerrar }: Props) {
               >
                 Ver la lista
               </button>
-            </div>
+            </PieDeModal>
           </div>
         )}
 
@@ -301,7 +298,7 @@ export default function ImportarClientesModal({ onCerrar }: Props) {
               </>
             )}
 
-            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-3">
+            <PieDeModal className="flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -324,10 +321,10 @@ export default function ImportarClientesModal({ onCerrar }: Props) {
                     ? "No hay nada para importar"
                     : `Importar ${nuevas} ${nuevas === 1 ? "cliente" : "clientes"}`}
               </button>
-            </div>
+            </PieDeModal>
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

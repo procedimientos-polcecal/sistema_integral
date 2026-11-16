@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { Modal } from "@/components/Modal";
 import { etapaDe, ETAPAS_ABIERTAS } from "@/lib/ventas/crm/etapas";
 import {
   ESTADOS_DE_CLIENTE,
@@ -187,21 +188,23 @@ export default function FichaDeCliente({
   const suEstado = estadoDeCliente(cliente.estado);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-      <div className="card my-8 w-full max-w-3xl space-y-5 p-5" style={{ background: "var(--surface, #fff)" }}>
+    // Sin borrador, a propósito de este cierre de merge: el cartel de «salir» no
+    // se pasa (`tocado`) porque nada de esta ficha pasa por `useBorrador`, así
+    // que la X, el fondo y Escape salen derecho. Lo que se está tipeando en un
+    // contacto, una oportunidad o una actividad **sin guardar** se pierde al
+    // salir; darles borrador es una decisión por formulario y va aparte.
+    <Modal titulo={cliente.razon_social} ancho="ancho" alSalir={onCerrar}>
+      <div className="space-y-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-baseline gap-2">
-              <h2 className="text-lg font-bold text-slate-900">{cliente.razon_social}</h2>
-              {suEstado && (
-                <span
-                  className="rounded-full px-2 py-0.5 text-xs font-semibold"
-                  style={{ background: `${suEstado.color}1A`, color: suEstado.color }}
-                >
-                  {suEstado.nombre}
-                </span>
-              )}
-            </div>
+            {suEstado && (
+              <span
+                className="rounded-full px-2 py-0.5 text-xs font-semibold"
+                style={{ background: `${suEstado.color}1A`, color: suEstado.color }}
+              >
+                {suEstado.nombre}
+              </span>
+            )}
             <p className="mt-0.5 text-sm text-slate-500">
               {[
                 cliente.nombre_fantasia,
@@ -217,16 +220,15 @@ export default function FichaDeCliente({
             </p>
             {cliente.notas && <p className="mt-1 text-sm text-slate-700">{cliente.notas}</p>}
           </div>
-          <div className="flex shrink-0 gap-2">
-            {puedeEditar && (
-              <button type="button" onClick={() => setEditando((v) => !v)} className="btn-secondary text-sm">
-                {editando ? "Dejar de editar" : "Editar"}
-              </button>
-            )}
-            <button type="button" onClick={onCerrar} className="btn-ghost text-sm">
-              Cerrar
+          {puedeEditar && (
+            <button
+              type="button"
+              onClick={() => setEditando((v) => !v)}
+              className="btn-secondary shrink-0 text-sm"
+            >
+              {editando ? "Dejar de editar" : "Editar"}
             </button>
-          </div>
+          )}
         </div>
 
         {error && (
@@ -399,7 +401,7 @@ export default function FichaDeCliente({
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
 

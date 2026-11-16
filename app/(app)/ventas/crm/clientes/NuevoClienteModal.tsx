@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { ESTADOS_DE_CLIENTE } from "@/lib/ventas/crm/formato";
 import type { Cliente } from "./FichaDeCliente";
 
@@ -106,23 +107,15 @@ export default function NuevoClienteModal({ usuarios, esAdmin, onCerrar, onCread
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-      <form
-        onSubmit={guardar}
-        className="card my-8 w-full max-w-2xl space-y-4 p-5"
-        style={{ background: "var(--surface, #fff)" }}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Nuevo cliente</h2>
-            <p className="text-sm text-slate-500">
-              Alcanza con la razón social. Lo demás se completa cuando se sepa.
-            </p>
-          </div>
-          <button type="button" onClick={onCerrar} className="btn-ghost text-sm">
-            Cerrar
-          </button>
-        </div>
+    // Sin borrador, a propósito de este cierre de merge: no pasa por
+    // `useBorrador` ni se pasa `tocado`, así que la X, el fondo y Escape salen
+    // derecho, sin preguntar, y lo tipeado se pierde. «Cancelar» y salir hacen
+    // hoy lo mismo; darle borrador es una decisión de este formulario y va aparte.
+    <Modal titulo="Nuevo cliente" ancho="ancho" alSalir={onCerrar}>
+      <form onSubmit={guardar} className="space-y-4">
+        <p className="text-sm text-slate-500">
+          Alcanza con la razón social. Lo demás se completa cuando se sepa.
+        </p>
 
         {error && (
           <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
@@ -215,16 +208,16 @@ export default function NuevoClienteModal({ usuarios, esAdmin, onCerrar, onCread
           </div>
         </div>
 
-        <div className="flex justify-end gap-2">
+        <PieDeModal>
           <button type="button" onClick={onCerrar} className="btn-secondary text-sm">
             Cancelar
           </button>
           <button type="submit" disabled={guardando} className="btn-primary text-sm">
             {guardando ? "Guardando…" : "Guardar"}
           </button>
-        </div>
+        </PieDeModal>
       </form>
-    </div>
+    </Modal>
   );
 }
 
