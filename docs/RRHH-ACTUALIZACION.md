@@ -815,3 +815,79 @@ del enum queda cubierto solo. Sale 1 si algo que no puede verse salió.
   todos, que es un supuesto y no el dato de cada sector.
 - **La importación de NOVEDADES** (`scripts/importar-novedades.mts`), que es de
   una sola vez y todavía no se corrió.
+
+## Una vacación es una ausencia (16/11/2026)
+
+Hasta esta fecha había **dos puertas** para cargar un período de vacaciones y
+sólo una servía. El formulario de Ausencias, con motivo «Vacaciones», creaba la
+ausencia y `sincronizarPeriodoVacaciones()` escribía sola la fila de
+`vacaciones`. Las otras dos pantallas —**RRHH → Vacaciones → Balance por
+empleado** y el bloque de vacaciones de la **ficha del empleado**— posteaban a
+`/api/rrhh/vacaciones`, que insertaba derecho en la tabla y **no creaba ninguna
+ausencia**.
+
+`/disponibilidad` lee `ausencias` y nada más. También la **programación del
+taller** y los **tres reportes de ausentismo**. Así que un período cargado por
+la segunda puerta no existía para ninguno de los tres. Medido contra producción
+ese día: **de 41 períodos, 20 eran así, y 4 tocaban ese día o uno futuro** —
+había gente de vacaciones que la pantalla mostraba como presente.
+
+Ahora el `POST` pasa por `altaDeAusencia()`. **El arreglo vive en la ruta y no
+en la pantalla a propósito**: así lo heredan las dos que postean ahí y cualquier
+tercera que aparezca mañana. Los 20 viejos se convirtieron con
+`scripts/vacaciones-huerfanas-a-ausencias.mts`.
+
+### Lo que no se deduce del código
+
+**La liquidación nunca estuvo ciega a los períodos huérfanos, y conviene saberlo
+antes de tocar el motor.** `lib/rrhh/engine/recalcular.ts` lee la tabla
+`vacaciones` **directo**, no a través de la ausencia, y la vacación le gana a la
+ausencia cargada:
+
+```ts
+if (vacacion) { ausente = false; }
+else if (ausenciaCargada) { ausente = true; … }
+```
+
+O sea que esos 20 períodos ya llegaban a `calculos_diarios` como días *no*
+ausentes, que es lo correcto para una vacación paga, y después del cambio las
+filas salen **idénticas**. Los ciegos eran Disponibilidad, el taller y los
+reportes. La primera versión del diseño afirmaba lo contrario y lo usaba como
+motivo; está corregido ahí y acá para que nadie lo use como argumento para
+tocar el motor. Por lo mismo, el relleno **no recalcula**: sería un no-op.
+
+**Los reportes de ausentismo subieron 215 días de golpe.** Julio 172→232,
+agosto 161→186, septiembre 119→136, octubre 116→136 y **noviembre 35→128**. No
+es un error del número nuevo: son 20 períodos que faltaban. Está escrito acá
+porque quien compare contra lo que vio la semana anterior va a concluir que el
+sistema se rompió.
+
+**Tres períodos tienen `dias_tomados` distinto del calendario y no se
+normalizaron, a propósito.** 24/09→01/10 dice 7 y son 8; 11/11→25/11 dice 14 y
+son 15; 13/10→19/10 dice 8 y son 7. **La primera edición de cada uno desde la
+pantalla lo pasa al calendario y mueve el balance de esa persona un día.** Se
+prefirió eso a normalizar tres balances de una vez sin que nadie lo pidiera. El
+tercero es el dato interesante: **nació de una ausencia y aun así quedó a
+mano**, o sea que alguien lo editó por el `PUT` y la sincronización no volvió a
+pasar — es la prueba de que un número tipeado al lado de uno calculado diverge
+solo, y por eso el campo «Días» salió de los dos formularios.
+
+**Las ausencias de vacaciones NO se ven en RRHH → Ausencias.** Su pestaña
+«Licencias» filtra con `excluirTipo=VACACIONES`, y se dejó así: las vacaciones
+tienen su propia pantalla. Está escrito porque es lo primero que alguien va a
+buscar y no lo va a encontrar.
+
+**Corregir o borrar un período se audita**, con el mismo contrato que
+`rrhh/ausencias/[id]`: el registro va antes del cambio y si no entra, no se
+escribe nada. La entidad del registro es `vacaciones` y **no** `ausencias`,
+porque lo que se corrige es el período — y sobre todo porque
+`anio_correspondiente` vive ahí, no se puede reconstruir de las fechas, y es el
+campo que decide **de qué año se descuentan los días**. El `DELETE` borra la
+**ausencia** y deja que el `on delete cascade` se lleve el período: borrar sólo
+el período dejaría la ausencia viva y la persona seguiría figurando ausente.
+
+**Un `PUT` que cambia sólo el año no toca ninguna columna de la ausencia**, y
+ésa es la razón de que el freno de no-op use `hayAlgoQueCambiar()` y no «¿hay
+cambios de ausencia?». Con lo segundo, el año no se habría podido corregir
+nunca. Por lo mismo, `sincronizarPeriodoVacaciones()` corre igual cuando no hubo
+ningún cambio de columna: es el único paso que lo guarda.
