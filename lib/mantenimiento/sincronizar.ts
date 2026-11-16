@@ -559,9 +559,17 @@ async function anotarLasDivergencias(
     // faltó esta revisión, y mezclarlos haría parecer total un fallo parcial.
     let sinRevisarCanceladas: string | null = null;
     try {
+      // El `.order()` no es decorativo aunque hoy no cambie nada: un `.range()`
+      // sin orden deja que la base devuelva las filas como quiera, y dos tandas
+      // con órdenes distintos pueden saltearse una. Con 25 notas no hay segunda
+      // tanda, pero pasadas las 1.000 una nota salteada se convierte en una
+      // «cancelada sin motivo» que nadie escribió — un falso positivo en el
+      // único detector que se construyó para no tener ninguno, y que por eso
+      // se mira. `orden_id` solo alcanza: los empates quedan pegados, así que
+      // una fila que se saltee entre sus iguales no le saca el id al conjunto.
       const conNota = new Set(
         (await traerTodo<{ orden_id: string }>((desde, hasta) =>
-          admin.from("ordenes_trabajo_notas").select("orden_id").range(desde, hasta)
+          admin.from("ordenes_trabajo_notas").select("orden_id").order("orden_id").range(desde, hasta)
         )).map((n) => n.orden_id)
       );
       for (const o of delSistema) o.tiene_nota = conNota.has(o.id);

@@ -166,6 +166,17 @@ export function laCeldaDelEstadoEstaVacia(p: OrdenLeida): boolean {
  * **Sólo `false` cuenta.** Si no se sabe si hay nota (`undefined`: la consulta
  * no corrió o falló, por ejemplo con la tabla todavía sin migrar) se calla;
  * marcar todas las canceladas sería sonar por algo que no se midió.
+ *
+ * **Y ve menos de lo que esas dos frases sugieren**, que es lo que hay que
+ * saber antes de confiarle el caso entero: mira si hay *alguna* nota, no si hay
+ * una que hable de la cancelación, así que una «Cancelada» tipeada en la M
+ * sobre una orden que ya venía justificada no suena nunca. Medido el
+ * 16/11/2026: 21 de las 51 órdenes abiertas ya tienen nota, o sea que el punto
+ * ciego cubre hoy el 41% de las que se podrían cancelar a mano. Es la
+ * consecuencia directa de no marcar ninguna nota como «la de la cancelación»
+ * —Decisión 2 del diseño— y se deja así, porque marcarla sería contradecirla.
+ * Lo que esta función cubre es lo que se puede cubrir sin esa marca —cero
+ * notas—, no «toda cancelación sin motivo».
  */
 export function laCancelacionNoTieneMotivo(
   s: Pick<OrdenDelSistema, "estado" | "tiene_nota">
