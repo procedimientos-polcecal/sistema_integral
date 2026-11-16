@@ -762,9 +762,11 @@ export async function PATCH(request: Request) {
   //
   // Acá estaba escrito que eso no podía pasar porque una orden con fecha de
   // cierre es `REALIZADO` —lo fuerza `estadoSegunElCierre`— y desde
-  // `REALIZADO` no se cancela. Esa fuerza existe sólo en el POST, que es el
-  // único que llama a esa función; en el PATCH no la llama nadie y
-  // `repartirRegistroDeOT` copia `fecha_cierre` al update sin mirar el estado.
+  // `REALIZADO` no se cancela. Esa fuerza es del **alta**: la llaman el POST
+  // de acá y los dos formularios que lo alimentan, y nadie más. En el PATCH no
+  // interviene, y `repartirRegistroDeOT` copia `fecha_cierre` al update sin
+  // mirar el estado; la importación tampoco la aplica —`filaDeOrden` mapea la
+  // M y la K por separado—, así que la fila vuelve de la planilla tal cual.
   // Medido el 16/11/2026: 0 de 2.466 filas tienen hoy una fecha de cierre con
   // un estado del que se pueda cancelar. Eso dice que **todavía no había
   // pasado**, no que no pudiera pasar.
