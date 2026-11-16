@@ -150,4 +150,31 @@ describe("buscarEnInventario", () => {
     expect(buscarEnInventario([{ codigo: null, nombre: "de" }], inventario)[0].estado)
       .toBe("no_esta");
   });
+
+  // Medido contra producción el 13/11/2026: la OT escribe el diámetro con ø y
+  // espacios, y el pañol lo tiene pegado.
+  it("reconoce el niple aunque la OT escriba el diámetro con ø y espacios", () => {
+    const inv = [{ codigo: "01221", descripcion: 'NIPLE GALVANIZADO 3" X 300MM', stock: 5, seguridad: 1, ubicacion: null }];
+    const [d] = buscarEnInventario([{ codigo: null, nombre: 'Niple galvanizado ø 3 " x 300 mm', cantidad: null }], inv);
+    expect(d.insumo?.codigo).toBe("01221");
+  });
+
+  it("reconoce la tapa con el mismo ø", () => {
+    const inv = [{ codigo: "01220", descripcion: 'TAPA GALVANIZADA 3"', stock: 2, seguridad: 1, ubicacion: null }];
+    const [d] = buscarEnInventario([{ codigo: null, nombre: 'Tapa galvanizada ø 3"', cantidad: null }], inv);
+    expect(d.insumo?.codigo).toBe("01220");
+  });
+
+  // La otra dirección: aflojar no puede juntar medidas distintas.
+  it("sigue sin confundir dos medidas que sólo difieren en el número", () => {
+    const inv = [{ codigo: "01222", descripcion: 'NIPLE GALVANIZADO 3" X 200MM', stock: 5, seguridad: 1, ubicacion: null }];
+    const [d] = buscarEnInventario([{ codigo: null, nombre: 'Niple galvanizado ø 3 " x 300 mm', cantidad: null }], inv);
+    expect(d.insumo).toBeNull();
+  });
+
+  it("no pega números que no llevan unidad: BULON 1/2 no es BULON 12", () => {
+    const inv = [{ codigo: "9", descripcion: "BULON 12", stock: 5, seguridad: 1, ubicacion: null }];
+    const [d] = buscarEnInventario([{ codigo: null, nombre: "Bulon 1/2", cantidad: null }], inv);
+    expect(d.insumo).toBeNull();
+  });
 });

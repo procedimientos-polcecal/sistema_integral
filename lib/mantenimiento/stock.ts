@@ -95,6 +95,29 @@ export interface Disponibilidad {
 const MINIMO_PARA_BUSCAR = 4;
 
 /**
+ * El texto de un repuesto, listo para compararlo con `includes`.
+ *
+ * La OT escribe `ø 3 " x 300 mm` y el pañol `3" X 300MM`: el mismo repuesto con
+ * tres diferencias que no significan nada. Se sacan sólo esas tres: el signo
+ * de diámetro, los espacios que rodean a la comilla de pulgada, y el espacio
+ * entre un número y su unidad.
+ *
+ * **No se colapsan todos los espacios**, y es a propósito: `BULON 1/2` pasaría
+ * a ser `BULON12` y coincidiría con `BULON 12`. Es el mismo error que en
+ * `riDelRepuesto.ts` costó cambiar un falso negativo por un falso positivo. Se
+ * aplica a los dos lados de la comparación, así que lo que se pierde en uno se
+ * pierde en el otro. Local y sin exportar: `normalizar` es de todos.
+ */
+function paraComparar(v: unknown): string {
+  return normalizar(v)
+    .replace(/[øØ]/g, " ")
+    .replace(/\s*["”″]\s*/g, '"')
+    .replace(/(\d)\s+(mm|cm|mts?|m|kg|kw|hp|lts?|l|pulg)\b/gi, "$1$2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Qué hay de cada repuesto que la orden necesita.
  *
  * Se busca por código, después por nombre completo y por último por nombre
@@ -110,18 +133,18 @@ export function buscarEnInventario(
 
   for (const i of inventario) {
     if (i.codigo) porCodigo.set(normalizar(i.codigo), i);
-    if (i.descripcion) porNombre.set(normalizar(i.descripcion), i);
+    if (i.descripcion) porNombre.set(paraComparar(i.descripcion), i);
   }
 
   return repuestos.map((r) => {
     const codigo = normalizar(r.codigo);
-    const nombre = normalizar(r.nombre);
+    const nombre = paraComparar(r.nombre);
 
     const insumo =
       (codigo && porCodigo.get(codigo)) ||
       (nombre && porNombre.get(nombre)) ||
       (nombre.length >= MINIMO_PARA_BUSCAR
-        ? inventario.find((i) => normalizar(i.descripcion).includes(nombre))
+        ? inventario.find((i) => paraComparar(i.descripcion).includes(nombre))
         : undefined) ||
       null;
 
