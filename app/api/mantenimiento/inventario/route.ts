@@ -62,7 +62,33 @@ export async function GET(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const q = (new URL(request.url).searchParams.get("q") ?? "").trim();
+  const parametros = new URL(request.url).searchParams;
+
+  // `?articulos=1` — la lista entera de artículos activos con su id, para elegir
+  // a cuál se refiere un repuesto. Son ~1.200 filas de tres columnas, que el
+  // `<Select>` filtra en el cliente; por eso `traerTodo` y no `.limit()`, que
+  // PostgREST corta en 1.000 sin avisar. Se pide recién cuando se la necesita.
+  if (parametros.get("articulos") === "1") {
+    try {
+      const filas = await traerTodo<{ id: string; codigo: string; descripcion: string }>(
+        (desde, hasta) =>
+          supabase
+            .from("inventario_articulos")
+            .select("id, codigo, descripcion")
+            .eq("activo", true)
+            .order("codigo")
+            .range(desde, hasta)
+      );
+      return NextResponse.json({ data: filas });
+    } catch (e) {
+      return NextResponse.json(
+        { error: `No se pudo leer el inventario: ${e instanceof Error ? e.message : "error"}` },
+        { status: 500 }
+      );
+    }
+  }
+
+  const q = (parametros.get("q") ?? "").trim();
 
   const consulta = supabase
     .from("inventario_articulos")

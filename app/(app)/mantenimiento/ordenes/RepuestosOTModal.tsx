@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import Select from "@/components/Select";
+import type { CuentaDeUnRepuesto } from "@/lib/mantenimiento/cuentaDeUnRepuesto";
 import { ESTADO_DE_STOCK, type Disponibilidad, type Insumo } from "@/lib/mantenimiento/stock";
 import { useCargar } from "@/lib/core/useCargar";
 import { haceCuanto } from "@/lib/core/haceCuanto";
@@ -71,9 +73,13 @@ interface Repuesto {
   nombre: string;
   codigo: string | null;
   cantidad: string | null;
+  /** El artículo del pañol que una persona eligió para este renglón, si eligió. */
+  articulo?: ArticuloDelPanol | null;
   /** Los requerimientos en curso que podrian ser este mismo repuesto. */
   ris?: { porCodigo: RiEnVuelo[]; porNombre: RiEnVuelo[] };
 }
+
+interface ArticuloDelPanol { id: string; codigo: string; descripcion: string }
 
 type Opcion = { id: string; nombre: string };
 
@@ -115,6 +121,33 @@ export default function RepuestosOTModal({
   const [pedido, setPedido] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
+
+  /**
+   * El catálogo del pañol con sus id, para elegir a qué artículo se refiere un
+   * repuesto. Son ~1.200 filas y casi nadie lo usa, así que se pide recién cuando
+   * alguien abre el selector, y una sola vez por modal.
+   */
+  const [articulos, setArticulos] = useState<ArticuloDelPanol[] | null>(null);
+  const pidiendoArticulos = useRef<Promise<ArticuloDelPanol[] | null> | null>(null);
+  function traerArticulos(): Promise<ArticuloDelPanol[] | null> {
+    if (articulos) return Promise.resolve(articulos);
+    pidiendoArticulos.current ??= (async () => {
+      try {
+        const res = await fetch("/api/mantenimiento/inventario?articulos=1");
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) { setError(body.error ?? "No se pudo traer el catálogo del pañol."); return null; }
+        const lista: ArticuloDelPanol[] = body.data ?? [];
+        setArticulos(lista);
+        return lista;
+      } catch {
+        setError("No se pudo traer el catálogo del pañol: no hay conexión con el servidor.");
+        return null;
+      } finally {
+        pidiendoArticulos.current = null;
+      }
+    })();
+    return pidiendoArticulos.current;
+  }
 
   /** El historial de la orden: de ahí sale qué repuesto ya tiene una pregunta esperando. */
   const [notas, setNotas] = useState<NotaDeLaOT[]>([]);
@@ -172,7 +205,13 @@ export default function RepuestosOTModal({
       // La cantidad viaja para que el inventario pueda decir «no alcanza»: con
       // 61 en stock y una OT que pide 80, sin esto la pantalla decía «Hay».
       body: JSON.stringify({
-        repuestos: lista.map((r) => ({ codigo: r.codigo, nombre: r.nombre, cantidad: r.cantidad })),
+        // Con artículo elegido se busca **ése**, no lo que el nombre se parezca:
+        // es lo que hace que el stock y el pedido a Compras sean los de la pieza.
+        repuestos: lista.map((r) => ({
+          codigo: r.articulo?.codigo ?? r.codigo,
+          nombre: r.articulo?.descripcion ?? r.nombre,
+          cantidad: r.cantidad,
+        })),
       }),
     });
     if (!stock.ok) return;
@@ -373,6 +412,15 @@ export default function RepuestosOTModal({
                       </div>
                     )}
 
+                    <ArticuloYRi
+                      repuesto={r}
+                      d={d}
+                      puedeEditar={puedeEditar}
+                      articulos={articulos}
+                      pedirArticulos={traerArticulos}
+                      onCambioDelArticulo={traer}
+                    />
+
                     {/* Cuando no hay, lo que sigue es pedirlo. El formulario
                         abre con el nombre, el código y la cantidad que ya están
                         acá: volver a escribirlos es donde el código se pierde y
@@ -534,6 +582,344 @@ export default function RepuestosOTModal({
         />
       )}
     </>
+  );
+}
+
+const numero = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
+
+/** Lo que dice el servidor, sin traducir; y los RI que bloquean, si los nombra. */
+async function leerFallo(res: Response): Promise<{ error: string; risPegados: number[] }> {
+  const body = await res.json().catch(() => ({}));
+  return {
+    error: body.error ?? "No se pudo completar la acción.",
+    risPegados: Array.isArray(body.ris_pegados) ? body.ris_pegados : [],
+  };
+}
+
+type RespuestaDeCuenta = { cuenta?: CuentaDeUnRepuesto | null; advertencia?: string };
+
+/**
+ * El artículo del pañol de un repuesto, los RI pegados a mano y la cuenta de
+ * cuánto de lo que viene ya tiene dueño.
+ *
+ * Los RI que el cruce por nombre adivina (`YaPedido`) **no entran en esta cuenta**
+ * y se siguen mostrando aparte: un falso positivo ahí haría leer «cubierta» a una
+ * orden por algo que no es suyo. Acá sólo cuentan los que una persona pegó.
+ *
+ * Un RI pegado a un renglón con artículo vale para **todas** las órdenes abiertas
+ * que piden ese artículo, y la pantalla lo dice. Y cambiar o soltar el artículo
+ * se rechaza mientras haya RI pegados al artículo viejo (la fila no guarda de qué
+ * renglón vino y borrarla se llevaría el trabajo de otra orden): el rechazo trae
+ * los números y acá se ofrece sacarlos uno por uno, también el de un RI que
+ * Compras ya sacó de la planilla, que bloquea y no se ve en ningún otro lado.
+ */
+function ArticuloYRi({
+  repuesto, d, puedeEditar, articulos, pedirArticulos, onCambioDelArticulo,
+}: {
+  repuesto: Repuesto;
+  d: Disponibilidad | undefined;
+  puedeEditar: boolean;
+  articulos: ArticuloDelPanol[] | null;
+  pedirArticulos: () => Promise<ArticuloDelPanol[] | null>;
+  onCambioDelArticulo: () => void;
+}) {
+  const articulo = repuesto.articulo ?? null;
+  const [cuenta, setCuenta] = useState<CuentaDeUnRepuesto | null>(null);
+  const [advertencia, setAdvertencia] = useState("");
+  const [error, setError] = useState("");
+  /** Los RI que impiden cambiar el artículo: hay que sacarlos antes. */
+  const [bloqueo, setBloqueo] = useState<number[]>([]);
+  const [aviso, setAviso] = useState("");
+  const [eligiendo, setEligiendo] = useState(false);
+  const [nro, setNro] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+
+  useCargar(async (vigente) => {
+    const res = await fetch(`/api/mantenimiento/repuestos/${repuesto.id}/ri`);
+    const body = await res.json().catch(() => ({}));
+    if (!vigente()) return;
+    if (!res.ok) { setError(body.error ?? "No se pudo calcular lo que viene."); return; }
+    setCuenta(body.cuenta ?? null);
+    setAdvertencia(body.advertencia ?? "");
+  }, [repuesto.id, articulo?.id]);
+
+  /** Aplica la respuesta de una escritura: la cuenta nueva, o la advertencia. */
+  function aplicar(body: RespuestaDeCuenta) {
+    setCuenta(body.cuenta ?? null);
+    setAdvertencia(body.advertencia ?? "");
+  }
+
+  async function llamar(
+    url: string, init: RequestInit
+  ): Promise<{ ok: true; body: RespuestaDeCuenta } | { ok: false }> {
+    setOcupado(true);
+    setError("");
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) {
+        const f = await leerFallo(res);
+        setError(f.error);
+        setBloqueo(res.status === 409 ? f.risPegados : []);
+        return { ok: false };
+      }
+      setBloqueo([]);
+      return { ok: true, body: await res.json().catch(() => ({})) };
+    } catch {
+      setError("No hay conexión con el servidor. Probá de nuevo.");
+      return { ok: false };
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function pegar() {
+    const r = await llamar(`/api/mantenimiento/repuestos/${repuesto.id}/ri`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nro_ri: nro.trim() }),
+    });
+    if (!r.ok) return;
+    setNro("");
+    setAviso("");
+    aplicar(r.body);
+  }
+
+  async function sacarRi(n: number) {
+    const r = await llamar(`/api/mantenimiento/repuestos/${repuesto.id}/ri?nro_ri=${n}`, { method: "DELETE" });
+    if (!r.ok) return;
+    setAviso("");
+    aplicar(r.body);
+  }
+
+  /** Sacar uno de los que bloquean el cambio de artículo: queda la lista que falta. */
+  async function sacarElQueBloquea(n: number) {
+    const faltan = bloqueo.filter((x) => x !== n);
+    const r = await llamar(`/api/mantenimiento/repuestos/${repuesto.id}/ri?nro_ri=${n}`, { method: "DELETE" });
+    if (!r.ok) return;
+    setBloqueo(faltan);
+    aplicar(r.body);
+    if (faltan.length === 0) setError("");
+  }
+
+  async function elegir(articuloId: string) {
+    const r = await llamar(`/api/mantenimiento/repuestos/${repuesto.id}/articulo`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ articulo_id: articuloId }),
+    });
+    if (!r.ok) return;
+    setEligiendo(false);
+    aplicar(r.body);
+    // Callado, esto sería una sorpresa: los RI que ya tenía el artículo los pegaron
+    // desde otras órdenes y desde ahora cuentan también para ésta.
+    const heredados = r.body.cuenta?.ris.length ?? 0;
+    setAviso(
+      heredados > 0
+        ? `Este artículo ya tenía ${heredados === 1 ? "1 RI pegado" : `${heredados} RI pegados`} desde otras órdenes: ` +
+          "desde ahora cuentan también para este repuesto."
+        : ""
+    );
+    onCambioDelArticulo();
+  }
+
+  async function soltar() {
+    const r = await llamar(`/api/mantenimiento/repuestos/${repuesto.id}/articulo`, { method: "DELETE" });
+    if (!r.ok) return;
+    setAviso("");
+    aplicar(r.body);
+    onCambioDelArticulo();
+  }
+
+  async function usarElQueReconocio(codigo: string) {
+    const lista = await pedirArticulos();
+    const encontrado = lista?.find((a) => a.codigo === codigo);
+    if (!encontrado) { setError("No se encontró ese artículo en el catálogo activo del pañol."); return; }
+    await elegir(encontrado.id);
+  }
+
+  async function abrirSelector() {
+    setEligiendo(true);
+    await pedirArticulos();
+  }
+
+  const reconocido = !articulo && d?.insumo?.codigo ? d.insumo : null;
+  const ris = cuenta?.ris ?? [];
+  const estaOrden = cuenta?.estaOrden ?? null;
+  const otras = cuenta ? cuenta.partes.length - (estaOrden ? 1 : 0) : 0;
+
+  return (
+    <div className="mt-1 space-y-1 text-xs">
+      {/* El artículo. Se elige, nunca se completa por parecido: enlazar al que se
+          le parece es peor que dejar sin enlace. */}
+      <p className="text-slate-600">
+        {articulo ? (
+          <>
+            <span className="font-medium">Artículo del pañol:</span>{" "}
+            <span className="font-mono text-slate-400">{articulo.codigo}</span> {articulo.descripcion}
+          </>
+        ) : (
+          <span className="text-slate-400">Sin artículo del pañol elegido.</span>
+        )}
+        {puedeEditar && !eligiendo && (
+          <>
+            {" "}
+            <button onClick={abrirSelector} disabled={ocupado} className="underline text-[var(--primary)]">
+              {articulo ? "Cambiar" : "Elegir artículo"}
+            </button>
+            {articulo && (
+              <>
+                {" · "}
+                <button onClick={soltar} disabled={ocupado} className="underline text-slate-500 hover:text-red-600">
+                  Soltar
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </p>
+
+      {/* El inventario lo reconoció por el nombre: se ofrece y la persona acepta. */}
+      {puedeEditar && reconocido && !eligiendo && (
+        <p className="rounded-lg bg-slate-50 px-2 py-1.5 text-slate-600">
+          El inventario lo reconoce como{" "}
+          <span className="font-mono text-slate-400">{reconocido.codigo}</span> {reconocido.descripcion}.{" "}
+          <button
+            onClick={() => usarElQueReconocio(reconocido.codigo!)}
+            disabled={ocupado}
+            className="underline text-[var(--primary)]"
+          >
+            Usar este artículo
+          </button>
+        </p>
+      )}
+
+      {puedeEditar && eligiendo && (
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            {articulos ? (
+              <Select
+                value=""
+                onChange={(e) => { if (e.target.value) void elegir(e.target.value); }}
+                disabled={ocupado}
+                className="input text-sm"
+                aria-label={`Artículo del pañol para ${repuesto.nombre}`}
+              >
+                <option value="">Buscá por código o descripción…</option>
+                {articulos.map((a) => (
+                  <option key={a.id} value={a.id}>{a.codigo} · {a.descripcion}</option>
+                ))}
+              </Select>
+            ) : (
+              <span className="text-slate-400">Cargando el catálogo del pañol…</span>
+            )}
+          </div>
+          <button onClick={() => setEligiendo(false)} className="shrink-0 underline text-slate-500">
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {error && <p className="text-red-600">{error}</p>}
+
+      {/* Lo que impide cambiar el artículo, con cada número para sacarlo de acá. */}
+      {bloqueo.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-900">
+          <p>
+            Estos RI están pegados al artículo y valen para todas las órdenes que lo usan.
+            Sacalos para poder cambiarlo o soltarlo:
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {bloqueo.map((n) => (
+              <li key={n}>
+                RI {n}{" "}
+                <button onClick={() => sacarElQueBloquea(n)} disabled={ocupado} className="underline hover:text-red-700">
+                  Sacar
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {aviso && <p className="text-amber-700">{aviso}</p>}
+      {advertencia && <p className="text-amber-700">{advertencia}</p>}
+
+      {/* Lo que cubre cada RI pegado a mano. Aparte del cruce por nombre. */}
+      {ris.length > 0 && (
+        <div className="rounded-lg border border-slate-200 px-2 py-1.5 text-slate-700">
+          <p className="font-medium">RI pegados</p>
+          <ul className="mt-0.5 space-y-0.5">
+            {ris.map((ri) => (
+              <li key={ri.nro_ri}>
+                <a href={`/compras/requerimientos?q=${ri.nro_ri}`} className="underline">RI {ri.nro_ri}</a>
+                {ri.estado_compra && (
+                  <span className="text-slate-500">
+                    {" "}· {COMPRA_LABELS[ri.estado_compra as EstadoCompra]?.label ?? ri.estado_compra}
+                  </span>
+                )}
+                {ri.cantidad != null && (
+                  <span className="text-slate-500">
+                    {" "}· pidió {numero.format(ri.cantidad)}
+                    {ri.cantidad_recibida ? `, llegaron ${numero.format(ri.cantidad_recibida)}` : ""}
+                  </span>
+                )}
+                {puedeEditar && (
+                  <>
+                    {" "}
+                    <button onClick={() => sacarRi(ri.nro_ri)} disabled={ocupado} className="underline text-slate-400 hover:text-red-600">
+                      Sacar
+                    </button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          {ris.length > 1 && (
+            <p className="mt-1 text-amber-700">
+              Hay {ris.length} RI pegados: lo que traen se suma y se reparte entre las órdenes
+              abiertas que piden esto, la más vieja primero.
+            </p>
+          )}
+          {articulo && (
+            <p className="mt-1 text-slate-500">
+              Valen para todas las órdenes abiertas que piden este artículo
+              {otras > 0 ? ` (hay ${otras} más)` : ""}, no sólo para ésta.
+            </p>
+          )}
+          {estaOrden &&
+            (estaOrden.pide == null ? (
+              <p className="mt-1 text-slate-500">
+                Esta orden no tiene una cantidad que se pueda leer, así que no se puede repartir.
+              </p>
+            ) : (
+              <p className="mt-1 font-medium">
+                Esta orden pide {numero.format(estaOrden.pide)}: {numero.format(estaOrden.cubiertas)} cubiertas
+                por RI pegados, falta pedir {numero.format(estaOrden.faltaPedir)}.
+              </p>
+            ))}
+        </div>
+      )}
+
+      {puedeEditar && (
+        <div className="flex items-center gap-2">
+          <div className="w-28">
+            <input
+              value={nro}
+              onChange={(e) => setNro(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && nro.trim() && !ocupado) void pegar(); }}
+              inputMode="numeric"
+              placeholder="N° de RI"
+              aria-label={`Número de RI para ${repuesto.nombre}`}
+              className="input text-sm"
+            />
+          </div>
+          <button onClick={pegar} disabled={ocupado || !nro.trim()} className="btn-secondary shrink-0">
+            Pegar RI
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

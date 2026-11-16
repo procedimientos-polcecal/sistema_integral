@@ -62,6 +62,30 @@ async function respuesta(
   }
 }
 
+/**
+ * GET — la cuenta de lo que viene para este renglón, sin escribir nada.
+ *
+ * La piden todas las pantallas que muestran el renglón, así que sólo exige
+ * sesión: ver cuántas piezas están cubiertas no es editar. Lee con el cliente
+ * admin (la cuenta cruza órdenes y vínculos de otras personas), por eso el
+ * permiso es el de esta ruta.
+ */
+export async function GET(_request: Request, { params }: Params) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  const { data: renglon } = await createAdminClient()
+    .from("ordenes_trabajo_repuestos")
+    .select("id, work_order_id, articulo_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!renglon) return NextResponse.json({ error: "No existe ese repuesto" }, { status: 404 });
+
+  return respuesta(renglon);
+}
+
 /** POST — `{ nro_ri }`. */
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
