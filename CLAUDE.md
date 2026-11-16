@@ -132,7 +132,9 @@ Antes de escribir una, leer las ocho trampas del
 - **Lo que no se deshace se audita.** Desde el 05/10/2026 hay una tabla
   `auditoria` en el núcleo y una función `auditar()` en
   [lib/core/auditoria.ts](lib/core/auditoria.ts). Medido el 12/11/2026 con
-  `grep`: la llaman **catorce rutas y un ayudante compartido** (eran nueve el
+  `grep`, y rehecha el 16/11/2026: la llaman **catorce rutas y dos ayudantes
+  compartidos**, y hay una quinceava ruta que audita a través de un ayudante y
+  por eso no sale en el grep (eran nueve el
   26/10/2026 y ocho antes; este renglón había quedado en «nueve» mientras el
   árbol llegaba a catorce, que es justo lo que vuelve insegura una cuenta
   escrita a mano). Las catorce: postear un asiento en Odoo, mover los permisos

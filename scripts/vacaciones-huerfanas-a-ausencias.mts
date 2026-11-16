@@ -63,6 +63,7 @@ if (existsSync(env)) {
 
 const { createAdminClient } = await import("../lib/supabase/admin.ts");
 const { diasEntre } = await import("../lib/rrhh/vacacionesDeAusencia.ts");
+const { traerTodo } = await import("../lib/core/paginado.ts");
 
 const APLICAR = process.argv.includes("--aplicar");
 const USUARIO = process.argv.find((a) => a.startsWith("--usuario="))?.slice("--usuario=".length);
@@ -112,13 +113,39 @@ const huerfanos = periodos ?? [];
 console.log(`${APLICAR ? "APLICANDO" : "EN SECO"} — ${huerfanos.length} períodos sin ausencia.`);
 console.log(`cargado_por_id: ${quien.apellido}, ${quien.nombre} (${quien.id})\n`);
 
-// Todas las ausencias, para el control de solapamiento. Son pocas y así no se
-// arma un `.in()` con muchos ids, que PostgREST rechaza con un 400 mudo.
-const { data: ausencias } = await db
-  .from("ausencias")
-  .select("id, empleado_id, tipo, fecha_desde, fecha_hasta");
+/*
+ * Todas las ausencias, para el control de solapamiento. No se filtra por
+ * empleado con un `.in()`: con muchos ids arma una URL que PostgREST rechaza
+ * con un 400 mudo.
+ *
+ * Va por `traerTodo()` aunque hoy sean 165 filas, porque PostgREST corta en
+ * 1000 y no avisa, y "esta tabla es chica" no es un argumento en este repo.
+ *
+ * Y SI LA LECTURA FALLA, EL SCRIPT SE MUERE. Con un `{ data }` suelto, un error
+ * dejaba `ausencias` en null, el filtro de solapamiento devolvía vacío,
+ * no se salteaba nada y se creaban las 20 ausencias encima de lo que hubiera
+ * — contando los días dos veces en Disponibilidad, en el taller y en los tres
+ * reportes, y avisándoselo por correo a los doce encargados. El informe habría
+ * dicho "salteados: 0", que es indistinguible de que todo esté bien. Un control
+ * que falla abierto es peor que no tenerlo.
+ */
+let ausencias: { id: string; empleado_id: string; tipo: string; fecha_desde: string; fecha_hasta: string }[];
+try {
+  ausencias = await traerTodo((desde, hasta) =>
+    db
+      .from("ausencias")
+      .select("id, empleado_id, tipo, fecha_desde, fecha_hasta")
+      .order("id")
+      .range(desde, hasta)
+  );
+} catch (e) {
+  console.error("No se pudieron leer las ausencias, que son el control de solapamiento:", e);
+  console.error("No se escribió nada.");
+  process.exit(1);
+}
 
 let convertidos = 0;
+const convertidosIds = new Set<string>();
 const salteados: string[] = [];
 const divergentes: string[] = [];
 
@@ -132,7 +159,7 @@ for (const p of huerfanos) {
 
   // Se vuelve a comprobar acá y no sólo al diseñarlo: el día que se midió eran
   // 0 de 20, pero esto corre después y alguien pudo cargar una a mano.
-  const pisa = (ausencias ?? []).filter(
+  const pisa = ausencias.filter(
     (a) => a.empleado_id === p.empleado_id && dia(a.fecha_desde) <= hasta && dia(a.fecha_hasta) >= desde
   );
   if (pisa.length > 0) {
@@ -182,6 +209,7 @@ for (const p of huerfanos) {
 
   console.log(`  ${desde} → ${hasta}: ausencia ${ausencia.id}`);
   convertidos++;
+  convertidosIds.add(p.id);
 }
 
 console.log(`\n${APLICAR ? "Convertidos" : "Se convertirían"}: ${convertidos} de ${huerfanos.length}`);
@@ -195,12 +223,20 @@ if (salteados.length > 0) {
 // la prueba de que un número tipeado al lado de uno calculado diverge solo
 // —ése nació de una ausencia y aun así quedó a mano, o sea que alguien lo editó
 // por el PUT y la sincronización no volvió a pasar—. Nombrarlos es el punto.
-const { data: conAusencia } = await db
+const { data: conAusencia, error: errorConAusencia } = await db
   .from("vacaciones")
   .select("fecha_desde, fecha_hasta, dias_tomados")
   .not("ausencia_id", "is", null)
   .order("fecha_desde");
+if (errorConAusencia) {
+  console.error("No se pudieron leer los períodos con ausencia:", errorConAusencia.message);
+  console.error("La lista de dias_tomados divergentes de abajo está incompleta.");
+}
 for (const p of conAusencia ?? []) {
+  // Los 20 que se acaban de convertir ya se miraron arriba: sin esto saldrían
+  // dos veces en el informe, y la segunda diciendo "(ya tenía ausencia)" —
+  // que leído después del relleno parece una divergencia nueva.
+  if (APLICAR && convertidosIds.has(p.id)) continue;
   const desde = dia(p.fecha_desde);
   const hasta = dia(p.fecha_hasta);
   const calendario = diasEntre(desde, hasta);

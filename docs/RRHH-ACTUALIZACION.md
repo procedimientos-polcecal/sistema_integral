@@ -834,8 +834,14 @@ había gente de vacaciones que la pantalla mostraba como presente.
 
 Ahora el `POST` pasa por `altaDeAusencia()`. **El arreglo vive en la ruta y no
 en la pantalla a propósito**: así lo heredan las dos que postean ahí y cualquier
-tercera que aparezca mañana. Los 20 viejos se convirtieron con
-`scripts/vacaciones-huerfanas-a-ausencias.mts`.
+tercera que aparezca mañana.
+
+**Los 20 viejos TODAVÍA NO SE CONVIRTIERON.** El script
+`scripts/vacaciones-huerfanas-a-ausencias.mts` está escrito y corrido en seco
+—convertiría 20 de 20, saltearía 0—, pero no se aplicó: eso va después de
+desplegar y de que alguien avise a los doce encargados, porque el correo diario
+de novedades de las 18:50 UTC va a listar las veinte de golpe. Quien lo corra,
+que escriba acá la fecha.
 
 ### Lo que no se deduce del código
 
@@ -856,7 +862,8 @@ reportes. La primera versión del diseño afirmaba lo contrario y lo usaba como
 motivo; está corregido ahí y acá para que nadie lo use como argumento para
 tocar el motor. Por lo mismo, el relleno **no recalcula**: sería un no-op.
 
-**Los reportes de ausentismo subieron 215 días de golpe.** Julio 172→232,
+**Los reportes de ausentismo van a subir 215 días de golpe el día que se
+corra el relleno.** Julio 172→232,
 agosto 161→186, septiembre 119→136, octubre 116→136 y **noviembre 35→128**. No
 es un error del número nuevo: son 20 períodos que faltaban. Está escrito acá
 porque quien compare contra lo que vio la semana anterior va a concluir que el
