@@ -533,12 +533,29 @@ async function anotarLasDivergencias(
   const vacio = { cuantas: 0, recortadas: 0 };
   try {
     // `traerTodo` porque son 2.300 y PostgREST corta en 1.000 sin avisar.
-    const delSistema = await traerTodo<OrdenDelSistema>((desde, hasta) =>
+    const delSistema = await traerTodo<OrdenDelSistema & { id: string }>((desde, hasta) =>
       admin
         .from("ordenes_trabajo")
-        .select("ot_number, sector_raw, equipo_raw, especialidad, tipo, quien, descripcion, fecha_ejecucion, fecha_cierre, estado, contratista, horas, operario_1, operario_2, operario_3, prioridad, sheets_pendiente")
+        .select("id, ot_number, sector_raw, equipo_raw, especialidad, tipo, quien, descripcion, fecha_ejecucion, fecha_cierre, estado, contratista, horas, operario_1, operario_2, operario_3, prioridad, sheets_pendiente")
         .range(desde, hasta)
     );
+
+    // Qué órdenes tienen alguna nota, para detectar las canceladas sin motivo.
+    // Va aparte y no como embed de la consulta de arriba por lo mismo que
+    // explica `ordenes/justificadas/route.ts`: un embed ataría las órdenes a que
+    // la tabla exista. Con `traerTodo` y no `.in()` porque no hay ids que
+    // acotar y las notas sólo crecen (25 hoy). Si falla, `tiene_nota` queda sin
+    // definir y el detector calla: se pierde un aviso, no la sincronización.
+    try {
+      const conNota = new Set(
+        (await traerTodo<{ orden_id: string }>((desde, hasta) =>
+          admin.from("ordenes_trabajo_notas").select("orden_id").range(desde, hasta)
+        )).map((n) => n.orden_id)
+      );
+      for (const o of delSistema) o.tiene_nota = conNota.has(o.id);
+    } catch {
+      // Sin la consulta no se sabe: se deja sin definir.
+    }
 
     const { filas, total, recortadas } = loQueSeGuardaDelContraste(
       contrastar(delSistema, deLaPlanilla)
