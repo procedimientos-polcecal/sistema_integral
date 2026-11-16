@@ -711,9 +711,10 @@ export async function PATCH(request: Request) {
 
   // ── CANCELAR: PRIMERO LA REGLA ────────────────────────────────────────────
   //
-  // Hace falta el estado que la orden tiene **hoy**, porque desde dónde se
-  // puede cancelar depende de él —desde REALIZADO no, que ya tiene fecha de
-  // cierre— y el cuerpo no lo trae.
+  // Hacen falta el estado y la fecha de cierre que la orden tiene **hoy**,
+  // porque de los dos depende si se puede cancelar y el cuerpo no los trae:
+  // desde REALIZADO no se cancela, y una orden que ya guarda una fecha de
+  // cierre tampoco —abajo está por qué eso es un caso vivo y no una hipótesis—.
   //
   // **Los dos motivos por los que esta lectura puede no traer el estado se
   // contestan distinto, y ésa es toda la razón del `maybeSingle` y del `if`
@@ -734,7 +735,7 @@ export async function PATCH(request: Request) {
   // tener la regla en dos lugares, que es como una de las dos se queda vieja.
   const { data: laDeAhora, error: errorDeLaOrden } = await admin
     .from("ordenes_trabajo")
-    .select("estado")
+    .select("estado, fecha_cierre")
     .eq("id", id)
     .maybeSingle();
 
@@ -748,22 +749,35 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "No existe esa orden de trabajo" }, { status: 404 });
   }
 
-  // Y una precisión sobre la fecha de cierre, porque lo que el código hace y lo
-  // que suena que hace no son lo mismo: cancelar **nunca pone** una fecha de
-  // cierre —`loQueImpideCancelar` rechaza la que venga con algo adentro—, pero
-  // un `fecha_cierre: null` en el cuerpo **sí pasa**: `vino()` lo cuenta como
-  // «no vino», `repartirRegistroDeOT` lo copia al update y la escritura vacía
-  // la celda K en la misma pasada. Hoy es inofensivo, y el argumento es del
-  // código y no de una medición: una orden con fecha de cierre es REALIZADO
-  // —lo fuerza `estadoSegunElCierre`— y desde REALIZADO no se cancela, así que
-  // lo que se vacía ya estaba vacío. Queda dicho en vez de tapado: escribir que
-  // no se toca sería afirmar algo que no pasó, que es exactamente lo que este
-  // repo ya pagó caro.
+  // La fecha de cierre se mira por las dos puntas —la que viene en el cuerpo y
+  // la que la orden ya tiene guardada—, y la segunda no es una precaución
+  // teórica: es un camino vivo. El modal de registrar el trabajo, con el
+  // resultado **«Parcial»**, manda `estado: "EN_PROCESO"` **junto con**
+  // `fecha_cierre`. Esa fila queda abierta y con fecha, y el viaje de ida y
+  // vuelta por la planilla no la corrige. Cancelarla después pasaba la regla
+  // —el estado actual deja cancelar y el cuerpo no trae fecha— y dejaba una
+  // `CANCELADA` con fecha de cierre: la fila que se contradice a sí misma, la
+  // que `costoEquipo` cobra como gasto real (`fecha_ejecucion ?? fecha_cierre
+  // ?? fecha`), que es justo lo que `SE_CANCELA_DESDE` existe para impedir.
+  //
+  // Acá estaba escrito que eso no podía pasar porque una orden con fecha de
+  // cierre es `REALIZADO` —lo fuerza `estadoSegunElCierre`— y desde
+  // `REALIZADO` no se cancela. Esa fuerza existe sólo en el POST, que es el
+  // único que llama a esa función; en el PATCH no la llama nadie y
+  // `repartirRegistroDeOT` copia `fecha_cierre` al update sin mirar el estado.
+  // Medido el 16/11/2026: 0 de 2.466 filas tienen hoy una fecha de cierre con
+  // un estado del que se pueda cancelar. Eso dice que **todavía no había
+  // pasado**, no que no pudiera pasar.
+  //
+  // De paso, el `??` cierra lo que el comentario viejo dejaba dicho como
+  // inofensivo: un `fecha_cierre: null` en el cuerpo ya no se cuela, porque la
+  // guardada habla en su lugar y la cancelación se frena en vez de vaciar la
+  // celda K en la misma pasada. Vaciar la fecha y cancelar son dos pedidos.
   const cancelacion = loQueImpideCancelar({
     estadoPedido: estado,
     estadoActual: laDeAhora.estado,
     justificacion: body.justificacion,
-    fechaCierre: body.fecha_cierre,
+    fechaCierre: body.fecha_cierre ?? laDeAhora.fecha_cierre,
   });
   if (!cancelacion.ok) {
     return NextResponse.json({ error: cancelacion.error }, { status: 400 });

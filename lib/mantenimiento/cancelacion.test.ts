@@ -85,6 +85,26 @@ describe("loQueImpideCancelar", () => {
     expect(r).toHaveProperty("error", expect.stringContaining("fecha de cierre"));
   });
 
+  it("la fecha de cierre guardada frena igual, aunque el cuerpo no traiga ninguna", () => {
+    // El camino vivo, y el que esta regla no veía: «Parcial» del modal de
+    // registrar manda `estado: "EN_PROCESO"` **junto con** `fecha_cierre`, así
+    // que la orden queda abierta y con fecha. Cancelarla después pasaba —el
+    // estado actual deja cancelar y el cuerpo no trae fecha— y dejaba una
+    // CANCELADA con fecha de cierre, que es la fila que se contradice a sí
+    // misma. Ahora el PATCH le pasa `body.fecha_cierre ?? la guardada`, y acá
+    // queda fijado que con la guardada sola la regla ya habla.
+    const r = loQueImpideCancelar({
+      estadoPedido: "CANCELADA",
+      estadoActual: "EN_PROCESO",
+      justificacion: "Se dio de baja el equipo",
+      fechaCierre: "2026-11-10",
+    });
+    expect(r).toEqual({
+      ok: false,
+      error: "Una orden cancelada no lleva fecha de cierre: esa fecha dice que se hizo.",
+    });
+  });
+
   it("una justificación con otro estado es un error del que llama", () => {
     const r = loQueImpideCancelar({
       estadoPedido: "EN_PROCESO", estadoActual: "POR_HACER", justificacion: "algo",
