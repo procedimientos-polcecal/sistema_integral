@@ -5,20 +5,19 @@ import { supabaseDeMentira, type Fila } from "@/lib/core/supabaseDeMentira";
  * Las rutas que pegan un RI a un repuesto y eligen su artículo del pañol, con un
  * Supabase de mentira.
  *
- * **Existe por el cableado y por nada más**, que es la única vara de la casa para
- * tener un test de ruta: la regla que no se puede sacar a `lib/` porque es la unión
- * entre dos piezas que por separado están bien. `repartir` (`loQueViene.ts`) es
- * aritmética pura y está probada sola, pero **reparte lo que le dan**: que le lleguen
- * *sólo* los RI pegados a mano —nunca los que el cruce por nombre de `riDelRepuesto`
- * adivina— y *sólo* órdenes abiertas lo decide quien la llama, y eso es esta ruta.
- * Las dos reglas salen del anti-objetivo de la función: un falso positivo del cruce,
- * o una orden ya terminada reclamando piezas, hace que otra lea «cubierta» por algo
- * que no es suyo. Ninguna de las dos piezas puede probarlo por su lado.
+ * **Existe por el cableado**, la única vara de la casa para tener un test de ruta:
+ * lo que decide la ruta y `lib/` no puede ver porque es la unión entre la
+ * petición y la base. Que un RI que no existe no se pegue (404), que sin edición no
+ * se pegue nada (403), que un número mal escrito diga lo que es verdad (400), la
+ * forma del `insert` —al artículo si el renglón lo tiene, al renglón si no—, el
+ * 23505 del índice único traducido a 409, qué borra el DELETE en cada destino, que
+ * cambiar el artículo con RI pegados se niegue, y que un fallo al armar la cuenta
+ * **después de guardar** no se contesta como si no se hubiera guardado.
  *
- * Lo mismo con lo demás de acá: que un RI que no existe no se pegue, que pegarlo dos
- * veces no duplique —el 23505 del índice único se traduce a 409, y eso es de la
- * ruta— y que la cuenta pida de a lotes de 200 (el fake rechaza un `.in()` más
- * largo, así que sin lotes el test se vuelve 500).
+ * **Las reglas de la cuenta no se prueban acá.** Que entren sólo los RI pegados a
+ * mano y sólo órdenes abiertas, y los lotes de 200, viven en `cuentaDeUnRepuesto.ts`,
+ * que toma el cliente como argumento y se prueba directo en
+ * `cuentaDeUnRepuesto.test.ts`. Acá sólo se mira que la ruta la devuelva.
  *
  * Lo que NO prueba, y conviene no creerle: que los índices existan con ese nombre
  * —el `alInsertar` de abajo *emula* su regla, no la ejecuta—, ni las policies, ni los
@@ -55,6 +54,19 @@ vi.mock("@/lib/mantenimiento/auth", () => ({
   puedeVerMantenimiento: async () => true,
 }));
 
+/** Para probar qué pasa si la cuenta falla **después** de que lo escrito ya se guardó. */
+const cuentaFalla = { si: false };
+vi.mock("@/lib/mantenimiento/cuentaDeUnRepuesto", async (importarOriginal) => {
+  const real = await importarOriginal<typeof import("@/lib/mantenimiento/cuentaDeUnRepuesto")>();
+  return {
+    ...real,
+    cuentaDeUnRepuesto: async (...args: Parameters<typeof real.cuentaDeUnRepuesto>) => {
+      if (cuentaFalla.si) throw new Error("PGRST000 raw english from postgrest");
+      return real.cuentaDeUnRepuesto(...args);
+    },
+  };
+});
+
 import { PUT as ponerArticulo, DELETE as soltarArticulo } from "@/app/api/mantenimiento/repuestos/[id]/articulo/route";
 import { POST as pegarRi, DELETE as sacarRi } from "@/app/api/mantenimiento/repuestos/[id]/ri/route";
 
@@ -82,6 +94,7 @@ const renglon = (n: number, extra: Fila = {}): Fila => ({
 beforeEach(() => {
   sesion.usuario = { id: "u1" };
   sesion.edita = true;
+  cuentaFalla.si = false;
   base.reiniciar({
     inventario_articulos: [{ id: "A" }, { id: "B" }],
     ordenes_trabajo: orden(1),
@@ -105,10 +118,32 @@ describe("pegar un RI", () => {
     expect(base.estado.inserts).toEqual([]);
   });
 
-  it("un número que no es un entero positivo se rechaza con un 400", async () => {
-    const r = await pegarRi(pedido("POST", { nro_ri: "abc" }), con("r1"));
-    expect(r.status).toBe(400);
+  it("un número mal escrito se rechaza con un 400 que dice lo que es verdad", async () => {
+    const mensajes: [unknown, string][] = [
+      [2.5, "entero mayor que cero"],
+      [0, "entero mayor que cero"],
+      ["abc", "entero mayor que cero"],
+      [undefined, "Falta el número de RI"],
+    ];
+    for (const [valor, texto] of mensajes) {
+      const r = await pegarRi(pedido("POST", { nro_ri: valor }), con("r1"));
+      expect(r.status).toBe(400);
+      const { error } = await r.json();
+      expect(error).toContain(texto);
+      expect(error).not.toMatch(/\bint\b|0 o más/);
+    }
     expect(base.estado.inserts).toEqual([]);
+  });
+
+  it("si la cuenta falla después de guardar, contesta 200 con una advertencia y no 500", async () => {
+    cuentaFalla.si = true;
+    const r = await pegarRi(pedido("POST", { nro_ri: 500 }), con("r1"));
+    expect(r.status).toBe(200);
+    const cuerpo = await r.json();
+    expect(cuerpo.cuenta).toBeNull();
+    expect(cuerpo.advertencia).toMatch(/Se guardó/);
+    expect(JSON.stringify(cuerpo)).not.toMatch(/PGRST|postgrest/i);
+    expect(base.estado.tablas.mant_ri_de_repuesto).toHaveLength(1);
   });
 
   it("si el renglón tiene artículo, el RI va al artículo; si no, al renglón", async () => {
@@ -144,12 +179,45 @@ describe("pegar un RI", () => {
 });
 
 describe("sacar un RI", () => {
-  it("lo saca del destino del renglón y deja la cuenta sin él", async () => {
+  const sacar = (nro: string, id = "r1") =>
+    sacarRi(pedido("DELETE", undefined, `http://x/api${nro === "" ? "" : `?nro_ri=${nro}`}`), con(id));
+
+  it("lo saca del artículo y deja la cuenta sin él", async () => {
     await pegarRi(pedido("POST", { nro_ri: 500 }), con("r1"));
-    const r = await sacarRi(pedido("DELETE", undefined, "http://x/api?nro_ri=500"), con("r1"));
+    const r = await sacar("500");
     expect(r.status).toBe(200);
     expect(base.estado.tablas.mant_ri_de_repuesto).toEqual([]);
     expect((await r.json()).cuenta.estaOrden.cubiertas).toBe(0);
+  });
+
+  it("lo saca del renglón cuando el RI se pegó antes de elegir artículo", async () => {
+    base.reiniciar({
+      ...base.estado.tablas,
+      mant_ri_de_repuesto: [{ id: "m1", nro_ri: 500, articulo_id: null, repuesto_id: "r1" }],
+    });
+    const r = await sacar("500");
+    expect(r.status).toBe(200);
+    expect(base.estado.tablas.mant_ri_de_repuesto).toEqual([]);
+  });
+
+  it("si está en los dos destinos, los saca a los dos; y no toca otros RI ni otros renglones", async () => {
+    base.reiniciar({
+      ...base.estado.tablas,
+      mant_ri_de_repuesto: [
+        { id: "m1", nro_ri: 500, articulo_id: "A", repuesto_id: null },
+        { id: "m2", nro_ri: 500, articulo_id: null, repuesto_id: "r1" },
+        { id: "m3", nro_ri: 501, articulo_id: "A", repuesto_id: null },
+        { id: "m4", nro_ri: 500, articulo_id: null, repuesto_id: "otro" },
+      ],
+    });
+    await sacar("500");
+    expect(base.estado.tablas.mant_ri_de_repuesto.map((f) => f.id)).toEqual(["m3", "m4"]);
+  });
+
+  it("sin ?nro_ri dice que falta, y no lo toma por un 0", async () => {
+    const r = await sacar("");
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toBe("Falta el número de RI");
   });
 });
 
@@ -175,64 +243,57 @@ describe("elegir el artículo del renglón", () => {
   });
 });
 
-describe("la cuenta que devuelven", () => {
-  it("con más de 200 órdenes pidiendo lo mismo, pide de a lotes", async () => {
-    const ordenes = Array.from({ length: 250 }, (_, i) => orden(i + 1)[0]);
-    const renglones = Array.from({ length: 250 }, (_, i) => renglon(i + 1));
+describe("cambiar o soltar el artículo con RI pegados al artículo", () => {
+  const conUnRiPegado = () =>
     base.reiniciar({
       ...base.estado.tablas,
-      ordenes_trabajo: ordenes,
-      ordenes_trabajo_repuestos: renglones,
+      mant_ri_de_repuesto: [{ id: "m1", nro_ri: 500, articulo_id: "A", repuesto_id: null }],
     });
-    const r = await pegarRi(pedido("POST", { nro_ri: 500 }), con("r1"));
+
+  it("cambiarlo se niega con 409, y ni el artículo ni los RI se tocan", async () => {
+    conUnRiPegado();
+    const r = await ponerArticulo(pedido("PUT", { articulo_id: "B" }), con("r1"));
+    expect(r.status).toBe(409);
+    expect((await r.json()).error).toMatch(/sacalos antes/);
+    expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBe("A");
+    expect(base.estado.tablas.mant_ri_de_repuesto).toHaveLength(1);
+  });
+
+  it("soltarlo se niega igual", async () => {
+    conUnRiPegado();
+    const r = await soltarArticulo(pedido("DELETE"), con("r1"));
+    expect(r.status).toBe(409);
+    expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBe("A");
+  });
+
+  it("sacando primero el RI, se puede cambiar", async () => {
+    conUnRiPegado();
+    await sacarRi(pedido("DELETE", undefined, "http://x/api?nro_ri=500"), con("r1"));
+    const r = await ponerArticulo(pedido("PUT", { articulo_id: "B" }), con("r1"));
     expect(r.status).toBe(200);
-    const { cuenta } = await r.json();
-    expect(cuenta.partes).toHaveLength(250);
+    expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBe("B");
   });
 
-  it("una OT realizada no entra en el reparto", async () => {
-    // La 1 es la más vieja pero está REALIZADA: si entrara, se llevaría los 10 y la 2 quedaría sin nada.
-    base.reiniciar({
-      ...base.estado.tablas,
-      ordenes_trabajo: [
-        ...orden(1, { estado: "REALIZADO", fecha: "2026-10-01" }),
-        ...orden(2),
-      ],
-      ordenes_trabajo_repuestos: [renglon(1), renglon(2)],
-    });
-    const r = await pegarRi(pedido("POST", { nro_ri: 500 }), con("r2"));
-    const { cuenta } = await r.json();
-    expect(cuenta.partes.map((p: { orden_id: string }) => p.orden_id)).toEqual(["o2"]);
-    expect(cuenta.estaOrden).toMatchObject({ orden_id: "o2", cubiertas: 10 });
+  it("elegir el mismo artículo no es un cambio, aunque tenga RI", async () => {
+    conUnRiPegado();
+    const r = await ponerArticulo(pedido("PUT", { articulo_id: "A" }), con("r1"));
+    expect(r.status).toBe(200);
   });
 
-  it("un RI que sólo encontró el cruce por nombre no entra en la cuenta", async () => {
-    // El 600 coincide por descripción con el repuesto y está en vuelo, pero nadie lo pegó.
+  it("los RI pegados al renglón no frenan el cambio", async () => {
     base.reiniciar({
       ...base.estado.tablas,
-      compras_requerimientos: [ri(500, { cantidad: 4 }), ri(600, { cantidad: 100, descripcion: "Martillo" })],
+      mant_ri_de_repuesto: [{ id: "m1", nro_ri: 500, articulo_id: null, repuesto_id: "r1" }],
     });
-    const r = await pegarRi(pedido("POST", { nro_ri: 500 }), con("r1"));
-    const { cuenta } = await r.json();
-    expect(cuenta.estaOrden).toMatchObject({ pide: 10, cubiertas: 4, faltaPedir: 6 });
-    expect(cuenta.ris.map((x: { nro_ri: number }) => x.nro_ri)).toEqual([500]);
+    const r = await ponerArticulo(pedido("PUT", { articulo_id: "B" }), con("r1"));
+    expect(r.status).toBe(200);
   });
 
-  it("el mismo RI en el artículo y en un renglón de ese artículo se cuenta una sola vez", async () => {
-    base.reiniciar({
-      ...base.estado.tablas,
-      compras_requerimientos: [ri(500, { cantidad: 10 })],
-      mant_ri_de_repuesto: [
-        { id: "m1", nro_ri: 500, articulo_id: "A", repuesto_id: null },
-        { id: "m2", nro_ri: 500, articulo_id: null, repuesto_id: "r1" },
-      ],
-    });
-    const r = await pegarRi(pedido("POST", { nro_ri: 500 }), con("r1")).catch(() => null);
-    // Pegarlo de nuevo choca con el índice del artículo (409): lo que importa es la cuenta que sale.
-    expect(r?.status).toBe(409);
-    const base2 = await ponerArticulo(pedido("PUT", { articulo_id: "A" }), con("r1"));
-    const { cuenta } = await base2.json();
-    expect(cuenta.ris).toHaveLength(1);
-    expect(cuenta.estaOrden).toMatchObject({ pide: 10, cubiertas: 10 });
+  it("si la cuenta falla después de guardar, contesta 200 con una advertencia", async () => {
+    cuentaFalla.si = true;
+    const r = await ponerArticulo(pedido("PUT", { articulo_id: "B" }), con("r1"));
+    expect(r.status).toBe(200);
+    expect((await r.json()).advertencia).toMatch(/Se guardó/);
+    expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBe("B");
   });
 });

@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
-import { validar, errorDeValidacion } from "@/lib/core/validar";
-import { cuentaDeUnRepuesto } from "@/lib/mantenimiento/cuentaDeUnRepuesto";
+import { cuentaDeUnRepuesto, leerNroRi } from "@/lib/mantenimiento/cuentaDeUnRepuesto";
 
 /**
  * Pegar un RI de Compras a un repuesto de una OT, y sacarlo.
@@ -28,13 +26,6 @@ import { cuentaDeUnRepuesto } from "@/lib/mantenimiento/cuentaDeUnRepuesto";
 
 type Params = { params: Promise<{ id: string }> };
 
-const esquema = z.object({
-  nro_ri: z
-    .number({ error: "El número de RI tiene que ser un número" })
-    .int("El número de RI tiene que ser entero")
-    .positive("El número de RI tiene que ser mayor que cero"),
-});
-
 async function conPermiso() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -54,11 +45,20 @@ async function respuesta(
   renglon: { id: string; work_order_id: string; articulo_id: string | null },
   extra: Record<string, unknown> = {}
 ) {
+  // **Lo escrito ya está escrito**: si sólo falla armar la cuenta, contestar 500
+  // le diría a la persona que no se guardó, apretaría de nuevo y recibiría un 409
+  // «ya está pegado» que se lee como una contradicción. Se contesta 200 sin
+  // cuenta y con una advertencia en castellano; el error crudo va al log.
   try {
     const cuenta = await cuentaDeUnRepuesto(createAdminClient(), renglon);
     return NextResponse.json({ ...extra, cuenta });
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    console.error("[repuestos/ri] la cuenta de lo que viene falló después de guardar:", e);
+    return NextResponse.json({
+      ...extra,
+      cuenta: null,
+      advertencia: "Se guardó, pero no se pudo calcular lo que viene. Recargá la pantalla para verlo.",
+    });
   }
 }
 
@@ -68,9 +68,10 @@ export async function POST(request: Request, { params }: Params) {
   const permiso = await conPermiso();
   if (permiso.error) return permiso.error;
 
-  const r = validar(esquema, await request.json().catch(() => null));
-  if (!r.ok) return errorDeValidacion(r.problemas);
-  const { nro_ri } = r.datos;
+  const cuerpo = await request.json().catch(() => null);
+  const r = leerNroRi(cuerpo?.nro_ri);
+  if (!r.ok) return NextResponse.json({ error: r.error }, { status: 400 });
+  const { nro_ri } = r;
 
   const admin = createAdminClient();
 
@@ -118,9 +119,9 @@ export async function DELETE(request: Request, { params }: Params) {
   const permiso = await conPermiso();
   if (permiso.error) return permiso.error;
 
-  const r = validar(esquema, { nro_ri: Number(new URL(request.url).searchParams.get("nro_ri")) });
-  if (!r.ok) return errorDeValidacion(r.problemas);
-  const { nro_ri } = r.datos;
+  const r = leerNroRi(new URL(request.url).searchParams.get("nro_ri"));
+  if (!r.ok) return NextResponse.json({ error: r.error }, { status: 400 });
+  const { nro_ri } = r;
 
   const admin = createAdminClient();
   const { data: renglon } = await admin
@@ -130,6 +131,9 @@ export async function DELETE(request: Request, { params }: Params) {
     .maybeSingle();
   if (!renglon) return NextResponse.json({ error: "No existe ese repuesto" }, { status: 404 });
 
+  // Dos borrados que no son atómicos: si el segundo falla, el primero ya se
+  // hizo y se contesta 400 con el vínculo a medio sacar. Repetir el pedido lo
+  // termina (borrar lo que no está no falla), así que no se envuelve en nada más.
   const borrados = [
     admin.from("mant_ri_de_repuesto").delete().eq("repuesto_id", id).eq("nro_ri", nro_ri),
     ...(renglon.articulo_id

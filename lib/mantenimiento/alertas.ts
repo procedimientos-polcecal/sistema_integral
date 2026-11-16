@@ -27,7 +27,7 @@ export interface Atrasable {
  * nada, sólo decide qué cuenta como atrasada. No se unifican a propósito. Si un
  * día aparece un estado nuevo, hay que mirar las dos y decidir en cada una.
  */
-const CERRADAS = ["REALIZADO", "SUSPENDIDA"];
+export const CERRADAS = ["REALIZADO", "SUSPENDIDA"];
 
 /**
  * El día de hoy como `aaaa-mm-dd`, en hora de Argentina.
