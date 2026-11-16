@@ -26,31 +26,40 @@
 -- un repuesto con su nombre, sólo pierde el enlace. Nunca se completa solo por
 -- parecido —enlazar al que se le parece es peor que dejar en null (README)—.
 --
--- LOS DOS ÍNDICES ÚNICOS SON PARCIALES, Y ESO TIENE UNA CONSECUENCIA
+-- LOS DOS ÍNDICES ÚNICOS SON COMUNES, NO PARCIALES, Y NO ES UN DETALLE
 --
 -- Pegar dos veces el mismo RI al mismo destino no debe duplicar. Como el
--- destino son dos columnas excluyentes, una constraint única común sobre
--- (nro_ri, articulo_id) dejaría pasar duplicados de los que tienen
--- `articulo_id` null, y hacen falta dos índices, cada uno `where … is not null`.
+-- destino son dos columnas excluyentes hacen falta dos índices únicos, uno por
+-- destino: (articulo_id, nro_ri) y (repuesto_id, nro_ri).
 --
--- **Un índice parcial no sirve como destino de `ON CONFLICT`** (es la segunda
--- trampa del README, ya pisada tres veces): un `upsert` contra estas columnas
--- falla con `42P10` recién la primera vez que se usa. Por eso la ruta que
--- inserta **no usa upsert**: hace un `insert` simple, atrapa el `23505`
--- (violación de unicidad) y lo devuelve como un 409 «ese RI ya está pegado».
--- Quien escriba o toque esa ruta no tiene que pelearse con la base: es así a
--- propósito.
+-- Son **comunes y no `where … is not null`** para que sigan siendo destino de
+-- un `ON CONFLICT`: un índice parcial no lo es y hace fallar el `upsert` con
+-- `42P10` recién la primera vez que se usa (segunda trampa del README, ya pisada
+-- tres veces). Y no se pierde nada: las filas con `articulo_id` null tienen
+-- clave (null, r), y los nulos no chocan entre sí, así que no se rechazan; es
+-- correcto, porque esas filas son del otro índice y no necesitan protegerse
+-- entre sí. La protección contra el duplicado es idéntica a la de uno parcial.
+-- Llevan el destino primero para que además sirvan para buscar por destino, y
+-- por eso no hay índices sueltos aparte.
 --
--- EL BORRADO VA EN CASCADA DE LOS DOS LADOS
+-- EL BORRADO VA EN CASCADA DE LOS DOS LADOS, Y NO HAY OTRA OPCIÓN
 --
--- Si el artículo o el renglón de OT al que apunta el vínculo ya no existe, el
--- vínculo no es información: es una fila que nadie puede interpretar, un RI
--- colgado de nada. Por eso `articulo_id` y `repuesto_id` llevan `on delete
--- cascade`. (Es distinto de la columna nueva de `ordenes_trabajo_repuestos`,
--- que es `set null`: ahí lo que sobrevive es el renglón, que tiene sentido
--- solo.) `nro_ri` no es una foreign key a propósito: `compras_requerimientos`
--- se espeja de una planilla y borra lo que la planilla deja de tener, y un RI
--- que desaparece de allá no debe llevarse el vínculo ni impedir su carga.
+-- `on delete set null` acá no es peor: **no se puede**. Si el borrado del padre
+-- dejara `repuesto_id` en null, la fila quedaría con `num_nonnulls = 0`, el
+-- `check` dispararía y el `DELETE` del padre fallaría, y con él
+-- `borrarLoQueLaPlanillaNoTrajo` de `lib/mantenimiento/sincronizar.ts`, no sólo
+-- esta tabla. Ojo con el precedente cercano: `20261029082249` le puso `on delete
+-- set null` a `ordenes_trabajo_notas.repuesto_id`, y quien lo copie rompe el
+-- borrado de OT. Además un vínculo a algo que ya no existe no es información.
+--
+-- Lo que se pierde, y por qué camino: el realista es el espejo. Una fila sale de
+-- la planilla, se borra la OT y, según CLAUDE.md, esa cascada se lleva sus
+-- notas, sus repuestos y su aviso, y con los repuestos estos vínculos. **Los RI
+-- pegados se tipean a mano y no existen en ninguna planilla**, así que a
+-- diferencia de lo demás que ese borrado se lleva, no se recuperan releyendo
+-- Sheets. `nro_ri` no es una foreign key a propósito: `compras_requerimientos`
+-- también espeja una planilla y un RI que desaparece de allá no debe llevarse
+-- el vínculo ni impedir su carga.
 --
 -- A TENER EN CUENTA
 --
@@ -89,21 +98,13 @@ create table if not exists public.mant_ri_de_repuesto (
     check (num_nonnulls(articulo_id, repuesto_id) = 1)
 );
 
--- Parciales a propósito y por eso sin upsert: ver el encabezado.
-create unique index if not exists mant_ri_de_repuesto_ri_articulo_uq
-  on public.mant_ri_de_repuesto (nro_ri, articulo_id)
-  where articulo_id is not null;
+-- Comunes a propósito, para que sigan siendo destino de `ON CONFLICT`: ver el
+-- encabezado. El destino va primero para servir también a la búsqueda por él.
+create unique index if not exists mant_ri_de_repuesto_articulo_ri_uq
+  on public.mant_ri_de_repuesto (articulo_id, nro_ri);
 
-create unique index if not exists mant_ri_de_repuesto_ri_repuesto_uq
-  on public.mant_ri_de_repuesto (nro_ri, repuesto_id)
-  where repuesto_id is not null;
-
--- Para traer los RI de un artículo o de un renglón sin recorrer la tabla, y
--- para que el borrado en cascada no tenga que leerla entera.
-create index if not exists mant_ri_de_repuesto_articulo_idx
-  on public.mant_ri_de_repuesto (articulo_id) where articulo_id is not null;
-create index if not exists mant_ri_de_repuesto_repuesto_idx
-  on public.mant_ri_de_repuesto (repuesto_id) where repuesto_id is not null;
+create unique index if not exists mant_ri_de_repuesto_repuesto_ri_uq
+  on public.mant_ri_de_repuesto (repuesto_id, nro_ri);
 
 alter table public.mant_ri_de_repuesto enable row level security;
 
@@ -128,4 +129,13 @@ create policy mant_ri_de_repuesto_delete on public.mant_ri_de_repuesto
   using ((select mant_puede_editar()));
 
 comment on table public.mant_ri_de_repuesto is
-  'Un RI de Compras pegado a un repuesto de una OT: o a un artículo del pañol (vale para toda OT que lo use) o a un renglón de una OT (vale sólo ahí). Exactamente uno de los dos destinos. Sin upsert: los índices únicos son parciales.';
+  'Un RI de Compras pegado a un repuesto de una OT: o a un artículo del pañol (vale para toda OT que lo use) o a un renglón de una OT (vale sólo ahí). Exactamente uno de los dos destinos. Los índices únicos son comunes: sirven de destino de ON CONFLICT.';
+
+comment on column public.ordenes_trabajo_repuestos.articulo_id is
+  'Artículo del pañol al que se refiere el renglón, si una persona lo eligió. Null quiere decir que nadie lo enlazó, nunca que el artículo no exista. No se completa por parecido de nombre.';
+
+comment on column public.mant_ri_de_repuesto.nro_ri is
+  'Número de RI de Compras. NO es una foreign key a compras_requerimientos: cruzarlo con esa tabla pierde en silencio los RI que la planilla ya dejó de tener.';
+
+comment on column public.mant_ri_de_repuesto.repuesto_id is
+  'Renglón de repuesto de una OT al que se pegó el RI (destino alternativo a articulo_id; exactamente uno de los dos). Va en cascada: no puede ser set null porque el check exige un destino.';
