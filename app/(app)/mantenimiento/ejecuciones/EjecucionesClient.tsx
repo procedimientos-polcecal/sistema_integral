@@ -277,10 +277,10 @@ export default function EjecucionesClient({ schedules, executions, currentUserId
         //
         // El motivo es la forma de esta pantalla y no una preferencia. El estado
         // del formulario vive en el componente de la página —que no se
-        // desmonta—, cada camino que lo abre lo **reescribe entero** —vacío en unos,
-        // con los valores del registro que se va a editar en otros—, así que lo
-        // tipeado antes no sobrevive de todas formas, y la clave del borrador tendría que llevar el registro que se está
-        // editando, que recién se sabe al abrirlo. Un borrador con clave fija
+        // desmonta—, sus dos caminos de apertura lo **reescriben entero** desde
+        // `formularioVacio()`, así que lo tipeado antes no sobrevive de todas
+        // formas, y la clave del borrador tendría que llevar el registro que se
+        // está editando, que recién se sabe al abrirlo. Un borrador con clave fija
         // haría lo peor de los dos mundos: lo escrito para un registro
         // reapareciendo sobre otro, que es justo lo que `claveDelBorrador`
         // existe para impedir.

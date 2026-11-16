@@ -259,7 +259,9 @@ function ChoferModal({ c, onClose, onSaved }: { c: any | null; onClose: () => vo
   }
 
   return (
-    // Igual que el de vehículos: salir conserva, sólo «Cancelar» tira.
+    // Igual que el de vehículos: el fondo, la X y Escape salen conservando porque
+    // no hay nada que tirar; este formulario no pasa por `useBorrador` y pierde
+    // lo cargado al salir, como antes.
     <Modal titulo={c ? "Editar chofer" : "Nuevo chofer"} alSalir={onClose}>
         <form onSubmit={guardar} className="space-y-3">
           <div>
