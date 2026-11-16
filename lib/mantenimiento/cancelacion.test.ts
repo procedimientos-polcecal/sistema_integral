@@ -17,8 +17,41 @@ describe("loQueImpideCancelar", () => {
   it("sin motivo no deja, y el mensaje dice qué falta", () => {
     for (const vacia of ["", "   ", null, undefined, 7]) {
       const r = loQueImpideCancelar({ ...abierta, justificacion: vacia });
-      expect(r.ok).toBe(false);
+      expect(r).toEqual({ ok: false, error: "Falta decir por qué no se hizo." });
     }
+  });
+
+  it("exactamente 1.000 caracteres entra", () => {
+    const r = loQueImpideCancelar({ ...abierta, justificacion: "x".repeat(1000) });
+    expect(r).toEqual({ ok: true, texto: "x".repeat(1000) });
+  });
+
+  it("un estado que no es cancelación con un motivo en blanco no opina", () => {
+    const r = loQueImpideCancelar({
+      estadoPedido: "EN_PROCESO", estadoActual: "POR_HACER", justificacion: "   ",
+    });
+    expect(r).toEqual({ ok: true, texto: "" });
+  });
+
+  it("un estado actual desconocido no deja cancelar y lo nombra", () => {
+    const r = loQueImpideCancelar({
+      estadoPedido: "CANCELADA", estadoActual: "INVENTADO", justificacion: "algo",
+    });
+    expect(r).toHaveProperty("error", expect.stringContaining("INVENTADO"));
+  });
+
+  // Los dos de abajo fijan el orden de los chequeos: con el estado malo y el
+  // texto malo a la vez, se oye primero el estado.
+  it("realizada con motivo vacío dice lo de la realizada, no lo del motivo", () => {
+    const r = loQueImpideCancelar({
+      estadoPedido: "CANCELADA", estadoActual: "REALIZADO", justificacion: "",
+    });
+    expect(r).toHaveProperty("error", expect.stringContaining("realizada"));
+  });
+
+  it("fecha de cierre con motivo vacío dice lo de la fecha, no lo del motivo", () => {
+    const r = loQueImpideCancelar({ ...abierta, justificacion: "", fechaCierre: "2026-11-13" });
+    expect(r).toHaveProperty("error", expect.stringContaining("fecha de cierre"));
   });
 
   it("un motivo de más de 1.000 se rechaza, no se recorta", () => {

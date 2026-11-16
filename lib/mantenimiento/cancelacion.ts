@@ -8,7 +8,8 @@
  * `CANCELADA`: «esta orden no se va a hacer» sin un motivo escrito es una OT que
  * desaparece del tablero sin que nadie sepa qué pasó.
  *
- * El orden de los chequeos importa y es el de los tests:
+ * El orden de los chequeos importa y los tests lo fijan (con el estado malo y el
+ * texto malo a la vez, se oye primero el estado):
  *
  * 1. Una justificación que llega con un estado que no es cancelación es un error
  *    del que llama, y no se traga: alguien mandó un texto creyendo que se
@@ -22,6 +23,9 @@ import { validarNota } from "@/lib/mantenimiento/notas";
 export const ESTADO_CANCELADA = "CANCELADA";
 
 /** Si el estado que se pide es una cancelación. */
+// Compara exacto, sin trim ni mayúsculas, a diferencia de `actual` más abajo: lo
+// pedido tiene que ser el valor guardado tal cual, y `actual` viene de la base
+// o de una planilla, que puede traerlo sucio.
 export function esCancelacion(estado: unknown): boolean {
   return estado === ESTADO_CANCELADA;
 }
@@ -34,6 +38,11 @@ export function esCancelacion(estado: unknown): boolean {
  * `fecha_cierre`, y `estadoSegunElCierre()` dice que la fecha manda: cancelarla
  * crearía una fila que se contradice a sí misma. Medido: hoy hay 0 filas en ese
  * caso, así que prohibirlo no le saca nada a nadie.
+ *
+ * Tiene un gemelo que no se unifica: `ESTA_PENDIENTE` de `prioridad.ts`, los
+ * mismos tres estados en otro orden. Una responde «qué órdenes siguen
+ * pendientes» y ésta «desde qué estados se puede cancelar»: dos preguntas que
+ * hoy comparten respuesta. Un estado nuevo se decide en cada una por separado.
  */
 export const SE_CANCELA_DESDE: readonly string[] = ["POR_HACER", "EN_PROCESO", "ATRASADO"];
 
