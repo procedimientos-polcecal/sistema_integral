@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { sumarDias } from "@/lib/core/fechas";
+import InfoTip from "@/components/InfoTip";
 import { tituloDelRango, type VistaDeAgenda } from "@/lib/agenda/rango";
 
 /**
@@ -117,6 +118,19 @@ export default function BarraDeLaAgenda({
           navegador a 375 px). Desde `sm` comparte la fila y se estira. */}
       <h2 className="w-full text-base font-semibold text-slate-900 sm:w-auto sm:min-w-0 sm:flex-1">
         {tituloDelRango(vista, dia)}
+        {vista !== "lista" && (
+          <>
+            {" "}
+            <InfoTip
+              text={
+                "Verde: evento de una orden de trabajo. Azul: cualquier otro, tuyo o de alguien que te invitó. Naranja: alguien lo movió o lo borró en Google. Los que ya pasaron se ven más pálidos, salvo los naranjas. La línea roja es el ahora. Un clic en un hueco abre un evento nuevo a esa hora; un clic en un evento abre su detalle. Dibuja las 24 horas, y un evento que cruza la medianoche se parte en un pedazo por día." +
+                (vista === "semana"
+                  ? " En un teléfono la semana muestra un solo día y las flechas avanzan de a uno."
+                  : "")
+              }
+            />
+          </>
+        )}
       </h2>
 
       <nav aria-label="Vista de la agenda" className="flex overflow-hidden rounded-lg border" style={{ borderColor: "#CBD5E1" }}>

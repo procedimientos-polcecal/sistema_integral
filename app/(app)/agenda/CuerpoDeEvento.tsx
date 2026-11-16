@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import InfoTip from "@/components/InfoTip";
 import {
   avisoDelPendiente, horarioDelEvento, mientrasEstaDivergido, permisosDelEvento, type EventoVista,
 } from "@/lib/agenda/vista";
@@ -137,6 +138,7 @@ function CajaDeLaOT({ numero }: { numero: number | null }) {
         )}
       </p>
       <p className="mt-1 text-slate-600">
+        <InfoTip text="El evento entra solo cuando la orden tiene una fecha de ejecución que no pasó: a una orden con la fecha ya pasada no se le crea evento, salvo que alguien la mande a mano. Dura 1:30 y arranca a las 08:00 —o a las 04:00 o las 12:00 si se mandó a mano con otro turno—; las que entran solas, de la misma especialidad y el mismo día, se apilan de a 1:30 hasta las 20:00. Lo crea la casilla de la persona que cargó la orden, o mantenimiento@ si no tiene autor, y lleva cinco invitados fijos —cuatro si el dueño es uno de ellos—, más los que se sumen a mano. Sigue a la orden sólo en el horario: el título, el lugar y los invitados se reescriben volviendo a mandarla." />{" "}
         No se edita ni se borra desde la Agenda: su horario sale de la fecha de ejecución de la orden, y la
         sincronización con la planilla lo vuelve a escribir cuando esa fecha cambia. Un cambio hecho acá
         desaparecería sin aviso. Se cambia desde la orden.

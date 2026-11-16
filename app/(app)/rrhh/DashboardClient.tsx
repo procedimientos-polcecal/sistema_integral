@@ -8,6 +8,7 @@ import { armarTarjetasHoy, tituloDeDetalle, type ClaveTarjeta, type ResumenHoy }
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * Los gráficos se cargan aparte: `recharts` son ~350 KB y bloqueaban el primer
@@ -168,7 +169,10 @@ export default function DashboardClient({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div className="card p-5">
-          <h2 className="font-medium text-slate-700 mb-3">Top 10 ausencias (mes en curso)</h2>
+          <h2 className="font-medium text-slate-700 mb-3 flex items-center gap-1.5">
+            Top 10 ausencias (mes en curso)
+            <InfoTip text="Cuenta los días en que la persona figura ausente: sin marcación y sin vacaciones, tenga o no la falta justificada. Las faltas que nadie clasificó cuentan igual. No cuentan los domingos (ni los sábados en los sectores de lunes a viernes), los feriados sin una ausencia cargada ni los días cubiertos por el turno de la víspera. Sólo personal activo, con los filtros de Empresa y Sector." />
+          </h2>
           {topAusencias?.length === 0 && <p className="text-sm text-slate-500">Sin ausencias registradas.</p>}
           {topAusencias && topAusencias.length > 0 && (
             <div className="overflow-x-auto">
@@ -189,7 +193,10 @@ export default function DashboardClient({
         </div>
 
         <div className="card p-5">
-          <h2 className="font-medium text-slate-700 mb-3">Top 10 llegadas tarde / salidas tempranas (mes en curso)</h2>
+          <h2 className="font-medium text-slate-700 mb-3 flex items-center gap-1.5">
+            Top 10 llegadas tarde / salidas tempranas (mes en curso)
+            <InfoTip text="Suma las tardanzas y los retiros anticipados que marcó el reloj, y ordena por la suma de las dos. Las tardanzas cargadas a mano en Ausencias no entran acá, aunque la tarjeta Tardes de arriba y el Analítico sí las cuentan." />
+          </h2>
           {topTardanzas?.length === 0 && <p className="text-sm text-slate-500">Sin tardanzas ni retiros anticipados registrados.</p>}
           {topTardanzas && topTardanzas.length > 0 && (
             <div className="overflow-x-auto">

@@ -13,6 +13,7 @@ import {
 import type { FiltrosDeHistorico } from "@/lib/despacho/filtrosUrl";
 import type { DatosDelHistorico } from "./page";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * El histórico y los indicadores.
@@ -50,18 +51,23 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
       <div className="grid gap-3 sm:grid-cols-3">
         <Indicador
           titulo="Tiempo de carga"
+          ayuda="Promedio de fin de carga menos inicio de carga de las órdenes de la lista: con los filtros puestos, y sin fechas, toda la historia. Sólo cuentan las que tienen los dos horarios y un resultado que no sea negativo; las otras no entran como cero. El «N de M» de abajo dice sobre cuántas órdenes está hecho."
           minutos={ind.promedioCarga}
           sobre={ind.cantidad - ind.sinTiempoDeCarga}
           de={ind.cantidad}
         />
         <Indicador
           titulo="Tiempo en predio"
+          ayuda="Promedio de salida del predio menos entrada de las órdenes de la lista: con los filtros puestos, y sin fechas, toda la historia. Sólo cuentan las que tienen los dos horarios y un resultado que no sea negativo; las otras no entran como cero. El «N de M» de abajo dice sobre cuántas órdenes está hecho."
           minutos={ind.promedioPredio}
           sobre={ind.cantidad - ind.sinTiempoEnPredio}
           de={ind.cantidad}
         />
         <div className="card p-4">
-          <div className="text-xs uppercase tracking-wide text-slate-500">Los que más tardaron</div>
+          <div className="text-xs uppercase tracking-wide text-slate-500">
+            Los que más tardaron
+            <InfoTip className="ml-1 normal-case" text="Las cinco órdenes de la lista con más tiempo en predio, de la entrada a la salida; no con más tiempo de carga. Quedan afuera las que no tienen los dos horarios y las que dan negativo." />
+          </div>
           {ind.peoresEnPredio.length === 0 ? (
             <div className="mt-2 text-sm text-slate-400">Nada que mostrar todavía.</div>
           ) : (
@@ -93,9 +99,13 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
         </label>
-        <label className="block">
-          <span className="text-xs font-medium text-slate-700">Material</span>
+        <div className="block">
+          <div className="flex items-center">
+            <label htmlFor="filtro-material" className="text-xs font-medium text-slate-700">Material</label>
+            <InfoTip className="ml-1" text="Material y envase no son datos de la orden: salen del catálogo de productos y, en las órdenes sin producto de Odoo (como las importadas de la planilla), de una tabla de equivalencias por texto. Al filtrar por cualquiera de los dos, las órdenes sin clasificar salen de la lista y de los promedios de arriba." />
+          </div>
           <Select
+            id="filtro-material"
             value={f.material}
             onChange={(e) => aplicar({ ...f, material: e.target.value })}
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -105,7 +115,7 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
               <option key={m} value={m}>{m}</option>
             ))}
           </Select>
-        </label>
+        </div>
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Envase</span>
           <Select
@@ -119,9 +129,13 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
             ))}
           </Select>
         </label>
-        <label className="block">
-          <span className="text-xs font-medium text-slate-700">Empresa</span>
+        <div className="block">
+          <div className="flex items-center">
+            <label htmlFor="filtro-empresa" className="text-xs font-medium text-slate-700">Empresa</label>
+            <InfoTip className="ml-1" text="Las órdenes importadas de la planilla no tienen empresa, porque la planilla no la trae. Filtrar por una empresa las deja afuera y queda sólo lo cargado desde este sistema. «Las dos» es sin filtro e incluye las que no tienen empresa." />
+          </div>
           <Select
+            id="filtro-empresa"
             value={f.empresa}
             onChange={(e) => aplicar({ ...f, empresa: e.target.value })}
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -131,7 +145,7 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
               <option key={e.id} value={e.nombre}>{e.nombre}</option>
             ))}
           </Select>
-        </label>
+        </div>
         <label className="block">
           <span className="text-xs font-medium text-slate-700">Desde</span>
           <input
@@ -243,18 +257,23 @@ export default function OrdenesClient({ datos }: { datos: DatosDelHistorico }) {
  */
 function Indicador({
   titulo,
+  ayuda,
   minutos,
   sobre,
   de,
 }: {
   titulo: string;
+  ayuda: string;
   minutos: number | null;
   sobre: number;
   de: number;
 }) {
   return (
     <div className="card p-4">
-      <div className="text-xs uppercase tracking-wide text-slate-500">{titulo}</div>
+      <div className="text-xs uppercase tracking-wide text-slate-500">
+        {titulo}
+        <InfoTip className="ml-1 normal-case" text={ayuda} />
+      </div>
       <div className="mt-1 text-2xl font-bold text-slate-900">
         {minutos === null ? "—" : comoSeLeenLosMinutos(Math.round(minutos))}
       </div>

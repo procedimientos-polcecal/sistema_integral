@@ -8,6 +8,7 @@ import type { ReparacionDB } from "@/lib/tallerVial/types";
 import RepuestosDelTrabajo from "../RepuestosDelTrabajo";
 import BuscadorDeArticulo, { type ArticuloOpcion } from "../BuscadorDeArticulo";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -219,7 +220,10 @@ export default function ReparacionesClient({
                 <th className="text-right">Horas</th>
                 <th className="text-right">Horómetro</th>
                 <th>Observaciones</th>
-                <th>Repuestos</th>
+                <th>
+                  Repuestos
+                  <InfoTip className="ml-1" text="Reservar un repuesto no descuenta stock: queda «Reservado» hasta que Inventario, desde «Reservas de Taller Vial», confirma que se retiró, y recién ahí baja el stock. Mientras esté reservado lo podés cancelar —se borra, no hay nada que devolver—; una vez confirmado ya no." />
+                </th>
               </tr>
             </thead>
             <tbody>

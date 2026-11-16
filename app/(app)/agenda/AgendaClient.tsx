@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useConfirm } from "@/components/ConfirmProvider";
+import InfoTip from "@/components/InfoTip";
 import { entradasDeLaBanda } from "@/lib/agenda/banda";
 import { diasDelRango, hrefDeLaAgenda, type VistaDeAgenda } from "@/lib/agenda/rango";
 import {
@@ -221,7 +222,8 @@ export default function AgendaClient({
       <div>
         <h1 className="text-xl font-bold text-slate-900">Agenda</h1>
         <p className="text-sm text-slate-500">
-          Tus eventos y aquellos a los que te invitaron. Se reflejan en Google Calendar.
+          Tus eventos y aquellos a los que te invitaron. Se reflejan en Google Calendar.{" "}
+          <InfoTip text="En la Agenda, cada uno ve lo que creó y aquello a lo que lo invitaron, aunque sea administrador del sistema. El SdG manda y Google Calendar es el espejo: lo que cargás acá aparece en el calendario tuyo y de cada invitado, y lo que se crea directo en Google no entra al SdG. Si alguien borra un evento o le cambia el horario en Google antes de que termine, el SdG no lo pisa ni lo acepta solo: avisa, en la banda de arriba, en la campana y con un push si tenés las notificaciones prendidas. No avisa de nada más —ni de quien acepta o rechaza, ni de un cambio de título, lugar o invitados—. No hay vista de mes." />
         </p>
       </div>
 

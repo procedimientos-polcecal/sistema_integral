@@ -21,6 +21,7 @@ import type { Consumo } from "@/lib/cantera/types";
 import { ChipCruce } from "./registros/CanteraClient";
 import InicioGrafico from "./InicioGrafico";
 import ResumenAnualSection from "./ResumenAnualSection";
+import InfoTip from "@/components/InfoTip";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 
@@ -129,7 +130,7 @@ export default async function CanteraInicioPage({
   return (
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-xl font-semibold">Cantera</h1>
+        <div className="flex items-baseline gap-2"><h1 className="text-xl font-semibold">Cantera</h1><InfoTip text="Lleva lo que pasa en la cantera: las perforaciones, voladuras y bochones con sus consumos, el destape del frente, el acarreo de los fleteros y la cubicación de los yacimientos. De ahí salen el costo por tonelada del mes y el informe mensual." /></div>
       </div>
 
       {/* ── Lo que importa de un vistazo ── */}

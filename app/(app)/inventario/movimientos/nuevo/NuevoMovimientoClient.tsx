@@ -6,6 +6,7 @@ import { loQueFalta, sectorDelMovimiento, stockQueQueda, avisoDeStockNegativo } 
 import TraerDeLaPlanilla from "../../TraerDeLaPlanilla";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 interface Articulo {
   id: string;
@@ -309,7 +310,8 @@ export default function NuevoMovimientoClient({
               />
               <span className="mt-1 block text-xs text-slate-400">
                 Un ajuste cambia el stock sin que haya entrado ni salido nada: queda
-                registrado quién lo hizo y por qué.
+                registrado quién lo hizo y por qué.{" "}
+                <InfoTip className="ml-0.5" text="Un ajuste no suma ni resta: deja el stock del artículo en lo que contaste, y lo cambia en el momento. Desde el sistema los movimientos del kardex no se editan ni se borran, así que un ajuste equivocado se corrige cargando otro. Ojo con cómo se lo ve después: a la planilla le llega la diferencia como una entrada o una salida, y la sincronización con la planilla reescribe el tipo y la cantidad con lo que lee, así que los ajustes cargados hasta ahora figuran en el kardex como entrada o salida por esa diferencia, no como «ajuste» (el stock de antes y el de después se conservan). Lo que sí lo nombra como ajuste, con el motivo, quién lo contó y el stock antes y después, es el registro de auditoría. El registro se escribe después de cambiar el stock: si no se pudiera escribir, el ajuste ya está hecho y la pantalla no lo avisa. Si el ajuste no mueve nada, la planilla igual recibe una fila, sin cantidad." />
               </span>
             </label>
           )}
@@ -318,6 +320,7 @@ export default function NuevoMovimientoClient({
             <p className={`text-sm ${avisoNegativo ? "text-red-600" : "text-slate-600"}`}>
               Queda en <strong>{quedaEn}</strong>
               {avisoNegativo && " — el stock quedaría negativo"}
+              <InfoTip className="ml-1" text="Es una cuenta con el stock que esta pantalla tiene cargado —el de la última lectura de la planilla más lo cargado desde el sistema—, que puede estar viejo si alguien movió el artículo después. Al registrar, el sistema recalcula con el stock real y avisa si queda negativo, pero lo registra igual." />
             </p>
           )}
 

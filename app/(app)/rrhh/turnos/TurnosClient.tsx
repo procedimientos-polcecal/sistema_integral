@@ -81,7 +81,7 @@ export default function TurnosClient() {
             <div>
               <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1">
                 Margen (minutos)
-                <InfoTip text="Un desvío de hasta este margen (para llegar o para salir) se redondea a la hora exacta del turno; pasado este margen, la entrada se marca como tardanza y la salida como hora extra a validar." />
+                <InfoTip text="Un desvío de hasta este margen (para llegar o para salir) se redondea a la hora exacta del turno; pasado este margen, la entrada se marca como tardanza y la salida anticipada como retiro anticipado. La hora extra pide además 30 minutos de más, fijos e independientes del margen." />
               </label>
               <input type="number" min={0} max={120} value={form.toleranciaMinutos} onChange={(e) => setForm({ ...form, toleranciaMinutos: e.target.value })}
                 className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm" />

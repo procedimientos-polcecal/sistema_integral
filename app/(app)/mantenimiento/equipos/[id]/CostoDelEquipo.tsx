@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import Link from "next/link";
 import type { CostoDelEquipo as Costo } from "@/lib/mantenimiento/costoEquipo";
 import { comoSeLee } from "@/lib/core/fechas";
@@ -66,7 +67,10 @@ export default function CostoDelEquipo({
                     <th className="px-4 py-2 text-left font-medium">Año</th>
                     <th className="px-4 py-2 text-right font-medium">Materiales</th>
                     <th className="px-4 py-2 text-right font-medium">Terceros</th>
-                    <th className="px-4 py-2 text-right font-medium">Mano de obra</th>
+                    <th className="px-4 py-2 text-right font-medium">
+                      Mano de obra
+                      <InfoTip className="ml-1" text="Es la duración de cada orden por la cantidad de operarios anotados, a la tarifa de la hora que regía ese día; una orden sin operarios anotados no suma. «Ambos» cuenta como una sola persona, así que subestima. Una orden con contratista no suma mano de obra propia aunque tenga operarios." />
+                    </th>
                     <th className="px-4 py-2 text-right font-medium">Total</th>
                   </tr>
                 </thead>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
 import { comoSeLee, diaDeLaSemana, hoyEnArgentina, semanaDe, sumarDias } from "@/lib/core/fechas";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import Reportes from "./Reportes";
 import CargarAusencia, { type EmpleadoParaCargar } from "./CargarAusencia";
 import {
@@ -65,7 +66,14 @@ export default function DisponibilidadClient({
         <p className="text-sm text-slate-500">
           {vista === "quien"
             ? "Quién no viene y qué día."
-            : "Cuánto se faltó en el mes, por sector."}
+            : "Cuánto se faltó en el mes, por sector."}{" "}
+          <InfoTip
+            text={
+              vista === "quien"
+                ? "Abierta a cualquiera con sesión. Dice quién no viene y qué día, nunca por qué: el motivo no sale de esta lista. Entran también las personas dadas de baja, si faltaron en esas fechas. Una ausencia ocupa todos los días de su rango, fines de semana incluidos. No aparece quien sólo tiene una tardanza (vino a trabajar) ni los francos del taller, que se leen de otra tabla."
+                : "Cuenta a todo el padrón, también a quienes ya no están, y a todos los sectores. Quien es encargado, administrador del sistema o tiene acceso a RRHH ve además el porcentaje, el motivo que más pesa y el detalle por persona del año; el resto ve los días y la dotación por sector."
+            }
+          />
         </p>
       </div>
 
@@ -306,7 +314,8 @@ function Resumen({
           {diaMasFlojo ? DIAS_DE_LA_SEMANA[diaDeLaSemana(diaMasFlojo.dia)].slice(0, 3) : "—"}
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          el día más flojo
+          el día más flojo{" "}
+          <InfoTip text="El día del rango con más personas ausentes; si dos empatan, el primero. Cuenta personas y no ausencias cargadas: quien tiene dos que se pisan ese día cuenta una vez." />
           <br />
           {diaMasFlojo
             ? `${comoSeLee(diaMasFlojo.dia).slice(0, 5)} · ${diaMasFlojo.cantidad} ${
@@ -331,7 +340,8 @@ function Resumen({
             {sectorMasGolpeado?.sector ?? "—"}
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            el sector más golpeado
+            el sector más golpeado{" "}
+            <InfoTip text="El sector con más personas distintas ausentes en el rango —personas y no días—; si dos empatan, el primero por orden alfabético. En «N de sus M», M son los empleados activos de hoy del sector: si faltó alguien que ya se fue, entra en N y no en M." />
             <br />
             {sectorMasGolpeado
               ? sectorMasGolpeado.personal !== null
@@ -388,7 +398,10 @@ function Grilla({ ausentes, dias }: { ausentes: Ausente[]; dias: string[] }) {
                 </th>
               );
             })}
-            <th className="px-2 py-2 text-center text-xs font-semibold text-slate-400">días</th>
+            <th className="px-2 py-2 text-center text-xs font-semibold text-slate-400">
+              días{" "}
+              <InfoTip text="Los días del rango en que esa persona figura ausente, con los fines de semana que su ausencia cubra. En la fila «Por día», de abajo, cada número es cuánta gente falta ese día y el ámbar marca el mayor del rango." />
+            </th>
           </tr>
         </thead>
         <tbody>

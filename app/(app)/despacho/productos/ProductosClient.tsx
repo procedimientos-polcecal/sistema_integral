@@ -10,6 +10,7 @@ import {
 } from "@/lib/core/productos";
 import type { FilaDeCatalogo, FueraDelCatalogo } from "./page";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * Clasificar el catálogo de productos.
@@ -144,6 +145,7 @@ export default function ProductosClient({
           <h2 className="font-semibold text-slate-900">
             Apareció en órdenes y no está en el catálogo{" "}
             <span className="font-normal text-slate-400">({fueraDelCatalogo.length})</span>
+            <InfoTip className="ml-1" text="Cada fila es un producto distinto que aparece en las órdenes y no está en el catálogo. Los que vinieron en un remito de Odoo se pueden sumar y clasificar. Los demás se agrupan por el texto exacto del producto y no se pueden sumar, porque no tienen producto de Odoo: son las órdenes cargadas sin remito y también todas las importadas de la planilla, aunque la fila diga «cargadas sin remito»." />
           </h2>
           <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-amber-200 bg-white">
             {fueraDelCatalogo.map((p) => (
@@ -291,7 +293,7 @@ function Tabla({
               <tr>
                 <th className="px-3 py-2 text-left">Código</th>
                 <th className="px-3 py-2 text-left">Producto</th>
-                <th className="px-3 py-2 text-right">Órdenes</th>
+                <th className="px-3 py-2 text-right">Órdenes<InfoTip className="ml-1 normal-case" text="Cuántas órdenes de carga usaron el producto, contadas por el producto de Odoo del remito. Las importadas de la planilla no tienen producto de Odoo y no suman acá, así que la cuenta cubre sólo lo cargado desde la balanza con remito, no la historia. Las dos listas se ordenan por esta cuenta." /></th>
                 <th className="px-3 py-2 text-left">Material</th>
                 <th className="px-3 py-2 text-left">Granulometría</th>
                 <th className="px-3 py-2 text-left">Envase</th>

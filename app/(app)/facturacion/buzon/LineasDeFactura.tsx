@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Buscador, { type Opcion } from "./Buscador";
+import InfoTip from "@/components/InfoTip";
 import type {
   AnaliticaSugerida,
   CuentaSugerida,
@@ -31,6 +32,9 @@ import type { FacturaEnPantalla } from "@/lib/facturacion/types";
  *   comprobante no dice a qué equipo fue un repuesto, y adivinarlo sería poner
  *   el gasto en el lugar equivocado sin que nadie se entere.
  */
+
+const AYUDA_DE_LA_DISTRIBUCION =
+  "Los porcentajes tienen que sumar 100, con una tolerancia de 0,05. Al agregar o sacar una cuenta el reparto se rehace en partes iguales y hay que volver a ajustar los porcentajes. Una distribución ya puesta no recibe sugerencia.";
 
 interface Catalogos {
   productos: { id: number; nombre: string }[];
@@ -152,6 +156,7 @@ export default function LineasDeFactura({
         <h4 className="border-b-2 border-slate-800 pb-1 text-xs font-semibold text-slate-800">
           Líneas de factura
           {lineas && <span className="ml-2 font-normal text-slate-400">{lineas.length}</span>}
+          <InfoTip className="ml-1" text="Las sugerencias de cuenta y de analítica salen de lo que ya se hizo en Odoo con ese proveedor: se proponen sólo con al menos dos antecedentes y con el 80 % de ellos en el mismo lugar, mirando primero ese proveedor y ese producto y después el proveedor solo. La analítica en verde no es una estadística: sale del equipo del requerimiento vinculado, el que declaró quien pidió o, si no declaró ninguno, el de la ubicación. Ninguna se guarda hasta que alguien la usa." />
         </h4>
       </div>
 
@@ -190,7 +195,7 @@ export default function LineasDeFactura({
             <span>Producto</span>
             <span>Etiqueta</span>
             <span>Cuenta</span>
-            <span>Distribución analítica</span>
+            <span>Distribución analítica<InfoTip className="ml-1 normal-case" text={AYUDA_DE_LA_DISTRIBUCION} /></span>
             <span className="text-right">Cantidad</span>
             <span className="text-right">Precio</span>
             <span className="text-right">Subtotal</span>
@@ -245,7 +250,8 @@ export default function LineasDeFactura({
               * el aviso de arriba explica.
               */}
             <p className="text-sm text-slate-700">
-              <span className="text-xs uppercase tracking-wide text-slate-500">Suman</span>{" "}
+              <span className="text-xs uppercase tracking-wide text-slate-500">Suman</span>
+              <InfoTip className="mx-1" text="La suma de las líneas tal como están guardadas. Un detalle leído del PDF viene en netos, sin IVA, y tiene que dar el neto del comprobante; una sola línea por el total vale el total con IVA. Por eso puede no coincidir con el «Importe total» de arriba." />{" "}
               <strong>{suma.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</strong>
             </p>
           </div>
@@ -615,6 +621,7 @@ function Linea({
       <div className="min-w-0">
         <span className="block text-[10px] uppercase tracking-wide text-slate-400 lg:hidden">
           Distribución analítica
+          <InfoTip className="ml-1 normal-case" text={AYUDA_DE_LA_DISTRIBUCION} />
         </span>
 
         {Object.keys(analitica).length > 0 && (

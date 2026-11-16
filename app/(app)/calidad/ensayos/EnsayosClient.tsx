@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import Link from "next/link";
 import Select from "@/components/Select";
 import { MALLAS_DEL_LISTADO } from "@/lib/calidad/ensayos/granulometria";
@@ -99,6 +100,7 @@ export default function EnsayosClient({
             ) : (
               <span className="text-amber-700">Sin límites cargados: nada se marca.</span>
             )}
+            <InfoTip className="ml-1" text="Rojo es fuera de un límite cargado. Ámbar es un problema de cálculo —humedad negativa, peso inicial que no supera al del recipiente, retenidos que superan el peso de la muestra—: se muestra y no se recorta. Un guión es que no se midió, no que dio cero. Los límites son por producto: uno que no tiene ninguno no se marca nunca, aunque otros sí." />
           </p>
         </div>
 
@@ -147,12 +149,19 @@ export default function EnsayosClient({
                   <th className="px-3 pt-2" rowSpan={2}>Fecha</th>
                   <th className="px-3 pt-2" rowSpan={2}>Producto</th>
                   <th className="px-3 pt-2 text-right" rowSpan={2}>Humedad (%)</th>
-                  <th className="px-3 pt-2 text-right" rowSpan={2}>P. vol. (g/l)</th>
-                  <th className="px-3 pt-2 text-right" rowSpan={2}>Cal útil (%)</th>
+                  <th className="px-3 pt-2 text-right" rowSpan={2}>
+                    P. vol. (g/l)
+                    <InfoTip className="ml-1 normal-case tracking-normal" text="Gramos × 1000 ÷ volumen del recipiente, en g/l. El volumen es un dato de cada muestra: viene propuesto en 330 cc, que es el recipiente real, y queda dicho con cuál se midió." />
+                  </th>
+                  <th className="px-3 pt-2 text-right" rowSpan={2}>
+                    Cal útil (%)
+                    <InfoTip className="ml-1 normal-case tracking-normal" text="ml de ácido × 0,037 ÷ peso de la muestra titulada, en %. El peso queda guardado con cada muestra y viene propuesto en 3 g, que es sobre lo que se tituló hasta ahora; 0,037 es la constante del método." />
+                  </th>
                   {/* Las cuatro van bajo un solo título: son la misma medición
                       en cuatro tamices, no cuatro determinaciones distintas. */}
                   <th className="border-x border-slate-200 px-3 pt-2 text-center" colSpan={MALLAS_DEL_LISTADO.length}>
                     Acumulado (%)
+                    <InfoTip className="ml-1 normal-case tracking-normal" text="Cuántas columnas se llenan lo decide el producto y no la muestra: los que declaran la malla #325 en su juego muestran las cuatro y el resto, como los Calcios, sólo la #200. En blanco es que ese producto no muestra esa malla o que no se midió, y nunca se cae a la malla de al lado. El #200 de un Filler suma tres tamices y el de un Calcio, ocho: no significan lo mismo." />
                   </th>
                   <th className="px-3 pt-2" rowSpan={2}>Observaciones</th>
                 </tr>
@@ -224,13 +233,19 @@ export default function EnsayosClient({
                     </dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-slate-500">P. vol.</dt>
+                    <dt className="text-slate-500">
+                      P. vol.
+                      <InfoTip className="ml-1" text="Gramos × 1000 ÷ volumen del recipiente, en g/l. El volumen es un dato de cada muestra: viene propuesto en 330 cc, que es el recipiente real, y queda dicho con cuál se midió." />
+                    </dt>
                     <dd>
                       <Celda v={f.pesoVolumetrico} decimales={0} />
                     </dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-slate-500">Cal útil</dt>
+                    <dt className="text-slate-500">
+                      Cal útil
+                      <InfoTip className="ml-1" text="ml de ácido × 0,037 ÷ peso de la muestra titulada, en %. El peso queda guardado con cada muestra y viene propuesto en 3 g, que es sobre lo que se tituló hasta ahora; 0,037 es la constante del método." />
+                    </dt>
                     <dd>
                       <Celda v={f.calUtilVial} />
                     </dd>
@@ -241,7 +256,10 @@ export default function EnsayosClient({
                     columnas: son hasta cuatro números y comparten título. */}
                 {f.acumulados.some((v) => v) && (
                   <div className="mt-1 border-t border-slate-100 pt-1">
-                    <p className="text-xs text-slate-500">Acumulado (%)</p>
+                    <p className="text-xs text-slate-500">
+                      Acumulado (%)
+                      <InfoTip className="ml-1" text="Cuántas columnas se llenan lo decide el producto y no la muestra: los que declaran la malla #325 en su juego muestran las cuatro y el resto, como los Calcios, sólo la #200. En blanco es que ese producto no muestra esa malla o que no se midió, y nunca se cae a la malla de al lado. El #200 de un Filler suma tres tamices y el de un Calcio, ocho: no significan lo mismo." />
+                    </p>
                     <div className="flex flex-wrap gap-x-4 text-sm">
                       {f.acumulados.map((v, i) =>
                         v ? (

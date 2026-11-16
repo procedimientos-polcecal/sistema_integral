@@ -11,6 +11,7 @@ import type { ServiceDB } from "@/lib/tallerVial/types";
 import RepuestosDelTrabajo from "../RepuestosDelTrabajo";
 import BuscadorDeArticulo, { type ArticuloOpcion } from "../BuscadorDeArticulo";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -192,7 +193,10 @@ export default function ServicesClient({
     <div className="mx-auto max-w-4xl">
       <Link href="/taller-vial" className="text-xs text-slate-500 underline">← Taller Vial</Link>
       <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="page-header">Services por horómetro</h1>
+        <div className="flex items-baseline gap-2">
+          <h1 className="page-header">Services por horómetro</h1>
+          <InfoTip text="Cada escalón se mide contra el horómetro actual del equipo: la lectura de la última carga de combustible que trajo una (no hay un horómetro aparte; un 0 de la planilla cuenta como lectura). «Próximo horómetro» es el mayor horómetro entre los services de ese escalón o de uno mayor, más el escalón. Queda Vencido al llegar a 0 hs y Próximo con 50 hs o menos. «Sin cargar» es que todavía no hay un service de ese escalón o de uno mayor, o que el equipo no tiene ninguna lectura. La fecha estimada usa el promedio de uso de todo su historial." />
+        </div>
         <p className="page-subheader">250 / 500 / 1000 / 2000 hs, en cascada: el de 1000 cubre al de 500 y al de 250.</p>
       </div>
 
@@ -362,7 +366,10 @@ export default function ServicesClient({
                 <th className="text-right">Escalón</th>
                 <th className="text-right">Horómetro</th>
                 <th>Observaciones</th>
-                <th>Repuestos</th>
+                <th>
+                  Repuestos
+                  <InfoTip className="ml-1" text="Reservar un repuesto no descuenta stock: queda «Reservado» hasta que Inventario, desde «Reservas de Taller Vial», confirma que se retiró, y recién ahí baja el stock. Mientras esté reservado lo podés cancelar —se borra, no hay nada que devolver—; una vez confirmado ya no." />
+                </th>
               </tr>
             </thead>
             <tbody>

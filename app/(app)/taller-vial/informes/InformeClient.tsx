@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import InfoTip from "@/components/InfoTip";
 import { ETIQUETA_UNIDAD, unidadDeUso } from "@/lib/tallerVial/equipos";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 import type { FilaInformeConsumo, FilaInformeDisponibilidad, LecturaDeDisponibilidad } from "@/lib/tallerVial/informe";
@@ -38,11 +39,14 @@ const AMBAR = "#E8A020";
 const AMBAR_CLARO = "#FFF7ED";
 
 /** El encabezado de una tabla, con el color verde o ámbar de la planilla — igual que en el informe de Cantera. */
-function Encabezado({ color, columnas }: { color: string; columnas: string[] }) {
+function Encabezado({ color, columnas, ayudas = {} }: { color: string; columnas: string[]; ayudas?: Record<string, string> }) {
   return (
     <tr style={{ backgroundColor: color }}>
       {columnas.map((c) => (
-        <th key={c} className="px-3 py-2 text-left text-xs font-semibold text-white">{c}</th>
+        <th key={c} className="px-3 py-2 text-left text-xs font-semibold text-white">
+          {c}
+          {ayudas[c] && <InfoTip text={ayudas[c]} className="ml-1" />}
+        </th>
       ))}
     </tr>
   );
@@ -91,7 +95,10 @@ export default function InformeClient({
     <div className="mx-auto max-w-5xl">
       <Link href="/taller-vial" className="text-xs text-slate-500 underline">← Taller Vial</Link>
       <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="page-header">Informe mensual</h1>
+        <div className="flex items-baseline gap-2">
+          <h1 className="page-header">Informe mensual</h1>
+          <InfoTip text="El consumo y la disponibilidad de cada equipo móvil en el mes que elegís, y se baja a Excel. Reemplaza los informes mensuales de la planilla «SEGUIMIENTO EQUIPOS MÓVILES», pero no da todos sus números: la referencia histórica y la disponibilidad se calculan distinto (lo dice cada tabla). Sólo aparecen los equipos con cargas ese mes en el consumo y con estados cargados en la disponibilidad; «Operativo con fallas» cuenta como no disponible." />
+        </div>
       </div>
 
       <div className="card mt-4 flex flex-wrap items-center justify-between gap-2 p-3">
@@ -126,7 +133,11 @@ export default function InformeClient({
           <div className="mt-2 overflow-x-auto card">
             <table className="w-full text-sm">
               <thead>
-                <Encabezado color={VERDE} columnas={["Equipo", "Cargas", "Litros", "Consumo del mes", "Ref. histórica", "Desvío"]} />
+                <Encabezado
+                  color={VERDE}
+                  columnas={["Equipo", "Cargas", "Litros", "Consumo del mes", "Ref. histórica", "Desvío"]}
+                  ayudas={{ "Consumo del mes": "Litros del mes sobre lo trabajado en el mes: cada lectura menos la de la carga anterior con lectura, aunque esa sea de otro mes. Todos los litros cuentan, también los de una carga sin lectura. «—» si no hay nada que restar." }}
+                />
               </thead>
               <tbody>
                 {consumo.map((f, i) => {
@@ -197,7 +208,10 @@ export default function InformeClient({
               {promedioDisponibilidad !== null && (
                 <tfoot>
                   <FilaTotal color={AMBAR}>
-                    <td className="px-3 py-2" colSpan={3}>PROMEDIO FLOTA</td>
+                    <td className="px-3 py-2" colSpan={3}>
+                      PROMEDIO FLOTA
+                      <InfoTip className="ml-1" text="Promedio simple de los porcentajes de arriba: un equipo con 3 días cargados pesa igual que uno con 30. El gráfico de disponibilidad de la portada suma en cambio los días de toda la flota, por eso los dos pueden no coincidir." />
+                    </td>
                     <td className="px-3 py-2">{num1.format(promedioDisponibilidad)}%</td>
                   </FilaTotal>
                 </tfoot>

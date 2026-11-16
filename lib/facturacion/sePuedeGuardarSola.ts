@@ -63,9 +63,9 @@ export function sePuedeGuardarSola({ lectura, empresaReconocida }: LoLeido): Ver
   }
 
   /*
-   * 3. El importe del QR coincide con el impreso.
+   * 3. El QR no es cien veces el impreso.
    *
-   *    Cuando no, son dos números que tendrían que ser el mismo y el que se va
+   *    Cuando sí lo es, son dos números que tendrían que ser el mismo y el que se va
    *    a guardar puede ser cien veces más grande —hay emisores que mandan el
    *    importe en centavos—. Es exactamente el caso que no puede pasar solo.
    */

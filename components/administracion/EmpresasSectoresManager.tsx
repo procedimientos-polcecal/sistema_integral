@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
 import { useConfirm } from "@/components/ConfirmProvider";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import {
   agruparSectores, loMantieneLaImportacion, type SectorAdmin,
 } from "@/lib/core/sectores";
@@ -136,7 +137,10 @@ export default function EmpresasSectoresManager() {
       )}
 
       <section className="card p-5">
-        <h2 className="mb-3 font-medium text-slate-700">Empresas</h2>
+        <div className="mb-3 flex items-center gap-2">
+          <h2 className="font-medium text-slate-700">Empresas</h2>
+          <InfoTip text="Desmarcar «Activa» no cambia sus sectores ni las filas que ya la usan. Hoy la sacan de los desplegables de empresa de Despacho (movimientos y recepciones) y de Facturación, y la importación de empleados de RRHH deja de enlazar a ella; Compras, Inventario, Mantenimiento y las pantallas de RRHH la siguen listando." />
+        </div>
         <ul className="space-y-1">
           {empresas.map((e) => (
             <li key={e.id} className="flex items-center justify-between text-sm text-slate-700">
@@ -152,7 +156,10 @@ export default function EmpresasSectoresManager() {
 
       <section className="card p-5">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-medium text-slate-700">Sectores</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="font-medium text-slate-700">Sectores</h2>
+            <InfoTip text="«Sin uso» no quiere decir libre. «N filas» es cuántas filas apuntan al sector en ocho tablas: empleados, equipos, avisos, órdenes de trabajo, órdenes de servicio, ubicaciones de Compras, y movimientos y destinos de Inventario. No cuenta otras que también lo usan —requerimientos de Compras, condiciones de Seguridad e Higiene, horas a realizar de RRHH, el cuaderno y los partes de contratista de Mantenimiento, entre otras—: «sin uso» quiere decir sin filas en esas ocho, no que nada lo use. Dar de baja un sector («Activo») no toca las filas que ya lo tienen: deja de ofrecerse en varios desplegables, por ejemplo los de Inventario y la ficha de un empleado, y la importación de empleados de RRHH deja de enlazar a él. Uno marcado «sin uso» se da de baja sin ninguna confirmación. Vale también para los de planta, aunque a ésos no se les cambie el nombre: la importación del libro BD Equipos no toca esa marca." />
+          </div>
           <p className="text-xs text-slate-500">
             {sectores.filter((s) => s.activo).length} activos de {sectores.length}
           </p>
@@ -239,7 +246,10 @@ export default function EmpresasSectoresManager() {
       </section>
 
       <section className="card p-5">
-        <h2 className="mb-1 font-medium text-slate-700">Nuevo sector</h2>
+        <div className="mb-1 flex items-center gap-2">
+          <h2 className="font-medium text-slate-700">Nuevo sector</h2>
+          <InfoTip text="No deja crear ni renombrar con un nombre que ya existe: se compara sin tildes ni mayúsculas, contra todos los sectores —de cualquier empresa, de planta y dados de baja—. Si el que choca está dado de baja, lo que corresponde es reactivarlo." />
+        </div>
         {/* Los de planta no se crean acá: los trae la importación del libro con
             su código, y uno hecho a mano quedaría sin código y fuera de ella. */}
         <p className="mb-3 text-xs text-slate-500">

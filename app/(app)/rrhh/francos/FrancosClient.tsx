@@ -101,7 +101,7 @@ export default function FrancosClient() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
           Francos compensatorios
-          <InfoTip text="Días de descanso que genera el sistema cuando un empleado trabaja un domingo o feriado. Podés marcarlos como tomados; los que no, se pagan en la liquidación." />
+          <InfoTip text="Días de descanso que genera el sistema cuando un empleado trabaja un domingo. Podés marcarlos como tomados; en la planilla general entran sólo los tomados." />
         </h1>
         <a href={`/api/rrhh/francos/export?${queryParams()}`} className="text-sm text-blue-600 hover:underline">Exportar</a>
       </div>
@@ -142,9 +142,19 @@ export default function FrancosClient() {
               <tr className="text-left text-slate-500 border-b">
                 <th className="pb-2">Legajo</th>
                 <th className="pb-2">Empleado</th>
-                <th className="pb-2">Generado el</th>
+                <th className="pb-2">
+                  <span className="inline-flex items-center gap-1">
+                    Generado el
+                    <InfoTip text="Es el día trabajado. El sistema genera el franco al recalcular un domingo trabajado. Un feriado entre semana trabajado se paga al 100% si «Tratar feriados como domingo» está activo, pero desde el 02/11/2026 no genera franco." />
+                  </span>
+                </th>
                 <th className="pb-2">Horas</th>
-                <th className="pb-2">Estado</th>
+                <th className="pb-2">
+                  <span className="inline-flex items-center gap-1">
+                    Estado
+                    <InfoTip text="Pendiente: sus horas no entran en la planilla general. Tomado: entran, pero en la del período de «Generado el» y no en el que lo marcaste: un franco ganado en octubre y tomado en noviembre va en la de octubre, cuando se vuelva a emitir." />
+                  </span>
+                </th>
                 <th className="pb-2"></th>
               </tr>
             </thead>

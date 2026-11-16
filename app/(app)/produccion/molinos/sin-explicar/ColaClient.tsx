@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import Select from "@/components/Select";
 import { comoSeLee } from "@/lib/core/fechas";
 import { comoSeLeeElTurnoDelRobot, minutosComoSeLee } from "@/lib/produccion/molinos/formato";
@@ -13,6 +14,15 @@ import type { MolinoDeLaCola } from "./page";
 
 /** Cuántas paradas ya explicadas se listan abajo: las más recientes. */
 const EXPLICADAS_VISIBLES = 30;
+
+/**
+ * Los `(i)` de esta pantalla. El respaldo está en `docs/INFOTIPS.md`: salen de
+ * `docs/PRODUCCION.md` («Los molinos») y del encabezado de `cola.ts`.
+ */
+const INFO_CUANTAS_SIN_EXPLICAR =
+  "Cuenta los turnos con una parada que llega al mínimo y que nadie explicó, ni con un motivo propio ni con «planta parada». No entran los turnos que el robot no informó, porque no se sabe que hayan ocurrido, ni los inconsistentes, cuya marcha se pasa de la teórica y por eso no dan parada.";
+const INFO_PLANTA_PARADA =
+  "Usa este motivo para los cuatro turnos del día y los saca de esta cola. No cambia ningún indicador: las horas no trabajadas y la utilización del molino dan lo mismo antes y después. Es la salida para un domingo, un feriado o una parada programada de planta.";
 
 /** Lo que dice la pantalla donde iría la lista de OT cuando quien mira no tiene Mantenimiento. */
 const SIN_ACCESO_A_MANTENIMIENTO = "No tenés acceso a Mantenimiento";
@@ -160,6 +170,7 @@ function FilaSinExplicar({
             >
               Planta parada todo el día
             </button>
+            <InfoTip text={INFO_PLANTA_PARADA} />
             {sinMotivo && <span className="text-xs text-slate-500">Escribí el motivo para poder guardar.</span>}
           </div>
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
@@ -337,6 +348,7 @@ export default function ColaClient({
             <h2 className="section-title">
               {m.nombre}
               <span className="ml-2 text-sm font-normal text-slate-500">{m.cola.sinExplicar.length} sin explicar</span>
+              <InfoTip text={INFO_CUANTAS_SIN_EXPLICAR} className="ml-1" />
             </h2>
             <p className="text-xs text-slate-500">
               Se pide motivo desde {minutosComoSeLee(m.umbralMinutos)} de parada, y sólo de {comoSeLee(m.desde)} en

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Select from "@/components/Select";
 import { TIPOS_AUSENCIA } from "@/lib/rrhh/tiposAusencia";
+import InfoTip from "@/components/InfoTip";
 
 export interface EmpleadoParaCargar {
   id: string;
@@ -133,7 +134,10 @@ export default function CargarAusencia({
   return (
     <form onSubmit={guardar} className="card space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-slate-900">Cargar una ausencia</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-slate-900">Cargar una ausencia</h2>
+          <InfoTip text="El motivo que elegís lo ven RRHH, los encargados y los administradores del sistema en «Ausentismo del mes»; no aparece en «Quién no viene». Una tardanza tampoco aparece en «Quién no viene» (la persona vino), pero sí suma un día en «Ausentismo del mes»." />
+        </div>
         <button
           type="button"
           className="btn-ghost"

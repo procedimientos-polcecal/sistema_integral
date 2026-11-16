@@ -16,6 +16,7 @@ import TarjetasDeFlota from "./TarjetasDeFlota";
 import CargasParaRevisar from "./CargasParaRevisar";
 import ConsumoPorEquipo, { type FilaDeConsumo } from "./ConsumoPorEquipo";
 import TendenciaDeDisponibilidad from "./TendenciaDeDisponibilidad";
+import InfoTip from "@/components/InfoTip";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 const num0 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
@@ -167,7 +168,7 @@ export default async function TallerVialInicioPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Taller Vial</h1>
+        <div className="flex items-baseline gap-2"><h1 className="text-xl font-semibold">Taller Vial</h1><InfoTip text="Sigue la flota de equipos viales: en qué estado está cada uno (operativo, fuera de servicio o con fallas), cuánto combustible cargó y cuándo le toca el próximo service. Desde acá cargás combustible y cambiás el estado de un equipo." /></div>
         <div className="flex flex-wrap gap-2">
           <Link href="/taller-vial/cargas" className="btn-primary">Cargar combustible</Link>
           <Link href="/taller-vial/estados" className="btn-primary">Cambiar estado de un equipo</Link>
@@ -182,6 +183,7 @@ export default async function TallerVialInicioPage() {
           color="#1E7D34"
           value={`${pct(resumenActual.operativos)}%`}
           label={`Operativos (${resumenActual.operativos}/${resumenActual.total})`}
+          sub={<InfoTip text="Cada equipo cuenta con el último estado que se cargó, aunque sea de hace semanas, no con el de hoy. Los equipos que nunca tuvieron un estado no suman en ninguno de los tres, así que los porcentajes pueden no dar 100." />}
         />
         <KpiCard
           color={resumenActual.fueraDeServicio > 0 ? "#DC2626" : "#94A3B8"}
@@ -210,7 +212,10 @@ export default async function TallerVialInicioPage() {
 
       <section className="card mt-4 p-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-slate-900">Próximo service (250 hs)</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="font-semibold text-slate-900">Próximo service (250 hs)</h2>
+            <InfoTip text="Horas que le faltan a cada equipo para el service de 250 hs, contra la última lectura de horómetro que trajo una carga de combustible (no hay un horómetro aparte; un 0 de la planilla cuenta como lectura). Un service de 500, 1000 o 2000 hs también cuenta como el de 250. Se pone ámbar con 50 hs o menos y rojo al llegar a 0. La fecha estimada supone el promedio de uso de todo su historial y no sale si ya está vencido o tiene menos de dos lecturas." />
+          </div>
           <Link href="/taller-vial/services" className="text-xs text-slate-500 underline">Ver los 4 escalones →</Link>
         </div>
         {(serviceVencidos > 0 || serviceProximos > 0) && (
@@ -262,7 +267,10 @@ export default async function TallerVialInicioPage() {
       <ConsumoPorEquipo filas={filasDeConsumo} />
 
       <section className="card mt-4 p-4">
-        <h2 className="font-semibold text-slate-900">Evolución del consumo, últimos 6 meses</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-slate-900">Evolución del consumo, últimos 6 meses</h2>
+          <InfoTip text="Son litros cargados por mes de toda la flota, no litros por hora: un mes con más trabajo muestra más litros sin que nadie consuma de más. Entran también las cargas sin equipo reconocido, y el mes en curso está incompleto." />
+        </div>
         <div className="mt-3 space-y-2">
           {evolucion.map((e) => (
             <div key={e.mes} className="flex items-center gap-3">
@@ -285,7 +293,10 @@ export default async function TallerVialInicioPage() {
 
       <section className="card mt-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold text-slate-900">Estados del mes, por equipo</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="font-semibold text-slate-900">Estados del mes, por equipo</h2>
+            <InfoTip text="Cada barra reparte los días con estado cargado de ese equipo en el mes, no los días del mes: con 10 días cargados la barra se llena igual que con 30. «3d FS» son los días fuera de servicio y «—» es ninguno. Sólo aparecen los equipos con algún estado este mes, ordenados por días fuera de servicio." />
+          </div>
           <div className="flex items-center gap-3 text-xs text-slate-500">
             <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Operativo</span>
             <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> Con fallas</span>

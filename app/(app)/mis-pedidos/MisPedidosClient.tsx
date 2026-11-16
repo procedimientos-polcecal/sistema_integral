@@ -8,6 +8,7 @@ import { textoDelReclamo } from "@/lib/compras/reclamo";
 import { traerTodo } from "@/lib/core/paginado";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import ConversacionDelPedido from "./ConversacionDelPedido";
+import InfoTip from "@/components/InfoTip";
 import {
   APROBACION_LABELS, COMPRA_LABELS, etiquetaPrioridad, fecha,
 } from "@/lib/compras/constants";
@@ -406,7 +407,8 @@ export default function MisPedidosClient({
           <p className="text-sm text-slate-500">
             {alcance === "mios"
               ? `Lo que pidió ${nombreDeMisAreas || "tu área"} y en qué anda.`
-              : "Todos los requerimientos, de todas las áreas. Buscá acá antes de pedir."}
+              : "Todos los requerimientos, de todas las áreas. Buscá acá antes de pedir."}{" "}
+            <InfoTip text="«Mi área» son los pedidos de las áreas que te asignaron en Administración → Usuarios, los haya cargado quien los haya cargado y no sólo los que pediste vos. «Todos» muestra los de todas las áreas, y cualquiera con sesión puede mirarlos, tenga o no Compras. Sin un área asignada la pantalla abre en «Todos» y no se puede reclamar." />
           </p>
         </div>
         <button
@@ -441,6 +443,7 @@ export default function MisPedidosClient({
           placeholder="Buscar por descripción, código, N° de RI…"
           className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm sm:max-w-sm"
         />
+        <InfoTip text="Busca en la descripción, el código y el nombre de quien lo pidió; un número solo se toma como N° de RI exacto. Busca dentro de «Mi área» o de «Todos», según lo que tengas elegido, y cambiar la búsqueda o el alcance suelta el color elegido en «Esperando a Compras»." />
 
         {!cargando && (
           <span className="text-xs text-slate-400">
@@ -462,6 +465,7 @@ export default function MisPedidosClient({
       {conteos && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-slate-400">Esperando a Compras:</span>
+          <InfoTip text="Cuenta sólo los pedidos que esperan a Compras (aunque gerencia todavía no los haya aprobado), y por eso los tres números suman bastante menos que la lista. Quedan sin punto, pero en la lista, los ya pedidos —la demora es del proveedor—, los que alguien frenó a propósito en «En espera» y los denegados. Los cortes de 30 y 90 días salieron de medir el reparto real." />
           <ChipDelSemaforo
             color="verde" cantidad={conteos.verde} activo={color === "verde"}
             etiqueta={`hasta ${DIAS_VERDE} días`}
@@ -485,6 +489,7 @@ export default function MisPedidosClient({
               Ver todos
             </button>
           )}
+          <InfoTip text="Al tocar un color, la lista pasa a ir del pedido más viejo al más nuevo; sin color sigue por número de RI, porque acá también se mira si alguien ya pidió lo mismo." />
         </div>
       )}
 
@@ -582,7 +587,7 @@ export default function MisPedidosClient({
                 <tr>
                   <th className="px-3 py-2 text-left">N° RI</th>
                   <th className="px-3 py-2 text-left">Fecha</th>
-                  <th className="px-3 py-2 text-left">Qué se pidió</th>
+                  <th className="px-3 py-2 text-left">Qué se pidió<InfoTip className="ml-1 normal-case" text="«Reclamar» sale en los pedidos amarillos y rojos de tu área, y abre el hilo del pedido con la pregunta ya redactada, que podés editar antes de enviar. Les llega a quienes tienen cargado un permiso de edición o de administración en Compras; un administrador del sistema que no lo tenga cargado no recibe el reclamo." /></th>
                   <th className="px-3 py-2 text-right">Cant.</th>
                   <th className="px-3 py-2 text-left">Área</th>
                   {alcance === "todos" && <th className="px-3 py-2 text-left">Quién pidió</th>}

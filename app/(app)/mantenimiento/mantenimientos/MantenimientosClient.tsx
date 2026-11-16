@@ -324,6 +324,7 @@ export default function MantenimientosClient({ schedules, equipos, users, linked
           <InfoTip text="Acá programás los mantenimientos preventivos de cada equipo: qué tarea, cada cuánto se repite y quién la hace. El sistema avisa cuando se acercan o vencen, y desde cada uno podés generar o vincular una orden de trabajo (OT)." />
         </h1>
         <div className="flex items-center gap-2">
+          <InfoTip text="Un mantenimiento activo cuya próxima fecha ya llegó crea solo su orden de trabajo, en la sincronización de Mantenimiento, y corre la fecha según su frecuencia (si se perdieron varios ciclos sale una sola OT; «Mensual» cuenta 30 días). Una fecha fija, o un personalizado sin días, se cierra al generar. Lo hace sólo con los tipos «Lubricación» y «Revisión eléctrica»: con Inspección, Limpieza, Ajuste, Reemplazo u Otro no crea nada, y esta pantalla ni tiene dónde cargarle la especialidad ni lo avisa. Uno pausado no genera." />
           <Select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}

@@ -47,7 +47,7 @@ export default function FeriadosClient() {
       <div className="card p-5 max-w-xl">
         <h2 className="font-medium text-slate-700 mb-3 flex items-center gap-1.5">
           Feriados
-          <InfoTip text="Los días feriados del año. El sistema los usa para el cálculo de horas: trabajar un feriado genera francos compensatorios y se paga con recargo, igual que un domingo." />
+          <InfoTip text="Los días feriados del año. El sistema los usa para el cálculo de horas: trabajar un feriado se paga con recargo, igual que un domingo, sólo si en Configuración está activada «Tratar feriados como domingo»; y no genera franco compensatorio (salvo que caiga en domingo)." />
         </h2>
         {!feriados ? (
           <p className="text-slate-500 text-sm mb-3">Cargando...</p>

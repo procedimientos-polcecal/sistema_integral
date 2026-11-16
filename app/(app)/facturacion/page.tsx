@@ -4,6 +4,7 @@ import KpiCard from "@/components/KpiCard";
 import { createClient } from "@/lib/supabase/server";
 import { hoyEnArgentina, rangoDelMes, sumarDias, comoSeLee } from "@/lib/core/fechas";
 import { nivelFacturacionDe } from "@/lib/facturacion/auth";
+import InfoTip from "@/components/InfoTip";
 
 const num = new Intl.NumberFormat("es-AR");
 const ars = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
@@ -48,7 +49,7 @@ export default async function FacturacionDashboardPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="page-header">Facturación</h1>
+        <div className="flex items-baseline gap-2"><h1 className="page-header">Facturación</h1><InfoTip text="Las facturas de proveedor entran por el buzón: el sistema lee el QR de ARCA y saca emisor, número, fecha e importe sin tipear nada. Desde ahí se deja el borrador en Odoo, y se puede revisar y confirmar sin salir del sistema." /></div>
         <Link href="/facturacion/buzon" className="btn-primary">Ir al buzón →</Link>
       </div>
 
@@ -68,7 +69,10 @@ export default async function FacturacionDashboardPage() {
       {/* ── Últimas cargadas ── */}
       <section className="card mt-6 p-4">
         <div className="flex items-center justify-between">
-          <h2 className="section-title">Últimas cargadas</h2>
+          <h2 className="section-title">
+            Últimas cargadas
+            <InfoTip className="ml-1" text="Las seis últimas que entraron al buzón, ordenadas por cuándo se cargaron. La fecha que se ve es la de carga, no la de la factura, y es la fecha UTC: una factura cargada de noche en Argentina aparece con la del día siguiente. Por lo mismo «Cargadas hoy» arranca a las 21:00 del día anterior. El importe es el total del comprobante." />
+          </h2>
           <Link href="/facturacion/buzon" className="text-xs text-slate-500 underline">Ver todas →</Link>
         </div>
         {!recientes || recientes.length === 0 ? (

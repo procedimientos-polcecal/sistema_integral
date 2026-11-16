@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import InfoTip from "./InfoTip";
 import {
   suNumeroSeMuestra,
   totalDeLaCampana,
@@ -66,7 +67,10 @@ export function NotificationsBell() {
           className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-lg border bg-white shadow-lg"
           style={{ borderColor: "var(--border)" }}
         >
-          <div className="section-title px-4 pt-3 pb-2">Notificaciones</div>
+          <div className="section-title flex items-center gap-1.5 px-4 pt-3 pb-2">
+            Notificaciones
+            <InfoTip text="Lo que tenés para mirar en los módulos a los que tenés acceso, más lo tuyo (las menciones sin leer y los cambios de tu Agenda), sin lo que no podés atender vos: la aprobación de compras sólo le llega a quien aprueba, las condiciones vencidas o sin completar de Seguridad e Higiene a quien administra ese módulo, y las fotos sin respaldo y la salud de las sincronizaciones sólo al administrador del sistema. El número del ícono suma los avisos con su cantidad, salvo los de ritmo y de salud, que no cuentan cosas —miden cuánto lleva mal un módulo o un recurso— y valen 1 cada uno. «Descartar» (la × que aparece al pasar el mouse) calla el aviso sólo para vos, también en tu resumen diario, y vuelve únicamente si su número supera el que tenía al descartarlo: el descarte no se limpia aunque el problema se arregle." />
+          </div>
           {!notificaciones || notificaciones.length === 0 ? (
             <div className="px-4 pb-4 text-sm text-slate-400">
               {notificaciones === null ? "Cargando..." : "Sin novedades por ahora."}

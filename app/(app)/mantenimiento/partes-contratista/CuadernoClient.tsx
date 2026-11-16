@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { createClient } from "@/lib/supabase/client";
 import { useCargar } from "@/lib/core/useCargar";
@@ -1446,6 +1447,7 @@ export default function CuadernoClient({
                   </button>
                 );
               })}
+              <InfoTip text="«Por confirmar» son los renglones con un sector que propuso el sistema y nadie confirmó: mientras no se confirme, no se genera su orden. «Dudosos» son los que el sistema no está seguro de haber leído bien —más de 200 h en un renglón, una fecha que no cierra, un número sin unidad—: entran igual y no frenan nada. Un renglón no sale como orden si no tiene sector, fecha, o ni horas ni precio; si está en un grupo con renglones de sectores distintos; o si el grupo ya tiene más de una orden. Además se generan hasta 25 por corrida, y la generación se niega entera si el contratista ya tiene órdenes de ese período cargadas a mano." />
             </div>
 
             {/* Filtrar por sector es lo que hace manejable juntar: se ve de a un
@@ -1862,7 +1864,8 @@ export default function CuadernoClient({
             </summary>
             <p className="mt-2 text-xs text-slate-500">
               Es la misma cuenta que hace la generación: antes de escribir, el servidor la vuelve a
-              calcular y se te muestra para confirmar. Generar no se deshace desde acá.
+              calcular y se te muestra para confirmar. Generar no se deshace desde acá.{" "}
+              <InfoTip text="«OT nueva»: el grupo todavía no tiene orden. «Suma horas»: alguno de sus renglones ya es una OT; se la reescribe con el total del grupo (las horas pasan a ser ese total, no se acumulan) y no se crea otra. «Revisar a mano»: el grupo apunta a dos o más órdenes distintas y no se toca ninguna. Un grupo cuyos renglones ya son todos una orden no aparece. El costo se guarda en la orden y se escribe además en la columna REPUESTO UTILIZADO de la planilla, sumado al texto que hubiera y sin pisarlo: queda en dos lugares que nada ata, y la ficha del equipo no lo suma a ningún costo." />
             </p>
             {puedeEditar && (
               <div className="mt-3">
@@ -2232,14 +2235,17 @@ function FilaDelRenglon({
             lo único irreversible de esta fila, y no se pone al lado de los campos
             que se tocan todo el tiempo. Un renglón ya convertido no se saca. */}
         {!bloqueado && (
-          <button
-            type="button"
-            onClick={onSacar}
-            className="shrink-0 self-end text-xs text-rose-700 underline"
-            title="Borra el renglón —para la tarea que ya tiene su OT cargada a mano—"
-          >
-            Sacar
-          </button>
+          <span className="flex shrink-0 items-center gap-1 self-end">
+            <button
+              type="button"
+              onClick={onSacar}
+              className="text-xs text-rose-700 underline"
+              title="Borra el renglón —para la tarea que ya tiene su OT cargada a mano—"
+            >
+              Sacar
+            </button>
+            <InfoTip text="Sacar borra el renglón de la carga y no se deshace. Es para la tarea que ya tiene su orden de trabajo cargada a mano: sacarla es decir que esas horas no se facturan desde acá. No se puede sacar un renglón que ya es una orden de trabajo ni uno que está en un grupo que ya generó. Nada más cuelga del renglón. El archivo del que salió (la foto o el Excel) sigue guardado, pero recuperar el renglón es volver a cargar ese archivo en otra carga; lo que sólo queda en el registro de auditoría es quién lo sacó y qué decía. Si ese registro no entra, no se borra." />
+          </span>
         )}
       </div>
 

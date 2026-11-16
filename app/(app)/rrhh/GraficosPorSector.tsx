@@ -50,7 +50,10 @@ export default function GraficosPorSector({
         </div>
 
         <div className="card p-5">
-          <h2 className="font-medium text-slate-700 mb-3">Horas extra por Sector</h2>
+          <h2 className="font-medium text-slate-700 mb-3 flex items-center gap-1.5">
+            Horas extra por Sector
+            <InfoTip text="Suma las horas extra que calculó el sistema en el período, estén validadas o no; el gráfico de costo de abajo parte de lo mismo. La liquidación y la planilla general sólo toman las validadas, así que lo que se paga puede ser menos que lo que muestra acá." />
+          </h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={horasExtraSector ?? []}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />

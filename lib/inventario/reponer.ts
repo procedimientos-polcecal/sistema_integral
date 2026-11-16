@@ -117,6 +117,16 @@ export function estaAbierto(
   return !COMPRA_CERRADA.has(String(ri.estado_compra ?? ""));
 }
 
+/**
+ * El texto del (i) que explica qué es «un pedido en curso» en Stock y en Para
+ * reponer. Vive al lado de `estaAbierto` y de `pedidosAbiertosPorCodigo` porque
+ * dice lo mismo que ellas: si cambia cuál estado cierra un pedido, o cómo se
+ * cruza con el artículo, cambia este texto. Una sola constante para que las dos
+ * pantallas no se separen.
+ */
+export const QUE_ES_UN_PEDIDO_EN_CURSO =
+  "Un artículo tiene un pedido en curso cuando algún requerimiento de Compras con su código no está recibido ni denegado (ni con la aprobación denegada). Se muestra el más nuevo y cuántos hay abiertos. No vence: uno viejo y trabado sigue contando. Un requerimiento cargado sin el código del artículo no se ve acá.";
+
 /** Días entre dos fechas ISO, en UTC para que no dependa del huso de quien mire. */
 function diasEntre(desde: string, hasta: string): number | null {
   const a = Date.parse(`${desde.slice(0, 10)}T00:00:00Z`);

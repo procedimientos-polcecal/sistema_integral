@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { PlantaDB } from "@/lib/trituracion/consultas";
+import InfoTip from "@/components/InfoTip";
 
 export default function PlantasClient({ plantas }: { plantas: PlantaDB[] }) {
   const router = useRouter();
@@ -32,7 +33,10 @@ export default function PlantasClient({ plantas }: { plantas: PlantaDB[] }) {
   return (
     <div className="mx-auto max-w-2xl">
       <Link href="/trituracion" className="text-xs text-slate-500 underline">← Trituración</Link>
-      <h1 className="page-header mt-1">Plantas</h1>
+      <div className="mt-1 flex items-baseline gap-2">
+        <h1 className="page-header">Plantas</h1>
+        <InfoTip text="Una planta desactivada deja de aparecer en el inicio, en el selector de partes y en el informe mensual, y sus partes ya cargados no suman en esos totales; no se borra nada, y el contador «Partes sin exportar» los sigue contando. Esta pantalla la ve quien administra Trituración, que incluye a los administradores del sistema." />
+      </div>
       <p className="page-subheader">
         El código es el número de la pestaña en la planilla (&ldquo;PLANTA {"{"}código{"}"}&rdquo;); no se edita acá.
       </p>

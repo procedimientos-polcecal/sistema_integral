@@ -7,6 +7,7 @@ import KpiCard from "@/components/KpiCard";
 import { ETIQUETA_UNIDAD, unidadDeUso } from "@/lib/tallerVial/equipos";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import ActualizarCargas from "./ActualizarCargas";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -181,8 +182,14 @@ export default function CargasClient({
                 <th>Equipo</th>
                 <th className="text-right">Litros</th>
                 <th className="text-right">Lectura</th>
-                <th className="text-right">Trabajado</th>
-                <th className="text-right">Consumo</th>
+                <th className="text-right">
+                  Trabajado
+                  <InfoTip className="ml-1" text="La lectura de esta carga menos la de la carga anterior con lectura del mismo equipo, aunque sea de otro mes; puede salir negativo. Queda en — si no hay una anterior, si esta carga no trae lectura o si el equipo no se reconoció." />
+                </th>
+                <th className="text-right">
+                  Consumo
+                  <InfoTip className="ml-1" text="Litros de esta carga divididos por lo trabajado. Queda en — si no hay trabajado o dio cero o menos. Una sola carga dice poco, porque no siempre se llena el tanque: para juzgar un equipo mirá el consumo del mes en el inicio." />
+                </th>
                 <th>Observaciones</th>
               </tr>
             </thead>

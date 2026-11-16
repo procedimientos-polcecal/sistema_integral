@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import KpiCard from "@/components/KpiCard";
@@ -146,6 +147,7 @@ export default function StockClient({
             error={sync?.error}
             que="Odoo leído"
           />
+          <InfoTip text="Lee primero la planilla, que es lo que mueve el saldo, y después controla los camiones contra Odoo. La fecha «Odoo leído» es la del control contra Odoo, no la de la lectura de la planilla. Una fila que se vacía en la planilla no se borra sola del libro: se avisa y la saca una persona." />
           {puedeEditar && (
             <button
               onClick={sincronizar}
@@ -163,7 +165,10 @@ export default function StockClient({
         <Saldo titulo="Vegetal" valor={saldos.vegetal} desde={ultimoConsumo.vegetal} />
         <Saldo titulo="Residual" valor={saldos.residual} desde={ultimoConsumo.residual} />
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Total
+            <InfoTip className="ml-1 normal-case tracking-normal" text="Es la suma de vegetal y residual, calculada: no es la columna TOTAL de la planilla, que desde la fila 386 quedó 0,450 t por encima de la suma de sus dos columnas. Si comparás por el total no van a coincidir; mandan los saldos por tipo." />
+          </p>
           <p className="mt-1 text-3xl font-bold text-slate-900">{t(saldos.total)}</p>
           <p className="text-xs text-slate-400">toneladas</p>
         </div>
@@ -270,9 +275,15 @@ export default function StockClient({
                 <th className="px-3 py-2">Fecha</th>
                 <th className="px-3 py-2">Qué</th>
                 <th className="px-3 py-2 text-right">Toneladas</th>
-                <th className="px-3 py-2 text-right">Vegetal</th>
+                <th className="px-3 py-2 text-right">
+                  Vegetal
+                  <InfoTip className="ml-1 normal-case tracking-normal" text="Esta columna y la de Residual son el saldo de cada tipo después de ese movimiento, no las toneladas del movimiento. Dentro de un mismo día el orden es el de carga: el saldo que vale es el del cierre del día." />
+                </th>
                 <th className="px-3 py-2 text-right">Residual</th>
-                <th className="px-3 py-2">Origen</th>
+                <th className="px-3 py-2">
+                  Origen
+                  <InfoTip className="ml-1 normal-case tracking-normal" text="«Importado» es lo que se leyó de la planilla, y desde el 13/10/2026 es el camino normal y no sólo la carga inicial. «Odoo» son filas de antes, de cuando Odoo creaba los movimientos; «Balanza», las que escribe la recepción de Despacho; «A mano», las que se cargaron en esta pantalla." />
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

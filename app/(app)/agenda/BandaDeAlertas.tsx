@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { EntradaDeLaBanda } from "@/lib/agenda/banda";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * La franja ámbar encima de la grilla con lo que tiene algo que decir: un evento
@@ -47,7 +48,8 @@ export default function BandaDeAlertas({
       style={{ background: "#FFFBEB", borderColor: "#FCD34D", color: "#92400E" }}
     >
       <p className="font-semibold">
-        {entradas.length === 1 ? "1 evento necesita atención" : `${entradas.length} eventos necesitan atención`}
+        {entradas.length === 1 ? "1 evento necesita atención" : `${entradas.length} eventos necesitan atención`}{" "}
+        <InfoTip text="Van primero los que alguien movió o borró en Google, después los que no llegaron a escribirse allá y después los demás avisos. La alerta de un evento divergido sigue acá aunque la hayas dado por vista: «Ya lo vi» apaga la campana sólo para quien lo aprieta, y se va cuando quien lo creó lo destraba. La banda trae también los divergidos y los pendientes de fechas que no estás mirando." />
       </p>
       <ul className="mt-1 space-y-0.5">
         {visibles.map((e) => (

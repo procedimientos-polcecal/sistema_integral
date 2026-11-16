@@ -109,6 +109,9 @@ export default function ConfiguracionClient({ config, turnos }: { config: any; t
             {guardando ? "Guardando..." : "Guardar configuración"}
           </button>
           {guardado && <span className="ml-3 text-sm text-emerald-600">Guardado.</span>}
+          <span className="ml-3 inline-flex align-middle">
+            <InfoTip text="Guardar no recalcula las rutas ya generadas: cada una conserva los km, los minutos y el dibujo con que se calculó, y se actualizan sólo cuando se la regenera o se le edita una parada." />
+          </span>
         </div>
       </div>
 
@@ -156,6 +159,10 @@ function TurnosCard({ turnos, onChange }: { turnos: any[]; onChange: () => void 
           </div>
         ))}
       </div>
+      <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
+        Eliminar y desactivar
+        <InfoTip text="Un turno que ya tiene rutas o plantillas no se puede eliminar, y desde esta pantalla tampoco se puede desactivar: sólo se cambian nombre, horario y color. Uno sin historial se elimina y se lleva su asistencia y su plan semanal." />
+      </p>
       {modal && <TurnoModal t={modal.t} onClose={() => setModal(null)} onSaved={() => { setModal(null); onChange(); }} />}
     </div>
   );

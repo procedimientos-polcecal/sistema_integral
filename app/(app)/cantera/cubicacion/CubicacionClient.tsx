@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import InfoTip from "@/components/InfoTip";
 import type { FilaCierreCubicacion, LecturaDeCubicacion } from "@/lib/cantera/cubicacion";
 import { CLAVE_C1C3, MATERIALES_DE_CANTERA, type DesgloseDeMaterial, type ExistenciaDeMaterial } from "@/lib/cantera/cubicacionPorMaterial";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -277,13 +278,22 @@ export default function CubicacionClient({
                   <span className="font-semibold text-slate-800">{tarjeta.titulo}</span>
                   <span className="text-xs text-slate-400">{tarjeta.subtitulo}</span>
                 </div>
-                <BadgeLectura lectura={fila?.lectura ?? null} />
+                <span className="flex items-center gap-1.5">
+                  <BadgeLectura lectura={fila?.lectura ?? null} />
+                  <InfoTip text="Compara el stock teórico con la existencia final medida. La diferencia, el residuo, se mide sobre lo volado del mes y no sobre el stock: hasta 5 % cierra, hasta 10 % es aceptable y más de eso hay que revisar. «Sin actividad» es un mes sin voladuras, y «Pendiente» que falta la existencia final de este mes o la del mes anterior, que es la inicial." />
+                </span>
               </div>
 
               <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-                <dt className="text-slate-500">Exist. inicial</dt>
+                <dt className="text-slate-500">
+                  Exist. inicial
+                  <InfoTip className="ml-1" text="Es la existencia final total del mes anterior. Si ese mes no tiene un cierre cargado queda en «—» y no en cero, y sin existencia inicial no hay stock teórico ni residuo." />
+                </dt>
                 <dd className="text-right font-mono tabular-nums text-slate-700">{t(fila?.existenciaInicial ?? null)}</dd>
-                <dt className="text-slate-500">Voladuras</dt>
+                <dt className="text-slate-500">
+                  Voladuras
+                  <InfoTip className="ml-1" text="Toneladas estimadas por la malla, no pesadas, de las perforaciones que terminaron de perforarse ese mes, aunque se hayan volado en otro: así cierra la planilla de cubicación. Una perforación sin fecha de fin no cuenta en ningún mes, y una cuya tonelada no se puede estimar (falta densidad, malla o metros) entra como 0, lo que baja el stock teórico y mueve el residuo." />
+                </dt>
                 <dd className="text-right font-mono tabular-nums text-slate-700">{t(fila?.voladuras ?? 0)}</dd>
                 <dt className="text-slate-500">Acarreo</dt>
                 <dd className="text-right font-mono tabular-nums text-slate-700">{t(fila?.acarreo ?? 0)}</dd>

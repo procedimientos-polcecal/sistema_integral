@@ -84,6 +84,8 @@ function VehiculosTab({ vehiculos, choferes, canEdit }: { vehiculos: any[]; chof
             className="text-sm text-blue-600 hover:underline disabled:opacity-50">
             {importando ? "Importando..." : "Importar Excel"}
           </button>
+          <InfoTip text="Lee la primera hoja por posición de columna: nombre, chofer, capacidad y teléfono. Sólo agrega los vehículos cuyo nombre no existe (sin mirar mayúsculas): los que ya están se saltean sin actualizarlos, un chofer que no existe se crea y una capacidad vacía o inválida queda en 8. La pantalla no dice cuántos se agregaron ni si el archivo falló." />
+          <InfoTip text="Un vehículo con rutas generadas no se puede eliminar, y el mensaje sugiere desactivarlo, pero esta pantalla no tiene ese control: sólo se editan nombre, chofer y capacidad. Sólo los vehículos activos entran en «Generar Ida» y «Generar Vuelta»." />
           <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={importar} />
         </div>
       )}

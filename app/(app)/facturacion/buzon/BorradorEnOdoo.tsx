@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
 import type { BorradorDeOdoo } from "@/lib/odoo/borradorDeOdoo";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * El borrador de Odoo, para revisarlo y confirmarlo sin salir del sistema.
@@ -262,6 +263,7 @@ export default function BorradorEnOdoo({
                     </button>
                   </>
                 )}
+                <InfoTip text="Confirmar en Odoo postea el asiento, y eso no se deshace desde el sistema: un asiento posteado es inmutable, Odoo le asigna el número del diario y corregirlo después es reabrirlo o reversarlo, que ya es una operación contable. Sólo lo hace un administrador de Facturación. Antes de postear el sistema comprueba que el asiento siga en borrador, que su total coincida con el del comprobante (con un margen de un centavo por línea; si la factura no tiene importe cargado esa comparación no se hace) y que el borrador tenga lo mismo que está cargado en el sistema, cuenta y analítica incluidas. Si algo no cuadra no postea y dice qué. Queda registrado quién lo posteó, el número del asiento y el total, pero el registro se escribe después de postear: si no se pudiera escribir, el asiento ya está posteado y la pantalla no lo avisa." />
               </div>
             )
           )}

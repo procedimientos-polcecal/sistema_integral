@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BotonNotificaciones } from "@/components/BotonNotificaciones";
+import InfoTip from "@/components/InfoTip";
 
 export default function MiCuentaClient({
   email,
@@ -55,7 +56,10 @@ export default function MiCuentaClient({
 
   return (
     <div className="space-y-6 max-w-md">
-      <h1 className="text-xl font-bold text-slate-900">Mi cuenta</h1>
+      <div className="flex items-baseline gap-2">
+        <h1 className="text-xl font-bold text-slate-900">Mi cuenta</h1>
+        <InfoTip text="Tus datos y lo que podés cambiar vos: la contraseña y las notificaciones de este aparato. El nombre, el email y el rol se muestran pero no se editan desde acá." />
+      </div>
 
       <div className="card p-5 space-y-2 text-sm">
         <div>
@@ -68,7 +72,8 @@ export default function MiCuentaClient({
         </div>
         <div>
           <span className="text-slate-500">Rol: </span>
-          <span className="text-slate-900">{rolLabel}</span>
+          <span className="text-slate-900">{rolLabel}</span>{" "}
+          <InfoTip text="El rol no decide por sí solo qué módulos ves: «Admin sistema» ve todos y entra a Administración; con «Encargado» u «Operario» ves los módulos que te hayan concedido. En algunos lugares puntuales el rol además cuenta: por ejemplo, un encargado ve en Disponibilidad el detalle por motivo y el anual aunque no tenga RRHH." />
         </div>
       </div>
 
@@ -78,7 +83,10 @@ export default function MiCuentaClient({
           prenderlas estaba escondido adentro de `/mi-remis`, que lo ve un
           puñado de gente — por eso en dos años no las activó nadie. */}
       <div className="card p-5">
-        <h2 className="font-medium text-slate-700 mb-3">Notificaciones</h2>
+        <div className="mb-3 flex items-center gap-2">
+          <h2 className="font-medium text-slate-700">Notificaciones</h2>
+          <InfoTip text="Llegan de cuatro maneras. Un resumen diario a las 8:30 (hora de Argentina) con lo que tenés para mirar según tus módulos: los lunes trae los totales y los demás días sólo lo que subió desde el resumen anterior; si no hay nada, no manda nada. En el momento: un requerimiento de compra o una orden de servicio esperando tu aprobación, si sos de quienes aprueban, y un evento de tu Agenda que alguien movió o borró en Google. Y a las 19:00, el remis que tengas asignado para mañana. Las menciones de la mensajería llegan por correo, no por acá. Se prenden por aparato." />
+        </div>
         <BotonNotificaciones />
       </div>
 

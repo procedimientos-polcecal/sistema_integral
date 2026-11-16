@@ -87,8 +87,18 @@ export default function EmpleadosClient({ empleados, turnos }: { empleados: any[
               <th className="pb-2">Legajo</th>
               <th className="pb-2">Nombre</th>
               <th className="pb-2">Dirección de recogida</th>
-              <th className="pb-2">Coordenadas</th>
-              <th className="pb-2">Turno default</th>
+              <th className="pb-2">
+                <span className="inline-flex items-center gap-1">
+                  Coordenadas
+                  <InfoTip text="«OK» sólo dice que hay coordenadas, no que sean las del domicilio: «Geocodificar faltantes» guarda el primer resultado que devuelve Nominatim (OpenStreetMap) sin mostrártelo, saltea sin avisar las direcciones que no encuentra y sólo toma a quienes tienen dirección cargada; el resto también figura «Falta geocodificar». Para comprobar una, abrila con Editar y mirá el pin." />
+                </span>
+              </th>
+              <th className="pb-2">
+                <span className="inline-flex items-center gap-1">
+                  Turno default
+                  <InfoTip text="Es la costumbre de cada uno, no una regla: la usan «Marcar según turno default» en Hoy y «Todos» en Semana, y decide en qué turno aparece cada persona en esas listas. Quien se marca en otro turno aparece igual en ese turno." />
+                </span>
+              </th>
               <th className="pb-2"></th>
             </tr>
           </thead>

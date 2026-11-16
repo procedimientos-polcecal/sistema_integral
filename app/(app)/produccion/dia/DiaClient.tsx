@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import InfoTip from "@/components/InfoTip";
 import { useRouter } from "next/navigation";
 import { comoSeLee, sumarDias, hoyEnArgentina } from "@/lib/core/fechas";
 import { comoSeLeeElTurno, parteAnterior } from "@/lib/produccion/turnos";
@@ -16,6 +17,20 @@ const FAMILIAS: { clave: Familia; etiqueta: string }[] = [
   { clave: "cal", etiqueta: "Cal" },
   { clave: "otros", etiqueta: "Otros" },
 ];
+
+/**
+ * Los `(i)` de los encabezados. El respaldo está en `docs/INFOTIPS.md`: salen de
+ * `docs/PRODUCCION.md` («Que la producción no se mide: se despeja») y de
+ * `produccionDelTurno`, `produccionDelDia` y `totalesDeDespacho`.
+ */
+const INFO_PRODUCCION_T1 =
+  "Turno de 4 a 12. No se carga: sale de depósito − depósito del parte anterior + despachado + rotura. Un negativo se muestra en rojo y no se recorta a cero: es un error de carga que hay que corregir.";
+const INFO_PRODUCCION_T2 =
+  "Turno de 12 a 20. La misma cuenta que T1, contra el parte de 4 a 12 del mismo día. Esas otras ocho horas, de 20 a 4, no se registran.";
+const INFO_PRODUCCION_DEL_DIA =
+  "La suma de T1 y T2. Si falta cargar uno de los dos, o el parte anterior de alguno, queda «—» y no una suma parcial. El primer parte que se carga en el sistema es sólo línea de base: ese día no muestra producción.";
+const INFO_DESPACHADO =
+  "Son bultos, no kilos, sumados de los renglones de camión de los dos turnos. Sólo entran los renglones con producto reconocido, y uno con kilos pero sin bultos suma cero.";
 
 interface Props {
   fecha: string;
@@ -201,10 +216,22 @@ export default function DiaClient({ fecha, renglonesDePapel, turnos, delDia, pue
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-3 py-2 text-left">Producto</th>
-                  <th className="px-3 py-2 text-right">Producción T1</th>
-                  <th className="px-3 py-2 text-right">Producción T2</th>
-                  <th className="px-3 py-2 text-right">Producción del día</th>
-                  <th className="px-3 py-2 text-right">Despachado</th>
+                  <th className="px-3 py-2 text-right">
+                    Producción T1
+                    <InfoTip text={INFO_PRODUCCION_T1} className="ml-1" />
+                  </th>
+                  <th className="px-3 py-2 text-right">
+                    Producción T2
+                    <InfoTip text={INFO_PRODUCCION_T2} className="ml-1" />
+                  </th>
+                  <th className="px-3 py-2 text-right">
+                    Producción del día
+                    <InfoTip text={INFO_PRODUCCION_DEL_DIA} className="ml-1" />
+                  </th>
+                  <th className="px-3 py-2 text-right">
+                    Despachado
+                    <InfoTip text={INFO_DESPACHADO} className="ml-1" />
+                  </th>
                   <th className="px-3 py-2 text-right">Rotura bolsa</th>
                   <th className="px-3 py-2 text-right">Rotura bolsón</th>
                 </tr>

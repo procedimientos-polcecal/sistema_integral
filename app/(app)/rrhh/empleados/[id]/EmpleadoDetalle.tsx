@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/ConfirmProvider";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import InfoTip from "@/components/InfoTip";
 
 const tabs = ["fichadas", "ausencias", "vacaciones", "francos"] as const;
 type Tab = (typeof tabs)[number];
@@ -286,9 +287,12 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
   return (
     <div>
       <div className="flex items-start justify-between mb-1">
-        <h1 className="text-xl font-bold text-slate-900">
-          {empleado.apellido}, {empleado.nombre}
-          {!empleado.activo && <span className="ml-2 text-sm font-normal text-red-600">(inactivo)</span>}
+        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <span>
+            {empleado.apellido}, {empleado.nombre}
+            {!empleado.activo && <span className="ml-2 text-sm font-normal text-red-600">(inactivo)</span>}
+          </span>
+          <InfoTip text="Las horas extra de cada día no entran en la liquidación hasta que se validan con «Validar», y la validación se pierde si después cambian las horas extra de ese día. «(manual)» marca un día con las horas corregidas a mano: el recálculo no lo pisa." />
         </h1>
         {canEdit && (
           <div className="flex gap-2">
@@ -607,7 +611,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                   <th className="pb-2">Año corresp.</th>
                   <th className="pb-2">Justificada</th>
                   <th className="pb-2">Observaciones</th>
-                  <th className="pb-2"></th>
+                  <th className="pb-2 text-right"><InfoTip text="«Eliminar» borra la ausencia y no se deshace. Si era de vacaciones y el período se creó desde el formulario de ausencias, se lleva también ese período de vacaciones y el balance deja de contarlo; un período cargado desde la pestaña Vacaciones no cuelga de la ausencia. Después el sistema recalcula esos días y vuelven a verse como si nunca hubiera habido nada, porque las ausencias no tienen historial: lo que decía queda sólo en el registro de auditoría, con quién lo borró, y ese registro se escribe antes del borrado. Esta pantalla no mira si el período ya está liquidado (la del encargado de Mantenimiento sí se niega), y la liquidación ya generada no cambia: sus totales quedaron calculados al generarla. «Editar» también queda registrado, con lo que decía antes y lo que dice ahora." /></th>
                 </tr>
               </thead>
               <tbody>

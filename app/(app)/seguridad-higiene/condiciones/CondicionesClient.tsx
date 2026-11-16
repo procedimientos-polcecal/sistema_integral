@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import { comoSeLee } from "@/lib/core/fechas";
 import { clasificar, type Clasificacion } from "@/lib/seguridadHigiene/riesgo";
 import { estadoDe, type Estado, type Falta } from "@/lib/seguridadHigiene/condicion";
@@ -96,12 +97,14 @@ function Marcas({ c, hoy }: { c: FilaDeCondicion; hoy: string }) {
  * que la flecha sea la única señal.
  */
 function Encabezado({
-  columna, orden, onOrdenar, children,
+  columna, orden, onOrdenar, children, info,
 }: {
   columna: ColumnaOrdenable;
   orden: OrdenDeColumna;
   onOrdenar: (c: ColumnaOrdenable) => void;
   children: React.ReactNode;
+  /** El `(i)` de la columna: va al lado del botón y no adentro, para que tocarlo no ordene. */
+  info?: string;
 }) {
   const activa = orden.columna === columna;
   return (
@@ -113,9 +116,29 @@ function Encabezado({
         {children}
         <span className="ml-1 text-xs text-slate-400">{activa ? (orden.ascendente ? "▲" : "▼") : ""}</span>
       </button>
+      {info && <InfoTip text={info} className="ml-1" />}
     </th>
   );
 }
+
+const INFO_DE_LA_PANTALLA =
+  "Una condición se carga en dos tiempos: quien la ve anota qué vio, dónde, la acción propuesta y la prioridad; el riesgo, el responsable, la fecha máxima y el cierre se completan después desde la ficha, y lo que falta se marca en ámbar. " +
+  "Por defecto la tabla pone arriba las vencidas, después las abiertas a las que les falta algo, después las completas por nivel de riesgo y al final las cerradas. En la tabla de la computadora, tocar un encabezado cambia ese orden hasta que volvés al sugerido.";
+
+const INFO_DE_LOS_NUMEROS =
+  "Cuentan todas las condiciones, no las que dejan los filtros. «Sin completar» son las abiertas a las que les falta algo: «Sin evaluar» (alguno de los cinco puntajes del riesgo), «Sin asignar» (responsable o fecha máxima) o «Sin lugar» (ni sector ni equipo). " +
+  "Una vencida sin evaluar cuenta en las dos, así que vencidas y sin completar no suman. Una cerrada no pide nada, aunque le falte.";
+
+const INFO_DEL_ESTADO =
+  "Cerrada: tiene fecha de ejecución, aunque la máxima ya haya pasado. Vencida: no tiene fecha de ejecución y la fecha máxima es anterior a hoy; el día de la máxima todavía no vence. Pendiente: todo lo demás, incluida una sin fecha máxima, que por eso nunca vence. " +
+  "Las marcas ámbar junto al estado son lo que le falta.";
+
+const INFO_DEL_PELIGRO =
+  "Sale del glosario de peligros del sistema. Si no se eligió, no se muestra (un guion en la tabla, nada en la tarjeta del teléfono): las 44 condiciones que vinieron del Excel entraron sin peligro, porque la planilla no tenía esa columna —estaba escrito dentro de la descripción— y no se lo dedujo del texto. Se completa desde la ficha.";
+
+const INFO_DEL_RIESGO =
+  "Sigla de la clasificación y nivel (probabilidad × gravedad). Cortes: I desde 139, S desde 90, M desde 49, PS desde 18, NS menos de 18. El guion quiere decir que falta alguno de los cinco puntajes, que se cargan en la ficha. " +
+  "En la tabla de la computadora, al ordenar por esta columna, las sin evaluar quedan al final: no son de riesgo bajo, son de las que no se sabe.";
 
 export default function CondicionesClient({
   filtrosIniciales,
@@ -287,7 +310,10 @@ export default function CondicionesClient({
           tenía este módulo y no aquél no tenía forma de cargar nada. */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-        <h1 className="text-xl font-bold text-slate-900">Condiciones inseguras</h1>
+        <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900">
+          Condiciones inseguras
+          <InfoTip text={INFO_DE_LA_PANTALLA} />
+        </h1>
         <p className="text-sm text-slate-500">
           {visibles.length} de {filas.length} condiciones.
           {resumen.cerradas > 0 && ` ${resumen.cerradas} cerradas.`}
@@ -338,6 +364,7 @@ export default function CondicionesClient({
         >
           <span className="text-lg font-bold text-slate-900">{resumen.abiertas}</span> abiertas
         </button>
+        <InfoTip text={INFO_DE_LOS_NUMEROS} className="self-center" />
       </div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -435,11 +462,11 @@ export default function CondicionesClient({
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <Encabezado columna="numero" orden={orden} onOrdenar={cambiarOrden}>N°</Encabezado>
-                  <Encabezado columna="estado" orden={orden} onOrdenar={cambiarOrden}>Estado</Encabezado>
+                  <Encabezado columna="estado" orden={orden} onOrdenar={cambiarOrden} info={INFO_DEL_ESTADO}>Estado</Encabezado>
                   <Encabezado columna="lugar" orden={orden} onOrdenar={cambiarOrden}>Lugar</Encabezado>
                   <Encabezado columna="descripcion" orden={orden} onOrdenar={cambiarOrden}>Qué se vio</Encabezado>
-                  <Encabezado columna="peligro" orden={orden} onOrdenar={cambiarOrden}>Peligro</Encabezado>
-                  <Encabezado columna="riesgo" orden={orden} onOrdenar={cambiarOrden}>Riesgo</Encabezado>
+                  <Encabezado columna="peligro" orden={orden} onOrdenar={cambiarOrden} info={INFO_DEL_PELIGRO}>Peligro</Encabezado>
+                  <Encabezado columna="riesgo" orden={orden} onOrdenar={cambiarOrden} info={INFO_DEL_RIESGO}>Riesgo</Encabezado>
                   <Encabezado columna="responsable" orden={orden} onOrdenar={cambiarOrden}>Responsable</Encabezado>
                   <Encabezado columna="fecha_maxima" orden={orden} onOrdenar={cambiarOrden}>Fecha máxima</Encabezado>
                 </tr>
@@ -495,6 +522,14 @@ export default function CondicionesClient({
           </div>
 
           {/* Tarjetas en el teléfono: la tabla no entra y recortarla miente. */}
+          {/* Las tarjetas son un botón entero y un `(i)` adentro sería un botón
+              dentro de otro, así que los tres van acá, una sola vez, con el mismo
+              texto que los encabezados de la tabla. */}
+          <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 md:hidden">
+            <span className="inline-flex items-center gap-1">Estado <InfoTip text={INFO_DEL_ESTADO} /></span>
+            <span className="inline-flex items-center gap-1">Riesgo <InfoTip text={INFO_DEL_RIESGO} /></span>
+            <span className="inline-flex items-center gap-1">Peligro <InfoTip text={INFO_DEL_PELIGRO} /></span>
+          </p>
           <ul className="space-y-2 md:hidden">
             {visibles.map((c) => (
               <li key={c.id}>

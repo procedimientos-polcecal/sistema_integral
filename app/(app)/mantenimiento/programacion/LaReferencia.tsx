@@ -7,6 +7,7 @@ import { useCargar } from "@/lib/core/useCargar";
 import { comoSeLee, semanaDe } from "@/lib/core/fechas";
 import type { Grupo, Oficio } from "@/lib/mantenimiento/programacion";
 import { OFICIO_TEXTO, TURNO_TEXTO, diaMes, llamar, type Persona } from "./programacionComun";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * La referencia del ciclo: de qué semana se cuenta todo lo demás.
@@ -51,6 +52,14 @@ import { OFICIO_TEXTO, TURNO_TEXTO, diaMes, llamar, type Persona } from "./progr
  * `/api/mantenimiento/programacion/referencia`; acá sólo se muestran sus
  * mensajes. Esta pantalla no toca la base.
  */
+
+/**
+ * Lo que dice el `(i)` junto al botón de guardar, según qué se está haciendo. Los tres
+ * modos escriben la misma tabla y no pasa lo mismo con el pasado, así que el texto cambia.
+ */
+const INFO_DE_CORREGIR = "Corregir pisa la referencia en su lugar: todas las semanas que se calculan desde ella, incluidas las que ya pasaron, van a mostrar otros turnos, y lo que mostraban antes no se guarda en ningún otro lado. Queda en el registro de auditoría, con lo que decía antes, lo que dice ahora y quién lo hizo; ese registro se escribe antes de cambiar y, si no entra, no se guarda nada. Desde esta pantalla no se puede sacar una referencia, sólo corregirla o agregar otra.";
+const INFO_DE_ANCLAR = "Volver a anclar agrega una referencia nueva y deja la anterior donde está: desde ese lunes manda la nueva, y las semanas anteriores se siguen viendo como se vieron. Queda en el registro de auditoría, con quién lo hizo, y se escribe antes de guardar. Desde esta pantalla no se puede sacar una referencia ya cargada, sólo corregirla.";
+const INFO_DE_CARGAR = "Es la primera referencia: de acá se cuenta todo el ciclo, hacia adelante y hacia atrás. Si el grupo o algún electricista está mal, todas las semanas salen mal sin que aparezca ningún error en pantalla, y esta carga no pide confirmación. Después se puede corregir. Queda registrado quién la cargó.";
 
 /** Un ancla como la devuelve el `GET` de la ruta. */
 interface Ancla {
@@ -384,6 +393,10 @@ export default function LaReferencia({
                 >
                   {modo === "correccion" ? "Guardar la corrección" : "Cargar la referencia"}
                 </button>
+                <InfoTip
+                  className="self-center"
+                  text={modo === "correccion" ? INFO_DE_CORREGIR : modo === "nueva" ? INFO_DE_ANCLAR : INFO_DE_CARGAR}
+                />
               </div>
             </div>
           )}

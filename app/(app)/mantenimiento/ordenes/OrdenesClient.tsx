@@ -631,6 +631,7 @@ export default function OrdenesClient({
             >
               {ORDENES_DEL_LISTADO.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
             </Select>
+            <InfoTip text="«Sugerido (GUT)» pone primero lo que sigue abierto —todo menos Realizado y Suspendida— y dentro de eso lo de más puntaje; entre iguales va la de número más alto. Una orden sin puntaje se ordena como si valiera 27 (3×3×3), no como cero: queda en el medio del pelotón. No sirve para buscar una orden puntual: para eso, «N° de OT»." />
           </div>
         </div>
       )}
@@ -1023,6 +1024,7 @@ function OTDetail({
         <span className="flex items-center gap-2">
           <span className="text-xs text-slate-400">GUT</span>
           <PuntajeGut orden={o} />
+          <InfoTip text="El puntaje es gravedad × urgencia × tendencia, de 1 a 125, y sólo existe con las tres notas: con una o dos queda la raya. La «Prioridad» de arriba sale de él cuando hay puntaje (más de 80 es Alta, de 30 a 80 Media, menos de 30 Baja) y puede decir otra cosa que la planilla; sin puntaje vale lo que diga la planilla. El GUT no se exporta a ninguna planilla: quien no entra al SdG no lo ve." />
         </span>
         {(["gravedad", "urgencia", "tendencia"] as const).map((campo) => {
           const nota: number | null = o[`gut_${campo}`] ?? null;

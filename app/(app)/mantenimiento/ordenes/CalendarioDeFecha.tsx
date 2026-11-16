@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import { norm } from "@/lib/core/texto";
 import {
   comoSeLee, diaDeLaSemana, hoyEnArgentina, mesRelativo, rangoDelMes, semanaDe,
@@ -603,7 +604,10 @@ function PanelDelDia({
       )}
 
       <div className="space-y-1">
-        <div className="text-[11px] font-semibold uppercase text-slate-500">Gente del taller</div>
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase text-slate-500">
+          Gente del taller
+          <InfoTip text="Cuenta las personas del padrón del taller (se carga en Programación) que ese día están dadas de alta y a las que no les consta una ausencia cargada ni un franco tomado con ese día. Es por día y no por turno, y una tardanza no cuenta como falta. Lo que nadie cargó —una ausencia, un franco sin día— no se descuenta, así que el número puede quedar de más. En días anteriores a la fecha desde la que cada persona figura en el padrón el panel no puede saber: dice «Padrón sin cargar» o «nadie ese día», y ninguna de las dos cosas prueba que no hubiera gente. «No lleva gente del taller» es CIVIL, INSTRUMENTACIÓN, OTRO o una orden sin especialidad: el padrón sólo tiene mecánicos, electricistas y lubricadores." />
+        </div>
         {!gente.sabemos ? (
           <p className="rounded-lg px-2 py-1 text-xs" style={{ background: "#fef3c7", color: "#92400e" }}>
             Padrón sin cargar: no se sabe cuánta gente del taller hay ese día.

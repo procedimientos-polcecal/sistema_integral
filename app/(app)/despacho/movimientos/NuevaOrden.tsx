@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { RemitoDeOdoo } from "@/lib/despacho/types";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * Dar de alta una orden de carga, con el camión en la puerta.
@@ -171,14 +172,17 @@ export default function NuevaOrden({
 
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <label className="block text-sm font-medium text-slate-700">
-            Remito de Odoo
-            {remitos !== null && (
-              <span className="ml-2 font-normal text-slate-400">
-                {remitos.length} de los últimos días
-              </span>
-            )}
-          </label>
+          <div className="flex items-center">
+            <label className="block text-sm font-medium text-slate-700">
+              Remito de Odoo
+              {remitos !== null && (
+                <span className="ml-2 font-normal text-slate-400">
+                  {remitos.length} de los últimos días
+                </span>
+              )}
+            </label>
+            <InfoTip className="ml-1" text="Los remitos de salida de Odoo programados desde seis días antes del día que estás viendo hasta el día siguiente, sin los cancelados y en cualquier otro estado, también borrador y sin validar. Cuenta la fecha programada, no la de creación. Trae como máximo los 400 más nuevos, así que si hubiera más faltarían los más viejos. Si un remito tiene varios productos, trae sólo el primero. Los que ya tienen orden quedan atenuados, con «ya tiene orden»." />
+          </div>
           <button
             onClick={onRefrescar}
             disabled={trayendo}

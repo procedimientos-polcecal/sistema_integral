@@ -20,6 +20,7 @@ import {
 import MultiSelect from "../MultiSelect";
 import MarcaMontoAlto from "../MarcaMontoAlto";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import { filtroDeMontoAlto } from "@/lib/compras/montoAlto";
 import {
   ESTADOS_APROBACION, ESTADOS_COMPRA, PRIORIDADES,
@@ -486,7 +487,10 @@ export default function RequerimientosClient({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-baseline gap-x-3">
-            <h1 className="text-xl font-bold text-slate-900">Requerimientos internos</h1>
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-xl font-bold text-slate-900">Requerimientos internos</h1>
+              <InfoTip text="Es la lista completa de requerimientos internos (RI), de todas las áreas. Cada uno lleva dos estados independientes, la aprobación de gerencia y la etapa de Compras, que son columnas distintas. Con permiso de edición hay además una columna de acciones para avanzar el circuito." />
+            </div>
             <UltimaSincronizacion
               cuando={sync?.created_at}
               ok={sync?.ok ?? true}
@@ -678,16 +682,16 @@ export default function RequerimientosClient({
               <tr>
                 <th className="px-3 py-2 text-left">N° RI</th>
                 <th className="px-3 py-2 text-left">Fecha</th>
-                <th className="px-3 py-2 text-left">Descripción</th>
+                <th className="px-3 py-2 text-left">Descripción<InfoTip className="ml-1 normal-case" text="«Vencido hace N días» cuenta contra la fecha en que se necesita, que la gente suele cargar como «ya»: casi todo lo abierto figura vencido, así que no mide atraso de Compras." /></th>
                 <th className="px-3 py-2 text-left">Área</th>
                 <th className="px-3 py-2 text-left">Dónde</th>
                 <th className="px-3 py-2 text-right">Cant.</th>
                 <th className="px-3 py-2 text-left">Prioridad</th>
                 <th className="px-3 py-2 text-left">Paga</th>
                 <th className="px-3 py-2 text-left">Aprobación</th>
-                <th className="px-3 py-2 text-left">Compra</th>
+                <th className="px-3 py-2 text-left">Compra<InfoTip className="ml-1 normal-case" text="«En espera» no es una etapa sino un desvío: un pedido que alguien frenó a propósito. Al sacarlo vuelve a la etapa donde estaba." /></th>
                 <th className="px-3 py-2 text-left">Proveedor</th>
-                <th className="px-3 py-2 text-right">Costo + IVA</th>
+                <th className="px-3 py-2 text-right">Costo + IVA<InfoTip className="ml-1 normal-case" text="Vacío no es cero: el costo real no existe hasta que se compra. Hasta entonces «Monto alto» mira el presupuesto en pesos más alto; los cargados en dólares no se cuentan, ni siquiera convertidos. «Sin monto alto» incluye también lo que alguien desmarcó a mano y lo que todavía no tiene ningún número." /></th>
                 {canEdit && <th className="px-3 py-2 text-left">Acción</th>}
               </tr>
             </thead>

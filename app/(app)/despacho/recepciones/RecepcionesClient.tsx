@@ -13,6 +13,7 @@ import {
 } from "@/lib/despacho/recepcion";
 import type { FilaDeRecepcion, ProveedorParaElAlta } from "./page";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * La balanza.
@@ -95,7 +96,10 @@ export default function RecepcionesClient({
     <div className="mx-auto max-w-5xl space-y-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Recepción de material</h1>
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-xl font-bold text-slate-900">Recepción de material</h1>
+            <InfoTip text="El estado se despeja de lo cargado, no se guarda: Esperando el bruto es sin peso bruto; Descargando, con bruto y sin tara; Lista para cerrar, con los dos pesos; Cerrada, que ya tiene su orden de compra en Odoo, aunque falte validar la recepción. El neto es bruto menos tara en toneladas, con dos decimales; si la tara es igual o mayor que el bruto no hay neto y se avisa en rojo." />
+          </div>
           <p className="text-sm text-slate-500">
             El camión en la balanza: bruto, descarga, tara. Al cerrar se crea la
             orden de compra en Odoo y se escribe la planilla.
@@ -200,6 +204,7 @@ export default function RecepcionesClient({
                   </div>
 
                   {puedeEditar && paso && (
+                    <span className="flex shrink-0 items-center gap-1.5">
                     <button
                       onClick={() =>
                         paso === "lista"
@@ -215,6 +220,8 @@ export default function RecepcionesClient({
                     >
                       {ocupado === recepcion.id ? "Guardando…" : ETIQUETA_DEL_BOTON[paso]}
                     </button>
+                    {paso === "lista" && <InfoTip text="Cerrar y crear la orden no se deshace desde el sistema. Crea en Odoo la orden de compra con el neto pesado, la confirma (ahí recibe su número) y valida la recepción del remito, que mueve stock de verdad. Además, si el proveedor es un carbonillero de Calidad, anota el camión en el stock de carbonilla, y escribe la fila en la planilla de Despacho. Si Odoo no deja confirmar la orden o validar el remito, la recepción figura igual como «Cerrada» y avisa lo que falló, y aunque el aviso diga «queda para reintentar», desde esta pantalla no hay botón para hacerlo: el aviso no se equivoca en que la orden quedó a medias, y vos no te equivocás en que no ves cómo seguir. Queda registrado quién cerró, la orden y las toneladas." />}
+                    </span>
                   )}
                 </div>
 

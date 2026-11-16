@@ -6,6 +6,7 @@ import { hoyEnArgentina, rangoDelMes, comoSeLee } from "@/lib/core/fechas";
 import { nivelProduccionDe } from "@/lib/produccion/auth";
 import { armarElMes } from "@/lib/produccion/consultas";
 import { TURNOS, comoSeLeeElTurno } from "@/lib/produccion/turnos";
+import InfoTip from "@/components/InfoTip";
 
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 
@@ -50,7 +51,7 @@ export default async function ProduccionDashboardPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="page-header">Producción</h1>
+        <div className="flex items-baseline gap-2"><h1 className="page-header">Producción</h1><InfoTip text="Cargás el informe de fábrica de cada turno: el material en depósito, lo despachado camión por camión y la rotura. Lo producido no se carga, el sistema lo calcula contra el parte anterior. No es Calidad: el stock de envases, el de carbonilla y los ensayos del laboratorio los lleva ese sector aparte." /></div>
         <Link href="/produccion/dia" className="btn-primary">Ir al día →</Link>
       </div>
 

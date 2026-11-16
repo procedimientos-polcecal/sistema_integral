@@ -1,5 +1,6 @@
 "use client";
 
+import InfoTip from "@/components/InfoTip";
 import { useEffect, useMemo, useState } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { useCargar } from "@/lib/core/useCargar";
@@ -224,7 +225,10 @@ export default function ProgramacionClient({ empleados }: { empleados: EmpleadoE
   return (
     <div className="mx-auto max-w-5xl space-y-4 md:p-6">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Programación del taller</h1>
+        <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900">
+          Programación del taller
+          <InfoTip text="«No está» sale de las ausencias cargadas y de los francos tomados, y no dice el motivo de las que cargó otra persona. Sólo marca a quien tiene turno ese día, y el franco cuenta por el día en que se descansa y sólo si está tomado: los pendientes y los tomados sin ese día no abren hueco, que son todos los tomados antes del 26/10/2026 y algunos posteriores. Una semana sin huecos no prueba que nadie falte, porque lo que nadie cargó todavía no aparece; la llegada tarde no cuenta como falta." />
+        </h1>
         <p className="mt-0.5 text-sm text-slate-500">
           Quién está en cada turno y quién falta. Tocá a la persona que no viene para anotar su falta.
         </p>
@@ -403,8 +407,9 @@ export default function ProgramacionClient({ empleados }: { empleados: EmpleadoE
 
           {/* La semana entera de un vistazo. */}
           <section>
-            <h2 className="mb-1.5 text-sm font-semibold text-slate-700">
+            <h2 className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
               La semana
+              <InfoTip text="Quién va a cada turno se calcula con la semana de referencia y la rotación, que se repite cada seis semanas: no hay una grilla guardada por semana. Mover a alguien («Movido») vale sólo ese día; las semanas siguientes siguen saliendo del ciclo." />
               {huecosDeLaSemana > 0 && (
                 <span className="ml-2 text-xs font-normal text-red-700">
                   {huecosDeLaSemana} {huecosDeLaSemana === 1 ? "falta" : "faltas"}

@@ -258,9 +258,24 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
                   <th className="pb-2 pr-3">Hs. normales</th>
                   <th className="pb-2 pr-3">Hs. extra 50%</th>
                   <th className="pb-2 pr-3">Hs. extra 100%</th>
-                  <th className="pb-2 pr-3">Franco comp.</th>
-                  <th className="pb-2 pr-3">Hs. vacaciones</th>
-                  <th className="pb-2 pr-3">Hs. enfermedad</th>
+                  <th className="pb-2 pr-3">
+                    <span className="inline-flex items-center gap-1">
+                      Franco comp.
+                      <InfoTip text="Sólo cuentan los francos marcados como tomados, y en el período de su fecha de «Generado el», no en el que se tomaron: un franco ganado en octubre y tomado en noviembre va en la planilla de octubre, cuando se vuelva a emitir." />
+                    </span>
+                  </th>
+                  <th className="pb-2 pr-3">
+                    <span className="inline-flex items-center gap-1">
+                      Hs. vacaciones
+                      <InfoTip text="Días corridos del período de vacaciones que caen dentro del rango, domingos y feriados incluidos, por las horas teóricas diarias del empleado. No salen de las marcaciones: esos días no generan horas normales." />
+                    </span>
+                  </th>
+                  <th className="pb-2 pr-3">
+                    <span className="inline-flex items-center gap-1">
+                      Hs. enfermedad
+                      <InfoTip text="Sólo licencias de tipo enfermedad o accidente inculpable marcadas como justificadas. Cuenta los días hábiles y sábados del rango, sin domingos ni feriados, por las horas teóricas diarias. Las demás licencias no aparecen en ninguna columna." />
+                    </span>
+                  </th>
                   <th className="pb-2">Total $</th>
                 </tr>
               </thead>
@@ -317,7 +332,12 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
                   <th className="pb-2">Hs. extra 50%</th>
                   <th className="pb-2">Hs. extra 100%</th>
                   <th className="pb-2">Total</th>
-                  <th className="pb-2">Estado</th>
+                  <th className="pb-2">
+                    <span className="inline-flex items-center gap-1">
+                      Estado
+                      <InfoTip text="Cerrar es lo que protege el período: las marcaciones de esos días ya no las toca ni Lenox ni el Excel del reloj. Una ausencia que cargues después dentro de un período cerrado se guarda pero no llega al recibo, y RRHH no te frena. Desde acá no se reabre: sólo existe Eliminar, también en las cerradas." />
+                    </span>
+                  </th>
                   <th className="pb-2"></th>
                 </tr>
               </thead>
@@ -338,7 +358,10 @@ export default function LiquidacionesClient({ empleados }: { empleados: any[] })
                     <td className="py-2 text-right whitespace-nowrap">
                       <a href={`/api/rrhh/liquidaciones/${l.id}/export`} className="text-blue-600 underline text-sm">Exportar</a>
                       {l.estado === "BORRADOR" && (
-                        <button onClick={() => cerrar(l)} className="text-slate-700 underline text-sm ml-3">Cerrar</button>
+                        <span className="ml-3 inline-flex items-center gap-1">
+                          <button onClick={() => cerrar(l)} className="text-slate-700 underline text-sm">Cerrar</button>
+                          <InfoTip text="Cerrar pasa la liquidación a «Cerrada» y desde esta pantalla no se vuelve a abrir: no hay botón de reapertura y sí uno de Eliminar, que también funciona con las cerradas. Por eso «definitiva», como dice el cartel, quiere decir que protege el período (ver el ícono de «Estado»: las marcaciones de esos días no las toca Lenox ni el Excel del reloj, y Mantenimiento se niega a cargar ausencias ahí), no que no se pueda borrar. Queda registrado quién la cerró, el período y el total bruto, pero el registro se escribe después de cerrar: si no se pudiera escribir, la liquidación ya está cerrada y la pantalla no lo avisa. Eliminar, en cambio, no deja ningún registro." />
+                        </span>
                       )}
                       <button onClick={() => eliminar(l)} className="text-red-600 underline text-sm ml-3">Eliminar</button>
                     </td>

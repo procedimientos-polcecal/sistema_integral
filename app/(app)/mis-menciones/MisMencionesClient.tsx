@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { haceCuanto } from "@/lib/core/haceCuanto";
 import { useCargar } from "@/lib/core/useCargar";
+import InfoTip from "@/components/InfoTip";
 import {
   agruparPorRegistro,
   comoSeLlega,
@@ -115,7 +116,8 @@ export default function MisMencionesClient() {
           <h1 className="text-xl font-bold text-slate-900">Mis menciones</h1>
           <p className="text-sm text-slate-500">
             Lo que te escribieron en una orden de trabajo, un requerimiento de compra o una
-            condición insegura y todavía no leíste.
+            condición insegura y todavía no leíste.{" "}
+            <InfoTip text="Una mención te llega por correo y no por push, y sólo si podés ver el registro, tenés correo cargado y no fuiste vos quien escribió. Cada una sin leer cuenta además en la campana y en el resumen de los lunes, pero no en el diario; no cuenta, ni aparece acá, la de un registro que ya no podés ver. Deja de estar sin leer al abrir la conversación —desplegar la barra del hilo— o con «Marcar como leído»: abrir el registro sin desplegarla no la marca. Acá ves sólo las tuyas." />
           </p>
         </div>
         <button

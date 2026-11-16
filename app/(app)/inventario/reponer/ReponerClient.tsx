@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 // `altaDeReposicion` vive en el lib y no acá porque la arma también el stock,
 // que desde el 5/10/2026 puede pedir un faltante sin pasar por esta pantalla.
 import {
-  DIAS_DE_CONSUMO, altaDeReposicion, type Candidato, type ConPedido,
+  DIAS_DE_CONSUMO, altaDeReposicion, QUE_ES_UN_PEDIDO_EN_CURSO, type Candidato, type ConPedido,
 } from "@/lib/inventario/reponer";
+import InfoTip from "@/components/InfoTip";
 import { COMPRA_LABELS } from "@/lib/compras/constants";
 import NuevoRequerimientoModal, {
   type ValoresIniciales,
@@ -66,8 +67,9 @@ export default function ReponerClient({
       )}
 
       <section className="space-y-2">
-        <h2 className="section-title">
-          Para pedir <span className="font-normal text-slate-400">· {paraPedir.length}</span>
+        <h2 className="section-title flex items-center gap-2">
+          <span>Para pedir <span className="font-normal text-slate-400">· {paraPedir.length}</span></span>
+          <InfoTip className="normal-case tracking-normal" text={`Va primero lo que más salidas tuvo en los últimos ${DIAS_DE_CONSUMO} días. «Pedir» abre el formulario de Compras con la cantidad ya puesta en el stock de seguridad, no en lo que falta, porque se compra por lote; no se crea nada hasta que apretás «Crear requerimiento». Si el pedido se cargó sin el código del artículo, esta lista no lo ve y lo sigue ofreciendo.`} />
         </h2>
 
         {paraPedir.length === 0 ? (
@@ -103,8 +105,9 @@ export default function ReponerClient({
 
       {yaPedidos.length > 0 && (
         <section className="space-y-2">
-          <h2 className="section-title">
-            Ya pedidos <span className="font-normal text-slate-400">· {yaPedidos.length}</span>
+          <h2 className="section-title flex items-center gap-2">
+            <span>Ya pedidos <span className="font-normal text-slate-400">· {yaPedidos.length}</span></span>
+            <InfoTip className="normal-case tracking-normal" text={QUE_ES_UN_PEDIDO_EN_CURSO} />
           </h2>
           <p className="text-xs text-slate-500">
             Faltan y se usan, pero ya tienen un pedido en curso. No hace falta

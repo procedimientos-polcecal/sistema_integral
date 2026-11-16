@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import { useRouter } from "next/navigation";
 import { CORTE_DE_LOS_TIPOS } from "@/lib/calidad/movimientos";
 import type { FilaDelLibro } from "../carbonilla/StockClient";
@@ -149,10 +150,19 @@ export default function MovimientosClient({
               <th className="px-3 py-2">Fecha</th>
               <th className="px-3 py-2">Qué</th>
               <th className="px-3 py-2 text-right">Toneladas</th>
-              <th className="px-3 py-2 text-right">Vegetal</th>
+              <th className="px-3 py-2 text-right">
+                Vegetal
+                <InfoTip className="ml-1 normal-case tracking-normal" text="Esta columna y la de Residual son el saldo de cada tipo después de ese movimiento, no las toneladas del movimiento. Dentro de un mismo día el orden es el de carga: el saldo que vale es el del cierre del día." />
+              </th>
               <th className="px-3 py-2 text-right">Residual</th>
-              <th className="px-3 py-2 text-right">Total</th>
-              <th className="px-3 py-2">Origen</th>
+              <th className="px-3 py-2 text-right">
+                Total
+                <InfoTip className="ml-1 normal-case tracking-normal" text="Vegetal más residual de ese momento, calculado: no es la columna TOTAL de la planilla, que desde la fila 386 quedó 0,450 t por encima de la suma de sus dos columnas. Mandan los saldos por tipo." />
+              </th>
+              <th className="px-3 py-2">
+                Origen
+                <InfoTip className="ml-1 normal-case tracking-normal" text="«Importado» es lo que se leyó de la planilla, y desde el 13/10/2026 es el camino normal y no sólo la carga inicial. «Odoo» son filas de antes, de cuando Odoo creaba los movimientos; «Balanza», las que escribe la recepción de Despacho; «A mano», las que se cargaron en esta pantalla." />
+              </th>
               {puedeEditar && <th className="px-3 py-2" />}
             </tr>
           </thead>

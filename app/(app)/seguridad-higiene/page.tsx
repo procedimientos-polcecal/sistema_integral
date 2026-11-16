@@ -10,6 +10,7 @@ import {
   DIAS_ANTES_DE_AVISAR,
 } from "@/lib/seguridadHigiene/respaldoDeFotos";
 import KpiCard from "@/components/KpiCard";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * El tablero de Seguridad e Higiene: la puerta del módulo.
@@ -93,7 +94,10 @@ export default async function SeguridadHigienePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Seguridad e Higiene</h1>
+        <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900">
+          Seguridad e Higiene
+          <InfoTip text="Lleva las condiciones inseguras de la planta, que antes vivían en un Excel que circulaba por mail; por ahora es lo único que tiene el módulo. El número grande de la tarjeta no es el total: son las condiciones abiertas a las que les falta evaluar el riesgo, asignar responsable y fecha, o decir el lugar. Abajo van las vencidas, las abiertas y el total." />
+        </h1>
         <p className="text-sm text-slate-500">Tocá una tarjeta para trabajarla.</p>
       </div>
 

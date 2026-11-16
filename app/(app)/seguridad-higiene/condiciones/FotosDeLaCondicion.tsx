@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
+import InfoTip from "@/components/InfoTip";
 import { useCargar } from "@/lib/core/useCargar";
 import { MAXIMO_POR_PEDIDO, problemaDeLaFoto } from "@/lib/seguridadHigiene/fotoDeCondicion";
 
@@ -152,7 +153,10 @@ export default function FotosDeLaCondicion({
 
   return (
     <section className="space-y-2">
-      <h3 className="text-sm font-semibold text-slate-900">Fotos</h3>
+      <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+        Fotos
+        <InfoTip text="Las 44 condiciones que vinieron del Excel entraron sin fotos: en la planilla eran vínculos al disco de quien la armó y no viajaron, así que las que falten se agregan acá. Las fotos son privadas: se ven con un link que dura una hora." />
+      </h3>
 
       {error && <p className="text-sm text-red-700">{error}</p>}
       {aviso && <p className="text-sm text-emerald-800">{aviso}</p>}

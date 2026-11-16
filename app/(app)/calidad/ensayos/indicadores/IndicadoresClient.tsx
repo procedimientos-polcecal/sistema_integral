@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import dynamic from "next/dynamic";
 import Select from "@/components/Select";
 import { limiteDe } from "@/lib/calidad/ensayos/limites";
@@ -192,7 +193,10 @@ export default function IndicadoresClient({
                   <dd className="font-semibold text-slate-900">{delProductoResumen.muestras}</dd>
                 </div>
                 <div className="rounded bg-slate-50 px-2 py-1">
-                  <dt className="text-xs text-slate-500">Fuera de límite</dt>
+                  <dt className="text-xs text-slate-500">
+                    Fuera de límite
+                    <InfoTip className="ml-1" text="Cuenta las muestras con alguna determinación fuera de un límite cargado. Un 0 no quiere decir que todo esté bien: sólo se marca contra lo que alguien cargó, producto por producto." />
+                  </dt>
                   <dd
                     className={`font-semibold ${
                       delProductoResumen.fueraDeLimite > 0 ? "text-red-700" : "text-slate-900"
@@ -240,7 +244,10 @@ export default function IndicadoresClient({
                   <tr>
                     <th className="px-3 py-2">Producto</th>
                     <th className="px-3 py-2 text-right">Muestras</th>
-                    <th className="px-3 py-2 text-right">Fuera</th>
+                    <th className="px-3 py-2 text-right">
+                      Fuera
+                      <InfoTip className="ml-1 normal-case tracking-normal" text="Cuenta las muestras con alguna determinación fuera de un límite cargado. Un 0 no quiere decir que todo esté bien: sólo se marca contra lo que alguien cargó, producto por producto." />
+                    </th>
                     <th className="px-3 py-2">Humedad</th>
                     <th className="px-3 py-2">Peso vol.</th>
                     <th className="px-3 py-2">Cal útil</th>

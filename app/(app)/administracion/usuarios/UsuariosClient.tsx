@@ -5,6 +5,7 @@ import { useConfirm } from "@/components/ConfirmProvider";
 import { MODULOS_ORDEN } from "@/lib/core/access";
 import type { Modulo } from "@/lib/core/types";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 type Rol = "admin_sistema" | "encargado" | "operario";
 type Nivel = "lectura" | "edicion" | "admin";
@@ -389,7 +390,10 @@ function EditarUsuarioModal({
           </label>
 
           <div className="pt-2 border-t">
-            <h3 className="text-sm font-medium text-slate-700 mb-2">Módulos</h3>
+            <h3 className="mb-2 flex items-center gap-1 text-sm font-medium text-slate-700">
+              Módulos
+              <InfoTip text="Guardar reemplaza todos los permisos de módulo de esta persona por los que ves marcados: lo que quedó en «Sin acceso» se quita. El sistema no guarda historial de permisos; lo único que dice cómo estaban antes, cómo quedaron y quién lo cambió es el registro de auditoría, que se escribe después de aplicar el cambio. Lo llama «conceder» si la persona termina con igual o más módulos que antes y «quitar» si termina con menos, contando módulos y no niveles. Guardar no pide confirmación, y si el registro no se pudiera escribir el cambio ya está hecho y esta pantalla no lo avisa." />
+            </h3>
             <div className="space-y-2">
               {MODULOS.map((m) => (
                 <div key={m} className="flex items-center justify-between gap-2">

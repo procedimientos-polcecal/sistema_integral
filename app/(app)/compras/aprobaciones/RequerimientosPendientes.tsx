@@ -8,6 +8,7 @@ import {
 } from "@/lib/compras/constants";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * Los requerimientos que esperan decisión.
@@ -82,7 +83,10 @@ export default function RequerimientosPendientes({
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-slate-900">Requerimientos</h2>
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-base font-semibold text-slate-900">Requerimientos</h2>
+          <InfoTip text="La cola va por prioridad y, a igual prioridad, por antigüedad; los que no tienen prioridad definida van al final." />
+        </div>
         <p className="text-sm text-slate-500">
           {pendientes.length === 0
             ? "Nada esperando decisión."
@@ -119,6 +123,9 @@ export default function RequerimientosPendientes({
                 {procesando ? "Aprobando…" : `Aprobar ${seleccion.size} seleccionado${seleccion.size === 1 ? "" : "s"}`}
               </button>
             )}
+            {puedeAprobar && seleccion.size > 0 && (
+              <InfoTip text="Aprueba de a uno cada pedido marcado, tal como está: no pide prioridad ni quién paga (la ficha sí las pide para aprobar) y no pide confirmación. Si alguno falla, los demás igual quedan aprobados y el cartel dice cuántos no. Desde acá no se vuelve atrás: cada pedido guarda quién lo aprobó y cuándo, y queda en su historial y en la planilla de Compras." />
+            )}
           </div>
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -142,9 +149,9 @@ export default function RequerimientosPendientes({
                     <th className="px-3 py-2 text-left">Área</th>
                     <th className="px-3 py-2 text-left">Dónde</th>
                     <th className="px-3 py-2 text-right">Cant.</th>
-                    <th className="px-3 py-2 text-left">Prioridad</th>
+                    <th className="px-3 py-2 text-left">Prioridad<InfoTip className="ml-1 normal-case" text="La propone quien pide y gerencia la confirma al aprobar. Cuando la urgencia la declara el que pide distingue poco, así que mirá también hace cuánto espera." /></th>
                     <th className="px-3 py-2 text-left">Paga</th>
-                    <th className="px-3 py-2 text-left">Se necesita</th>
+                    <th className="px-3 py-2 text-left">Se necesita<InfoTip className="ml-1 normal-case" text="La gente suele cargarla como «ya»: el margen entre pedir y necesitar es de pocos días, así que no ordena nada." /></th>
                     <th className="px-3 py-2"></th>
                   </tr>
                 </thead>

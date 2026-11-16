@@ -2,8 +2,13 @@
 
 import { useSyncExternalStore } from "react";
 import Link from "next/link";
+import InfoTip from "@/components/InfoTip";
 import type { Alerta } from "@/lib/tallerVial/tablero";
 import type { EquipoTallerVial } from "@/lib/tallerVial/consultas";
+
+/** Las condiciones completas de lo que avisa el panel: el texto vive acá porque lo usan los dos lugares donde aparece (la franja de «Todo en orden» y el encabezado). */
+const QUE_AVISA =
+  "Aparecen sólo estas situaciones: nadie cargó combustible hace 4 días o más; un equipo lleva 3 días o más fuera de servicio; un equipo pasó más de 3 veces su intervalo habitual entre cargas, con un mínimo de 7 días (no se mira si está fuera de servicio, si no carga hace más de 60 días o si tiene menos de 5 cargas en 180 días; y si nadie cargó hace 4 días no se avisa equipo por equipo); su consumo de los últimos 30 días supera en más de 25 % al de los 150 días anteriores (con 3 y 5 cargas como mínimo, contando sólo las que tienen consumo calculable: con lectura y una lectura anterior que haya subido); o su service de 250 hs está vencido o a 50 hs o menos. Los de 500, 1000 y 2000 hs no avisan acá.";
 
 const CLAVE = "taller-vial:alertas-abierta";
 const EVENTO = "taller-vial:alertas-abierta-cambio";
@@ -40,7 +45,7 @@ export default function AlertasDeTaller({ alertas, equipos }: { alertas: Alerta[
   if (alertas.length === 0) {
     return (
       <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
-        Todo en orden: ningún equipo pide atención hoy.
+        Todo en orden: ningún equipo pide atención hoy. <InfoTip text={QUE_AVISA} />
       </div>
     );
   }
@@ -72,7 +77,10 @@ export default function AlertasDeTaller({ alertas, equipos }: { alertas: Alerta[
   return (
     <section className={`card mt-4 ${minimizada ? "px-4 py-2" : "p-4"}`}>
       <div className="flex items-center justify-between gap-2">
-        <h2 className="font-semibold text-slate-900">Para atender hoy</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-slate-900">Para atender hoy</h2>
+          <InfoTip text={QUE_AVISA} />
+        </div>
         <div className="flex items-center gap-3">
           {resumen}
           <button

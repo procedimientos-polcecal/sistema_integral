@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import { esCorreo } from "@/lib/agenda/evento";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import {
@@ -186,7 +187,10 @@ export default function EventoModal({
         </div>
 
         <div className="space-y-2">
-          <label className="block text-xs font-medium text-slate-600">Invitados</label>
+          <div className="flex items-center gap-1.5">
+            <label className="block text-xs font-medium text-slate-600">Invitados</label>
+            <InfoTip text="Quien tiene usuario en el SdG ve el evento en su Agenda y recibe el aviso si alguien lo mueve o lo borra en Google; un correo de afuera (proveedor, contratista) recibe la invitación y las actualizaciones de Google, pero no el aviso del SdG. Si borrás el evento, a todos les llega la cancelación por correo. Al usuario se lo reconoce por su correo en minúscula: si está guardado con mayúsculas, no se lo enlaza." />
+          </div>
 
           {invitados.length > 0 && (
             <ul className="flex flex-wrap gap-1.5">

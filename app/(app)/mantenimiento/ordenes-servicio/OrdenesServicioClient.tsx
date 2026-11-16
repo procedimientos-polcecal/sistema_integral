@@ -9,6 +9,7 @@ import type { OrdenServicio } from "@/lib/mantenimiento/types";
 import DetalleOS from "./DetalleOS";
 import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import MultiSelect from "@/components/MultiSelect";
 import {
   FILTROS_OS_VACIOS, CAMPOS_DE_FECHA_OS, ENLACES_OS,
@@ -138,7 +139,10 @@ export default function OrdenesServicioClient({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-baseline gap-x-3">
-            <h1 className="text-xl font-bold text-slate-900">Órdenes de servicio</h1>
+            <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900">
+              Órdenes de servicio
+              <InfoTip text="Una orden de servicio es un trabajo que se le pide a un tercero; la orden de trabajo, en cambio, la hace el personal propio. No se crean acá: se piden por el formulario de Google y acá se les hace el seguimiento. «Sin proveedor elegido» incluye los pedidos que todavía no llegaron a la pestaña de su área, como los que esperan aprobación, que no tienen seguimiento cargado." />
+            </h1>
             <UltimaSincronizacion
               cuando={sync?.created_at}
               ok={sync?.ok ?? true}

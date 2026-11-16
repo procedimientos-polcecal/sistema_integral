@@ -11,6 +11,7 @@ import GenerarOTModal, { type EquipoDelAviso } from "./GenerarOTModal";
 import DesestimarModal from "./DesestimarModal";
 import EnlazarOTModal from "./EnlazarOTModal";
 import Select from "@/components/Select";
+import InfoTip from "@/components/InfoTip";
 import { finalDelAviso, estaDesestimado } from "@/lib/mantenimiento/desestimarAviso";
 import { sePuedeDesenlazar } from "@/lib/mantenimiento/enlazarOtAlAviso";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
@@ -212,7 +213,10 @@ export default function AvisosClient({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-baseline gap-x-3">
-            <h1 className="text-xl font-bold text-slate-900">Avisos</h1>
+            <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900">
+              Avisos
+              <InfoTip text="Un aviso es lo que alguien reportó que necesita mantenimiento, y de él sale la orden de trabajo. Termina de una de tres maneras: con OT, desestimado (con su motivo) o pendiente, y «Sin orden de trabajo» cuenta sólo los pendientes. Cualquier texto en la columna OT ASIGNADA de la planilla hace que el aviso cuente como con OT, y si tiene OT y además está desestimado, vale la OT." />
+            </h1>
             <UltimaSincronizacion
               cuando={sync?.created_at}
               ok={sync?.ok ?? true}

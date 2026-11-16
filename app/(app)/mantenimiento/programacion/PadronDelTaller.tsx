@@ -6,6 +6,7 @@ import { useCargar } from "@/lib/core/useCargar";
 import { comoSeLee, hoyEnArgentina } from "@/lib/core/fechas";
 import type { Grupo, Oficio } from "@/lib/mantenimiento/programacion";
 import { OFICIO_TEXTO, ORDEN_OFICIO, llamar } from "./programacionComun";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * El padrón del taller: quién es mecánico, electricista o lubricador, de qué
@@ -288,6 +289,7 @@ export default function PadronDelTaller({
                       >
                         Cancelar
                       </button>
+                      <InfoTip text="Borra la fila del padrón y no se deshace. Lo que la fila decía —oficio, grupo, desde y hasta— no está en ningún otro lado, así que queda en el registro de auditoría junto con quién la sacó; si ese registro no se puede escribir, no se borra. Ninguna otra tabla cuelga de ésta: los movimientos a mano de la programación guardan a la persona por su id, sin vínculo con el padrón, y borrar su fila los dejaría apuntando a alguien que ya no figura (hoy no hay ninguno cargado). Si la persona trabajó en el taller y se fue, va «Dar de baja», que conserva la fila." />
                     </div>
                   </div>
                 )}

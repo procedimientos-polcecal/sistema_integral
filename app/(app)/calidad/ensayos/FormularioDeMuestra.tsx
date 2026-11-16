@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import Select from "@/components/Select";
 import { calUtilVial, humedad, pesoVolumetrico } from "@/lib/calidad/ensayos/determinaciones";
 import { granulometria } from "@/lib/calidad/ensayos/granulometria";
@@ -274,7 +275,10 @@ export default function FormularioDeMuestra({
       </section>
 
       <section className="space-y-2 rounded border border-slate-200 bg-white p-3">
-        <h2 className="text-sm font-semibold text-slate-700">Peso volumétrico</h2>
+        <h2 className="text-sm font-semibold text-slate-700">
+          Peso volumétrico
+          <InfoTip className="ml-1" text="Gramos × 1000 ÷ volumen del recipiente, en g/l. El recipiente viene propuesto en 330 cc, que es el real, y queda guardado con la muestra." />
+        </h2>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <Campo
             etiqueta="Gramos pesados"
@@ -291,7 +295,10 @@ export default function FormularioDeMuestra({
       </section>
 
       <section className="space-y-2 rounded border border-slate-200 bg-white p-3">
-        <h2 className="text-sm font-semibold text-slate-700">Cal útil vial</h2>
+        <h2 className="text-sm font-semibold text-slate-700">
+          Cal útil vial
+          <InfoTip className="ml-1" text="ml de ácido × 0,037 ÷ peso de la muestra, en %. El peso viene propuesto en 3 g y queda guardado: el día que se titule sobre otro peso, el número sale bien igual." />
+        </h2>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <Campo
             etiqueta="ml de ácido"
@@ -308,7 +315,10 @@ export default function FormularioDeMuestra({
       </section>
 
       <section className="space-y-2 rounded border border-slate-200 bg-white p-3">
-        <h2 className="text-sm font-semibold text-slate-700">Granulometría</h2>
+        <h2 className="text-sm font-semibold text-slate-700">
+          Granulometría
+          <InfoTip className="ml-1" text="Cargás los gramos retenidos en cada malla. El retenido y el acumulado en % los calcula el sistema sobre el peso de la muestra y no se guardan, así que un acumulado no puede no cerrar con sus partes." />
+        </h2>
         <div className="sm:w-1/3">
           <Campo
             etiqueta="Peso de muestra (g)"

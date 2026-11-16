@@ -3,10 +3,12 @@
 import { useState, type ReactNode } from "react";
 import Select from "@/components/Select";
 import HiloDeMensajes from "@/components/HiloDeMensajes";
+import InfoTip from "@/components/InfoTip";
 import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { comoSeLee } from "@/lib/core/fechas";
 import { CRITERIOS, clasificar, type Criterio } from "@/lib/seguridadHigiene/riesgo";
 import { estadoDe } from "@/lib/seguridadHigiene/condicion";
+import { fechaDudosaDelExcel } from "@/lib/seguridadHigiene/fechaDudosa";
 import {
   borradorDe,
   faltasPendientes,
@@ -33,6 +35,26 @@ const CRITERIOS_EN_ORDEN: { clave: Criterio; titulo: string }[] = [
   { clave: "legislacion", titulo: "Legislación" },
 ];
 
+const INFO_DEL_LUGAR =
+  "Un sector o un equipo del catálogo del sistema, no texto libre. Al importar las 44 condiciones del Excel (30/10/2026), 37 quedaron sin sector: el enlace era por igualdad de nombre y lo dudoso se dejó vacío. " +
+  "Lo que decía la planilla quedó en Observaciones, en la última línea («Lugar según la planilla: …»). «Planta 02», «Planta 2» y «Planta 3» no se asignaron porque a qué planta se refieren no está confirmado.";
+
+const INFO_DE_LA_PRIORIDAD =
+  "1, 2 o 3, la elige quien carga. No ordena la tabla ni cambia ningún aviso: lo que ordena es el nivel de riesgo, que se evalúa después. El sistema no define qué significa cada número.";
+
+const INFO_DE_LA_EVALUACION =
+  "Probabilidad = frecuencia + antecedentes + controles. Gravedad = magnitud del daño + legislación. Nivel = probabilidad × gravedad. Clasificación: I desde 139, S desde 90, M desde 49, PS desde 18 y NS menos de 18. " +
+  "Con un solo puntaje sin elegir no hay nivel. Evalúa quien tiene nivel admin en Seguridad e Higiene, y los administradores del sistema lo tienen siempre.";
+
+const INFO_DE_LA_FECHA_DE_EJECUCION =
+  "Poner la fecha en una condición que no la tenía la cierra y no se registra, porque se puede deshacer. Lo que no se deshace es perder una fecha que ya estaba: «Reabrir» la borra, y esa fecha es el único lugar donde quedaba cuándo se arregló. Reabrir sí queda registrado, con la fecha que había y quién la quitó; cambiar una fecha por otra, en cambio, pisa la anterior y no deja ningún registro. Hasta que no apretás «Guardar cambios» no pasa nada. Sólo lo hace un administrador de Seguridad e Higiene.";
+
+const INFO_DE_LOS_PUNTAJES_PISADOS =
+  "Corregir un puntaje que ya tenía valor no se deshace: el nivel de riesgo se calcula sobre los cinco puntajes, así que cambiar uno reescribe la clasificación entera y el número de antes no queda en ningún otro lado. Por eso queda registrado, en una sola fila por guardado, con los puntajes que se pisaron, el nivel que había, cómo quedaron esos puntajes y quién lo hizo (el nivel nuevo no se guarda: se recalcula de la fila). Ponerle puntaje a una condición que no tenía ninguno no se registra: no destruye nada.";
+
+const INFO_DE_LA_FECHA_MAXIMA =
+  "La condición vence el día después de esta fecha, no ese mismo día. Sin fecha máxima no puede vencer nunca, y por eso cuenta como «sin asignar». Una condición con fecha de ejecución tampoco figura nunca como vencida.";
+
 /**
  * El texto de una opción cabe en el desplegable recortado; entero va debajo, en
  * cuanto se la elige. Los párrafos de «magnitud del daño» miden 300 caracteres:
@@ -43,11 +65,20 @@ function recortado(texto: string, largo = 90): string {
 }
 
 /** Los campos de una ficha son siempre etiqueta arriba, campo abajo. */
-function Campo({ titulo, children, ayuda }: { titulo: string; children: ReactNode; ayuda?: ReactNode }) {
+function Campo({
+  titulo, children, ayuda, info,
+}: {
+  titulo: string;
+  children: ReactNode;
+  ayuda?: ReactNode;
+  /** El `(i)` del campo, al lado de su rótulo. */
+  info?: string;
+}) {
   return (
     <div className="space-y-1">
-      <span className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+      <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
         {titulo}
+        {info && <InfoTip text={info} />}
       </span>
       {children}
       {ayuda && <div className="text-xs text-slate-500">{ayuda}</div>}
@@ -109,6 +140,7 @@ export default function FichaDeCondicion({
   const estado = estadoDe(fila, hoy);
   const faltas = faltasPendientes(fila, hoy);
   const cerrada = estado === "Cerrada";
+  const fechaEnDuda = fechaDudosaDelExcel(fila.numero, fila.detectada_el);
 
   // Una cerrada sólo la corrige un admin: la policy de `edicion` la deja afuera.
   const puedePrimera = puedeEditar && (!cerrada || esAdmin);
@@ -218,6 +250,7 @@ export default function FichaDeCondicion({
             <p className="text-xs text-slate-500">
               Detectada el {comoSeLee(fila.detectada_el)}
               {nombreDe(fila.detectada_por) ? ` por ${nombreDe(fila.detectada_por)}` : ""}
+              {fechaEnDuda && <InfoTip text={fechaEnDuda} className="ml-1" />}
             </p>
           </div>
           <button type="button" onClick={onCerrar} className="btn-secondary shrink-0">
@@ -249,7 +282,7 @@ export default function FichaDeCondicion({
             {puedePrimera ? (
               <>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Campo titulo="Lugar">
+                  <Campo titulo="Lugar" info={INFO_DEL_LUGAR}>
                     <Select
                       className={clase}
                       value={borrador.lugar.tipo}
@@ -323,7 +356,7 @@ export default function FichaDeCondicion({
                   />
                 </Campo>
 
-                <Campo titulo="Prioridad">
+                <Campo titulo="Prioridad" info={INFO_DE_LA_PRIORIDAD}>
                   <Select
                     className={clase}
                     value={borrador.prioridad}
@@ -338,7 +371,7 @@ export default function FichaDeCondicion({
               </>
             ) : (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Campo titulo="Lugar">
+                <Campo titulo="Lugar" info={INFO_DEL_LUGAR}>
                   <Valor>{lugarComoTexto}</Valor>
                 </Campo>
                 <Campo titulo="Peligro">
@@ -354,7 +387,7 @@ export default function FichaDeCondicion({
                     <Valor>{fila.accion_propuesta}</Valor>
                   </Campo>
                 </div>
-                <Campo titulo="Prioridad">
+                <Campo titulo="Prioridad" info={INFO_DE_LA_PRIORIDAD}>
                   <Valor>{fila.prioridad === null ? "" : String(fila.prioridad)}</Valor>
                 </Campo>
               </div>
@@ -368,7 +401,10 @@ export default function FichaDeCondicion({
 
           {/* Evaluación del riesgo */}
           <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-slate-900">Evaluación del riesgo</h3>
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+              Evaluación del riesgo
+              <InfoTip text={INFO_DE_LA_EVALUACION} />
+            </h3>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {CRITERIOS_EN_ORDEN.map(({ clave, titulo }) => {
@@ -424,6 +460,12 @@ export default function FichaDeCondicion({
                   se calcula cuando están los cinco.
                 </span>
               )}
+              {esAdmin && (
+                <p className="mt-2 flex items-center gap-1 text-xs text-slate-500">
+                  Qué pasa al corregir un puntaje ya cargado
+                  <InfoTip text={INFO_DE_LOS_PUNTAJES_PISADOS} />
+                </p>
+              )}
             </div>
           </section>
 
@@ -452,7 +494,7 @@ export default function FichaDeCondicion({
                 )}
               </Campo>
 
-              <Campo titulo="Fecha máxima de ejecución">
+              <Campo titulo="Fecha máxima de ejecución" info={INFO_DE_LA_FECHA_MAXIMA}>
                 {esAdmin ? (
                   <input
                     type="date"
@@ -485,6 +527,7 @@ export default function FichaDeCondicion({
 
               <Campo
                 titulo="Fecha de ejecución"
+                info={INFO_DE_LA_FECHA_DE_EJECUCION}
                 ayuda={
                   esAdmin
                     ? "Tener fecha de ejecución cierra la condición; borrarla la reabre."

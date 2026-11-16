@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import InfoTip from "@/components/InfoTip";
 import { useRouter } from "next/navigation";
 import { comoSeLee } from "@/lib/core/fechas";
 import type { FilaDeLaBusqueda } from "@/lib/calidad/historico/aplanar";
@@ -107,7 +108,10 @@ export default function HistoricoClient({
                 <th className="px-3 py-2">Fecha</th>
                 <th className="px-3 py-2">Origen</th>
                 <th className="px-3 py-2">Determinación</th>
-                <th className="px-3 py-2 text-right">Valor</th>
+                <th className="px-3 py-2 text-right">
+                  Valor
+                  <InfoTip className="ml-1" text="La escala que ves al lado es la lectura que hizo el sistema, no algo que haya escrito el laboratorio: si se equivocó, se corrige la etiqueta y el número sigue siendo el bueno. Que una fila no esté en ámbar no prueba que su escala esté bien: esa comprobación sólo alcanza a una minoría de las filas. El peso volumétrico viejo puede traer un error del 1 %, por haberse calculado con dos recipientes distintos." />
+                </th>
                 <th className="px-3 py-2">&nbsp;</th>
               </tr>
             </thead>

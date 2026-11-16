@@ -25,6 +25,7 @@ import HiloDeMensajes from "@/components/HiloDeMensajes";
 import MontoAlto from "./MontoAlto";
 import type { HistoricoDelArticulo } from "@/lib/compras/historicoDelArticulo";
 import MarcaMontoAlto from "../../MarcaMontoAlto";
+import InfoTip from "@/components/InfoTip";
 
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
@@ -363,7 +364,10 @@ export default function RequerimientoDetalle({
         <div className="space-y-4">
           {/* Aprobación */}
           <section className="rounded-xl border border-slate-200 bg-white p-5">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Aprobación</h2>
+            <div className="mb-3 flex items-center gap-1">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aprobación</h2>
+              <InfoTip text="Aprobar o denegar lo decide quien aprueba, y desde esta pantalla no se vuelve atrás: una vez resuelto el cuadro muestra quién y cuándo y no ofrece ningún botón para cambiarlo. Aprobar pasa el pedido a «En comparativa» si todavía no había empezado; denegar lo cierra como «Denegado» y exige un motivo, que quien lo pidió lee en «Mis pedidos». En los dos casos el pedido guarda quién decidió y cuándo, queda asentado en su historial y se escribe en la planilla de Compras." />
+            </div>
 
             {resuelto ? (
               <div className="space-y-1 text-sm text-slate-600">

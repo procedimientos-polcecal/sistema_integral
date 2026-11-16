@@ -7,6 +7,7 @@ import { nivelInventarioDe } from "@/lib/inventario/auth";
 import { ultimaSincronizacionDe } from "@/lib/core/sincronizaciones";
 import { hoyEnArgentina, comoSeLee } from "@/lib/core/fechas";
 import TraerDeLaPlanilla from "./TraerDeLaPlanilla";
+import InfoTip from "@/components/InfoTip";
 
 const num = new Intl.NumberFormat("es-AR");
 
@@ -64,7 +65,7 @@ export default async function InventarioDashboardPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="page-header">Inventario</h1>
+        <div className="flex items-baseline gap-2"><h1 className="page-header">Inventario</h1><InfoTip text="Es el stock del almacén: cada artículo, cada entrada y salida que se carga, y lo que quedó por debajo del stock de seguridad. Se sincroniza con la planilla del almacén, y es la planilla la que manda: el stock sale de su fórmula. Un movimiento que no llegó allá queda en el kardex como «sin escribir», pero su efecto en el stock se revierte en la próxima lectura, y hay que anotarlo a mano en la planilla." /></div>
         <div className="flex items-center gap-2">
           <TraerDeLaPlanilla sync={sync} />
           <Link href="/inventario/movimientos/nuevo" className="btn-primary">Cargar movimiento</Link>
@@ -93,7 +94,10 @@ export default async function InventarioDashboardPage() {
         {/* ── Faltantes ── */}
         <section className="card p-4">
           <div className="flex items-center justify-between">
-            <h2 className="section-title">Con faltante</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="section-title">Con faltante</h2>
+              <InfoTip text="Los 6 artículos con mayor diferencia contra su stock de seguridad, no los más urgentes. Tener faltante es una referencia y no una cola de trabajo: lo cumple cerca de la mitad del catálogo y la mayoría lleva meses sin moverse. Lo que conviene pedir, porque además tiene consumo reciente, está en Para reponer." />
+            </div>
             <Link href="/inventario/stock?faltantes=1" className="text-xs text-slate-500 underline">Ver todos →</Link>
           </div>
           {!faltantes || faltantes.length === 0 ? (

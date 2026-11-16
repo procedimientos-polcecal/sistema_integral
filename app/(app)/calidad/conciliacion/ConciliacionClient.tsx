@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import InfoTip from "@/components/InfoTip";
 
 /**
  * Las tres listas del control contra Odoo.
@@ -113,6 +114,7 @@ export default function ConciliacionClient({
                       ? "camión sin orden de compra"
                       : "camiones sin orden de compra"
                   }`}
+              <InfoTip className="ml-1" text="Un camión se aparea con una orden del mismo proveedor a no más de dos días, y cada orden se usa una sola vez. Sólo entran al cruce las líneas de Odoo cuyo producto está en la lista de «Productos de Odoo» con «cuenta» y cuya cantidad es posible para un camión (más de 0 y hasta 60 t): si la orden no pasa eso, el camión sale acá aunque la orden exista. Sólo se miran camiones de carbonilleros declarados y activos, de los últimos 30 días." />
             </h2>
             <p className="mt-0.5 text-xs text-red-800">
               Entraron al stock y no tienen orden en Odoo. <strong>No se les puede facturar.</strong>
@@ -191,6 +193,7 @@ export default function ConciliacionClient({
                       ? "camión con otra cantidad en Odoo"
                       : "camiones con otra cantidad en Odoo"
                   }`}
+              <InfoTip className="ml-1" text="El camión se compara con la orden del mismo proveedor más parecida en cantidad, y cada orden se usa una sola vez. Una diferencia de menos de 5 kg se toma como el mismo número." />
             </h2>
             <p className="mt-0.5 text-xs text-slate-500">
               El camión y su orden están los dos; lo que no coincide es el peso.
