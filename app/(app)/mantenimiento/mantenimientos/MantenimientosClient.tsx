@@ -52,7 +52,7 @@ const OT_ESTADO_META: Record<string, { label: string; color: string; bg: string 
   EN_PROCESO: { label: "En proceso", color: "#1D4ED8", bg: "#EFF6FF" },
   ATRASADO:   { label: "Atrasado",   color: "#DC2626", bg: "#FEF2F2" },
   REALIZADO:  { label: "Realizado",  color: "#16A34A", bg: "#F0FDF4" },
-  SUSPENDIDA: { label: "Suspendida", color: "#B45309", bg: "#FFFBEB" },
+  CANCELADA:  { label: "Cancelada",  color: "#475569", bg: "#F1F5F9" },
 };
 
 function nombreCompleto(u: { nombre?: string; apellido?: string } | null | undefined): string {

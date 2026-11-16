@@ -69,7 +69,7 @@ export default async function MantenimientoDashboardPage() {
   ]);
 
   // ── Conteo de OTs por estado (count queries, sin traer todas las filas) ──────
-  const OT_ESTADOS = ["POR_HACER", "EN_PROCESO", "ATRASADO", "REALIZADO", "SUSPENDIDA"];
+  const OT_ESTADOS = ["POR_HACER", "EN_PROCESO", "ATRASADO", "REALIZADO", "CANCELADA"];
   const otCounts = await Promise.all(
     OT_ESTADOS.map((e) =>
       supabase.from("ordenes_trabajo").select("id", { count: "exact", head: true }).eq("estado", e)

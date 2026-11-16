@@ -64,7 +64,7 @@ const OT_ESTADO_META: Record<string, { label: string; color: string }> = {
   EN_PROCESO: { label: "En proceso", color: "var(--status-mant)" },
   ATRASADO:   { label: "Atrasado",   color: "var(--status-rep)" },
   REALIZADO:  { label: "Realizado",  color: "var(--primary)" },
-  SUSPENDIDA: { label: "Suspendida", color: "var(--accent)" },
+  CANCELADA:  { label: "Cancelada",  color: "#475569" },
 };
 
 const TIPO_COLORS: Record<string, string> = {
