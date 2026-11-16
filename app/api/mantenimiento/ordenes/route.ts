@@ -6,8 +6,10 @@ import { altaEnLaPlanilla } from "@/lib/mantenimiento/formulario";
 import { escribirEnLaFilaDeLaOT, type FilaDeOT } from "@/lib/mantenimiento/planillaDeOT";
 import {
   celdasParaRegistrar, repartirRegistroDeOT,
-  esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT,
+  esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT, type ValorDeCelda,
 } from "@/lib/mantenimiento/ordenes";
+import { esCancelacion, loQueImpideCancelar } from "@/lib/mantenimiento/cancelacion";
+import { celdaDeObservacionPrevia } from "@/lib/mantenimiento/notas";
 import { fechaDeLaCarga, type FechaDeLaCarga } from "@/lib/mantenimiento/avisos";
 import { marcarElAviso } from "@/lib/mantenimiento/marcarElAviso";
 import {
@@ -253,6 +255,27 @@ export async function POST(request: Request) {
   // OT sin que nadie se entere. El texto es lo que va a la planilla —tiene una
   // sola celda— y los renglones, a `ordenes_trabajo_repuestos`.
   const losRepuestos = repuestosDelCuerpo(body);
+
+  // ── UNA OT NO NACE CANCELADA ────────────────────────────────
+  //
+  // `CANCELADA` **sí es** un estado de OT, así que el chequeo de abajo lo deja
+  // pasar: esto se rechaza acá o no se rechaza en ningún lado. Y hay que
+  // rechazarlo, porque cancelar exige un motivo escrito y el alta no tiene
+  // dónde pedirlo —la nota cuelga de una orden que todavía no existe—. Una OT
+  // que naciera cancelada sería exactamente lo que este estado vino a impedir:
+  // «no se va a hacer» sin que nadie sepa por qué.
+  //
+  // Y no es una pérdida: crearla y cancelarla son dos pedidos, y el segundo
+  // pasa por el PATCH, que sí exige la justificación.
+  if (esCancelacion(estado)) {
+    // Alcanzable desde la cola igual que la rama de abajo, y por eso avisa:
+    // una app vieja que mande este estado dejaría la carga parada para siempre.
+    const error =
+      "Una orden de trabajo no se crea cancelada: se crea y después se cancela, " +
+      "escribiendo el motivo.";
+    avisarDeLaCarga(request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
+    return NextResponse.json({ error }, { status: 400 });
+  }
 
   // El POST no validaba el estado y el PATCH sí: cualquier texto entraba a la
   // base y de ahí a la planilla, donde `EN_LA_PLANILLA[v] ?? v` lo escribía tal
@@ -682,6 +705,38 @@ export async function PATCH(request: Request) {
   const { id, estado, requiere_parada_sector } = body ?? {};
   if (!id) return NextResponse.json({ error: "ID requerido" }, { status: 400 });
 
+  const admin = createAdminClient();
+
+  // ── CANCELAR: PRIMERO LA REGLA ────────────────────────────────────────────
+  //
+  // Hace falta el estado que la orden tiene **hoy**, porque desde dónde se
+  // puede cancelar depende de él —desde REALIZADO no, que ya tiene fecha de
+  // cierre— y el cuerpo no lo trae. De paso, un id inventado no llega a
+  // cancelar nada: sin fila el estado actual queda vacío, y la regla no deja
+  // cancelar desde un estado desconocido.
+  //
+  // Qué impide cancelar no se decide acá: lo contesta `loQueImpideCancelar`,
+  // que es pura y tiene sus tests —una justificación con un estado que no es
+  // cancelación, un estado del que no se cancela, una fecha de cierre, un
+  // texto vacío o demasiado largo—. Acá se le pasa lo que llegó y se obedece
+  // el veredicto, una sola vez. Repetir cualquiera de esos chequeos sería
+  // tener la regla en dos lugares, que es como una de las dos se queda vieja.
+  const { data: laDeAhora } = await admin
+    .from("ordenes_trabajo")
+    .select("estado")
+    .eq("id", id)
+    .single();
+
+  const cancelacion = loQueImpideCancelar({
+    estadoPedido: estado,
+    estadoActual: laDeAhora?.estado,
+    justificacion: body.justificacion,
+    fechaCierre: body.fecha_cierre,
+  });
+  if (!cancelacion.ok) {
+    return NextResponse.json({ error: cancelacion.error }, { status: 400 });
+  }
+
   // Lista blanca. No se acepta el resto del body para evitar escritura
   // arbitraria de columnas (mass-assignment).
   const update: Record<string, unknown> = { synced_at: new Date().toISOString() };
@@ -723,13 +778,68 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "No se envió ningún cambio" }, { status: 400 });
   }
 
-  const admin = createAdminClient();
+  // ── EL MOTIVO ENTRA ANTES QUE EL ESTADO ───────────────────────────────────
+  //
+  // Es la regla de la casa, la misma que la auditoría de lo irreversible: el
+  // registro se escribe **antes** de la acción que no se deshace — «si no
+  // entra, no se borra». Acá: si la nota no entra, la orden no se cancela.
+  //
+  // Al revés quedarían órdenes canceladas sin motivo, que es exactamente lo
+  // que este estado vino a impedir: «no se va a hacer» sin decir por qué es
+  // una OT que desaparece del tablero sin que nadie sepa qué pasó. Y el error
+  // de este lado es barato: una nota sin cancelación es una justificación más
+  // en el historial, que es lo que cualquier OT abierta puede tener de todos
+  // modos.
+  //
+  // Va pegada al `update` y no junto a la regla de arriba a propósito. Entre
+  // medio sólo hay chequeos que no escriben nada —la falla, el reparto, «no se
+  // envió ningún cambio»—, y si alguno rechaza el pedido conviene que la nota
+  // todavía no esté puesta: lo que no se escribió tampoco hay que deshacerlo.
+  //
+  // La condición se calcula una sola vez para los dos lugares que dependen de
+  // ella —la nota y la celda X—: tocar una y no la otra dejaría una
+  // cancelación con el motivo guardado y la planilla sin él, o al revés.
+  const seCancela = esCancelacion(estado);
+
+  if (seCancela) {
+    const { error: errorDeLaNota } = await admin
+      .from("ordenes_trabajo_notas")
+      .insert({ orden_id: id, texto: cancelacion.texto, creado_por: user.id });
+
+    if (errorDeLaNota) {
+      return NextResponse.json(
+        {
+          error:
+            "La orden no se canceló porque no se pudo guardar el motivo: " +
+            `${errorDeLaNota.message}. Probá de nuevo.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
+  // ── LAS DOS CELDAS, EN UNA SOLA ESCRITURA ─────────────────────────────────
+  //
+  // Cancelar toca la **M** —el estado— y la **X** —la última justificación—, y
+  // las dos van en la misma llamada: cada escritura relee la columna A del
+  // master para encontrar la fila, así que partirla en dos cuesta el doble y
+  // abre una ventana donde el estado ya cambió y el motivo todavía no está.
+  //
+  // El `after()` de más abajo reintenta con este mismo `extra`, así que el
+  // reintento de los cuatro minutos se lleva la X sin una línea de código.
+  // Lo que el drenaje no puede rehacer es la X: `exportarLoPendiente` arma el
+  // registro desde la fila de `ordenes_trabajo` con `loQueHayQueExportar`, y
+  // la observación previa no tiene columna ahí. Esa limitación ya existía
+  // —está medida en el encabezado de `ordenes/[id]/notas/route.ts`— y no
+  // empeora: la M sí la repone el drenaje, y la salida para la X es volver a
+  // guardar la justificación desde la orden.
+  const extra = seCancela ? [celdaDeObservacionPrevia(cancelacion.texto)] : [];
 
   const { data: updated, error } = await admin
     .from("ordenes_trabajo").update(update).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const planilla_error = await escribirEnLaPlanilla(updated, registro);
+  const planilla_error = await escribirEnLaPlanilla(updated, registro, extra);
 
   // ── Y SI NO SALIÓ, SE ANOTA Y SE INSISTE ──────────────────────────────────
   //
@@ -760,7 +870,7 @@ export async function PATCH(request: Request) {
 
     after(async () => {
       const r = await reintentarHastaQueSalga({
-        intentar: () => escribirEnLaPlanilla(updated, registro),
+        intentar: () => escribirEnLaPlanilla(updated, registro, extra),
       });
       await admin
         .from("ordenes_trabajo")
@@ -781,10 +891,18 @@ export async function PATCH(request: Request) {
  * Qué celdas tocar lo decide `celdasParaRegistrar`; la escritura —con la guarda
  * de que la fila siga siendo la de esta OT— vive en `planillaDeOT.ts`, porque
  * las notas escriben la columna X por el mismo camino.
+ *
+ * `extra` son las celdas que no salen del registro, y hoy es una sola: la **X**
+ * de la cancelación, que es una nota y no un campo de `ordenes_trabajo`. Va por
+ * parámetro y no adentro de `celdasParaRegistrar` para que esa función siga
+ * siendo «el reparto de la tabla a la planilla» y nada más — y para que las dos
+ * llamadas de la ruta, la primera y la del `after()`, le pasen lo mismo sin que
+ * ninguna tenga que acordarse de reconstruirlo.
  */
 async function escribirEnLaPlanilla(
   orden: FilaDeOT,
-  registro: RegistroDeOT
+  registro: RegistroDeOT,
+  extra: readonly { columna: number; valor: ValorDeCelda }[] = []
 ): Promise<string | null> {
-  return escribirEnLaFilaDeLaOT(orden, celdasParaRegistrar(registro));
+  return escribirEnLaFilaDeLaOT(orden, [...celdasParaRegistrar(registro), ...extra]);
 }

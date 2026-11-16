@@ -263,7 +263,15 @@ export const REGISTRO = {
     porque:
       "El alta y el PATCH anotan el pendiente e insisten con `after()`. El PATCH " +
       "lo hace desde el 26/10/2026: antes devolvía el motivo a la pantalla y la " +
-      "sincronización le pisaba el registro del trabajo.",
+      "sincronización le pisaba el registro del trabajo. Al cancelar escribe dos " +
+      "celdas y **sólo una va a la cola**: la M —el estado— la rehace " +
+      "`loQueHayQueExportar` desde la fila, y la X —la última justificación— no, " +
+      "porque la observación previa no tiene columna en `ordenes_trabajo`. La X la " +
+      "reintenta el `after()`, que lleva las mismas celdas; si tampoco sale, el " +
+      "drenaje repone la M y deja la X, y la salida es volver a guardar la " +
+      "justificación desde la orden. Es la limitación que ya estaba medida en el " +
+      "encabezado de `ordenes/[id]/notas/route.ts` y no empeora: la X no la lee " +
+      "`filaDeOrden`, así que ninguna sincronización la pisa.",
   },
   "app/api/mantenimiento/partes-contratista/generar/route.ts": {
     estrategia: "cola",
