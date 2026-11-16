@@ -30,10 +30,16 @@ interface Nota {
 }
 
 export default function JustificacionOT({
-  ordenId, puedeEditar, onCambio,
+  ordenId, puedeEditar, cancelada = false, onCambio,
 }: {
   ordenId: string;
   puedeEditar: boolean;
+  /**
+   * La orden está cancelada. Su motivo es lo único que dice por qué no se hizo
+   * y el servidor no deja borrarlo (409): se puede escribir otro, no sacar uno.
+   * Ofrecer el botón sería ofrecer algo que siempre falla.
+   */
+  cancelada?: boolean;
   /** Para que el listado refresque el cartel de "sin justificar". */
   onCambio?: () => void;
 }) {
@@ -135,7 +141,7 @@ export default function JustificacionOT({
                     todos los que pueden editar y el servidor es el que decide:
                     esconderlo según el usuario acá sería repetir la regla en un
                     segundo lugar, que es donde se desincronizan. */}
-                {puedeEditar && (
+                {puedeEditar && !cancelada && (
                   <button
                     onClick={() => borrar(n)}
                     className="text-slate-300 underline hover:text-red-600"
@@ -156,7 +162,7 @@ export default function JustificacionOT({
             onChange={(e) => { setTexto(e.target.value); setError(""); }}
             maxLength={MAXIMO_DE_NOTA}
             rows={2}
-            placeholder="Por qué todavía no se hizo…"
+            placeholder={cancelada ? "Agregar otra explicación…" : "Por qué todavía no se hizo…"}
             className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
           />
           <button
