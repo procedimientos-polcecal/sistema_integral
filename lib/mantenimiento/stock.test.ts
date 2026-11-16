@@ -177,4 +177,17 @@ describe("buscarEnInventario", () => {
     const [d] = buscarEnInventario([{ codigo: null, nombre: "Bulon 1/2", cantidad: null }], inv);
     expect(d.insumo).toBeNull();
   });
+
+  // Lo que pegar la unidad podía perder: el pañol escribe la palabra entera.
+  it("sigue reconociendo `2 m` contra un artículo que dice `2 METROS`", () => {
+    const inv = [{ codigo: "7", descripcion: "CABLE 2 METROS", stock: 5, seguridad: 1, ubicacion: null }];
+    const [d] = buscarEnInventario([{ codigo: null, nombre: "Cable 2 m", cantidad: null }], inv);
+    expect(d.insumo?.codigo).toBe("7");
+  });
+
+  it("sigue reconociendo `5 l` contra `5 LITROS` (caso que ya andaba antes de pegar unidades)", () => {
+    const inv = [{ codigo: "8", descripcion: "ACEITE 5 LITROS", stock: 5, seguridad: 1, ubicacion: null }];
+    const [d] = buscarEnInventario([{ codigo: null, nombre: "Aceite 5 l", cantidad: null }], inv);
+    expect(d.insumo?.codigo).toBe("8");
+  });
 });

@@ -99,22 +99,36 @@ const MINIMO_PARA_BUSCAR = 4;
  *
  * La OT escribe `ø 3 " x 300 mm` y el pañol `3" X 300MM`: el mismo repuesto con
  * tres diferencias que no significan nada. Se sacan sólo esas tres: el signo
- * de diámetro, los espacios que rodean a la comilla de pulgada, y el espacio
- * entre un número y su unidad.
+ * de diámetro, los espacios que rodean a la comilla de pulgada, y —con
+ * `pegar`— el espacio entre un número y su unidad.
  *
  * **No se colapsan todos los espacios**, y es a propósito: `BULON 1/2` pasaría
  * a ser `BULON12` y coincidiría con `BULON 12`. Es el mismo error que en
- * `riDelRepuesto.ts` costó cambiar un falso negativo por un falso positivo. Se
- * aplica a los dos lados de la comparación, así que lo que se pierde en uno se
- * pierde en el otro. Local y sin exportar: `normalizar` es de todos.
+ * `riDelRepuesto.ts` costó cambiar un falso negativo por un falso positivo.
+ *
+ * **La lista de unidades es cerrada**: una unidad que no está acá no se pega.
+ *
+ * **Por qué `pegar` es una variante y no la única forma.** Pegar sólo se
+ * puede hacer cuando la unidad termina en un límite de palabra, así que
+ * `2 m` pasa a `2m` pero `2 METROS` no: el pañol tiene 15 artículos así
+ * (`3,05 METROS`, `4 LITROS`) y una OT que escriba `2 m` dejaría de
+ * encontrarlos, cuando antes `2 m` era prefijo de `2 METROS`. Por eso se
+ * compara de las dos maneras (ver `coincide`) y alcanza con que una dé.
  */
-function paraComparar(v: unknown): string {
-  return normalizar(v)
+function paraComparar(v: unknown, pegar: boolean): string {
+  let t = normalizar(v)
     .replace(/[øØ]/g, " ")
-    .replace(/\s*["”″]\s*/g, '"')
-    .replace(/(\d)\s+(mm|cm|mts?|m|kg|kw|hp|lts?|l|pulg)\b/gi, "$1$2")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/\s*["”″]\s*/g, '"');
+  if (pegar) t = t.replace(/(\d)\s+(mm|cm|mts?|m|kg|kw|hp|lts?|l|pulg)\b/gi, "$1$2");
+  return t.replace(/\s+/g, " ").trim();
+}
+
+/** Si el nombre del repuesto está en la descripción, de cualquiera de las dos formas. */
+function coincide(descripcion: unknown, nombre: unknown): boolean {
+  return [false, true].some((pegar) => {
+    const n = paraComparar(nombre, pegar);
+    return n.length >= MINIMO_PARA_BUSCAR && paraComparar(descripcion, pegar).includes(n);
+  });
 }
 
 /**
@@ -133,18 +147,18 @@ export function buscarEnInventario(
 
   for (const i of inventario) {
     if (i.codigo) porCodigo.set(normalizar(i.codigo), i);
-    if (i.descripcion) porNombre.set(paraComparar(i.descripcion), i);
+    if (i.descripcion) porNombre.set(paraComparar(i.descripcion, true), i);
   }
 
   return repuestos.map((r) => {
     const codigo = normalizar(r.codigo);
-    const nombre = paraComparar(r.nombre);
+    const nombre = paraComparar(r.nombre, true);
 
     const insumo =
       (codigo && porCodigo.get(codigo)) ||
       (nombre && porNombre.get(nombre)) ||
-      (nombre.length >= MINIMO_PARA_BUSCAR
-        ? inventario.find((i) => paraComparar(i.descripcion).includes(nombre))
+      (nombre
+        ? inventario.find((i) => coincide(i.descripcion, r.nombre))
         : undefined) ||
       null;
 
