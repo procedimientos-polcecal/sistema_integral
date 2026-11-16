@@ -43,7 +43,7 @@ const base = supabaseDeMentira({
   },
 });
 
-const sesion = { usuario: { id: "u1" } as { id: string } | null, edita: true };
+const sesion = { usuario: { id: "u1" } as { id: string } | null, edita: true, ve: true };
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser: async () => ({ data: { user: sesion.usuario } }) } }),
@@ -51,7 +51,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => base.admin }));
 vi.mock("@/lib/mantenimiento/auth", () => ({
   puedeEditarMantenimiento: async () => sesion.edita,
-  puedeVerMantenimiento: async () => true,
+  puedeVerMantenimiento: async () => sesion.ve,
 }));
 
 /** Para probar qué pasa si la cuenta falla **después** de que lo escrito ya se guardó. */
@@ -68,7 +68,7 @@ vi.mock("@/lib/mantenimiento/cuentaDeUnRepuesto", async (importarOriginal) => {
 });
 
 import { PUT as ponerArticulo, DELETE as soltarArticulo } from "@/app/api/mantenimiento/repuestos/[id]/articulo/route";
-import { POST as pegarRi, DELETE as sacarRi } from "@/app/api/mantenimiento/repuestos/[id]/ri/route";
+import { GET as verCuenta, POST as pegarRi, DELETE as sacarRi } from "@/app/api/mantenimiento/repuestos/[id]/ri/route";
 
 const pedido = (metodo: string, cuerpo?: unknown, url = "http://x/api") =>
   new Request(url, {
@@ -94,6 +94,7 @@ const renglon = (n: number, extra: Fila = {}): Fila => ({
 beforeEach(() => {
   sesion.usuario = { id: "u1" };
   sesion.edita = true;
+  sesion.ve = true;
   cuentaFalla.si = false;
   base.reiniciar({
     inventario_articulos: [{ id: "A" }, { id: "B" }],
@@ -346,5 +347,30 @@ describe("el 409 dice qué bloquea", () => {
       expect(r.status).toBe(400);
     }
     expect(base.estado.tablas.mant_ri_de_repuesto).toHaveLength(1);
+  });
+});
+
+describe("ver la cuenta (GET)", () => {
+  it("sin sesión contesta 401 y sin ver Mantenimiento 403: la cuenta se lee con el cliente admin, sin RLS", async () => {
+    sesion.usuario = null;
+    expect((await verCuenta(pedido("GET"), con("r1"))).status).toBe(401);
+
+    sesion.usuario = { id: "u1" };
+    sesion.ve = false;
+    const r = await verCuenta(pedido("GET"), con("r1"));
+    expect(r.status).toBe(403);
+    expect(JSON.stringify(await r.json())).not.toMatch(/cuenta|partes/);
+  });
+
+  it("quien sólo mira, sin edición, la ve y no escribe nada", async () => {
+    sesion.edita = false;
+    const r = await verCuenta(pedido("GET"), con("r1"));
+    expect(r.status).toBe(200);
+    expect((await r.json()).cuenta.estaOrden).toMatchObject({ orden_id: "o1", pide: 10 });
+    expect(base.estado.inserts).toEqual([]);
+  });
+
+  it("un repuesto que no existe es un 404", async () => {
+    expect((await verCuenta(pedido("GET"), con("nada"))).status).toBe(404);
   });
 });

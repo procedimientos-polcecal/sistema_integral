@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
+import { puedeEditarMantenimiento, puedeVerMantenimiento } from "@/lib/mantenimiento/auth";
 import { cuentaDeUnRepuesto, leerNroRi } from "@/lib/mantenimiento/cuentaDeUnRepuesto";
 
 /**
@@ -65,16 +65,20 @@ async function respuesta(
 /**
  * GET — la cuenta de lo que viene para este renglón, sin escribir nada.
  *
- * La piden todas las pantallas que muestran el renglón, así que sólo exige
- * sesión: ver cuántas piezas están cubiertas no es editar. Lee con el cliente
- * admin (la cuenta cruza órdenes y vínculos de otras personas), por eso el
- * permiso es el de esta ruta.
+ * Pide **ver Mantenimiento**, no editar: mirar cuántas piezas están cubiertas no
+ * es escribir. Y lo pide en serio: la cuenta se lee con el cliente admin (cruza
+ * órdenes y vínculos de otras personas), así que RLS no corre y el único piso es
+ * este permiso. Con sólo la sesión, cualquiera con el id de un repuesto leería los
+ * RI, sus estados y las órdenes abiertas que piden el mismo artículo.
  */
 export async function GET(_request: Request, { params }: Params) {
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (!(await puedeVerMantenimiento(supabase, user.id))) {
+    return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+  }
 
   const { data: renglon } = await createAdminClient()
     .from("ordenes_trabajo_repuestos")

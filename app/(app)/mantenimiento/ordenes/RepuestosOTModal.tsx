@@ -128,20 +128,27 @@ export default function RepuestosOTModal({
    * alguien abre el selector, y una sola vez por modal.
    */
   const [articulos, setArticulos] = useState<ArticuloDelPanol[] | null>(null);
-  const pidiendoArticulos = useRef<Promise<ArticuloDelPanol[] | null> | null>(null);
-  function traerArticulos(): Promise<ArticuloDelPanol[] | null> {
+  /**
+   * Sube cada vez que algo cambia la cuenta de un artículo. Un RI pegado en un
+   * renglón vale para todos los renglones del mismo artículo, así que los demás
+   * tienen que volver a calcular; sin esto dos líneas del mismo modal decían
+   * números distintos para las mismas piezas.
+   */
+  const [versionDeLaCuenta, setVersionDeLaCuenta] = useState(0);
+  const pidiendoArticulos = useRef<Promise<ArticuloDelPanol[] | string> | null>(null);
+  /** La lista, o el texto de por qué no se pudo: lo dice el renglón que la pidió. */
+  function traerArticulos(): Promise<ArticuloDelPanol[] | string> {
     if (articulos) return Promise.resolve(articulos);
     pidiendoArticulos.current ??= (async () => {
       try {
         const res = await fetch("/api/mantenimiento/inventario?articulos=1");
         const body = await res.json().catch(() => ({}));
-        if (!res.ok) { setError(body.error ?? "No se pudo traer el catálogo del pañol."); return null; }
+        if (!res.ok) return body.error ?? "No se pudo traer el catálogo del pañol.";
         const lista: ArticuloDelPanol[] = body.data ?? [];
         setArticulos(lista);
         return lista;
       } catch {
-        setError("No se pudo traer el catálogo del pañol: no hay conexión con el servidor.");
-        return null;
+        return "No se pudo traer el catálogo del pañol: no hay conexión con el servidor.";
       } finally {
         pidiendoArticulos.current = null;
       }
@@ -374,7 +381,10 @@ export default function RepuestosOTModal({
           </p>
         )}
 
-        {cargando ? (
+        {/* Sólo se tapa la lista la primera vez: en una recarga el spinner la
+            desmontaba entera y se llevaba lo que cada renglón tenía en pantalla
+            (los avisos de un cambio de artículo, un RI a medio escribir). */}
+        {cargando && repuestos.length === 0 ? (
           <p className="py-6 text-center text-sm text-slate-400">Cargando…</p>
         ) : repuestos.length === 0 ? (
           <p className="py-6 text-center text-sm text-slate-400">
@@ -418,6 +428,8 @@ export default function RepuestosOTModal({
                       puedeEditar={puedeEditar}
                       articulos={articulos}
                       pedirArticulos={traerArticulos}
+                      versionDeLaCuenta={versionDeLaCuenta}
+                      onCambioDeLaCuenta={() => setVersionDeLaCuenta((v) => v + 1)}
                       onCambioDelArticulo={traer}
                     />
 
@@ -614,13 +626,17 @@ type RespuestaDeCuenta = { cuenta?: CuentaDeUnRepuesto | null; advertencia?: str
  * Compras ya sacó de la planilla, que bloquea y no se ve en ningún otro lado.
  */
 function ArticuloYRi({
-  repuesto, d, puedeEditar, articulos, pedirArticulos, onCambioDelArticulo,
+  repuesto, d, puedeEditar, articulos, pedirArticulos, versionDeLaCuenta, onCambioDeLaCuenta,
+  onCambioDelArticulo,
 }: {
   repuesto: Repuesto;
   d: Disponibilidad | undefined;
   puedeEditar: boolean;
   articulos: ArticuloDelPanol[] | null;
-  pedirArticulos: () => Promise<ArticuloDelPanol[] | null>;
+  pedirArticulos: () => Promise<ArticuloDelPanol[] | string>;
+  versionDeLaCuenta: number;
+  /** Se pegó o sacó un RI, o cambió el artículo: los demás renglones recalculan. */
+  onCambioDeLaCuenta: () => void;
   onCambioDelArticulo: () => void;
 }) {
   const articulo = repuesto.articulo ?? null;
@@ -633,6 +649,8 @@ function ArticuloYRi({
   const [eligiendo, setEligiendo] = useState(false);
   const [nro, setNro] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  /** Por qué no se pudo traer el catálogo, si no se pudo: se dice acá y se puede reintentar. */
+  const [falloElCatalogo, setFalloElCatalogo] = useState("");
 
   useCargar(async (vigente) => {
     const res = await fetch(`/api/mantenimiento/repuestos/${repuesto.id}/ri`);
@@ -641,7 +659,7 @@ function ArticuloYRi({
     if (!res.ok) { setError(body.error ?? "No se pudo calcular lo que viene."); return; }
     setCuenta(body.cuenta ?? null);
     setAdvertencia(body.advertencia ?? "");
-  }, [repuesto.id, articulo?.id]);
+  }, [repuesto.id, articulo?.id, versionDeLaCuenta]);
 
   /** Aplica la respuesta de una escritura: la cuenta nueva, o la advertencia. */
   function aplicar(body: RespuestaDeCuenta) {
@@ -682,6 +700,7 @@ function ArticuloYRi({
     setNro("");
     setAviso("");
     aplicar(r.body);
+    onCambioDeLaCuenta();
   }
 
   async function sacarRi(n: number) {
@@ -689,6 +708,7 @@ function ArticuloYRi({
     if (!r.ok) return;
     setAviso("");
     aplicar(r.body);
+    onCambioDeLaCuenta();
   }
 
   /** Sacar uno de los que bloquean el cambio de artículo: queda la lista que falta. */
@@ -698,6 +718,7 @@ function ArticuloYRi({
     if (!r.ok) return;
     setBloqueo(faltan);
     aplicar(r.body);
+    onCambioDeLaCuenta();
     if (faltan.length === 0) setError("");
   }
 
@@ -719,6 +740,7 @@ function ArticuloYRi({
           "desde ahora cuentan también para este repuesto."
         : ""
     );
+    onCambioDeLaCuenta();
     onCambioDelArticulo();
   }
 
@@ -727,19 +749,23 @@ function ArticuloYRi({
     if (!r.ok) return;
     setAviso("");
     aplicar(r.body);
+    onCambioDeLaCuenta();
     onCambioDelArticulo();
   }
 
   async function usarElQueReconocio(codigo: string) {
     const lista = await pedirArticulos();
-    const encontrado = lista?.find((a) => a.codigo === codigo);
+    if (typeof lista === "string") { setError(lista); return; }
+    const encontrado = lista.find((a) => a.codigo === codigo);
     if (!encontrado) { setError("No se encontró ese artículo en el catálogo activo del pañol."); return; }
     await elegir(encontrado.id);
   }
 
   async function abrirSelector() {
     setEligiendo(true);
-    await pedirArticulos();
+    setFalloElCatalogo("");
+    const lista = await pedirArticulos();
+    if (typeof lista === "string") setFalloElCatalogo(lista);
   }
 
   const reconocido = !articulo && d?.insumo?.codigo ? d.insumo : null;
@@ -763,13 +789,13 @@ function ArticuloYRi({
         {puedeEditar && !eligiendo && (
           <>
             {" "}
-            <button onClick={abrirSelector} disabled={ocupado} className="underline text-[var(--primary)]">
+            <button onClick={abrirSelector} disabled={ocupado} className="underline text-[var(--primary)] disabled:opacity-40 disabled:cursor-not-allowed">
               {articulo ? "Cambiar" : "Elegir artículo"}
             </button>
             {articulo && (
               <>
                 {" · "}
-                <button onClick={soltar} disabled={ocupado} className="underline text-slate-500 hover:text-red-600">
+                <button onClick={soltar} disabled={ocupado} className="underline text-slate-500 enabled:hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed">
                   Soltar
                 </button>
               </>
@@ -786,7 +812,7 @@ function ArticuloYRi({
           <button
             onClick={() => usarElQueReconocio(reconocido.codigo!)}
             disabled={ocupado}
-            className="underline text-[var(--primary)]"
+            className="underline text-[var(--primary)] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Usar este artículo
           </button>
@@ -810,7 +836,14 @@ function ArticuloYRi({
                 ))}
               </Select>
             ) : (
-              <span className="text-slate-400">Cargando el catálogo del pañol…</span>
+              falloElCatalogo ? (
+                <span className="text-red-600">
+                  {falloElCatalogo}{" "}
+                  <button onClick={abrirSelector} className="underline">Reintentar</button>
+                </span>
+              ) : (
+                <span className="text-slate-400">Cargando el catálogo del pañol…</span>
+              )
             )}
           </div>
           <button onClick={() => setEligiendo(false)} className="shrink-0 underline text-slate-500">
@@ -832,7 +865,7 @@ function ArticuloYRi({
             {bloqueo.map((n) => (
               <li key={n}>
                 RI {n}{" "}
-                <button onClick={() => sacarElQueBloquea(n)} disabled={ocupado} className="underline hover:text-red-700">
+                <button onClick={() => sacarElQueBloquea(n)} disabled={ocupado} className="underline enabled:hover:text-red-700 disabled:opacity-40 disabled:cursor-not-allowed">
                   Sacar
                 </button>
               </li>
@@ -866,7 +899,7 @@ function ArticuloYRi({
                 {puedeEditar && (
                   <>
                     {" "}
-                    <button onClick={() => sacarRi(ri.nro_ri)} disabled={ocupado} className="underline text-slate-400 hover:text-red-600">
+                    <button onClick={() => sacarRi(ri.nro_ri)} disabled={ocupado} className="underline text-slate-400 enabled:hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed">
                       Sacar
                     </button>
                   </>
