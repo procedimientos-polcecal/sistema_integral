@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import InfoTip from "@/components/InfoTip";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { diasEntre } from "@/lib/rrhh/vacacionesDeAusencia";
 
 export default function VacacionesClient({ empleados }: { empleados: any[] }) {
   const searchParams = useSearchParams();
@@ -41,7 +42,7 @@ function Balance({ empleados }: { empleados: any[] }) {
   const [employeeId, setEmployeeId] = useState("");
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [balance, setBalance] = useState<any | null>(null);
-  const [form, setForm] = useState({ fechaDesde: "", fechaHasta: "", diasTomados: "" });
+  const [form, setForm] = useState({ fechaDesde: "", fechaHasta: "" });
   const [guardando, setGuardando] = useState(false);
 
   const cargarBalance = useCargar(async (vigente) => {
@@ -59,11 +60,11 @@ function Balance({ empleados }: { empleados: any[] }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         employeeId, anioCorrespondiente: anio,
-        fechaDesde: form.fechaDesde, fechaHasta: form.fechaHasta, diasTomados: Number(form.diasTomados),
+        fechaDesde: form.fechaDesde, fechaHasta: form.fechaHasta,
       }),
     });
     setGuardando(false);
-    setForm({ fechaDesde: "", fechaHasta: "", diasTomados: "" });
+    setForm({ fechaDesde: "", fechaHasta: "" });
     cargarBalance();
   }
 
@@ -111,9 +112,20 @@ function Balance({ empleados }: { empleados: any[] }) {
                 <label className="block text-xs text-slate-500 mb-1">Hasta</label>
                 <input type="date" required value={form.fechaHasta} onChange={(e) => setForm({ ...form, fechaHasta: e.target.value })} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
               </div>
+              {/*
+                Los días no se tipean: salen del calendario, que es lo que la
+                sincronización guarda al crear el período desde la ausencia. Un
+                campo que acepte otro número y después lo descarte es peor que
+                no tenerlo — ya pasó, y hay tres períodos cuyo `dias_tomados` no
+                coincide con sus fechas.
+              */}
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Días</label>
-                <input type="number" required value={form.diasTomados} onChange={(e) => setForm({ ...form, diasTomados: e.target.value })} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm w-20" />
+                <p className="px-2 py-1.5 text-sm text-slate-700">
+                  {form.fechaDesde && form.fechaHasta && form.fechaHasta >= form.fechaDesde
+                    ? diasEntre(form.fechaDesde, form.fechaHasta)
+                    : "—"}
+                </p>
               </div>
               <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
                 {guardando ? "Guardando..." : "Guardar"}

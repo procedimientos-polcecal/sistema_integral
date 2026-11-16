@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/ConfirmProvider";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import { diasEntre } from "@/lib/rrhh/vacacionesDeAusencia";
 
 const tabs = ["fichadas", "ausencias", "vacaciones", "francos"] as const;
 type Tab = (typeof tabs)[number];
@@ -246,13 +247,13 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
 
   // --- vacaciones ---
   const [nuevaVacacion, setNuevaVacacion] = useState({
-    fechaDesde: "", fechaHasta: "", diasTomados: "", anioCorrespondiente: String(new Date().getFullYear()),
+    fechaDesde: "", fechaHasta: "", anioCorrespondiente: String(new Date().getFullYear()),
   });
   const [editandoVacacionId, setEditandoVacacionId] = useState<string | null>(null);
   const [guardandoVacacion, setGuardandoVacacion] = useState(false);
   function cancelarEdicionVacacion() {
     setEditandoVacacionId(null);
-    setNuevaVacacion({ fechaDesde: "", fechaHasta: "", diasTomados: "", anioCorrespondiente: String(anioVacaciones) });
+    setNuevaVacacion({ fechaDesde: "", fechaHasta: "", anioCorrespondiente: String(anioVacaciones) });
   }
   async function refrescarVacaciones() {
     const data = await fetch(`/api/rrhh/vacaciones/${empleado.id}/balance?anio=${anioVacaciones}`).then((r) => r.json());
@@ -267,7 +268,6 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
       anioCorrespondiente: Number(nuevaVacacion.anioCorrespondiente),
       fechaDesde: nuevaVacacion.fechaDesde,
       fechaHasta: nuevaVacacion.fechaHasta,
-      diasTomados: Number(nuevaVacacion.diasTomados),
     };
     await fetch(editandoVacacionId ? `/api/rrhh/vacaciones/${editandoVacacionId}` : "/api/rrhh/vacaciones", {
       method: editandoVacacionId ? "PUT" : "POST",
@@ -727,9 +727,19 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                 <label className="block text-xs text-slate-500 mb-1">Hasta</label>
                 <input type="date" required value={nuevaVacacion.fechaHasta} onChange={(e) => setNuevaVacacion({ ...nuevaVacacion, fechaHasta: e.target.value })} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" />
               </div>
+              {/*
+                Los días no se tipean: salen del calendario, que es lo que la
+                sincronización guarda. Un campo que acepte otro número y después
+                lo descarte es peor que no tenerlo — ya pasó, y hay tres
+                períodos cuyo `dias_tomados` no coincide con sus fechas.
+              */}
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Días</label>
-                <input type="number" required min={1} value={nuevaVacacion.diasTomados} onChange={(e) => setNuevaVacacion({ ...nuevaVacacion, diasTomados: e.target.value })} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm w-20" />
+                <p className="px-2 py-1.5 text-sm text-slate-700">
+                  {nuevaVacacion.fechaDesde && nuevaVacacion.fechaHasta && nuevaVacacion.fechaHasta >= nuevaVacacion.fechaDesde
+                    ? diasEntre(nuevaVacacion.fechaDesde, nuevaVacacion.fechaHasta)
+                    : "—"}
+                </p>
               </div>
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Año correspondiente</label>
@@ -764,7 +774,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
                       <button
                         onClick={() => {
                           setEditandoVacacionId(p.id);
-                          setNuevaVacacion({ fechaDesde: p.fecha_desde.slice(0, 10), fechaHasta: p.fecha_hasta.slice(0, 10), diasTomados: String(p.dias_tomados), anioCorrespondiente: String(p.anio_correspondiente) });
+                          setNuevaVacacion({ fechaDesde: p.fecha_desde.slice(0, 10), fechaHasta: p.fecha_hasta.slice(0, 10), anioCorrespondiente: String(p.anio_correspondiente) });
                         }}
                         className="text-slate-700 underline text-xs"
                       >
