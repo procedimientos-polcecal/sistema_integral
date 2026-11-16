@@ -529,8 +529,14 @@ export async function exportarLoPendiente(
 async function anotarLasDivergencias(
   admin: ReturnType<typeof createAdminClient>,
   deLaPlanilla: readonly OrdenLeida[]
-): Promise<{ cuantas: number; recortadas: number; error: string | null }> {
-  const vacio = { cuantas: 0, recortadas: 0 };
+): Promise<{
+  cuantas: number;
+  recortadas: number;
+  error: string | null;
+  /** Por qué no pudo correr la revisión de canceladas sin motivo; null si corrió. */
+  sinRevisarCanceladas: string | null;
+}> {
+  const vacio = { cuantas: 0, recortadas: 0, sinRevisarCanceladas: null };
   try {
     // `traerTodo` porque son 2.300 y PostgREST corta en 1.000 sin avisar.
     const delSistema = await traerTodo<OrdenDelSistema & { id: string }>((desde, hasta) =>
@@ -546,6 +552,12 @@ async function anotarLasDivergencias(
     // la tabla exista. Con `traerTodo` y no `.in()` porque no hay ids que
     // acotar y las notas sólo crecen (25 hoy). Si falla, `tiene_nota` queda sin
     // definir y el detector calla: se pierde un aviso, no la sincronización.
+    // Esa pérdida **antes era invisible** —un detector que deja de mirar no se
+    // distingue de uno que no encuentra nada— y ahora no lo es: el motivo sale
+    // en `canceladas_sin_revisar` del resultado. No se reusa `error`, que
+    // quiere decir «no se pudo anotar nada»: acá el contraste sí corrió y sólo
+    // faltó esta revisión, y mezclarlos haría parecer total un fallo parcial.
+    let sinRevisarCanceladas: string | null = null;
     try {
       const conNota = new Set(
         (await traerTodo<{ orden_id: string }>((desde, hasta) =>
@@ -553,8 +565,8 @@ async function anotarLasDivergencias(
         )).map((n) => n.orden_id)
       );
       for (const o of delSistema) o.tiene_nota = conNota.has(o.id);
-    } catch {
-      // Sin la consulta no se sabe: se deja sin definir.
+    } catch (e) {
+      sinRevisarCanceladas = e instanceof Error ? e.message : String(e);
     }
 
     const { filas, total, recortadas } = loQueSeGuardaDelContraste(
@@ -571,7 +583,7 @@ async function anotarLasDivergencias(
       if (alta.error) return { ...vacio, error: alta.error.message };
     }
 
-    return { cuantas: total, recortadas, error: null };
+    return { cuantas: total, recortadas, error: null, sinRevisarCanceladas };
   } catch (e) {
     return { ...vacio, error: e instanceof Error ? e.message : String(e) };
   }
@@ -698,6 +710,11 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     // Un fallo acá no frena la corrida —anotar es secundario, importar no—, así
     // que se dice. Mientras la migración no esté corrida, esto dice por qué.
     ...(divergencias.error ? { divergencias_sin_anotar: divergencias.error } : {}),
+    // Distinto del anterior: el contraste corrió entero, sólo no pudo buscar
+    // las canceladas sin motivo. Si aparece, ese detector está apagado.
+    ...(divergencias.sinRevisarCanceladas
+      ? { canceladas_sin_revisar: divergencias.sinRevisarCanceladas }
+      : {}),
   });
 }
 
