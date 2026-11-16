@@ -853,11 +853,15 @@ export async function PATCH(request: Request) {
       .insert({ orden_id: id, texto: cancelacion.texto, creado_por: user.id });
 
     // 500 y no 400: que la base no acepte el insert es un fallo del servidor,
-    // y el cuerpo que llegó puede estar perfecto. Vestirlo de error del cliente
-    // le dice «no reintentes» a cualquiera que trate los 4xx como definitivos
-    // —la cola de las cargas sin señal, sin ir más lejos—, y así una
-    // cancelación que sólo necesitaba otro intento se perdería en silencio. El
-    // texto ya decía «probá de nuevo»; ahora el código dice lo mismo.
+    // y el cuerpo que llegó puede estar perfecto. El código de estado es lo
+    // único que separa «arreglá el pedido» de «volvé a intentar», y un 4xx acá
+    // le diría lo primero a quien no tiene nada que arreglar: volvería a tipear
+    // el mismo motivo para recibir la misma respuesta. El texto ya decía
+    // «probá de nuevo»; ahora el código dice lo mismo.
+    //
+    // Lo que **no** es el motivo, aunque suene: la cola de las cargas sin
+    // señal. `mandarALaRuta` de `public/sw.js` manda siempre `method: "POST"`,
+    // así que no llega nunca a este PATCH y no hay ningún 4xx suyo que frenar.
     if (errorDeLaNota) {
       return NextResponse.json(
         {

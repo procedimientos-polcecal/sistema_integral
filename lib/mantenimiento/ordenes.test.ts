@@ -365,8 +365,11 @@ describe("CANCELADA", () => {
     expect(celdaDeEstado("POR_HACER", 42)).toBe('=IF(J42="","",L42)');
   });
 
-  it("SUSPENDIDA ya no es un estado, y el error dice cuáles valen", () => {
-    // Un teléfono con la app vieja manda el estado que dejó de valer.
+  it("SUSPENDIDA ya no es un estado del vocabulario, y CANCELADA sí", () => {
+    // Un teléfono con la app vieja manda el estado que dejó de valer. Que el
+    // error además liste los que valen lo arma la ruta con `ESTADOS_DE_OT`
+    // (`mensajeDeEstadoInvalido`), y las rutas no se prueban en este repo: acá
+    // se fija el vocabulario, que es lo que ese mensaje interpola.
     expect(esEstadoDeOT("SUSPENDIDA")).toBe(false);
     expect(esEstadoDeOT("CANCELADA")).toBe(true);
   });
