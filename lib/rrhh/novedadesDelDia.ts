@@ -13,14 +13,32 @@ import { labelTipoAusencia } from "./tiposAusencia";
  *
  * ## Las tres decisiones que no se deducen del código, todas medidas
  *
- * 1. **Una vacación que nació de una ausencia no se lista aparte.** Cargar una
- *    ausencia de tipo `VACACIONES` crea además la fila en `vacaciones`, con su
- *    `ausencia_id` apuntando a la primera. Medido el 16/11/2026: de 41
- *    vacaciones, **21 tienen `ausencia_id`**. Listar las dos cosas haría que la
- *    misma licencia apareciera dos veces en el mismo correo, con fechas
- *    distintas —el período y los días hábiles no coinciden—, que es la forma
- *    más rápida de que alguien deje de creerle al resumen. Entran sólo las que
- *    se cargaron solas, en la pestaña de vacaciones.
+ * 1. **Una vacación y su ausencia son la misma novedad, y se escriben una sola
+ *    vez: en la sección de vacaciones.** Cargar vacaciones crea dos filas —la
+ *    ausencia de tipo `VACACIONES` y el período en `vacaciones`, con su
+ *    `ausencia_id`— y listar las dos pone la misma licencia dos veces en el
+ *    mismo correo, que es la forma más rápida de que alguien deje de creerle.
+ *
+ *    **Gana la de `vacaciones` porque dice más.** Las fechas son idénticas
+ *    —`sincronizarPeriodoVacaciones` las copia de la ausencia— pero el período
+ *    agrega `dias_tomados` y, sobre todo, `anio_correspondiente`, que es de qué
+ *    año se descuentan los días. Ese dato no se deduce de las fechas y es el
+ *    motivo por el que corregir un período se audita. Lo que la ausencia tiene
+ *    de más —las observaciones y quién la cargó— se le pega al renglón, así
+ *    que no se pierde nada.
+ *
+ *    **Esto estaba al revés hasta el 17/11/2026 y conviene saber por qué**, que
+ *    es la parte que no se deduce del código. Cuando esto se escribió, sólo 21
+ *    de 41 períodos tenían `ausencia_id`: RRHH tenía dos puertas para cargar
+ *    vacaciones y una no creaba la ausencia. Con eso, descartar las atadas y
+ *    listar las sueltas daba bien. El mismo día se arregló aquella puerta
+ *    (`app/api/rrhh/vacaciones/route.ts`), así que **de ahora en más todas
+ *    nacen atadas**: la regla vieja habría dejado la sección de vacaciones
+ *    permanentemente vacía y cada licencia habría salido como un renglón de
+ *    ausencia sin días ni año. Nadie lo habría notado —el correo seguía
+ *    saliendo, con la vacación adentro, sólo que más pobre—, y por eso queda
+ *    escrito: **la regla depende de un invariante de otro archivo**, no de algo
+ *    que este módulo controle.
  *
  * 2. **Los francos generados y los tomados van en secciones separadas, y la
  *    diferencia está escrita en el correo.** No son lo mismo aunque sean la
@@ -57,6 +75,8 @@ export interface PersonaDeLaNovedad {
 }
 
 export interface AusenciaNueva {
+  /** Hace falta para saber si una vacación del día es ésta misma. */
+  id?: string | null;
   empleado: PersonaDeLaNovedad | null;
   fecha_desde: string;
   fecha_hasta: string;
@@ -72,8 +92,11 @@ export interface VacacionNueva {
   fecha_hasta: string;
   dias_tomados: number | string | null;
   anio_correspondiente: number | string | null;
-  /** Cuando viene de una ausencia, no se lista: ya está en la otra sección. */
+  /** La ausencia que la generó, cuando la hay: sirve para no listarla dos veces. */
   ausencia_id: string | null;
+  /** Se le pegan de su ausencia, para no perderlas al no listarla. */
+  observaciones?: string | null;
+  cargadaPor?: string | null;
 }
 
 export interface FrancoNuevo {
@@ -132,13 +155,43 @@ export function rangoDeFechas(desde: string, hasta: string): string {
 }
 
 /**
- * Las vacaciones que entran al correo: las que **no** nacieron de una ausencia.
+ * Reparte las dos listas para que una licencia salga **una sola vez**, en la
+ * sección de vacaciones, y con todo lo que se sabe de ella.
  *
  * Ver la decisión 1 del encabezado. Separada en su propia función para poder
- * fijarla con un test: es la que evita que la misma licencia salga dos veces.
+ * fijarla con un test, porque es la que sostiene esa decisión.
+ *
+ * Tres casos, y los tres pasan:
+ *
+ * - **Vacación con su ausencia, las dos del día.** Sale una vez, como
+ *   vacación, con las observaciones y el autor de la ausencia pegados. La
+ *   ausencia no se lista.
+ * - **Vacación suelta**, sin `ausencia_id` — las 20 viejas, o una que se
+ *   cargue por un camino que no cree la ausencia. Sale como vacación, sin
+ *   observaciones. No se inventa nada.
+ * - **Ausencia de tipo VACACIONES sin período del día**, porque el período se
+ *   creó otro día o porque no se creó. Se queda en la sección de ausencias,
+ *   que es la verdad de lo que hay: decir menos es mejor que no decirlo.
  */
-export function vacacionesQueNoSonUnaAusencia<T extends { ausencia_id: string | null }>(vacaciones: T[]): T[] {
-  return vacaciones.filter((v) => !v.ausencia_id);
+export function repartirVacacionesYAusencias(
+  ausencias: AusenciaNueva[],
+  vacaciones: VacacionNueva[]
+): { ausencias: AusenciaNueva[]; vacaciones: VacacionNueva[] } {
+  const porId = new Map<string, AusenciaNueva>();
+  for (const a of ausencias) if (a.id) porId.set(a.id, a);
+
+  const absorbidas = new Set<string>();
+  const conDetalle = vacaciones.map((v) => {
+    const suAusencia = v.ausencia_id ? porId.get(v.ausencia_id) : undefined;
+    if (!suAusencia) return v;
+    absorbidas.add(v.ausencia_id!);
+    return { ...v, observaciones: suAusencia.observaciones, cargadaPor: suAusencia.cargadaPor };
+  });
+
+  return {
+    ausencias: ausencias.filter((a) => !(a.id && absorbidas.has(a.id))),
+    vacaciones: conDetalle,
+  };
 }
 
 /** Cuántas novedades hay en total, contando las cuatro secciones. */
@@ -249,10 +302,15 @@ export function cuerpoDelCorreo(
     ...seccion(
       "Vacaciones",
       null,
-      n.vacaciones.map(
-        (v) =>
-          `- ${comoSeLlama(v.empleado)} — ${rangoDeFechas(v.fecha_desde, v.fecha_hasta)} · ${v.dias_tomados ?? "?"} días · año ${v.anio_correspondiente ?? "?"}`
-      )
+      n.vacaciones.map((v) => {
+        const dias = Number(v.dias_tomados ?? NaN);
+        const cuantos = isFinite(dias) ? `${dias} ${dias === 1 ? "día" : "días"}` : "? días";
+        const cabeza = `- ${comoSeLlama(v.empleado)} — ${rangoDeFechas(v.fecha_desde, v.fecha_hasta)} · ${cuantos} · año ${v.anio_correspondiente ?? "?"}`;
+        const detalle: string[] = [];
+        if (v.observaciones?.trim()) detalle.push(`    Observaciones: ${sangrado(v.observaciones.trim(), "    ")}`);
+        if (v.cargadaPor) detalle.push(`    La cargó: ${v.cargadaPor}`);
+        return [cabeza, ...detalle].join("\n");
+      })
     )
   );
 

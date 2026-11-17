@@ -10,7 +10,7 @@ import {
   cuerpoDelCorreo,
   destinatariosDelCorreo,
   hayAlgoQueMandar,
-  vacacionesQueNoSonUnaAusencia,
+  repartirVacacionesYAusencias,
   type NovedadesDelDia,
 } from "@/lib/rrhh/novedadesDelDia";
 
@@ -153,10 +153,13 @@ export async function GET(request: Request) {
   const tomados = (francos as Fila[]).filter((f) => f.fecha_tomado === dia);
   const generados = (francos as Fila[]).filter((f) => f.fecha_tomado !== dia);
 
-  const novedades: NovedadesDelDia = {
-    ausencias: (ausencias as Fila[]).map((a) => {
+  // Una licencia cargada como vacaciones deja DOS filas —la ausencia y el
+  // período— y el reparto decide cuál se escribe, para que no salga dos veces.
+  const repartidas = repartirVacacionesYAusencias(
+    (ausencias as Fila[]).map((a) => {
       const quien = uno(a.usuarios as { nombre?: string; apellido?: string } | null);
       return {
+        id: a.id as string,
         empleado: uno(a.empleados as never),
         fecha_desde: a.fecha_desde as string,
         fecha_hasta: a.fecha_hasta as string,
@@ -166,16 +169,19 @@ export async function GET(request: Request) {
         cargadaPor: quien ? [quien.nombre, quien.apellido].filter(Boolean).join(" ") : null,
       };
     }),
-    vacaciones: vacacionesQueNoSonUnaAusencia(
-      (vacaciones as Fila[]).map((v) => ({
-        empleado: uno(v.empleados as never),
-        fecha_desde: v.fecha_desde as string,
-        fecha_hasta: v.fecha_hasta as string,
-        dias_tomados: v.dias_tomados as number,
-        anio_correspondiente: v.anio_correspondiente as number,
-        ausencia_id: (v.ausencia_id as string | null) ?? null,
-      }))
-    ),
+    (vacaciones as Fila[]).map((v) => ({
+      empleado: uno(v.empleados as never),
+      fecha_desde: v.fecha_desde as string,
+      fecha_hasta: v.fecha_hasta as string,
+      dias_tomados: v.dias_tomados as number,
+      anio_correspondiente: v.anio_correspondiente as number,
+      ausencia_id: (v.ausencia_id as string | null) ?? null,
+    }))
+  );
+
+  const novedades: NovedadesDelDia = {
+    ausencias: repartidas.ausencias,
+    vacaciones: repartidas.vacaciones,
     francosTomados: tomados.map((f) => ({
       empleado: uno(f.empleados as never),
       fecha_generado: f.fecha_generado as string,

@@ -9,7 +9,7 @@ import {
   fechaCorta,
   hayAlgoQueMandar,
   rangoDeFechas,
-  vacacionesQueNoSonUnaAusencia,
+  repartirVacacionesYAusencias,
   type NovedadesDelDia,
 } from "./novedadesDelDia";
 
@@ -68,23 +68,81 @@ describe("comoSeLlama", () => {
   });
 });
 
-describe("vacacionesQueNoSonUnaAusencia", () => {
-  it("saca las que nacieron de una ausencia", () => {
+describe("repartirVacacionesYAusencias", () => {
+  const laAusenciaDeLaVacacion = {
+    id: "aus-1",
+    empleado: PEREZ,
+    fecha_desde: "2026-11-20",
+    fecha_hasta: "2026-11-27",
+    tipo: "VACACIONES",
+    justificada: true,
+    observaciones: "Pidió adelantar una semana",
+    cargadaPor: "Agustina Are",
+  };
+  const elPeriodo = {
+    empleado: PEREZ,
+    fecha_desde: "2026-11-20",
+    fecha_hasta: "2026-11-27",
+    dias_tomados: 7,
+    anio_correspondiente: 2025,
+    ausencia_id: "aus-1",
+  };
+
+  it("una licencia sale UNA vez, y del lado que dice más", () => {
     /*
-     * Medido el 16/11/2026: de 41 vacaciones, 21 tienen `ausencia_id`. Sin
-     * este filtro, esas 21 licencias salen dos veces en el mismo correo.
+     * Desde el 17/11/2026 toda vacación nace con su ausencia, así que sin esto
+     * la misma licencia saldría dos veces en el mismo correo.
      */
-    const vacaciones = [
-      { id: "a", ausencia_id: "la-ausencia" },
-      { id: "b", ausencia_id: null },
-      { id: "c", ausencia_id: null },
-    ];
-    expect(vacacionesQueNoSonUnaAusencia(vacaciones).map((v) => v.id)).toEqual(["b", "c"]);
+    const r = repartirVacacionesYAusencias([laAusenciaDeLaVacacion], [elPeriodo]);
+    expect(r.ausencias).toEqual([]);
+    expect(r.vacaciones).toHaveLength(1);
   });
 
-  it("sin ninguna atada devuelve todas", () => {
-    const vacaciones = [{ id: "b", ausencia_id: null }];
-    expect(vacacionesQueNoSonUnaAusencia(vacaciones)).toHaveLength(1);
+  it("y se lleva puesto lo que la ausencia tenía de más", () => {
+    // Las observaciones y el autor viven en la ausencia; si no se pegan acá,
+    // al no listarla se pierden.
+    const [v] = repartirVacacionesYAusencias([laAusenciaDeLaVacacion], [elPeriodo]).vacaciones;
+    expect(v.observaciones).toBe("Pidió adelantar una semana");
+    expect(v.cargadaPor).toBe("Agustina Are");
+    expect(v.anio_correspondiente).toBe(2025);
+  });
+
+  it("no toca las ausencias que no son esa vacación", () => {
+    const otra = { ...UNA_AUSENCIA, id: "aus-2" };
+    const r = repartirVacacionesYAusencias([laAusenciaDeLaVacacion, otra], [elPeriodo]);
+    expect(r.ausencias.map((a) => a.id)).toEqual(["aus-2"]);
+  });
+
+  it("una vacación suelta sale igual, sin inventarle observaciones", () => {
+    // Las 20 viejas, cargadas por la puerta que no creaba la ausencia.
+    const suelta = { ...elPeriodo, ausencia_id: null };
+    const r = repartirVacacionesYAusencias([], [suelta]);
+    expect(r.vacaciones).toHaveLength(1);
+    expect(r.vacaciones[0].observaciones).toBeUndefined();
+    expect(r.vacaciones[0].cargadaPor).toBeUndefined();
+  });
+
+  it("una ausencia de vacaciones sin período del día se queda donde está", () => {
+    // El período se creó otro día, o no se creó. Mejor decir menos que no
+    // decirlo: la ausencia sigue saliendo.
+    const r = repartirVacacionesYAusencias([laAusenciaDeLaVacacion], []);
+    expect(r.ausencias.map((a) => a.id)).toEqual(["aus-1"]);
+    expect(r.vacaciones).toEqual([]);
+  });
+
+  it("un ausencia_id que no es de hoy no borra ninguna ausencia", () => {
+    const deOtroDia = { ...elPeriodo, ausencia_id: "aus-de-ayer" };
+    const r = repartirVacacionesYAusencias([{ ...UNA_AUSENCIA, id: "aus-2" }], [deOtroDia]);
+    expect(r.ausencias.map((a) => a.id)).toEqual(["aus-2"]);
+    expect(r.vacaciones).toHaveLength(1);
+  });
+
+  it("no modifica los arreglos que recibe", () => {
+    const aus = [laAusenciaDeLaVacacion];
+    const vac = [elPeriodo];
+    repartirVacacionesYAusencias(aus, vac);
+    expect(aus).toHaveLength(1);
+    expect(vac[0]).not.toHaveProperty("cargadaPor");
   });
 });
 
@@ -159,6 +217,26 @@ describe("cuerpoDelCorreo", () => {
     expect(cuerpo).toContain("    La cargó: Karen Shtefec");
     expect(cuerpo).toContain("VACACIONES (1)");
     expect(cuerpo).toContain("- PÉREZ, ANA — del 20/11/2026 al 27/11/2026 · 7 días · año 2025");
+  });
+
+  it("el renglón de vacaciones lleva lo que absorbió de su ausencia", () => {
+    const conDetalle = con({
+      vacaciones: [{
+        empleado: PEREZ, fecha_desde: "2026-11-20", fecha_hasta: "2026-11-27",
+        dias_tomados: 7, anio_correspondiente: 2025, ausencia_id: "aus-1",
+        observaciones: "Pidió adelantar una semana", cargadaPor: "Agustina Are",
+      }],
+    });
+    const cuerpo = cuerpoDelCorreo(conDetalle, "2026-11-17");
+    expect(cuerpo).toContain("    Observaciones: Pidió adelantar una semana");
+    expect(cuerpo).toContain("    La cargó: Agustina Are");
+  });
+
+  it("un día de vacaciones no dice «1 días»", () => {
+    const unDia = con({
+      vacaciones: [{ empleado: PEREZ, fecha_desde: "2026-11-20", fecha_hasta: "2026-11-20", dias_tomados: 1, anio_correspondiente: 2026, ausencia_id: null }],
+    });
+    expect(cuerpoDelCorreo(unDia, "2026-11-17")).toContain("el 20/11/2026 · 1 día · año 2026");
   });
 
   it("dice que los francos generados los hace el sistema", () => {
