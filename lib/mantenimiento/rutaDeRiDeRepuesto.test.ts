@@ -321,8 +321,9 @@ describe("cambiar o soltar el artículo con RI pegados al artículo", () => {
 
   describe("los RI pegados al renglón", () => {
     // Un RI pegado a un renglón que no tenía artículo se guarda con `repuesto_id` y se
-    // lee, ya con artículo, como del grupo (cuentaDeUnRepuesto). Por eso cambiarlo de
-    // artículo se niega: si no, el vínculo se iría a cubrir órdenes que no son suyas.
+    // lee, ya con artículo, como del grupo (cuentaDeUnRepuesto). Por eso, con artículo
+    // puesto, **cambiarlo y soltarlo se niegan los dos**: si no, el vínculo se iría a
+    // cubrir órdenes que no son suyas, de una o de dos patadas.
     const conUnRiDelRenglon = () =>
       base.reiniciar({
         ...base.estado.tablas,
@@ -335,18 +336,49 @@ describe("cambiar o soltar el artículo con RI pegados al artículo", () => {
       expect(r.status).toBe(409);
       const cuerpo = await r.json();
       expect(cuerpo.ris_pegados).toEqual([500]);
-      expect(cuerpo.error).toMatch(/sacalo antes de cambiar el artículo/);
+      expect(cuerpo.error).toMatch(/sacalo antes de cambiar o soltar el artículo/);
       expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBe("A");
       expect(base.estado.tablas.mant_ri_de_repuesto).toHaveLength(1);
     });
 
-    it("no frenan el soltar: angosta el alcance y el vínculo sigue alcanzable", async () => {
+    it("frenan también el soltar", async () => {
       conUnRiDelRenglon();
       const r = await soltarArticulo(pedido("DELETE"), con("r1"));
-      expect(r.status).toBe(200);
-      expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBeNull();
+      expect(r.status).toBe(409);
+      expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBe("A");
       expect(base.estado.tablas.mant_ri_de_repuesto).toHaveLength(1);
-      // Y desde esa misma pantalla se puede sacar.
+    });
+
+    /*
+     * **El camino que la primera versión de este freno dejaba abierto**, y que vale
+     * la pena tener fijado porque el argumento para dejarlo abierto sonaba bien.
+     *
+     * Frenaba sólo el cambio, con el razonamiento de que soltar *angosta* el alcance
+     * y no deja nada fuera del alcance del DELETE — las dos cosas ciertas. Pero el
+     * mismo viaje salía en dos pasos: soltar, que con `viejo` puesto no miraba los
+     * vínculos del renglón, y volver a elegir, que con `viejo` en null no mira nada.
+     * El vínculo terminaba contando para todas las órdenes abiertas que piden el
+     * artículo nuevo, y **la que lee «cubierta» de más no es la de quien apretó**, así
+     * que ningún aviso de la pantalla la alcanza. Los dos botones están uno al lado
+     * del otro.
+     */
+    it("ni por la puerta de al lado: soltar y volver a elegir otro artículo", async () => {
+      conUnRiDelRenglon();
+      expect((await soltarArticulo(pedido("DELETE"), con("r1"))).status).toBe(409);
+      expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBe("A");
+
+      // El único camino que queda es el bueno: sacar el RI primero.
+      await sacarRi(pedido("DELETE", undefined, "http://x/api?nro_ri=500"), con("r1"));
+      expect((await soltarArticulo(pedido("DELETE"), con("r1"))).status).toBe(200);
+      expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBeNull();
+    });
+
+    it("sin artículo puesto no frenan nada, y se sacan desde esa misma pantalla", async () => {
+      base.reiniciar({
+        ...base.estado.tablas,
+        ordenes_trabajo_repuestos: [renglon(1, { articulo_id: null })],
+        mant_ri_de_repuesto: [{ id: "m1", nro_ri: 500, articulo_id: null, repuesto_id: "r1" }],
+      });
       const sacado = await sacarRi(pedido("DELETE", undefined, "http://x/api?nro_ri=500"), con("r1"));
       expect(sacado.status).toBe(200);
       expect(base.estado.tablas.mant_ri_de_repuesto).toEqual([]);

@@ -8,7 +8,11 @@ import { cuentaDeUnRepuesto, leerNroRi } from "@/lib/mantenimiento/cuentaDeUnRep
  * Pegar un RI de Compras a un repuesto de una OT, y sacarlo.
  *
  * **El destino sale de la fila:** si el renglón tiene `articulo_id`, el RI se pega
- * al artículo y vale para toda OT que lo use; si no, al renglón y vale sólo ahí.
+ * al artículo y vale para toda OT que lo use; si no, al renglón — y ahí vale sólo
+ * para ese renglón **mientras el renglón no tenga artículo**. El día que alguien le
+ * elija uno, ese vínculo pasa a valer para todas las órdenes que piden ese artículo,
+ * y por eso `articulo/route.ts` niega desde entonces cambiarlo o soltarlo mientras el
+ * vínculo exista. Decir «vale sólo ahí» a secas es lo que dejó pasar el defecto.
  *
  * **Se comprueba contra `compras_requerimientos` antes de pegar**, aunque la tabla
  * no tenga foreign key (a propósito: un RI que la planilla deje de tener no debe

@@ -22,11 +22,12 @@ import { cuantosPide } from "./stock";
  *
  * **La lectura por `repuesto_id` de todos los renglones del artículo es correcta
  * porque cambiar el artículo está frenado** (`articulo/route.ts`: un vínculo del
- * renglón, o del artículo, niega el cambio con un 409). Un vínculo pegado a un
+ * renglón, o del artículo, niega el cambio **y el soltar** con un 409). Un vínculo pegado a un
  * renglón sin artículo pasa a valer para el grupo cuando ese renglón elige uno,
- * que es lo pedido; si el cambio no estuviera frenado, ese mismo vínculo se
- * arrastraría a otro artículo y una orden leería «cubierta» por un pedido que
- * nunca fue de su pieza. **Quien afloje ese 409 tiene que cambiar esta lectura
+ * que es lo pedido; si ese freno no estuviera, ese mismo vínculo se arrastraría a
+ * otro artículo y una orden leería «cubierta» por un pedido que nunca fue de su
+ * pieza. **El soltar está frenado por eso y no por sí mismo**: soltar y volver a
+ * elegir recorren ese camino en dos pasos. **Quien afloje ese 409 tiene que cambiar esta lectura
  * antes**, porque es lo que lo está sosteniendo.
  *
  * Quiénes compiten: si el renglón tiene artículo, **todas las órdenes abiertas que

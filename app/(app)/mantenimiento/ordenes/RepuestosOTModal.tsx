@@ -619,11 +619,14 @@ type RespuestaDeCuenta = { cuenta?: CuentaDeUnRepuesto | null; advertencia?: str
  * orden por algo que no es suyo. Acá sólo cuentan los que una persona pegó.
  *
  * Un RI pegado a un renglón con artículo vale para **todas** las órdenes abiertas
- * que piden ese artículo, y la pantalla lo dice. Y cambiar o soltar el artículo
- * se rechaza mientras haya RI pegados al artículo viejo (la fila no guarda de qué
- * renglón vino y borrarla se llevaría el trabajo de otra orden): el rechazo trae
- * los números y acá se ofrece sacarlos uno por uno, también el de un RI que
- * Compras ya sacó de la planilla, que bloquea y no se ve en ningún otro lado.
+ * que piden ese artículo, y la pantalla lo dice. Y cambiar o soltar el artículo se
+ * rechaza mientras haya RI pegados, **sean del artículo viejo o de este mismo
+ * renglón**: los del artículo porque la fila no guarda de qué renglón vino y
+ * borrarla se llevaría el trabajo de otra orden, y los del renglón porque se irían
+ * con él al grupo nuevo — soltar incluido, que es ese mismo viaje en dos clics con
+ * los dos botones uno al lado del otro. El rechazo trae los números y acá se ofrece
+ * sacarlos uno por uno, también el de un RI que Compras ya sacó de la planilla, que
+ * bloquea y no se ve en ningún otro lado.
  */
 function ArticuloYRi({
   repuesto, d, puedeEditar, articulos, pedirArticulos, versionDeLaCuenta, onCambioDeLaCuenta,
@@ -669,7 +672,7 @@ function ArticuloYRi({
 
   async function llamar(
     url: string, init: RequestInit
-  ): Promise<{ ok: true; body: RespuestaDeCuenta } | { ok: false }> {
+  ): Promise<{ ok: true; body: RespuestaDeCuenta } | { ok: false; status?: number }> {
     setOcupado(true);
     setError("");
     try {
@@ -678,7 +681,7 @@ function ArticuloYRi({
         const f = await leerFallo(res);
         setError(f.error);
         setBloqueo(res.status === 409 ? f.risPegados : []);
-        return { ok: false };
+        return { ok: false, status: res.status };
       }
       setBloqueo([]);
       return { ok: true, body: await res.json().catch(() => ({})) };
@@ -715,7 +718,15 @@ function ArticuloYRi({
   async function sacarElQueBloquea(n: number) {
     const faltan = bloqueo.filter((x) => x !== n);
     const r = await llamar(`/api/mantenimiento/repuestos/${repuesto.id}/ri?nro_ri=${n}`, { method: "DELETE" });
-    if (!r.ok) return;
+    if (!r.ok) {
+      // **Un 404 es «ése ya no está»**, no un fallo de esta lista: lo sacó otra persona
+      // entre que se dibujó el panel y se apretó. `llamar` vacía el bloqueo ante
+      // cualquier fallo que no sea un 409, y acá eso se llevaría también los números
+      // que **sí** siguen frenando: el panel quedaría vacío y habría que apretar
+      // «Cambiar» otra vez para recuperarlos. Queda la lista que falta.
+      if (r.status === 404) setBloqueo(faltan);
+      return;
+    }
     setBloqueo(faltan);
     aplicar(r.body);
     onCambioDeLaCuenta();
@@ -866,7 +877,7 @@ function ArticuloYRi({
       {bloqueo.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-900">
           <p>
-            Estos RI están pegados al artículo y valen para todas las órdenes que lo usan.
+            Estos RI valen para todas las órdenes que piden este artículo.
             Sacalos para poder cambiarlo o soltarlo:
           </p>
           <ul className="mt-1 space-y-0.5">

@@ -85,6 +85,42 @@ describe("el `not` del Supabase de mentira", () => {
   });
 });
 
+describe("lo que un borrado devuelve", () => {
+  /*
+   * La trampa que esto cierra no está en el fake sino en lo que el fake **deja
+   * pasar**. Una ruta que borra y cuenta cuántas filas borró necesita el
+   * `.select("id")`, porque PostgREST sin él devuelve `data: null`; si el fake
+   * devolviera las filas igual, sacarle ese `select` dejaba los tests en verde y
+   * mandaba a producción un borrado que contesta «no había nada que borrar»
+   * después de haber borrado. Lo encontró una revisión, no un test.
+   */
+  const conDosFilas = () => {
+    const b = supabaseDeMentira();
+    b.reiniciar({ t: [{ id: "a", x: 1 }, { id: "b", x: 1 }] });
+    return b;
+  };
+  type Borrable = {
+    delete(): {
+      eq(c: string, v: unknown): PromiseLike<{ data: unknown[] | null }> & {
+        select(c: string): PromiseLike<{ data: unknown[] | null }>;
+      };
+    };
+  };
+
+  it("sin `select()` no devuelve las filas, aunque las haya borrado", async () => {
+    const b = conDosFilas();
+    const { data } = await (b.admin.from("t") as unknown as Borrable).delete().eq("x", 1);
+    expect(data).toBeNull();
+    expect(b.estado.tablas.t).toEqual([]);
+  });
+
+  it("con `select()` las devuelve, que es con lo que se cuenta cuántas se borraron", async () => {
+    const b = conDosFilas();
+    const { data } = await (b.admin.from("t") as unknown as Borrable).delete().eq("x", 1).select("id");
+    expect(data).toEqual([{ id: "a" }, { id: "b" }]);
+  });
+});
+
 describe("el `update` y el `alInsertar` del Supabase de mentira", () => {
   it("el update toca sólo lo que coincide con el filtro", async () => {
     const b = supabaseDeMentira();

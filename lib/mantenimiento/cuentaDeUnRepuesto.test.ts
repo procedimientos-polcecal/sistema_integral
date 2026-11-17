@@ -48,6 +48,23 @@ describe("la cuenta de un repuesto", () => {
     expect(cuenta.partes).toHaveLength(250);
   });
 
+  /*
+   * **El empalme con la lectura de la cantidad.** La lectura vive en `stock.ts` y se
+   * prueba ahí; lo que esto fija es que *esta* función la use y no tenga una propia.
+   * Hubo una tercera —`Number()` de toda la cadena— y volver a ponerla deja en verde
+   * todo el resto de este archivo, porque los demás renglones dicen "10", que las dos
+   * leen igual. El texto es el del único renglón que hoy diverge en producción
+   * (medido el 17/11/2026: 1 de 27).
+   */
+  it("lee la cantidad con la lectura compartida y no con una propia", async () => {
+    base.reiniciar({
+      ...base.estado.tablas,
+      ordenes_trabajo_repuestos: [renglon(1, { cantidad: "23 Grillas de 2mm" })],
+    });
+    const cuenta = await cuentaDeUnRepuesto(cliente, de(1));
+    expect(cuenta.estaOrden).toMatchObject({ pide: 23, cubiertas: 10, faltaPedir: 13 });
+  });
+
   it("una OT realizada no entra en el reparto", async () => {
     // La 1 es la más vieja pero está REALIZADA: si entrara se llevaría los 10 y la 2 quedaría sin nada.
     base.reiniciar({

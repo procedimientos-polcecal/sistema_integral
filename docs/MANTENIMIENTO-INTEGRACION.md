@@ -3233,10 +3233,11 @@ tiene.** Un RI pegado a un artículo vale para toda OT que lo pida; uno pegado a
 repuesto sin artículo vale sólo para ese renglón **hasta que el renglón elige
 artículo**: ahí pasa a valer para el grupo, porque el renglón ya es de esa pieza
 (es lo pedido: pegar primero el número y elegir el artículo después). Desde ahí
-**cambiar de artículo se niega** mientras ese vínculo siga (punto 8), porque
-arrastrarlo a otro grupo lo haría cubrir órdenes que no son suyas; **soltar el
-artículo no se niega**, porque angosta el alcance y el vínculo sigue alcanzable
-desde la misma pantalla. **Agrupar los sueltos por texto parecido se
+**cambiar o soltar el artículo se niegan los dos** mientras ese vínculo siga (punto
+8), porque arrastrarlo a otro grupo lo haría cubrir órdenes que no son suyas — y
+soltar, que por sí solo angosta el alcance y sería inofensivo, es la primera mitad
+de ese mismo viaje: soltar y volver a elegir dejan el vínculo en el grupo nuevo sin
+que nada lo mire. **Agrupar los sueltos por texto parecido se
 descartó a propósito**: «grillas» está escrito de cinco maneras en las órdenes
 («Grillas de 2mm», «Grillas de 2 mm», «Grillas 4mm», «Grillas 4 mm», «grillas de 4mm»), y el RI de las de 2 mm aparecería en la
 orden que pide las de 4. Es la regla de la casa —*enlazar al que se le parece
@@ -3277,9 +3278,9 @@ elige en ella.
 bug de la pulgada del 12/11/2026, en el otro cruce.
 
 **8. Cambiar o soltar el artículo se niega con un 409 que nombra los números que
-bloquean, y no frena lo mismo cada clase de vínculo.** Los pegados **al
-artículo viejo** frenan cambiar *y* soltar; los pegados **al renglón** frenan sólo
-**cambiar a otro artículo**. Negar es mejor que borrar porque la fila del link
+bloquean.** Las dos clases de vínculo —los pegados **al artículo viejo** y los
+pegados **a este renglón**— frenan cambiar *y* soltar, por razones distintas. Negar
+es mejor que borrar porque la fila del link
 del artículo no sabe qué renglón la pegó: borrarla se llevaría links que pegó otra
 orden. Y el del renglón tiene que frenar el cambio porque la cuenta lee los
 vínculos de todos los renglones del artículo: sin el freno, pegar el 500 sin
@@ -3287,9 +3288,13 @@ artículo, elegir A y cambiar a B hacía que el 500 pasara a cubrir todas las
 órdenes abiertas que piden B (reproducido por la revisión de la rama; hoy es
 inalcanzable porque la tabla tiene 0 filas, pero el trío 2896/2897/2898 es el
 grupo donde muerde). El costo si estuviera mal: quien se equivocó de artículo saca
-el RI y lo vuelve a pegar, en vez de que el sistema lo mueva solo. Soltar no se
-frena por uno del renglón: angosta el alcance, nadie lee «cubierta» de más, y el
-DELETE lo alcanza por `repuesto_id`. El 409 nombra los números porque un link cuyo
+el RI y lo vuelve a pegar, en vez de que el sistema lo mueva solo. **Y frena también
+el soltar, que mirado solo parece inofensivo**: soltar angosta el alcance y el
+DELETE sigue alcanzando el vínculo por `repuesto_id`, pero soltar y volver a elegir
+**son ese mismo cambio en dos pasos** —con `viejo` en null no se mira nada— y los
+dos botones están uno al lado del otro. La primera versión de este freno frenaba
+sólo el cambio; la puerta de al lado la encontró la revisión de la misma ola de
+arreglos, y está fijada con un test. El 409 nombra los números porque un link cuyo
 RI Compras ya sacó de la planilla sigue bloqueando y no se ve en ningún otro
 lado (`nro_ri` no es una foreign key a propósito). **Quien afloje ese 409 tiene que
 tocar antes la lectura de `cuentaDeUnRepuesto`**, que es la que depende de él.
@@ -3297,10 +3302,24 @@ tocar antes la lectura de `cuentaDeUnRepuesto`**, que es la que depende de él.
 **9. Sacar un RI que no está pegado a este renglón da 404 y no un «listo».** Puede
 estar pegado a *otro* renglón del mismo artículo —cuenta acá igual—, y entonces hay
 que sacarlo desde ese otro. Un borrado a medias se termina repitiéndolo: el 404
-sólo aparece cuando no había nada que borrar. Y **«cuántas pide este renglón» tiene
-una sola lectura** (`primerNumero`/`cuantosPide` en `lib/mantenimiento/stock.ts`):
-hubo una tercera que leía `"80 u."` como null y dejaba a esa orden sin consumir
-nada del reparto.
+sólo aparece cuando no había nada que borrar.
+
+**10. «Cuántas pide este renglón» tiene una sola lectura**, `primerNumero` y
+`cuantosPide` en `lib/mantenimiento/stock.ts`. Hubo una tercera, propia de la
+cuenta, que hacía `Number()` de toda la cadena: leía `"80 u."` como null mientras la
+de al lado leía 80, así que un renglón decía «No alcanza · 61 en stock» encima de
+«no se puede repartir» — y peor, esa orden no consumía nada del reparto y una más
+nueva se llevaba el envío entero. Medido el 17/11/2026: **1 de los 27 renglones
+diverge**, el que dice «23 Grillas de 2mm». El `0` se conserva como texto
+(`"0 bolsas"` → `"0"`) porque viaja al formulario de Compras, y el signo no se lee:
+`"-3"` da 3, que es lo que esa lectura ya hacía para el stock y hoy no alcanza a
+ningún renglón.
+
+**11. El comentario de `mant_ri_de_repuesto` en la base quedó viejo.** Dice que un
+vínculo con `repuesto_id` vale «para ese renglón de esa OT y nada más», que era
+cierto cuando se escribió y dejó de serlo con el punto 2. La migración
+`20261116082907` **ya está aplicada y una migración aplicada no se edita**: se
+corrige con un `comment on` en otra. Hasta que eso pase, manda lo que dice acá.
 
 ## Los datos: qué está y qué no
 

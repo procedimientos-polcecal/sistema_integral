@@ -208,6 +208,16 @@ describe("primerNumero y cuantosPide: una sola lectura de la cantidad", () => {
       expect(cuantosPide(v as string | null | undefined)).toBeNull();
     }
   });
+  it("el signo no se lee: «-3» da 3 y no null", () => {
+    // La lectura vieja de `cantidadDelRenglon` hacía `Number("-3")` y daba null; ésta
+    // toma el primer número y da 3. Es la semántica que `cuantosPide` ya tenía para el
+    // stock, así que no es una regresión, y medido el 17/11/2026 **ninguno** de los 27
+    // renglones de repuesto trae un número negativo: no mueve ninguna cuenta de hoy.
+    // Está escrito porque el caso desapareció al unificar y el cambio de signo no se
+    // notaba en ningún lado.
+    expect(cuantosPide("-3")).toBe(3);
+  });
+
   it("primerNumero conserva el 0 como texto y normaliza el punto decimal", () => {
     expect(primerNumero("0 bolsas")).toBe("0");
     expect(primerNumero("2,5")).toBe("2.5");

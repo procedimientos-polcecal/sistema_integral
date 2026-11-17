@@ -31,21 +31,29 @@ import { cuentaDeUnRepuesto } from "@/lib/mantenimiento/cuentaDeUnRepuesto";
  * mismo artículo: borrar es llevarse el trabajo ajeno sin avisar.
  *
  * **Los pegados al renglón** (`repuesto_id = este renglón`, que es lo que pasa si
- * el RI se pegó antes de elegir artículo) frenan **sólo cambiar a otro artículo,
- * no soltar**. La cuenta (`cuentaDeUnRepuesto`) lee los vínculos de *todos* los
- * renglones del artículo, así que en cuanto el renglón elige artículo, su vínculo
- * propio pasa a valer para el grupo: es lo pedido —pegar primero el número y
- * elegir el artículo después— y no es una fuga, porque el renglón ya es de ese
- * artículo. Lo que **sí** sería una fuga es que cambiar el artículo lo arrastrara
- * a otro grupo: el pedido nunca fue de esa pieza, y el RI pasaría a cubrir a todas
- * las órdenes abiertas que piden el artículo nuevo (reproducido: pegar el 500 sin
- * artículo, elegir A y cambiar a B lo dejaba pasar). Soltar, en cambio,
- * **angosta** el alcance —vuelve a valer sólo para este renglón—, nadie lee
- * «cubierta» de más, y el vínculo sigue alcanzable desde esta pantalla porque el
- * DELETE de `ri` lo busca por `repuesto_id`. Ésa es la diferencia con uno del
- * artículo, que al soltar queda vivo **y** fuera de alcance. Quien se equivocó de
- * artículo saca el RI y lo vuelve a pegar: dos clics y el número, a cambio de que
- * el sistema no lo mueva solo.
+ * el RI se pegó antes de elegir artículo) frenan **las dos cosas también**, y por una
+ * razón que no es la misma. La cuenta (`cuentaDeUnRepuesto`) lee los vínculos de
+ * *todos* los renglones del artículo, así que en cuanto el renglón elige artículo su
+ * vínculo propio pasa a valer para el grupo: eso es lo pedido —pegar primero el
+ * número y elegir el artículo después— y no es una fuga, porque el renglón ya es de
+ * ese artículo. Lo que sí sería una fuga es que **cambiar** el artículo lo arrastrara
+ * a otro grupo: el pedido nunca fue de esa pieza y el RI pasaría a cubrir a todas las
+ * órdenes abiertas que piden el artículo nuevo (reproducido: pegar el 500 sin
+ * artículo, elegir A y cambiar a B lo dejaba pasar).
+ *
+ * **Y soltar se frena por eso mismo, aunque mirado solo parezca inofensivo.** Soltar
+ * angosta el alcance —el vínculo vuelve a valer sólo para este renglón—, nadie lee
+ * «cubierta» de más, y el vínculo sigue alcanzable porque el DELETE de `ri` lo busca
+ * por `repuesto_id`. Pero **soltar y volver a elegir son el cambio que esta misma
+ * ruta acaba de negar**: en dos clics, con los dos botones uno al lado del otro en la
+ * pantalla, y con `viejo` en null las dos preguntas de abajo dan false y el vínculo
+ * entra al grupo nuevo sin que nada lo mire. Dejar abierta la primera mitad era dejar
+ * abierto el camino entero, y **la orden que lee «cubierta» de más no es la de quien
+ * apretó**, así que el aviso de la pantalla no la alcanza. La primera versión de este
+ * arreglo frenaba sólo el cambio; lo encontró la revisión de la misma ola.
+ *
+ * Quien se equivocó de artículo saca el RI y lo vuelve a pegar: dos clics y el
+ * número, a cambio de que el sistema no lo mueva solo.
  *
  * Repetir el mismo artículo no es un cambio.
  *
@@ -96,13 +104,13 @@ async function guardar(id: string, articuloId: string | null) {
   }
 
   const viejo = (renglon.articulo_id as string | null) ?? null;
-  // Los del artículo bloquean cambiar y soltar; los del renglón, sólo cambiar a
-  // otro artículo (ver la cabecera: soltar angosta y no deja nada fuera de alcance).
+  // **Con artículo puesto, el artículo no se mueve mientras haya un RI pegado**, sea
+  // del artículo o del propio renglón: las dos clases frenan cambiar y soltar, por
+  // razones distintas que están en la cabecera.
   // **Elegir el primero (viejo null) no es cambiar**: ahí el vínculo del renglón pasa a
   // valer para el grupo, que es lo pedido, y bloquearlo impediría pegar primero y elegir después.
-  const bloqueaPorArticulo = viejo !== null && viejo !== articuloId;
-  const bloqueaPorRenglon = viejo !== null && articuloId !== null && articuloId !== viejo;
-  if (bloqueaPorArticulo || bloqueaPorRenglon) {
+  const bloquea = viejo !== null && viejo !== articuloId;
+  if (bloquea) {
     // **Se leen de la tabla de vínculos y no de la cuenta, a propósito.** La
     // cuenta ignora un RI que la planilla ya no tiene (no trae nada); este
     // bloqueo no puede ignorarlo, porque la fila sigue ahí y sigue bloqueando.
@@ -110,22 +118,17 @@ async function guardar(id: string, articuloId: string | null) {
     // `cuenta.ris`, y sin ellos la persona tendría que sacar vínculos que no ve.
     // Dos consultas y no un `or`: son dos columnas y dos razones distintas.
     const pegados: { nro_ri: number }[] = [];
-    let delArticulo = 0;
     try {
-      if (bloqueaPorArticulo) {
-        const delViejo = await traerTodo((d, h) =>
+      pegados.push(
+        ...(await traerTodo((d, h) =>
           admin.from("mant_ri_de_repuesto").select("nro_ri").eq("articulo_id", viejo!).range(d, h)
-        );
-        delArticulo = delViejo.length;
-        pegados.push(...delViejo);
-      }
-      if (bloqueaPorRenglon) {
-        pegados.push(
-          ...(await traerTodo((d, h) =>
-            admin.from("mant_ri_de_repuesto").select("nro_ri").eq("repuesto_id", id).range(d, h)
-          ))
-        );
-      }
+        ))
+      );
+      pegados.push(
+        ...(await traerTodo((d, h) =>
+          admin.from("mant_ri_de_repuesto").select("nro_ri").eq("repuesto_id", id).range(d, h)
+        ))
+      );
     } catch {
       return NextResponse.json({ error: "No se pudieron comprobar los RI de este repuesto" }, { status: 500 });
     }
@@ -137,7 +140,7 @@ async function guardar(id: string, articuloId: string | null) {
           error:
             `Este repuesto tiene pegado${uno ? "" : "s"} ${uno ? "el RI" : "los RI"} ${ris.join(", ")}, ` +
             `que ${uno ? "vale" : "valen"} para todas las órdenes que piden este artículo: ` +
-            `${uno ? "sacalo" : "sacalos"} antes de ${delArticulo > 0 ? "cambiar o soltar" : "cambiar"} el artículo.`,
+            `${uno ? "sacalo" : "sacalos"} antes de cambiar o soltar el artículo.`,
           ris_pegados: ris,
         },
         { status: 409 }

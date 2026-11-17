@@ -181,8 +181,9 @@ export function buscarEnInventario(
  * `cantidadDelRenglon`, que hacía `Number()` de toda la cadena y divergió:
  * `"80 u."` daba null ahí y 80 acá, así que un renglón decía «No alcanza · 61 en
  * stock» (leyó 80) sobre «no se puede repartir» (leyó null), y peor, esa orden
- * no consumía nada del reparto y una más nueva se llevaba el envío entero. Medido,
- * 1 de los 26 renglones de hoy ya diverge. No se agrega otra: se usa ésta.
+ * no consumía nada del reparto y una más nueva se llevaba el envío entero. Medido el
+ * 17/11/2026: 1 de los 27 renglones diverge, el que dice «23 Grillas de 2mm». No se
+ * agrega otra lectura: se usa ésta.
  *
  * Se conserva el `0` ("0 bolsas" → "0"): viaja al formulario de Compras y
  * convertirlo a número lo haría desaparecer.

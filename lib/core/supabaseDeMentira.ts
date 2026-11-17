@@ -132,12 +132,23 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
     private unica: "single" | "maybeSingle" | null = null;
     private rango: [number, number] | null = null;
     private conflicto: string | null = null;
+    private pidioSelect = false;
 
     constructor(private tabla: string) {}
 
+    /**
+      * Además de las columnas, anota **que se pidió**: en PostgREST `select()` es lo
+      * único que agrega `Prefer: return=representation`, así que un `delete()` o un
+      * `update()` sin él devuelven `data: null`. Devolver las filas igual dejaba
+      * pasar en verde el error de sacarle el `.select("id")` a un borrado que cuenta
+      * cuántas borró — y en producción ese borrado contestaba «no había nada» después
+      * de haber borrado. Es la misma regla que el `.not` de más abajo: lo cómodo acá
+      * es un test verde con la ruta rota.
+      */
     select(columnas: string) {
       if (this.accion === "select") estado.lecturas.push(this.tabla);
       this.columnas = columnas;
+      this.pidioSelect = true;
       return this;
     }
     eq(columna: string, valor: unknown) { this.igualdades.push([columna, valor]); return this; }
@@ -255,7 +266,7 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
       if (this.accion === "update") {
         const aTocar = filas.filter(coincide);
         for (const f of aTocar) Object.assign(f, this.fila);
-        return { data: aTocar.map((f) => this.proyectar(f)), error: null };
+        return { data: this.pidioSelect ? aTocar.map((f) => this.proyectar(f)) : null, error: null };
       }
 
       if (this.accion === "delete") {
@@ -265,7 +276,7 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
           if (seNego) return { data: null, error: seNego };
         }
         estado.tablas[this.tabla] = filas.filter((f) => !coincide(f));
-        return { data: aBorrar.map((f) => ({ id: f.id })), error: null };
+        return { data: this.pidioSelect ? aBorrar.map((f) => ({ id: f.id })) : null, error: null };
       }
 
       const halladas = filas.filter(coincide);
