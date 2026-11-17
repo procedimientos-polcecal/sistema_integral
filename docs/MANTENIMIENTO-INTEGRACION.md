@@ -3228,9 +3228,15 @@ sola definición, con tests— y evita el libro de reservas, que dejaría
 reservas viejas que nadie limpia cuando una orden se cierra o cambia de
 cantidad.
 
-**2. El link es global cuando hay artículo, y de ese renglón cuando no.** Un RI
-pegado a un artículo vale para toda OT que lo pida; uno pegado a un repuesto
-suelto vale sólo para ese renglón. **Agrupar los sueltos por texto parecido se
+**2. El link es global cuando hay artículo, y de ese renglón mientras no lo
+tiene.** Un RI pegado a un artículo vale para toda OT que lo pida; uno pegado a un
+repuesto sin artículo vale sólo para ese renglón **hasta que el renglón elige
+artículo**: ahí pasa a valer para el grupo, porque el renglón ya es de esa pieza
+(es lo pedido: pegar primero el número y elegir el artículo después). Desde ahí
+**cambiar de artículo se niega** mientras ese vínculo siga (punto 8), porque
+arrastrarlo a otro grupo lo haría cubrir órdenes que no son suyas; **soltar el
+artículo no se niega**, porque angosta el alcance y el vínculo sigue alcanzable
+desde la misma pantalla. **Agrupar los sueltos por texto parecido se
 descartó a propósito**: «grillas» está escrito de cinco maneras en las órdenes
 («Grillas de 2mm», «Grillas de 2 mm», «Grillas 4mm», «Grillas 4 mm», «grillas de 4mm»), y el RI de las de 2 mm aparecería en la
 orden que pide las de 4. Es la regla de la casa —*enlazar al que se le parece
@@ -3270,12 +3276,31 @@ elige en ella.
 --todas`: **de 7 a 13 de 26 reconocidos, sin perder ninguno**. Es la familia del
 bug de la pulgada del 12/11/2026, en el otro cruce.
 
-**8. Cambiar o soltar el artículo se niega con un 409 mientras haya RI pegados
-al artículo viejo, y el 409 nombra los números que bloquean.** Negar es mejor
-que borrar porque la fila del link no sabe qué renglón la pegó: borrarla se
-llevaría links que pegó otra orden. Y tiene que nombrarlos porque un link cuyo
+**8. Cambiar o soltar el artículo se niega con un 409 que nombra los números que
+bloquean, y no frena lo mismo cada clase de vínculo.** Los pegados **al
+artículo viejo** frenan cambiar *y* soltar; los pegados **al renglón** frenan sólo
+**cambiar a otro artículo**. Negar es mejor que borrar porque la fila del link
+del artículo no sabe qué renglón la pegó: borrarla se llevaría links que pegó otra
+orden. Y el del renglón tiene que frenar el cambio porque la cuenta lee los
+vínculos de todos los renglones del artículo: sin el freno, pegar el 500 sin
+artículo, elegir A y cambiar a B hacía que el 500 pasara a cubrir todas las
+órdenes abiertas que piden B (reproducido por la revisión de la rama; hoy es
+inalcanzable porque la tabla tiene 0 filas, pero el trío 2896/2897/2898 es el
+grupo donde muerde). El costo si estuviera mal: quien se equivocó de artículo saca
+el RI y lo vuelve a pegar, en vez de que el sistema lo mueva solo. Soltar no se
+frena por uno del renglón: angosta el alcance, nadie lee «cubierta» de más, y el
+DELETE lo alcanza por `repuesto_id`. El 409 nombra los números porque un link cuyo
 RI Compras ya sacó de la planilla sigue bloqueando y no se ve en ningún otro
-lado (`nro_ri` no es una foreign key a propósito).
+lado (`nro_ri` no es una foreign key a propósito). **Quien afloje ese 409 tiene que
+tocar antes la lectura de `cuentaDeUnRepuesto`**, que es la que depende de él.
+
+**9. Sacar un RI que no está pegado a este renglón da 404 y no un «listo».** Puede
+estar pegado a *otro* renglón del mismo artículo —cuenta acá igual—, y entonces hay
+que sacarlo desde ese otro. Un borrado a medias se termina repitiéndolo: el 404
+sólo aparece cuando no había nada que borrar. Y **«cuántas pide este renglón» tiene
+una sola lectura** (`primerNumero`/`cuantosPide` en `lib/mantenimiento/stock.ts`):
+hubo una tercera que leía `"80 u."` como null y dejaba a esa orden sin consumir
+nada del reparto.
 
 ## Los datos: qué está y qué no
 

@@ -13,7 +13,7 @@
  * de Mantenimiento entra como si fuera de Producción—.
  */
 
-import type { Disponibilidad, EstadoDeStock } from "@/lib/mantenimiento/stock";
+import { primerNumero, type Disponibilidad, type EstadoDeStock } from "@/lib/mantenimiento/stock";
 import {
   ubicacionesDelEquipo, ubicacionesDelSector, type UbicacionEnlazada,
 } from "@/lib/compras/ubicaciones";
@@ -90,8 +90,7 @@ export interface PedidoSugerido {
  * lo deja poner a mano, y un 1 puesto por el sistema se firma sin mirarlo.
  */
 export function cantidadPedida(texto: string | null | undefined): string {
-  const m = String(texto ?? "").match(/\d+(?:[.,]\d+)?/);
-  return m ? m[0].replace(",", ".") : "";
+  return primerNumero(texto) ?? "";
 }
 
 /**

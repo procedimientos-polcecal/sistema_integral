@@ -4,6 +4,7 @@ import { CERRADAS } from "./alertas";
 import {
   repartir, type RiPegado, type OrdenQuePide, type ParteDeLaOrden,
 } from "./loQueViene";
+import { cuantosPide } from "./stock";
 
 /**
  * Arma lo que `repartir` recibe, para un renglón de repuesto, y la llama.
@@ -18,6 +19,15 @@ import {
  *    (`REALIZADO` y `SUSPENDIDA`), la misma definición que usa el resto de
  *    Mantenimiento y no una tercera. Una orden ya hecha, o suspendida, no reclama
  *    piezas. Hoy no hay ninguna `SUSPENDIDA`, así que no cambia ningún número.
+ *
+ * **La lectura por `repuesto_id` de todos los renglones del artículo es correcta
+ * porque cambiar el artículo está frenado** (`articulo/route.ts`: un vínculo del
+ * renglón, o del artículo, niega el cambio con un 409). Un vínculo pegado a un
+ * renglón sin artículo pasa a valer para el grupo cuando ese renglón elige uno,
+ * que es lo pedido; si el cambio no estuviera frenado, ese mismo vínculo se
+ * arrastraría a otro artículo y una orden leería «cubierta» por un pedido que
+ * nunca fue de su pieza. **Quien afloje ese 409 tiene que cambiar esta lectura
+ * antes**, porque es lo que lo está sosteniendo.
  *
  * Quiénes compiten: si el renglón tiene artículo, **todas las órdenes abiertas que
  * piden ese mismo artículo** y los RI pegados al artículo o a cualquiera de esos
@@ -43,12 +53,6 @@ export interface CuentaDeUnRepuesto {
   partes: ParteDeLaOrden[];
   /** La parte de la orden de este renglón; null si esa orden ya está realizada. */
   estaOrden: ParteDeLaOrden | null;
-}
-
-/** «10», «2,5» → número. Lo que no se lee como número positivo no es una cantidad. */
-export function cantidadDelRenglon(texto: string | null | undefined): number | null {
-  const n = Number(String(texto ?? "").trim().replace(",", "."));
-  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**
@@ -125,7 +129,7 @@ export async function cuentaDeUnRepuesto(
   for (const r of renglones) {
     const orden = r.work_order_id as string;
     if (!abiertas.has(orden)) continue;
-    const c = cantidadDelRenglon(r.cantidad as string | null);
+    const c = cuantosPide(r.cantidad as string | null);
     const antes = pide.get(orden) ?? null;
     pide.set(orden, c == null ? antes : (antes ?? 0) + c);
   }

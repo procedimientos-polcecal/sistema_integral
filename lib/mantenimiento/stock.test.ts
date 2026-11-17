@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapearInventario, filaDeInsumo, buscarEnInventario } from "./stock";
+import { mapearInventario, filaDeInsumo, buscarEnInventario, primerNumero, cuantosPide } from "./stock";
 
 describe("mapearInventario", () => {
   it("ubica las columnas por su encabezado", () => {
@@ -189,5 +189,29 @@ describe("buscarEnInventario", () => {
     const inv = [{ codigo: "8", descripcion: "ACEITE 5 LITROS", stock: 5, seguridad: 1, ubicacion: null }];
     const [d] = buscarEnInventario([{ codigo: null, nombre: "Aceite 5 l", cantidad: null }], inv);
     expect(d.insumo?.codigo).toBe("8");
+  });
+});
+
+describe("primerNumero y cuantosPide: una sola lectura de la cantidad", () => {
+  it("lee enteros, decimales con coma o punto, y espacios", () => {
+    expect(cuantosPide("10")).toBe(10);
+    expect(cuantosPide(" 2,5 ")).toBe(2.5);
+    expect(cuantosPide("2.5")).toBe(2.5);
+  });
+  it("toma el primer número aunque haya texto alrededor", () => {
+    expect(cuantosPide("80 u.")).toBe(80);
+    expect(cuantosPide("x3")).toBe(3);
+    expect(cuantosPide("10 unidades")).toBe(10);
+  });
+  it("lo que no es un número positivo no es una cantidad", () => {
+    for (const v of ["", null, undefined, "abc", "un juego", "0", "0 bolsas"]) {
+      expect(cuantosPide(v as string | null | undefined)).toBeNull();
+    }
+  });
+  it("primerNumero conserva el 0 como texto y normaliza el punto decimal", () => {
+    expect(primerNumero("0 bolsas")).toBe("0");
+    expect(primerNumero("2,5")).toBe("2.5");
+    expect(primerNumero("un juego")).toBeNull();
+    expect(primerNumero("80 u.")).toBe("80");
   });
 });

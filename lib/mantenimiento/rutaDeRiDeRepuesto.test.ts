@@ -215,6 +215,40 @@ describe("sacar un RI", () => {
     expect(base.estado.tablas.mant_ri_de_repuesto.map((f) => f.id)).toEqual(["m3", "m4"]);
   });
 
+  it("si no había nada que borrar, contesta 404 y lo dice: puede estar pegado a otro renglón", async () => {
+    const r = await sacar("999");
+    expect(r.status).toBe(404);
+    const { error } = await r.json();
+    expect(error).toMatch(/no está pegado a este repuesto/);
+    expect(error).toMatch(/otro renglón del mismo artículo/);
+  });
+
+  it("un RI pegado al renglón de otra orden del mismo artículo da 404 desde acá y la fila ajena sigue", async () => {
+    base.reiniciar({
+      ...base.estado.tablas,
+      ordenes_trabajo: [...orden(1), ...orden(2)],
+      ordenes_trabajo_repuestos: [renglon(1), renglon(2)],
+      mant_ri_de_repuesto: [{ id: "m1", nro_ri: 500, articulo_id: null, repuesto_id: "r2" }],
+    });
+    const r = await sacar("500", "r1");
+    expect(r.status).toBe(404);
+    expect(base.estado.tablas.mant_ri_de_repuesto.map((f) => f.id)).toEqual(["m1"]);
+    // Y desde el renglón dueño sí se saca.
+    expect((await sacar("500", "r2")).status).toBe(200);
+    expect(base.estado.tablas.mant_ri_de_repuesto).toEqual([]);
+  });
+
+  it("repetir un borrado a medio hacer lo termina con 200: el 404 es sólo cuando no había nada", async () => {
+    // El primer intento sacó el vínculo del renglón y quedó el del artículo.
+    base.reiniciar({
+      ...base.estado.tablas,
+      mant_ri_de_repuesto: [{ id: "m1", nro_ri: 500, articulo_id: "A", repuesto_id: null }],
+    });
+    expect((await sacar("500")).status).toBe(200);
+    expect(base.estado.tablas.mant_ri_de_repuesto).toEqual([]);
+    expect((await sacar("500")).status).toBe(404);
+  });
+
   it("sin ?nro_ri dice que falta, y no lo toma por un 0", async () => {
     const r = await sacar("");
     expect(r.status).toBe(400);
@@ -255,7 +289,11 @@ describe("cambiar o soltar el artículo con RI pegados al artículo", () => {
     conUnRiPegado();
     const r = await ponerArticulo(pedido("PUT", { articulo_id: "B" }), con("r1"));
     expect(r.status).toBe(409);
-    expect((await r.json()).error).toMatch(/sacalos antes/);
+    const { error } = await r.json();
+    // Con un solo RI el mensaje concuerda en singular.
+    expect(error).toMatch(/tiene pegado el RI 500, que vale para todas las órdenes/);
+    expect(error).toMatch(/sacalo antes de cambiar o soltar/);
+    expect(error).not.toMatch(/los RI 500|sacalos/);
     expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBe("A");
     expect(base.estado.tablas.mant_ri_de_repuesto).toHaveLength(1);
   });
@@ -281,13 +319,83 @@ describe("cambiar o soltar el artículo con RI pegados al artículo", () => {
     expect(r.status).toBe(200);
   });
 
-  it("los RI pegados al renglón no frenan el cambio", async () => {
-    base.reiniciar({
-      ...base.estado.tablas,
-      mant_ri_de_repuesto: [{ id: "m1", nro_ri: 500, articulo_id: null, repuesto_id: "r1" }],
+  describe("los RI pegados al renglón", () => {
+    // Un RI pegado a un renglón que no tenía artículo se guarda con `repuesto_id` y se
+    // lee, ya con artículo, como del grupo (cuentaDeUnRepuesto). Por eso cambiarlo de
+    // artículo se niega: si no, el vínculo se iría a cubrir órdenes que no son suyas.
+    const conUnRiDelRenglon = () =>
+      base.reiniciar({
+        ...base.estado.tablas,
+        mant_ri_de_repuesto: [{ id: "m1", nro_ri: 500, articulo_id: null, repuesto_id: "r1" }],
+      });
+
+    it("frenan el cambio a otro artículo: 409, nada se toca y el número viaja en ris_pegados", async () => {
+      conUnRiDelRenglon();
+      const r = await ponerArticulo(pedido("PUT", { articulo_id: "B" }), con("r1"));
+      expect(r.status).toBe(409);
+      const cuerpo = await r.json();
+      expect(cuerpo.ris_pegados).toEqual([500]);
+      expect(cuerpo.error).toMatch(/sacalo antes de cambiar el artículo/);
+      expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBe("A");
+      expect(base.estado.tablas.mant_ri_de_repuesto).toHaveLength(1);
     });
-    const r = await ponerArticulo(pedido("PUT", { articulo_id: "B" }), con("r1"));
-    expect(r.status).toBe(200);
+
+    it("no frenan el soltar: angosta el alcance y el vínculo sigue alcanzable", async () => {
+      conUnRiDelRenglon();
+      const r = await soltarArticulo(pedido("DELETE"), con("r1"));
+      expect(r.status).toBe(200);
+      expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBeNull();
+      expect(base.estado.tablas.mant_ri_de_repuesto).toHaveLength(1);
+      // Y desde esa misma pantalla se puede sacar.
+      const sacado = await sacarRi(pedido("DELETE", undefined, "http://x/api?nro_ri=500"), con("r1"));
+      expect(sacado.status).toBe(200);
+      expect(base.estado.tablas.mant_ri_de_repuesto).toEqual([]);
+    });
+
+    it("elegir el primer artículo no es cambiar: pegar primero y elegir después sigue andando", async () => {
+      base.reiniciar({
+        ...base.estado.tablas,
+        ordenes_trabajo_repuestos: [renglon(1, { articulo_id: null })],
+        mant_ri_de_repuesto: [{ id: "m1", nro_ri: 500, articulo_id: null, repuesto_id: "r1" }],
+      });
+      const r = await ponerArticulo(pedido("PUT", { articulo_id: "A" }), con("r1"));
+      expect(r.status).toBe(200);
+      expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBe("A");
+    });
+
+    it("de punta a punta: pegar sin artículo, elegir A, intentar B es 409; sacando el RI primero, pasa", async () => {
+      base.reiniciar({
+        ...base.estado.tablas,
+        ordenes_trabajo_repuestos: [renglon(1, { articulo_id: null })],
+        mant_ri_de_repuesto: [],
+      });
+      expect((await pegarRi(pedido("POST", { nro_ri: 500 }), con("r1"))).status).toBe(200);
+      expect((await ponerArticulo(pedido("PUT", { articulo_id: "A" }), con("r1"))).status).toBe(200);
+
+      const intento = await ponerArticulo(pedido("PUT", { articulo_id: "B" }), con("r1"));
+      expect(intento.status).toBe(409);
+      expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBe("A");
+
+      await sacarRi(pedido("DELETE", undefined, "http://x/api?nro_ri=500"), con("r1"));
+      const despues = await ponerArticulo(pedido("PUT", { articulo_id: "B" }), con("r1"));
+      expect(despues.status).toBe(200);
+      expect(base.estado.tablas.ordenes_trabajo_repuestos[0].articulo_id).toBe("B");
+    });
+
+    it("el bloqueo junta los dos orígenes sin repetir números", async () => {
+      base.reiniciar({
+        ...base.estado.tablas,
+        mant_ri_de_repuesto: [
+          { id: "m1", nro_ri: 500, articulo_id: "A", repuesto_id: null },
+          { id: "m2", nro_ri: 500, articulo_id: null, repuesto_id: "r1" },
+          { id: "m3", nro_ri: 300, articulo_id: null, repuesto_id: "r1" },
+          { id: "m4", nro_ri: 900, articulo_id: null, repuesto_id: "otro" },
+        ],
+      });
+      const r = await ponerArticulo(pedido("PUT", { articulo_id: "B" }), con("r1"));
+      expect(r.status).toBe(409);
+      expect((await r.json()).ris_pegados).toEqual([300, 500]);
+    });
   });
 
   it("si la cuenta falla después de guardar, contesta 200 con una advertencia", async () => {
@@ -316,6 +424,7 @@ describe("el 409 dice qué bloquea", () => {
     const cuerpo = await r.json();
     expect(cuerpo.ris_pegados).toEqual([500, 777]);
     expect(cuerpo.error).toContain("500, 777");
+    expect(cuerpo.error).toMatch(/tiene pegados los RI 500, 777, que valen/);
   });
 
   it("y se puede sacar por número un RI que Compras ya no tiene", async () => {

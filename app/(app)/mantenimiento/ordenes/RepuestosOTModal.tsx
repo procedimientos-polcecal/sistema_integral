@@ -723,6 +723,9 @@ function ArticuloYRi({
   }
 
   async function elegir(articuloId: string) {
+    // Sin artículo, la cuenta sólo trae los RI que este mismo renglón tenía pegados
+    // a sí mismo: eso sí se sabe antes de elegir.
+    const teniaPropios = !articulo && (cuenta?.ris.length ?? 0) > 0;
     const r = await llamar(`/api/mantenimiento/repuestos/${repuesto.id}/articulo`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -731,14 +734,19 @@ function ArticuloYRi({
     if (!r.ok) return;
     setEligiendo(false);
     aplicar(r.body);
-    // Callado, esto sería una sorpresa: los RI que ya tenía el artículo los pegaron
-    // desde otras órdenes y desde ahora cuentan también para ésta.
-    const heredados = r.body.cuenta?.ris.length ?? 0;
+    // Callado, esto sería una sorpresa: los RI que cuenta el artículo valen desde ahora
+    // para todas las órdenes que lo piden. **No se dice de dónde vino cada uno**:
+    // `cuenta.ris` no trae la procedencia y pueden ser de otras órdenes o de este
+    // mismo renglón; afirmarlo sería inventarlo.
+    const hay = r.body.cuenta?.ris.length ?? 0;
+    const cuantos = hay === 1 ? "1 RI pegado" : `${hay} RI pegados`;
     setAviso(
-      heredados > 0
-        ? `Este artículo ya tenía ${heredados === 1 ? "1 RI pegado" : `${heredados} RI pegados`} desde otras órdenes: ` +
-          "desde ahora cuentan también para este repuesto."
-        : ""
+      hay === 0
+        ? ""
+        : teniaPropios
+          ? `Con este artículo cuentan ${cuantos}, y los que pegaste a este repuesto antes de elegirlo valen ` +
+            "desde ahora para todas las órdenes que piden ese artículo. Para cambiar de artículo hay que sacarlos primero."
+          : `Con este artículo cuentan ${cuantos}: valen también para este repuesto.`
     );
     onCambioDeLaCuenta();
     onCambioDelArticulo();
@@ -827,7 +835,7 @@ function ArticuloYRi({
                 value=""
                 onChange={(e) => { if (e.target.value) void elegir(e.target.value); }}
                 disabled={ocupado}
-                className="input text-sm"
+                className="input"
                 aria-label={`Artículo del pañol para ${repuesto.nombre}`}
               >
                 <option value="">Buscá por código o descripción…</option>
@@ -944,7 +952,7 @@ function ArticuloYRi({
               inputMode="numeric"
               placeholder="N° de RI"
               aria-label={`Número de RI para ${repuesto.nombre}`}
-              className="input text-sm"
+              className="input"
             />
           </div>
           <button onClick={pegar} disabled={ocupado || !nro.trim()} className="btn-secondary shrink-0">

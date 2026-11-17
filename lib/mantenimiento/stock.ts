@@ -172,21 +172,37 @@ export function buscarEnInventario(
 }
 
 /**
- * Cuántos pide la orden, si de lo anotado sale un número.
+ * El primer número que aparece en lo anotado, como texto, o null si no hay.
  *
- * El campo es texto libre —"80", "80 u.", "un juego"— porque la planilla lo es.
- * Lo que no tiene número devuelve `null` y **no se compara**: decir «no
- * alcanza» sin saber cuánto hace falta es inventar.
+ * El campo de cantidad es texto libre —"80", "80 u.", "x3", "un juego"— porque la
+ * planilla lo es. **Ésta es la única lectura de ese texto**: de ella salen
+ * `cuantosPide` (el número, para comparar y repartir) y `cantidadPedida` de
+ * `pedirRepuesto.ts` (el texto, para llenar el formulario). Hubo una tercera,
+ * `cantidadDelRenglon`, que hacía `Number()` de toda la cadena y divergió:
+ * `"80 u."` daba null ahí y 80 acá, así que un renglón decía «No alcanza · 61 en
+ * stock» (leyó 80) sobre «no se puede repartir» (leyó null), y peor, esa orden
+ * no consumía nada del reparto y una más nueva se llevaba el envío entero. Medido,
+ * 1 de los 26 renglones de hoy ya diverge. No se agrega otra: se usa ésta.
  *
- * Es la misma lectura que hace `cantidadPedida` de `pedirRepuesto.ts`, que
- * llena el formulario del requerimiento. Están separadas porque devuelven
- * cosas distintas —aquélla el texto para un campo, ésta un número para
- * comparar— y unirlas obligaría a una a convertir de vuelta.
+ * Se conserva el `0` ("0 bolsas" → "0"): viaja al formulario de Compras y
+ * convertirlo a número lo haría desaparecer.
  */
-function cuantosPide(texto: string | null | undefined): number | null {
+export function primerNumero(texto: string | null | undefined): string | null {
   const m = String(texto ?? "").match(/\d+(?:[.,]\d+)?/);
-  if (!m) return null;
-  const n = Number(m[0].replace(",", "."));
+  return m ? m[0].replace(",", ".") : null;
+}
+
+/**
+ * Cuántos pide la orden, si de lo anotado sale un número **positivo**.
+ *
+ * Lo que no tiene número devuelve `null` y **no se compara**: decir «no
+ * alcanza» sin saber cuánto hace falta es inventar. Es `primerNumero` más la
+ * exigencia de que sea mayor que cero; no tiene lectura propia.
+ */
+export function cuantosPide(texto: string | null | undefined): number | null {
+  const t = primerNumero(texto);
+  if (t === null) return null;
+  const n = Number(t);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 

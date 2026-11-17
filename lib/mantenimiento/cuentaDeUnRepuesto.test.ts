@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { supabaseDeMentira, type Fila } from "@/lib/core/supabaseDeMentira";
-import { cuentaDeUnRepuesto, cantidadDelRenglon, leerNroRi } from "./cuentaDeUnRepuesto";
+import { cuentaDeUnRepuesto, leerNroRi } from "./cuentaDeUnRepuesto";
 import { risDelRepuesto } from "./riDelRepuesto";
 
 /**
@@ -119,19 +119,6 @@ describe("la cuenta de un repuesto", () => {
     expect(cuenta.partes.map((p) => p.orden_id)).toEqual(["o1"]);
     expect(cuenta.ris).toEqual([]);
     expect(cuenta.estaOrden?.cubiertas).toBe(0);
-  });
-});
-
-describe("cantidadDelRenglon", () => {
-  it("lee enteros, decimales con coma o punto, y espacios", () => {
-    expect(cantidadDelRenglon("10")).toBe(10);
-    expect(cantidadDelRenglon(" 2,5 ")).toBe(2.5);
-    expect(cantidadDelRenglon("2.5")).toBe(2.5);
-  });
-  it("lo que no es un número positivo no es una cantidad", () => {
-    for (const v of ["", null, undefined, "abc", "0", "-3", "10 unidades"]) {
-      expect(cantidadDelRenglon(v as string | null | undefined)).toBeNull();
-    }
   });
 });
 

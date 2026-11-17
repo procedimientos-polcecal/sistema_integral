@@ -15,27 +15,44 @@ import { cuentaDeUnRepuesto } from "@/lib/mantenimiento/cuentaDeUnRepuesto";
  * null y no borra el renglón. Las dos devuelven la cuenta de lo que viene, que
  * cambia al cambiar de artículo.
  *
- * ── CAMBIAR O SOLTAR EL ARTÍCULO CON RI PEGADOS AL ARTÍCULO: SE NIEGA ────────
+ * ── CAMBIAR O SOLTAR EL ARTÍCULO CON RI PEGADOS: SE NIEGA, PERO NO TODO IGUAL ──
  *
- * Pegar un RI a un renglón con artículo lo escribe **sobre el artículo**, y esa
- * decisión la toma la ruta (`ri/route.ts`), no la persona: ella dijo «este RI es
- * de esta pieza». Esa fila no guarda de qué renglón vino (`repuesto_id` es null).
- * Si después se cambia el artículo del renglón y la fila vieja queda, **sigue
- * contando para todas las demás órdenes abiertas que piden el artículo viejo**:
- * una lee «cubierta» por un RI que nunca fue de su pieza, que es el anti-objetivo
- * de la función. Y desde esa pantalla ya no se puede sacar, porque el DELETE busca
- * en el artículo *nuevo*.
+ * Hay dos clases de vínculo que este renglón puede tener, y **frenan cosas
+ * distintas por una razón distinta**:
  *
- * Se podría borrar al cambiar, pero no se sabe cuáles de esas filas eran de este
- * renglón y cuáles las pegó otro renglón del mismo artículo: borrar es llevarse el
- * trabajo ajeno sin avisar. Por eso **se niega con un 409** mientras el artículo
- * viejo tenga RI pegados, y se dice cómo seguir: sacarlos primero (con el artículo
- * todavía puesto, el DELETE de `ri` los alcanza). Los RI pegados al *renglón*
- * (`repuesto_id`) se quedan, son suyos. Repetir el mismo artículo no es un cambio.
+ * **Los pegados al artículo** (`articulo_id = el viejo`) frenan **cambiar y
+ * soltar**. Pegar un RI a un renglón con artículo lo escribe sobre el artículo, y
+ * esa decisión la toma la ruta (`ri/route.ts`), no la persona: ella dijo «este RI
+ * es de esta pieza». Esa fila no guarda de qué renglón vino. Si después se cambia
+ * el artículo y la fila vieja queda, **sigue contando para todas las demás órdenes
+ * abiertas que piden el artículo viejo**, y desde esta pantalla ya no se puede
+ * sacar, porque el DELETE busca en el artículo *nuevo*. Se podría borrar al
+ * cambiar, pero no se sabe cuáles eran de este renglón y cuáles los pegó otro del
+ * mismo artículo: borrar es llevarse el trabajo ajeno sin avisar.
  *
- * **El 409 trae `ris_pegados`**: puede haber un vínculo cuyo RI la planilla ya dejó
- * de tener (no hay foreign key justamente para eso), y esa fila bloquea aunque la
- * cuenta no la vea. Con los números la pantalla puede ofrecer sacarlos uno por uno.
+ * **Los pegados al renglón** (`repuesto_id = este renglón`, que es lo que pasa si
+ * el RI se pegó antes de elegir artículo) frenan **sólo cambiar a otro artículo,
+ * no soltar**. La cuenta (`cuentaDeUnRepuesto`) lee los vínculos de *todos* los
+ * renglones del artículo, así que en cuanto el renglón elige artículo, su vínculo
+ * propio pasa a valer para el grupo: es lo pedido —pegar primero el número y
+ * elegir el artículo después— y no es una fuga, porque el renglón ya es de ese
+ * artículo. Lo que **sí** sería una fuga es que cambiar el artículo lo arrastrara
+ * a otro grupo: el pedido nunca fue de esa pieza, y el RI pasaría a cubrir a todas
+ * las órdenes abiertas que piden el artículo nuevo (reproducido: pegar el 500 sin
+ * artículo, elegir A y cambiar a B lo dejaba pasar). Soltar, en cambio,
+ * **angosta** el alcance —vuelve a valer sólo para este renglón—, nadie lee
+ * «cubierta» de más, y el vínculo sigue alcanzable desde esta pantalla porque el
+ * DELETE de `ri` lo busca por `repuesto_id`. Ésa es la diferencia con uno del
+ * artículo, que al soltar queda vivo **y** fuera de alcance. Quien se equivocó de
+ * artículo saca el RI y lo vuelve a pegar: dos clics y el número, a cambio de que
+ * el sistema no lo mueva solo.
+ *
+ * Repetir el mismo artículo no es un cambio.
+ *
+ * **El 409 trae `ris_pegados`** con los números de los dos orígenes: puede haber un
+ * vínculo cuyo RI la planilla ya dejó de tener (no hay foreign key justamente para
+ * eso), y esa fila bloquea aunque la cuenta no la vea. Con los números la pantalla
+ * puede ofrecer sacarlos uno por uno, y el DELETE de `ri` alcanza a los dos.
  * Y el 404 de un artículo inexistente gana sobre el 409: ver el comentario abajo.
  */
 
@@ -79,27 +96,48 @@ async function guardar(id: string, articuloId: string | null) {
   }
 
   const viejo = (renglon.articulo_id as string | null) ?? null;
-  if (viejo !== null && viejo !== articuloId) {
+  // Los del artículo bloquean cambiar y soltar; los del renglón, sólo cambiar a
+  // otro artículo (ver la cabecera: soltar angosta y no deja nada fuera de alcance).
+  // **Elegir el primero (viejo null) no es cambiar**: ahí el vínculo del renglón pasa a
+  // valer para el grupo, que es lo pedido, y bloquearlo impediría pegar primero y elegir después.
+  const bloqueaPorArticulo = viejo !== null && viejo !== articuloId;
+  const bloqueaPorRenglon = viejo !== null && articuloId !== null && articuloId !== viejo;
+  if (bloqueaPorArticulo || bloqueaPorRenglon) {
     // **Se leen de la tabla de vínculos y no de la cuenta, a propósito.** La
     // cuenta ignora un RI que la planilla ya no tiene (no trae nada); este
     // bloqueo no puede ignorarlo, porque la fila sigue ahí y sigue bloqueando.
     // Por eso el 409 **lleva los números**: la pantalla no los puede sacar de
     // `cuenta.ris`, y sin ellos la persona tendría que sacar vínculos que no ve.
-    let pegados: { nro_ri: number }[];
+    // Dos consultas y no un `or`: son dos columnas y dos razones distintas.
+    const pegados: { nro_ri: number }[] = [];
+    let delArticulo = 0;
     try {
-      pegados = await traerTodo((d, h) =>
-        admin.from("mant_ri_de_repuesto").select("nro_ri").eq("articulo_id", viejo).range(d, h)
-      );
+      if (bloqueaPorArticulo) {
+        const delViejo = await traerTodo((d, h) =>
+          admin.from("mant_ri_de_repuesto").select("nro_ri").eq("articulo_id", viejo!).range(d, h)
+        );
+        delArticulo = delViejo.length;
+        pegados.push(...delViejo);
+      }
+      if (bloqueaPorRenglon) {
+        pegados.push(
+          ...(await traerTodo((d, h) =>
+            admin.from("mant_ri_de_repuesto").select("nro_ri").eq("repuesto_id", id).range(d, h)
+          ))
+        );
+      }
     } catch {
-      return NextResponse.json({ error: "No se pudieron comprobar los RI del artículo actual" }, { status: 500 });
+      return NextResponse.json({ error: "No se pudieron comprobar los RI de este repuesto" }, { status: 500 });
     }
     if (pegados.length > 0) {
       const ris = [...new Set(pegados.map((p) => p.nro_ri))].sort((x, y) => x - y);
+      const uno = ris.length === 1;
       return NextResponse.json(
         {
           error:
-            `El artículo actual tiene pegados los RI ${ris.join(", ")}, y valen para todas las órdenes que lo usan: ` +
-            "sacalos antes de cambiar o soltar el artículo.",
+            `Este repuesto tiene pegado${uno ? "" : "s"} ${uno ? "el RI" : "los RI"} ${ris.join(", ")}, ` +
+            `que ${uno ? "vale" : "valen"} para todas las órdenes que piden este artículo: ` +
+            `${uno ? "sacalo" : "sacalos"} antes de ${delArticulo > 0 ? "cambiar o soltar" : "cambiar"} el artículo.`,
           ris_pegados: ris,
         },
         { status: 409 }

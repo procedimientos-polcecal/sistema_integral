@@ -206,7 +206,7 @@ export default function ConsultasClient({ puedeAbrirLaOrden }: { puedeAbrirLaOrd
                     <button
                       onClick={() => contestar(c)}
                       disabled={enviando !== null || !caja.texto.trim()}
-                      className="btn-primary text-sm"
+                      className="btn-primary"
                     >
                       {enviando === c.id ? "Enviando…" : "Contestar"}
                     </button>

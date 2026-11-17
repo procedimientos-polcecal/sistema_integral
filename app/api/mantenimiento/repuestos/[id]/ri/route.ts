@@ -160,17 +160,44 @@ export async function DELETE(request: Request, { params }: Params) {
   if (!renglon) return NextResponse.json({ error: "No existe ese repuesto" }, { status: 404 });
 
   // Dos borrados que no son atómicos: si el segundo falla, el primero ya se
-  // hizo y se contesta 400 con el vínculo a medio sacar. Repetir el pedido lo
-  // termina (borrar lo que no está no falla), así que no se envuelve en nada más.
+  // hizo y se contesta 400 con el vínculo a medio sacar. **Repetir el pedido lo
+  // termina**: el segundo intento borra lo que falte y contesta 200, porque el 404
+  // sólo aparece cuando no había nada que borrar en ninguno de los dos destinos.
+  //
+  // Se piden las filas borradas (`select("id")`) porque un DELETE que no borra nada
+  // no da error, y contestar «listo» sería mentir en tres casos: un número mal
+  // tipeado, un RI que otra persona ya sacó, y —el que importa— un RI que cuenta
+  // para este renglón porque **otro renglón del mismo artículo** lo tiene pegado a
+  // sí mismo (`repuesto_id` ajeno): desde acá no se alcanza, y quien aprieta tiene
+  // que saber que hay que sacarlo desde ese otro renglón.
   const borrados = [
-    admin.from("mant_ri_de_repuesto").delete().eq("repuesto_id", id).eq("nro_ri", nro_ri),
+    admin.from("mant_ri_de_repuesto").delete().eq("repuesto_id", id).eq("nro_ri", nro_ri).select("id"),
     ...(renglon.articulo_id
-      ? [admin.from("mant_ri_de_repuesto").delete().eq("articulo_id", renglon.articulo_id).eq("nro_ri", nro_ri)]
+      ? [
+          admin
+            .from("mant_ri_de_repuesto")
+            .delete()
+            .eq("articulo_id", renglon.articulo_id)
+            .eq("nro_ri", nro_ri)
+            .select("id"),
+        ]
       : []),
   ];
+  let cuantos = 0;
   for (const b of borrados) {
-    const { error } = await b;
+    const { data, error } = await b;
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    cuantos += data?.length ?? 0;
+  }
+  if (cuantos === 0) {
+    return NextResponse.json(
+      {
+        error:
+          `El RI ${nro_ri} no está pegado a este repuesto. Puede estar pegado a otro renglón del mismo ` +
+          "artículo, y entonces hay que sacarlo desde ahí.",
+      },
+      { status: 404 }
+    );
   }
 
   return respuesta(renglon);
