@@ -35,6 +35,16 @@
  * (`ot_enlazada_en is null`, y sin enlace o con el sello propio): si el aviso
  * cambió en el medio, el update no lo toca.
  *
+ * ── LOS NÚMEROS QUE DEVUELVE SON FILAS ESCRITAS, NO PEDIDAS ───────────────
+ *
+ * Cada update lleva `.select("id")` y se suma `data.length`. Sin eso se contaba
+ * el tamaño del lote, y si una guarda filtraba filas por una carrera el JSON
+ * decía «2» cuando se escribió 0. Esos dos números son la única señal de que la
+ * resolución está viva: la comprobación después de la primera sincronización
+ * real es que un aviso nuevo del formulario entre con `work_order_id`, y un
+ * contador que sobrecuenta la vuelve inútil. Los ids que vuelven no se usan
+ * para otra cosa. Un error sigue llegando en `error` igual con `.select()`.
+ *
  * Nunca tira: cualquier fallo vuelve en `error` y la corrida sigue. El enlace se
  * recalcula entero en la próxima, así que lo único que se pierde es el tiempo.
  */
@@ -67,6 +77,7 @@ export async function resolverLosEnlacesDeAvisos(
 ): Promise<EnlacesResueltos> {
   let enlazados = 0;
   let vaciados = 0;
+  let paso = "leyendo los avisos";
 
   try {
     const avisos = (await traerTodo((desde, hasta) =>
@@ -78,6 +89,7 @@ export async function resolverLosEnlacesDeAvisos(
         .range(desde, hasta)
     )) as AvisoAResolver[];
 
+    paso = "leyendo las órdenes de trabajo";
     // Sólo las OT cuyo número aparece en algún aviso: la tabla tiene miles.
     const numeros = [
       ...new Set(
@@ -93,39 +105,43 @@ export async function resolverLosEnlacesDeAvisos(
         .from("ordenes_trabajo")
         .select("id, ot_number")
         .in("ot_number", lote);
-      if (error) return { enlazados, vaciados, error: error.message };
+      if (error) return { enlazados, vaciados, error: `${paso}: ${error.message}` };
       for (const ot of data ?? []) idPorNumero.set(Number(ot.ot_number), ot.id as string);
     }
 
     const { aEnlazar, aVaciar } = loQueHayQueReenlazar(avisos, idPorNumero);
     const cuando = new Date().toISOString();
+    paso = "enlazando avisos";
 
     for (const { otId, avisoIds } of aEnlazar) {
       for (const lote of lotes(avisoIds)) {
-        const { error } = await admin
+        const { data, error } = await admin
           .from("avisos")
           .update({ work_order_id: otId, ot_resuelta_en: cuando })
           .in("id", lote)
           .is("ot_enlazada_en", null)
-          .or("work_order_id.is.null,ot_resuelta_en.not.is.null");
-        if (error) return { enlazados, vaciados, error: error.message };
-        enlazados += lote.length;
+          .or("work_order_id.is.null,ot_resuelta_en.not.is.null")
+          .select("id");
+        if (error) return { enlazados, vaciados, error: `${paso}: ${error.message}` };
+        enlazados += data?.length ?? 0;
       }
     }
 
+    paso = "vaciando enlaces";
     for (const lote of lotes(aVaciar)) {
-      const { error } = await admin
+      const { data, error } = await admin
         .from("avisos")
         .update({ work_order_id: null, ot_resuelta_en: null })
         .in("id", lote)
         .is("ot_enlazada_en", null)
-        .not("ot_resuelta_en", "is", null);
-      if (error) return { enlazados, vaciados, error: error.message };
-      vaciados += lote.length;
+        .not("ot_resuelta_en", "is", null)
+        .select("id");
+      if (error) return { enlazados, vaciados, error: `${paso}: ${error.message}` };
+      vaciados += data?.length ?? 0;
     }
 
     return { enlazados, vaciados };
   } catch (e) {
-    return { enlazados, vaciados, error: e instanceof Error ? e.message : String(e) };
+    return { enlazados, vaciados, error: `${paso}: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
