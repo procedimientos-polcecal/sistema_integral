@@ -247,3 +247,32 @@ describe("avisoDeDesenlazada", () => {
     expect(texto).toContain("sincronización");
   });
 });
+
+describe("loQueImpideDesenlazar: el aviso que resolvió la sincronización", () => {
+  it("al aviso que resolvió la sincronización le dice que el número está en la planilla", () => {
+    const motivos = loQueImpideDesenlazar({
+      oa_number: "A-120", work_order_id: "ot-a", ot_asignada: "2814",
+      ot_enlazada_en: null, ot_resuelta_en: "2026-11-17T10:00:00Z",
+    }, 2814);
+    expect(motivos).toHaveLength(1);
+    expect(motivos[0]).toContain("en la planilla");
+    expect(motivos[0]).not.toContain("se generó desde el aviso");
+  });
+
+  it("al aviso cuya OT nació de él le sigue diciendo que hay que dar de baja la orden", () => {
+    const motivos = loQueImpideDesenlazar({
+      oa_number: "A-121", work_order_id: "ot-a", ot_asignada: "2814",
+      ot_enlazada_en: null, ot_resuelta_en: null,
+    }, 2814);
+    expect(motivos[0]).toContain("darla de baja");
+  });
+
+  it("los dos siguen bloqueando el desenlazar", () => {
+    for (const resuelta of [null, "2026-11-17T10:00:00Z"]) {
+      expect(sePuedeDesenlazar({
+        oa_number: "A-1", work_order_id: "ot-a", ot_asignada: "2814",
+        ot_enlazada_en: null, ot_resuelta_en: resuelta,
+      })).toBe(false);
+    }
+  });
+});

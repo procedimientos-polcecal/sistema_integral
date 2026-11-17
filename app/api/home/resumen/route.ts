@@ -155,8 +155,11 @@ async function resumenMantenimiento(supabase: Awaited<ReturnType<typeof createCl
     ),
     // Los avisos se cuentan en memoria porque "sin orden" son dos columnas: la
     // sincronización guarda el número de la planilla como texto en
-    // `ot_asignada` y sólo los generados desde la app llenan `work_order_id`.
-    // Mirando una sola, los 141 avisos parecerían estar todos sin atender.
+    // `ot_asignada`, y `work_order_id` lo llenan los generados desde la app y,
+    // desde el 17/11/2026, también la sincronización al resolver ese número.
+    // Se siguen mirando las dos porque hay avisos (10 al medirlo) cuyo texto no
+    // es un número —«si», «Revision»— y nunca van a tener enlace, aunque
+    // alguien los dio por atendidos. Mirando una sola, parecerían sin atender.
     traerTodo<{ work_order_id: string | null; ot_asignada: string | null }>((desde, hasta) =>
       supabase.from("avisos").select("work_order_id, ot_asignada").range(desde, hasta)
     ),
