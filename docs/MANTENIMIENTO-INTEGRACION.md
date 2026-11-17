@@ -3261,3 +3261,117 @@ update mantenimientos_ejecuciones
 `datetime-local`— e `instanteDeArgentina()` —para mandarlo con huso `-03:00`—,
 las dos con tests. Y `eslint.config.mjs` tiene una regla que rechaza
 `new Date().toISOString().slice(0, 16)`, que es la forma exacta que causó esto.
+
+
+## Un aviso no termina cuando nace la OT (17/11/2026)
+
+Un aviso dice que una máquina anda mal. De un aviso sale una orden de trabajo,
+y hasta ahora las dos listas que muestran avisos —`/mis-avisos`, abierta a los
+catorce usuarios, y `/mantenimiento/avisos`— decían **«OT #2814» y nada más**.
+Eso contesta «¿alguien lo tomó?» y deja sin contestar la que importa:
+**¿se terminó de tratar?** `finalDelAviso()` devuelve `con-ot` igual para un
+aviso cuya orden se cerró hace tres semanas que para uno cuya orden está
+atrasada desde diciembre.
+
+El diseño está en
+[el spec](superpowers/specs/2026-11-16-avisos-el-estado-del-trabajo-design.md)
+y el plan en
+[su plan](superpowers/plans/2026-11-17-avisos-el-estado-del-trabajo.md). Lo
+medido el 17/11/2026 contra producción, que es de donde sale todo lo demás:
+
+| | |
+|---|---|
+| avisos en total | 238 |
+| con `work_order_id` | 39 |
+| con el número sólo como texto en `ot_asignada` | 182, y los 182 resuelven a una OT existente |
+| texto que no es un número | 10 |
+| sin nada | 7 |
+| de los 221 resolubles, **con la OT abierta** | **13** — el resto, 208, cerradas |
+| OT abiertas en todo el sistema | 55 de 2.489 |
+
+O sea que esto existe para encontrar **esos 13 entre 238**.
+
+### Lo que no se deduce del código
+
+**1. `ot_enlazada_en is null` no separa los avisos en dos sino en tres.** Es la
+trampa central, y la que obligó a corregir el diseño después de escrito:
+
+| El aviso | Cómo se reconoce | Quién lo enlazó | Lo toca la sincronización |
+|---|---|---|---|
+| 17 | `ot_enlazada_en` puesto | una persona, con «Ya tiene OT» | **no** |
+| 22 | los dos sellos en null y `work_order_id` puesto | el sistema, al generar la OT desde el aviso | **no** |
+| 182 | `ot_resuelta_en` puesto | la resolución automática, desde el número tipeado en la planilla | **sí**: se corrige y se vacía siguiendo la planilla |
+
+`ot_resuelta_en` es la columna que lo hace posible (migración
+`20261117090055`), y la escribe **sólo** la resolución automática —el relleno y
+la sincronización—, igual que `ot_enlazada_en` la escribe sólo la ruta de
+enlazar. Sin ella, vaciar la celda `OT ASIGNADA` de la planilla dejaría
+huérfana una de esas 22 órdenes: el aviso volvería a «pendiente» invitando a
+que alguien genere una segunda orden para el mismo problema, que es
+**exactamente lo que `loQueImpideDesenlazar` se niega a hacer**, con ese
+argumento escrito. La sincronización habría hecho callada lo que la ruta
+rechaza.
+
+**2. «Cerrada» lo decide `estado` y jamás la presencia de una fecha.** De las
+2.489 OT, **220 están en `REALIZADO` sin `fecha_cierre`** —cerca de una de cada
+diez—, y ninguna de las 55 abiertas tiene fecha. La fecha, cuando está, es
+confiable; lo que no se puede es deducir el estado de su ausencia. Una pantalla
+que lo leyera al revés diría «abierta» sobre trabajo terminado. La regla vive en
+`estadoDelTrabajo()`, en
+[lib/mantenimiento/trabajoDelAviso.ts](../lib/mantenimiento/trabajoDelAviso.ts),
+con sus tests.
+
+**3. `/mis-avisos` lee el estado de la OT por una ruta con cliente admin, y no
+embebido.** `ordenes_trabajo` tiene el SELECT cerrado con `mant_puede_ver()`
+desde la migración `20260916110349`, y esa pantalla lee con el cliente del
+navegador: a los **6 de 14 usuarios sin el módulo** el embebido les devolvería
+null **en silencio**, y la pantalla diría «sin orden» sobre trabajo que existe.
+Por eso el estado viaja por `GET /api/mantenimiento/avisos/trabajo`, que lee con
+el cliente admin y pone el permiso ella —el mismo patrón que Disponibilidad con
+`ausencias`— y expone sólo `ot_number`, `estado` y `fecha_cierre`.
+`/mantenimiento/avisos` **sí** embebe, porque ahí sólo entra quien tiene el
+módulo.
+
+Vale anotar cómo se descubrió, porque el error es fácil de repetir: el embebido
+se había probado con la `SUPABASE_SERVICE_ROLE_KEY`, **que saltea RLS**, así que
+la prueba no valía para la pantalla que importaba.
+
+**4. Si la ruta falla, la pantalla no empeora.** `estadoDelTrabajo` recibe
+`undefined` —que quiere decir «no se pudo leer la orden» y no «no hay orden»— y
+devuelve el texto que ya se mostraba. Nunca «sin orden de trabajo» sobre trabajo
+que existe. Y con el filtro «Sin cerrar» puesto, una lista vacía sería una
+mentira: se dice que no se pudo saber, en vez de mostrarla.
+
+**5. Nada de esto se exporta.** La columna `OT ASIGNADA` sigue siendo la que
+escribe una persona y la que la sincronización lee; `work_order_id` y
+`ot_resuelta_en` son del sistema. El enlace se resuelve leyendo `ot_asignada`
+**de la tabla y no de la fila de la planilla**, que es lo que hace que respete
+sola a los avisos que el upsert saltea por tener la exportación pendiente.
+
+**6. El `UPDATE` de la sincronización va aparte y no dentro del upsert.**
+supabase-js arma el parámetro `columns` con la **unión de las claves de todo el
+lote** y le manda `null` a la fila que no la trae, así que meterlo adentro
+obligaría a partir las filas en cuatro grupos —ya hay dos por
+`repartirPorArea`—. Un fallo ahí **no cambia el `ok`** de la corrida, a
+diferencia de las áreas: el área decide en qué pantalla aparece un aviso y un
+fallo sostenido lo esconde, mientras que el enlace se recalcula entero en la
+próxima corrida y lo único que se pierde mientras tanto es decir si el trabajo
+terminó.
+
+**7. Y las dos pantallas dicen lo mismo del mismo aviso.** El texto y el color
+salen de `comoSeMuestraElTrabajo()`, al lado de `estadoDelTrabajo`. Lo que
+**no** se unifica, a propósito, son los casos sin enlace: `/mantenimiento/avisos`
+dice «Ya tiene OT» y `/mis-avisos` «Con orden de trabajo», porque le hablan a
+gente distinta.
+
+### Cómo se comprueba que no se congeló
+
+Dos cosas que ningún test ve:
+
+- Después del relleno (`npx tsx scripts/rellenar-el-enlace-de-avisos.mts
+  --aplicar`), **221 avisos de 238 con `work_order_id`**; los 17 restantes son
+  los 10 de texto que no es un número y los 7 sin nada.
+- Después de la primera sincronización, que un aviso nuevo del Forms con su
+  número en `OT ASIGNADA` entre con `work_order_id` puesto y `ot_resuelta_en`
+  sellado. Es la única prueba de que la resolución sigue viva, y es la misma que
+  en octubre confirmó que el área se completaba sola.
