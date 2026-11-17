@@ -819,9 +819,11 @@ equipo.
 
 ## Un aviso nuevo sale por dos lados, y hay un tercero que se gana aparte
 
-Desde el 18/10/2026 el SdG manda **un resumen diario por push**: una
-notificación por persona con lo que tiene para mirar en sus módulos, a las 11:30
-UTC (8:30 de Argentina), después del último sync. Cada uno las prende en **Mi
+Desde el 18/10/2026 el SdG manda **un resumen por push**: una notificación por
+persona con lo que tiene para mirar en sus módulos, a las 11:30 UTC (8:30 de
+Argentina), después del último sync. **Era diario y desde el 17/11/2026 manda
+sólo los lunes** —el movimiento del día lo avisa ahora un cron cada quince
+minutos, más abajo—, aunque la corrida sigue siendo diaria. Cada uno las prende en **Mi
 cuenta → Notificaciones**, y **por aparato** — la clave de `push_suscripciones`
 es `(usuario_id, endpoint)`, así que el celular y la computadora son dos filas.
 
@@ -832,9 +834,9 @@ sea que un aviso mal calibrado ya no es una campanita de más: es una
 notificación en el teléfono de alguien.
 
 **Pero no dicen lo mismo: la campana muestra el stock y el push el
-movimiento.** Desde el 18/10/2026 el resumen diario dice lo que **se movió**
-desde el resumen anterior —«3 más · Órdenes de trabajo atrasadas»— y los
-**lunes** manda los totales. El motivo está medido: contando stocks, el push de
+movimiento.** Desde el 18/10/2026 el push dice lo que **se movió** —«3 más ·
+Órdenes de trabajo atrasadas»— y los **lunes** manda los totales. El motivo
+está medido: contando stocks, el push de
 mañana decía lo mismo que el de hoy. «Facturas en el buzón sin vincular: 1»
 dijo lo mismo trece días; hay **un solo service en todo el sistema**, así que
 «15 equipos sin service» no podía bajar; 19 de las 23 OT atrasadas tienen más
@@ -843,20 +845,59 @@ de una semana y la más vieja es del 11/12/2025. Y la prueba de que ya costó: d
 **los 13 avisos descartados** cada una — descartar era la única defensa contra
 un mensaje que se repite.
 
-Tres cosas que no se deducen del código:
+**Y desde el 17/11/2026 el movimiento no espera al día siguiente: lo manda un
+cron propio cada quince minutos** (`app/api/cron/avisos-al-instante`), dentro
+de la misma ventana 7:00–21:00 que el resto de los avisos al instante. El
+resumen de las 8:30 **sigue corriendo todos los días pero manda sólo los
+lunes**, con los totales. Se pidió así: que una ausencia cargada y cualquier
+novedad se sepan enseguida, y por push y no por correo.
 
-- **La `cantidad` de un aviso se compara contra la foto del día anterior**
-  (`avisos_fotos`, que escribe el mismo cron al final de cada corrida). Si
-  cambiás **qué cuenta** un aviso sin cambiarle el id, el día del cambio sale
-  una novedad falsa del tamaño del salto. Id nuevo para conteo nuevo.
+Seis cosas que no se deducen del código:
+
+- **La `cantidad` de un aviso se compara contra el vistazo anterior**
+  (`avisos_vistos`, una fila por aviso que se pisa unas 56 veces por día), y
+  **no** contra la foto del día anterior. Son dos tablas y dos relojes:
+  `avisos_fotos` tiene una fila por aviso **y por día** y es contra la que se
+  calculan los totales de los lunes —su fecha es además la idempotencia de ese
+  cron—, así que mezclarlas rompe el delta semanal. Si cambiás **qué cuenta**
+  un aviso sin cambiarle el id, la corrida siguiente saca una novedad falsa del
+  tamaño del salto. Id nuevo para conteo nuevo.
+- **La familia `salud-*` avisa por el flanco y no por el número.** Su
+  `cantidad` es la racha de corridas fallidas, y con diez sincronizaciones
+  corriendo seis veces por hora esa racha sube unas seis veces por hora
+  mientras el recurso siga roto: tratarla como un conteo son **hasta 56 pushes
+  en un día por un solo sync caído**. Así que se avisa cuando pasa de sana a
+  rota, una vez. Que un recurso arreglado y vuelto a romper avise de nuevo
+  **depende de que el vistazo se guarde reemplazando y no acumulando** — las
+  dos mitades se sostienen juntas y están atadas con tests de los dos lados.
+- **Un aviso nuevo tiene que declarar su `modulo` en `lib/home/avisos.ts`**, o
+  por el camino instantáneo no le llega a nadie —o le llega a todos, según la
+  rama, y las dos cosas por accidente—. Esa relación vivía implícita en la
+  llamada al conteo, que se hacía una vez por persona; el instantáneo calcula
+  **una sola vez para los dieciséis** y filtra después, así que ya no hay dónde
+  aplicarla. Las únicas entradas sin módulo son las transversales —la Agenda y
+  la mensajería—, que son exactamente las dos de `ES_POR_PERSONA`, y hay un
+  test del contrato que lo fija.
 - **Los lunes son la red, no un extra.** Contando sólo movimiento, algo que
   dejó de moverse no se nombra nunca más — y hay una OT atrasada desde
   diciembre de 2025. Si sacás el recordatorio semanal, el depósito se pudre en
-  silencio.
+  silencio. Y **el cron diario no se saca de `vercel.json` aunque mande sólo
+  los lunes**: además escribe `avisos_fotos`, que es contra lo que se calculan
+  esos totales y es el candado contra el reenvío.
 - **Un aviso con lista de responsables va a la lista.** `compras-por-aprobar`
   va a `compras_aprobadores` y no a todo el que vea Compras: medido, le llegaba
   a 6 personas y 3 no podían aprobar. Los administradores siguen recibiendo
-  todo lo demás.
+  todo lo demás. Ése además **queda afuera del instantáneo**, porque ya avisa
+  solo al nacer el requerimiento y llegaría dos veces por lo mismo.
+- **Las ausencias cargadas son un push y no un aviso de la campana.** Su id
+  —`rrhh-ausencias-cargadas`, en `lib/rrhh/ausenciasRecientes.ts`— no está en
+  `lib/home/avisos.ts` y no hay que buscarlo ahí: una ausencia cargada no queda
+  pendiente de nada, así que no hay stock que contar y en la campana sería un
+  número que sólo crece. Se cuenta por **`created_at` y nunca por
+  `fecha_desde`**: la mediana entre que una ausencia empieza y que alguien la
+  carga es de **33 días**. Le llega a todos, que es lo que se pidió, y es una
+  audiencia **distinta** de la del correo de RR.HH. de las 15:50, que va a doce
+  encargados con el detalle del día.
 
 Y una trampa que no se deduce del código: **la `cantidad` de un aviso de ritmo
 no cuenta cosas.** Es cuántos umbrales lleva el módulo sin cargarse, y existe
@@ -1078,6 +1119,18 @@ invocación y la ventana 7:00–21:00 sin encolar— y que **divergencia sean s�
 borrado y movido**; el detalle está en [docs/AGENDA.md](docs/AGENDA.md). Si
 agregás un emisor instantáneo, sea por ese archivo o por afuera, anotalo allá.
 
+**Y hay una quinta, que no cumple ninguna de las tres y por eso es otra cosa.**
+Desde el 17/11/2026 el cron `avisos-al-instante` manda cada quince minutos lo
+que se movió desde la corrida anterior. No hay una persona nombrada esperando
+—le llega a todo el que vea ese módulo—, nada se frena hasta que alguien
+decida, y lo que cuenta es un delta y no un hecho puntual. **No es un aviso al
+instante en el sentido de las tres condiciones: es el resumen diario, más
+seguido.** Se lo nombra acá para que no se lo confunda con el portón: lo que lo
+hace sostenible es lo mismo que al resumen —una sola notificación por persona y
+por corrida, y nunca el total sino lo que cambió— más la ventana que sí heredó.
+Pedir que algo entre ahí no es pedir pasar por `avisarAQuienDecide()`: alcanza
+con que sea un aviso de `lib/home/avisos.ts` con su módulo declarado.
+
 Tres cosas más que no se deducen del código, y que son las que evitan que esto
 termine en que alguien apague las notificaciones:
 
@@ -1116,9 +1169,10 @@ la lista de los candidatos que **no** pasan el filtro y por qué — que es lo q
 permite decirle que no al próximo módulo que lo pida.
 
 **El payload de un push es plano: `{title, body, url}`.** Es el `Aviso` de
-[lib/core/webpush.ts](lib/core/webpush.ts) y lo mandan los **cuatro** emisores que
-hay —el resumen diario, el aviso al instante, el de Remises y, desde el
-03/11/2026, el de la divergencia de la Agenda—. La `url` va en
+[lib/core/webpush.ts](lib/core/webpush.ts) y lo mandan los **cinco** emisores que
+hay —el resumen semanal, el aviso al instante, el de Remises, desde el
+03/11/2026 el de la divergencia de la Agenda y, desde el 17/11/2026, el cron de
+las novedades cada quince minutos—. La `url` va en
 el primer nivel, no adentro de un `data`.
 
 Esto parece un detalle y costó un mes de notificaciones que no llevaban a

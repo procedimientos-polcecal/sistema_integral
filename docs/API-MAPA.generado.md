@@ -4,7 +4,7 @@
 > Lo escrito a mano —para qué sirve cada módulo, cómo está armada una ruta y
 > las trampas— está en [API.md](API.md). Acá sólo hay lo que sale del código.
 
-Al 2026-11-13: **304 rutas** y **473 handlers** en 25 carpetas.
+Al 2026-11-17: **307 rutas** y **477 handlers** en 25 carpetas.
 
 ## Cómo leer la columna «guarda»
 
@@ -39,10 +39,10 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 
 | Guarda | Rutas |
 |---|---|
-| secreto del cron | 18 |
+| secreto del cron | 20 |
 | secreto propio | 3 |
 | token contra la base | 1 |
-| permiso de módulo | 198 |
+| permiso de módulo | 199 |
 | sesión | 28 |
 | el proxy | 56 |
 | **ABIERTA** | 0 |
@@ -155,11 +155,12 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/compras/ubicaciones/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarCompras` | `compras_requerimientos`, `compras_ubicaciones` | admin |
 | `/api/compras/ubicaciones` | GET, POST | permiso de módulo · `puedeEditarCompras` | `compras_ubicaciones` | admin |
 
-## cron (18)
+## cron (20)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
 | `/api/cron/agenda` | GET | secreto del cron | — | admin · 300s |
+| `/api/cron/avisos-al-instante` | GET | secreto del cron | `notificaciones_descartes`, `push_suscripciones`, `usuario_modulos`, `usuarios` | admin · paginado |
 | `/api/cron/avisos-diarios` | GET | secreto del cron | `push_suscripciones`, `usuario_modulos`, `usuarios` | admin · paginado |
 | `/api/cron/calidad-envases-bajada` | GET | secreto del cron | `calidad_envases_movimientos` | admin · 300s |
 | `/api/cron/calidad-envases-sync` | GET | secreto del cron | — | 300s |
@@ -173,6 +174,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/cron/remises-notificaciones` | GET | secreto del cron | `hojas_ruta`, `push_suscripciones`, `usuarios` | admin |
 | `/api/cron/respaldo-sheets` | GET | secreto del cron | — | admin · 300s |
 | `/api/cron/rrhh-lenox-sync` | GET | secreto del cron | — | 300s |
+| `/api/cron/rrhh-novedades` | GET | secreto del cron | `ausencias`, `francos`, `rrhh_correo_novedades`, `usuarios`, `vacaciones` | admin |
 | `/api/cron/rrhh-recalculo` | GET | secreto del cron | — | admin · 300s |
 | `/api/cron/syh-respaldo-de-fotos` | GET | secreto del cron | — | admin · 300s |
 | `/api/cron/taller-vial-partes-sync` | GET | secreto del cron | — | 300s |
@@ -370,7 +372,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/remises/vehiculos` | GET, POST | el proxy | `vehiculos` | — |
 | `/api/remises/vehiculos/template` | GET | el proxy | — | — |
 
-## rrhh (54)
+## rrhh (55)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
@@ -390,6 +392,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/rrhh/ausencias/export` | GET | el proxy | `ausencias` | — |
 | `/api/rrhh/ausencias` | GET, POST | sesión | `ausencias` | — |
 | `/api/rrhh/configuracion` | GET, PUT | permiso de módulo · `es_admin_check` | `config_liquidacion` | — |
+| `/api/rrhh/correo-novedades` | GET, PUT | permiso de módulo · `es_admin_check` | `usuarios` | — |
 | `/api/rrhh/dashboard/detalle-hoy` | GET | el proxy | — | — |
 | `/api/rrhh/dashboard/detalle-sector` | GET | el proxy | `calculos_diarios`, `empleados`, `sectores` | — |
 | `/api/rrhh/dashboard/horas-extra-por-sector` | GET | el proxy | `calculos_diarios` | — |
@@ -557,6 +560,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/compras/ubicaciones/[id]` | `lib/compras/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/ubicaciones` | `lib/compras/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/cron/agenda` | `lib/agenda/canales`, `lib/agenda/reintentarPendientes`, `lib/core/cron`, `lib/core/sincronizaciones`, `lib/supabase/admin` |
+| `/api/cron/avisos-al-instante` | `lib/core/access`, `lib/core/cron`, `lib/core/paginado`, `lib/core/types`, `lib/core/webpush`, `lib/home/avisosDeUsuario`, `lib/home/moduloDelAviso`, `lib/home/notificaciones`, `lib/home/novedadAlInstante`, `lib/home/resumenDeAvisos`, `lib/home/vistazoDeAvisos`, `lib/rrhh/ausenciasRecientes`, `lib/supabase/admin` |
 | `/api/cron/avisos-diarios` | `lib/core/cron`, `lib/core/fechas`, `lib/core/paginado`, `lib/core/types`, `lib/core/webpush`, `lib/home/avisosDeUsuario`, `lib/home/fotoDeAvisos`, `lib/home/movimiento`, `lib/home/resumenDeAvisos`, `lib/supabase/admin` |
 | `/api/cron/calidad-envases-bajada` | `lib/calidad/envases/bajada`, `lib/calidad/envases/sincronizar`, `lib/core/cron`, `lib/core/paginado`, `lib/core/sheets`, `lib/core/sincronizaciones`, `lib/supabase/admin` |
 | `/api/cron/calidad-envases-sync` | `lib/calidad/envases/sincronizar`, `lib/core/cron` |
@@ -570,6 +574,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/cron/remises-notificaciones` | `lib/core/cron`, `lib/core/fechas`, `lib/core/webpush`, `lib/supabase/admin` |
 | `/api/cron/respaldo-sheets` | `lib/core/cron`, `lib/core/sincronizaciones`, `lib/respaldo/correr`, `lib/supabase/admin` |
 | `/api/cron/rrhh-lenox-sync` | `lib/core/cron`, `lib/rrhh/dates`, `lib/rrhh/lenox/cliente`, `lib/rrhh/lenox/corrida`, `lib/rrhh/lenox/rango` |
+| `/api/cron/rrhh-novedades` | `lib/core/correo`, `lib/core/cron`, `lib/core/fechas`, `lib/rrhh/novedadesDelDia`, `lib/rrhh/paginado`, `lib/supabase/admin` |
 | `/api/cron/rrhh-recalculo` | `lib/core/cron`, `lib/core/sincronizaciones`, `lib/rrhh/recalculoProgramado`, `lib/supabase/admin` |
 | `/api/cron/syh-respaldo-de-fotos` | `lib/core/cron`, `lib/core/sincronizaciones`, `lib/seguridadHigiene/respaldoEnDrive`, `lib/supabase/admin` |
 | `/api/cron/taller-vial-partes-sync` | `lib/core/cron`, `lib/tallerVial/importarPartes` |
@@ -722,6 +727,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/rrhh/ausencias/export` | `lib/core/xlsxExport`, `lib/rrhh/route-utils`, `lib/rrhh/tiposAusencia`, `lib/supabase/server` |
 | `/api/rrhh/ausencias` | `lib/core/cuerpo`, `lib/rrhh/altaDeAusencia`, `lib/rrhh/route-utils`, `lib/supabase/server` |
 | `/api/rrhh/configuracion` | `lib/core/cuerpo`, `lib/rrhh/recalculoProgramado`, `lib/rrhh/route-utils`, `lib/supabase/server` |
+| `/api/rrhh/correo-novedades` | `lib/core/cuerpo`, `lib/rrhh/route-utils`, `lib/supabase/server` |
 | `/api/rrhh/dashboard/detalle-hoy` | `lib/rrhh/resumenHoy`, `lib/rrhh/route-utils`, `lib/supabase/server` |
 | `/api/rrhh/dashboard/detalle-sector` | `lib/rrhh/constants`, `lib/rrhh/dashboardHelpers`, `lib/rrhh/engine/recalcular`, `lib/rrhh/route-utils`, `lib/rrhh/valorHora`, `lib/supabase/server` |
 | `/api/rrhh/dashboard/horas-extra-por-sector` | `lib/rrhh/dashboardHelpers`, `lib/rrhh/engine/recalcular`, `lib/rrhh/paginado`, `lib/rrhh/route-utils`, `lib/supabase/server` |
