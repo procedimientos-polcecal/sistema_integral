@@ -21,7 +21,7 @@ export default async function AvisosPage() {
   const avisos = await traerTodo<Aviso>((desde, hasta) =>
     supabase
       .from("avisos")
-      .select("*, equipos(name, code), sectores(nombre)")
+      .select("*, equipos(name, code), sectores(nombre), ordenes_trabajo(ot_number, estado, fecha_cierre)")
       .order("fecha", { ascending: false, nullsFirst: false })
       .range(desde, hasta)
   );

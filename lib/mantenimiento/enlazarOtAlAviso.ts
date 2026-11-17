@@ -66,7 +66,12 @@
  *
  * 1. **Lo escribió una persona en la planilla.** Es el caso normal, no el
  *    raro: medido el 26/10/2026, de 186 avisos con algo en esa columna, 182
- *    no tienen `work_order_id` —«RI 1888», «Revision», «si», «1889 - 1886»—.
+ *    no tenían `work_order_id`.
+ *    Desde el 17/11/2026 ya no se reconocen por esa ausencia, sino por
+ *    `ot_resuelta_en`: a los que dicen un número —la enorme mayoría— la
+ *    resolución automática les completó el enlace y les puso ese sello. Los
+ *    que dicen otra cosa —«RI 1888», «Revision», «si», «1889 - 1886»— siguen
+ *    sin enlace y sin sello, y caen en la primera regla de abajo.
  *    Vaciar esa celda es borrar lo que alguien puso donde lee quien no entra
  *    al sistema. No se ofrece, y se distingue solo.
  * 2. **La OT la generó el sistema desde este aviso.** Desenlazarla deja una
@@ -192,6 +197,14 @@ export interface AvisoADesenlazar {
    * 26/10/2026 y para todo lo que salga de «Generar OT».
    */
   ot_enlazada_en?: string | null;
+  /**
+   * Cuándo la sincronización resolvió el número de la planilla a una orden.
+   * `null` es que el enlace no salió de ahí. La escribe **sólo** esa
+   * resolución, igual que `ot_enlazada_en` la escribe sólo la ruta de
+   * enlazar. Opcional porque la migración `20261117090055` puede no estar
+   * aplicada todavía.
+   */
+  ot_resuelta_en?: string | null;
 }
 
 /**
@@ -230,13 +243,27 @@ export function loQueImpideDesenlazar(
     return [`El aviso ${oa} no tiene ninguna orden de trabajo enlazada.`];
   }
 
-  // El caso normal y no el raro: 182 de 186. Es texto que alguien escribió en
+  // El caso normal y no el raro: 182 de 186 (medido el 26/10/2026; hoy la
+  // mayoría tiene `work_order_id` y cae en la rama de `ot_resuelta_en`). Es texto que alguien escribió en
   // la planilla, y desenlazar vacía esa celda.
   if (!aviso.work_order_id) {
     return [
       `El aviso ${oa} dice «${dice}» en OT ASIGNADA, pero el sistema no tiene ninguna ` +
       `orden enlazada: ese texto está sólo en la planilla y lo puso alguien a mano. ` +
       `Borrarlo desde acá sería pisarlo — si está mal, corregilo en la planilla.`,
+    ];
+  }
+
+  // Tiene `work_order_id`, pero lo puso la sincronización resolviendo un número
+  // que alguien tipeó en `OT ASIGNADA`. Es el caso 1 del encabezado con otro
+  // aspecto: el dato de origen está en la planilla, y vaciarlo desde acá es
+  // pisar lo que alguien puso donde lee quien no entra al sistema.
+  if (aviso.ot_resuelta_en) {
+    return [
+      `El aviso ${oa} está enlazado a la OT #${dice || "—"} porque alguien escribió ese ` +
+      `número en OT ASIGNADA en la planilla y el sistema lo resolvió. Borrarlo desde acá ` +
+      `sería pisar lo que se puso allá, y la próxima sincronización lo traería de vuelta ` +
+      `— si está mal, corregilo en la planilla.`,
     ];
   }
 

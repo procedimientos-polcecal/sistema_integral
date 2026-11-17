@@ -674,7 +674,7 @@ export default function DashboardClient({
           <Acceso href="/mantenimiento/ordenes" label="Órdenes de trabajo" />
           <Acceso href="/mantenimiento/ordenes-servicio" label="Órdenes de servicio" />
           <Acceso href="/mantenimiento/partes-contratista" label="Partes de contratista" />
-          <Acceso href="/mantenimiento/planificacion" label="Planificación" />
+          <Acceso href="/mantenimiento/planificacion" label="Programación" />
           <Acceso href="/mantenimiento/produccion" label="Producción" />
           <Acceso href="/mantenimiento/historial" label="Historial" />
           {esAdmin && <Acceso href="/mantenimiento/configuracion" label="Configuración" />}

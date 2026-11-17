@@ -9,11 +9,16 @@ import {
   fechaCorta,
   hayAlgoQueMandar,
   rangoDeFechas,
+  repartirAusentesDelDia,
   repartirVacacionesYAusencias,
+  soloLoQueCorrespondeAlDia,
+  tocaElDiaOElFuturo,
+  comoEstaEnElDia,
+  SIN_NOVEDADES,
   type NovedadesDelDia,
 } from "./novedadesDelDia";
 
-const VACIO: NovedadesDelDia = { ausencias: [], vacaciones: [], francosTomados: [], francosGenerados: [] };
+const VACIO: NovedadesDelDia = SIN_NOVEDADES;
 
 const CEJAS = { apellido: "CEJAS", nombre: "MARIO AGUSTIN", legajo: "PC_118" };
 const PEREZ = { apellido: "PÉREZ", nombre: "ANA", legajo: null };
@@ -174,6 +179,114 @@ describe("hayAlgoQueMandar", () => {
   });
 });
 
+describe("soloLoQueCorrespondeAlDia", () => {
+  const HOY = "2026-11-17";
+
+  it("una ausencia que ya termino no se informa", () => {
+    // El caso que lo motivó: el 16/11 se cargó una ausencia del 02 al 03/11.
+    const n = con({ ausencias: [{ ...UNA_AUSENCIA, fecha_desde: "2026-11-02", fecha_hasta: "2026-11-03" }] });
+    expect(soloLoQueCorrespondeAlDia(n, HOY).ausencias).toEqual([]);
+  });
+
+  it("una que empezó antes pero sigue, sí", () => {
+    // El corte va sobre la fecha final, no sobre la de inicio: mirar
+    // `fecha_desde` dejaría afuera justo la licencia que está en curso.
+    const n = con({ ausencias: [{ ...UNA_AUSENCIA, fecha_desde: "2026-11-10", fecha_hasta: "2026-11-20" }] });
+    expect(soloLoQueCorrespondeAlDia(n, HOY).ausencias).toHaveLength(1);
+  });
+
+  it("la que termina justo hoy entra", () => {
+    const n = con({ ausencias: [{ ...UNA_AUSENCIA, fecha_desde: "2026-11-10", fecha_hasta: HOY }] });
+    expect(soloLoQueCorrespondeAlDia(n, HOY).ausencias).toHaveLength(1);
+  });
+
+  it("una del futuro entra", () => {
+    const n = con({ ausencias: [{ ...UNA_AUSENCIA, fecha_desde: "2026-12-01", fecha_hasta: "2026-12-10" }] });
+    expect(soloLoQueCorrespondeAlDia(n, HOY).ausencias).toHaveLength(1);
+  });
+
+  it("se lleva los francos generados por un domingo anterior", () => {
+    /*
+     * Medido: 130 de 143 francos llevan un `fecha_generado` anterior al día en
+     * que el recálculo los creó, porque los genera el lunes por el domingo. Es
+     * el montón de 17 renglones automáticos que ya no sale.
+     */
+    const n = con({
+      francosGenerados: [{ empleado: CEJAS, fecha_generado: "2026-11-15", horas: 8 }],
+      francosTomados: [{ empleado: CEJAS, fecha_generado: "2026-11-01", fecha_tomado: HOY, horas: 8 }],
+    });
+    const r = soloLoQueCorrespondeAlDia(n, HOY);
+    expect(r.francosGenerados).toEqual([]);
+    // El tomado sobrevive: se marcó hoy, y marcarlo es un acto de hoy.
+    expect(r.francosTomados).toHaveLength(1);
+  });
+
+  it("no toca las dos secciones de presencia", () => {
+    // No son movimientos: su criterio es cubrir el día, no haber empezado hoy.
+    const unAusente = { empleado: CEJAS, fecha_desde: "2026-11-01", fecha_hasta: "2026-11-30", tipo: "VACACIONES" };
+    const n = con({ empiezanOTerminan: [unAusente], siguenAusentes: [unAusente] });
+    const r = soloLoQueCorrespondeAlDia(n, HOY);
+    expect(r.empiezanOTerminan).toHaveLength(1);
+    expect(r.siguenAusentes).toHaveLength(1);
+  });
+
+  it("acepta un timestamp completo, no sólo el día suelto", () => {
+    expect(tocaElDiaOElFuturo("2026-11-17T00:00:00+00:00", HOY)).toBe(true);
+    expect(tocaElDiaOElFuturo("2026-11-16T00:00:00+00:00", HOY)).toBe(false);
+  });
+});
+
+describe("repartirAusentesDelDia y comoEstaEnElDia", () => {
+  const HOY = "2026-11-17";
+  const arranca = { empleado: CEJAS, fecha_desde: HOY, fecha_hasta: "2026-11-20", tipo: "VACACIONES" };
+  const termina = { empleado: PEREZ, fecha_desde: "2026-11-10", fecha_hasta: HOY, tipo: "ENFERMEDAD_ACCIDENTE_INCULPABLE" };
+  const sigue = { empleado: PEREZ, fecha_desde: "2026-11-10", fecha_hasta: "2026-11-30", tipo: "VACACIONES" };
+  const unSoloDia = { empleado: CEJAS, fecha_desde: HOY, fecha_hasta: HOY, tipo: "PERMISO_PERSONAL" };
+
+  it("parte la lista en dos sin repetir a nadie", () => {
+    // Las dos secciones salen de la MISMA lista: listar «los que cambian» y
+    // después «todos» pondría a la misma persona dos veces.
+    const r = repartirAusentesDelDia([arranca, termina, sigue], HOY);
+    expect(r.empiezanOTerminan).toHaveLength(2);
+    expect(r.siguenAusentes).toHaveLength(1);
+    expect(r.empiezanOTerminan.length + r.siguenAusentes.length).toBe(3);
+  });
+
+  it("dice qué le pasa a cada uno ese día", () => {
+    expect(comoEstaEnElDia(arranca, HOY)).toBe("arranca hoy, hasta el 20/11/2026");
+    expect(comoEstaEnElDia(termina, HOY)).toBe("último día, mañana se reintegra");
+    expect(comoEstaEnElDia(sigue, HOY)).toBe("hasta el 30/11/2026");
+    expect(comoEstaEnElDia(unSoloDia, HOY)).toBe("hoy solamente");
+  });
+
+  it("el de un solo día cuenta como que cambia", () => {
+    const r = repartirAusentesDelDia([unSoloDia], HOY);
+    expect(r.empiezanOTerminan).toHaveLength(1);
+    expect(r.siguenAusentes).toEqual([]);
+  });
+});
+
+describe("las secciones de presencia no disparan el correo", () => {
+  const unAusente = { empleado: CEJAS, fecha_desde: "2026-11-01", fecha_hasta: "2026-11-30", tipo: "VACACIONES" };
+
+  it("con gente ausente pero sin movimientos, no se manda", () => {
+    /*
+     * Es la regla original del usuario, y sin esto se cae: hubo al menos una
+     * persona ausente los 46 días de 46 medidos, así que el correo saldría
+     * todos los días diciendo casi lo mismo.
+     */
+    const n = con({ empiezanOTerminan: [unAusente], siguenAusentes: [unAusente] });
+    expect(hayAlgoQueMandar(n)).toBe(false);
+    expect(cuantasSon(n)).toBe(0);
+  });
+
+  it("un solo movimiento alcanza, y entonces la presencia viaja con él", () => {
+    const n = con({ ausencias: [UNA_AUSENCIA], siguenAusentes: [unAusente] });
+    expect(hayAlgoQueMandar(n)).toBe(true);
+    expect(cuerpoDelCorreo(n, "2026-11-17")).toContain("SIGUEN AUSENTES (1)");
+  });
+});
+
 describe("asuntoDelCorreo", () => {
   it("dice cuánto hay de cada cosa, no sólo el total", () => {
     const n = con({
@@ -251,6 +364,21 @@ describe("cuerpoDelCorreo", () => {
     const cuerpo = cuerpoDelCorreo(con({ ausencias: [UNA_AUSENCIA] }), "2026-11-16");
     expect(cuerpo).not.toContain("VACACIONES");
     expect(cuerpo).not.toContain("FRANCOS");
+    expect(cuerpo).not.toContain("SIGUEN AUSENTES");
+    expect(cuerpo).not.toContain("EMPIEZAN O TERMINAN");
+  });
+
+  it("escribe las dos secciones de presencia con lo que le pasa a cada uno", () => {
+    const n = con({
+      ausencias: [UNA_AUSENCIA],
+      empiezanOTerminan: [{ empleado: CEJAS, fecha_desde: "2026-11-17", fecha_hasta: "2026-11-20", tipo: "VACACIONES" }],
+      siguenAusentes: [{ empleado: PEREZ, fecha_desde: "2026-11-10", fecha_hasta: "2026-11-30", tipo: "LICENCIA_ART" }],
+    });
+    const cuerpo = cuerpoDelCorreo(n, "2026-11-17");
+    expect(cuerpo).toContain("EMPIEZAN O TERMINAN HOY (1)");
+    expect(cuerpo).toContain("- CEJAS, MARIO AGUSTIN (PC_118) — Vacaciones · arranca hoy, hasta el 20/11/2026");
+    expect(cuerpo).toContain("SIGUEN AUSENTES (1)");
+    expect(cuerpo).toContain("- PÉREZ, ANA — Licencia por ART · hasta el 30/11/2026");
   });
 
   it("pone el encabezado y el cierre que configuró RR.HH.", () => {

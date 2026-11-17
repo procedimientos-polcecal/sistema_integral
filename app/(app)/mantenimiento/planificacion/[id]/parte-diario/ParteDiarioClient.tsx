@@ -314,7 +314,7 @@ export default function ParteDiarioClient({
               </Select>
               {gente.length === 0 && (
                 <p className="mt-1 text-xs text-slate-500">
-                  El padrón del taller está vacío: se carga en Programación, en «El taller».
+                  El padrón del taller está vacío: se carga en Asignación RR.HH, en «El taller».
                 </p>
               )}
             </div>

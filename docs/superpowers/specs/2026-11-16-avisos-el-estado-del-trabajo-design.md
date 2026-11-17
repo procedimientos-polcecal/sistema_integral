@@ -138,6 +138,40 @@ usa en Disponibilidad con `ausencias`—. Se expone sólo `ot_number`, `estado` 
 `fecha_cierre`: no el resto de la orden. `/mantenimiento/avisos` sí puede
 embeber directo, porque a esa pantalla sólo entra quien tiene el módulo.
 
+**4. Y después de todo eso sí hace falta una columna, por los 22 del medio.**
+Lo de arriba daba por hecho que `ot_enlazada_en is null` separa en dos: el
+enlace manual y todo lo demás. Medido el 17/11/2026, son **tres** grupos. De
+los 39 avisos con enlace, **17 son manuales** (`ot_enlazada_en` puesto) y los
+otros **22 son OT que el sistema generó desde el aviso**, que tienen esa
+columna en null igual que los 182 que la sincronización va a resolver.
+
+Confundir esos 22 con los 182 rompe dos cosas:
+
+- **Vaciar la celda de la planilla orfanaría una OT que el sistema creó.** El
+  aviso volvería a «pendiente» invitando a que alguien genere una segunda
+  orden para el mismo problema — que es exactamente lo que
+  `loQueImpideDesenlazar` se niega a hacer, con ese argumento escrito. La
+  sincronización haría callada lo que la ruta rechaza.
+- **El mensaje del desenlazar le mentiría a los 182**, que es el problema que
+  el punto 2 ya había anotado sin poder resolver.
+
+Así que la misma migración que apaga la cascada agrega
+**`avisos.ot_resuelta_en timestamptz`**: la escribe **sólo** la resolución
+automática —el relleno y la sincronización—, igual que `ot_enlazada_en` la
+escribe sólo la ruta de enlazar. Con eso los tres grupos se distinguen y la
+regla del `UPDATE` queda:
+
+| El aviso | Lo toca la sincronización |
+|---|---|
+| `ot_enlazada_en` puesto (17) | **no**, lo enlazó una persona mirando la orden |
+| `ot_resuelta_en` puesto | **sí**: se corrige y se vacía siguiendo la planilla |
+| los dos en null y `work_order_id` puesto (22) | **no**, la OT nació de este aviso |
+| los dos en null y `work_order_id` en null (182) | **sí**, se completa |
+
+Y el desenlazar pasa a decir la verdad en los tres casos, sin inventar nada:
+con `ot_resuelta_en` el número lo escribió alguien en la planilla y se arregla
+ahí; sin él, la orden nació del aviso y hay que darla de baja a ella.
+
 **Y dos que quedaron resueltas sin cambiar nada:** `ot_number` es único (2.466
 de 2.466, medido), así que un número nunca resuelve a dos OT; y los dos
 consumidores de `work_order_id is null` —el tablero de Mantenimiento y
@@ -202,11 +236,14 @@ no se deduce:
 > combinatorio. Un `UPDATE` aparte lo esquiva entero y cuesta una consulta por
 > corrida.
 
-**El `where` de ese `UPDATE` es `ot_enlazada_en is null` y no
-`work_order_id is null`** — es la corrección 2 de más arriba, y es lo que
-permite corregir un número mal tipeado sin pisar nunca un enlace que hizo una
-persona. Esa condición va **en el `where` y no sólo en el cálculo**, para que
-no pise un enlace manual creado entre la lectura y la escritura.
+**El `where` de ese `UPDATE` sale del cuadro de la corrección 4**:
+`ot_enlazada_en is null` **y además** `work_order_id is null or ot_resuelta_en
+is not null`. Lo primero deja afuera los 17 enlaces manuales; lo segundo, las
+22 OT que nacieron del aviso. Lo que queda son los 182 y lo que la
+sincronización misma haya resuelto antes, que es lo único que puede corregirse
+y vaciarse siguiendo la planilla. Esas condiciones van **en el `where` y no
+sólo en el cálculo**, para que no pisen un enlace que alguien haya hecho entre
+la lectura y la escritura.
 
 Si esa resolución falla, **la corrida sigue** y se anota el motivo, igual que
 hace hoy `area_sin_leer`: los avisos ya se guardaron y no tiene sentido

@@ -153,10 +153,27 @@ export const NAV: NavItem[] = [
       // lado: allá se le pide un trabajo a un tercero, acá se carga el papel
       // con el que un tercero dice qué hizo cada día.
       { label: "Partes de contratista", href: "/mantenimiento/partes-contratista", modulo: "mantenimiento" },
-      { label: "Planificación", href: "/mantenimiento/planificacion", modulo: "mantenimiento" },
+      /*
+       * LOS DOS RÓTULOS DE ABAJO NO COINCIDEN CON SU RUTA, Y ES A PROPÓSITO.
+       *
+       * Se pidió el 17/11/2026: en la planta «programar» es decidir el trabajo
+       * del día —que es lo que vive en `/planificacion`—, y la semana de turnos
+       * del taller es repartir gente, no trabajo. Así que los nombres se
+       * cruzaron y **las urls no se tocaron**: cambiarlas rompería los enlaces
+       * que ya circulan por correo, los `href` de media docena de pantallas y
+       * no le cambiaría el nombre a ninguna tabla (`planificacion_diaria`,
+       * `mant_programacion_referencia`), que siguen diciendo lo de antes.
+       *
+       * O sea: «Programación» es `/mantenimiento/planificacion` y «Asignación
+       * RR.HH» es `/mantenimiento/programacion`. Cuando un texto de pantalla
+       * nombre una de las dos, el nombre que vale es el de acá y no el de la
+       * ruta — que es justamente lo que hace fácil escribir el nombre viejo sin
+       * darse cuenta.
+       */
+      { label: "Programación", href: "/mantenimiento/planificacion", modulo: "mantenimiento" },
       // La ve sólo el admin de Mantenimiento, que es el encargado del taller: la
       // semana de turnos y quién falta. No es una pantalla de consulta general.
-      { label: "Programación", href: "/mantenimiento/programacion", modulo: "mantenimiento", soloAdmin: true },
+      { label: "Asignación RR.HH", href: "/mantenimiento/programacion", modulo: "mantenimiento", soloAdmin: true },
       { label: "Producción", href: "/mantenimiento/produccion", modulo: "mantenimiento" },
       { label: "Historial", href: "/mantenimiento/historial", modulo: "mantenimiento" },
       {

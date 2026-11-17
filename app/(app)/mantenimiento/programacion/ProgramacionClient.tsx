@@ -224,7 +224,13 @@ export default function ProgramacionClient({ empleados }: { empleados: EmpleadoE
   return (
     <div className="mx-auto max-w-5xl space-y-4 md:p-6">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Programación del taller</h1>
+        {/*
+          * Se llamaba «Programación del taller» hasta el 17/11/2026, y ese
+          * nombre ahora es el de la otra pantalla (`/planificacion`): escribirlo
+          * acá mandaría a la gente al lugar equivocado. El porqué del cruce está
+          * en `lib/core/nav.ts`.
+          */}
+        <h1 className="text-xl font-bold text-slate-900">Asignación RR.HH</h1>
         <p className="mt-0.5 text-sm text-slate-500">
           Quién está en cada turno y quién falta. Tocá a la persona que no viene para anotar su falta.
         </p>

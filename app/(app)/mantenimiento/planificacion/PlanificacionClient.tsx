@@ -68,7 +68,7 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            Planificación diaria
+            Programación diaria
             <InfoTip text="Armás el plan de trabajo de un día: elegís qué órdenes de trabajo se hacen, a quién se asignan, y después generás la hoja para imprimir o guardar en PDF. Cada plan agrupa varias OTs para una fecha." />
           </h1>
           <p className="text-sm text-slate-400 mt-0.5">Programá el trabajo del día y generá las órdenes para imprimir</p>
