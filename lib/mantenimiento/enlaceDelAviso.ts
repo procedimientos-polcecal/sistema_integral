@@ -4,7 +4,8 @@
  * ── POR QUÉ EXISTE ──────────────────────────────────────────────────────────
  *
  * Un aviso dice que una máquina anda mal y de él sale una orden de trabajo. El
- * número de esa orden vivía, en 182 de 238 avisos (medido el 17/11/2026), sólo
+ * número de esa orden vivía, en 182 de los 238 avisos (medido el 17/11/2026),
+ * sólo
  * como **texto** en `ot_asignada` —lo tipeó una persona en una planilla de
  * Google— mientras la columna de verdad, `avisos.work_order_id`, estaba en
  * null. Un script lo resuelve de una vez y la sincronización lo mantiene en
@@ -13,7 +14,8 @@
  *
  * ── LOS TRES GRUPOS DE `work_order_id` ──────────────────────────────────────
  *
- * Medido contra producción el 17/11/2026, de 39 avisos con `work_order_id`:
+ * Medido contra producción el 17/11/2026 sobre los 238 avisos. **39 tienen
+ * `work_order_id`**, y no son todos lo mismo:
  *
  * - **17 los enlazó una persona** con el botón «Ya tiene OT»
  *   (`ot_enlazada_en` puesto). Es una decisión humana, mirada con la orden a
@@ -21,14 +23,17 @@
  *   número cambie.
  * - **22 son OT que el sistema generó desde el aviso** (los dos sellos,
  *   `ot_enlazada_en` y `ot_resuelta_en`, en null). Tampoco se tocan, y **ésta
- *   es la razón de que `aVaciar` exista con tanto cuidado**: `enlazarOtAlAviso.ts`
- *   explica que desenlazar una OT que nació del aviso «dejaría una orden que
- *   nadie reclama, y el aviso volvería a la lista de pendientes invitando a que
- *   alguien genere una segunda orden para el mismo problema». Si esta función
- *   los vaciara cuando alguien borra la celda de la planilla, la
+ *   es la razón de que `aVaciar` exista con tanto cuidado**: el encabezado de
+ *   `enlazarOtAlAviso.ts` explica que desenlazar una OT nacida del aviso deja
+ *   una orden que nadie reclama y devuelve el aviso a la lista de pendientes,
+ *   invitando a que alguien genere una segunda para el mismo problema. Si esta
+ *   función los vaciara cuando alguien borra la celda de la planilla, la
  *   sincronización haría callada lo que esa ruta se niega a hacer.
- * - **Los 182 restantes** son los que esta función viene a resolver: avisos
- *   con el número escrito y sin enlace.
+ *
+ * Los otros **199 no tienen enlace**, y tampoco son todos lo mismo: **182**
+ * traen el número escrito y son los que esta función resuelve, **10** traen un
+ * texto que no es un número —«Revision», «-», «1889 - 1886»— que no se
+ * interpreta, y **7** no traen nada.
  *
  * ── LA REGLA ────────────────────────────────────────────────────────────────
  *
