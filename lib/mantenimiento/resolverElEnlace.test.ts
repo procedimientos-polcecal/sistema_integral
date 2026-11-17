@@ -6,13 +6,17 @@ import { resolverLosEnlacesDeAvisos } from "./resolverElEnlace";
  * escritura. Fija las guardas del where —el `.or()` es lo único que protege a
  * los avisos cuya OT nació de ellos—, no su semántica.
  */
-function doble() {
+function doble(extraAVaciar = 0) {
   const updates: { payload: unknown; filtros: string[] }[] = [];
   const avisos = [
     { id: "a1", ot_asignada: "100", work_order_id: null, ot_enlazada_en: null, ot_resuelta_en: null },
     { id: "a2", ot_asignada: "100", work_order_id: null, ot_enlazada_en: null, ot_resuelta_en: null },
     { id: "a3", ot_asignada: "", work_order_id: "x", ot_enlazada_en: null, ot_resuelta_en: "t" },
   ];
+  // Avisos cuyo enlace lo puso la resolución y cuya celda ahora está vacía.
+  for (let i = 0; i < extraAVaciar; i++) {
+    avisos.push({ id: `v${i}`, ot_asignada: "", work_order_id: "x", ot_enlazada_en: null, ot_resuelta_en: "t" });
+  }
   const consulta = (tabla: string) => {
     const q: Record<string, unknown> = {};
     let upd: { payload: unknown; filtros: string[] } | null = null;
@@ -47,5 +51,31 @@ describe("resolverLosEnlacesDeAvisos", () => {
     expect(d.updates[1].filtros).toContain("not(ot_resuelta_en,is,null)");
     // el doble devuelve 1 fila por update aunque se pidieron 2 y 1: se cuenta lo escrito
     expect(r).toEqual({ enlazados: 1, vaciados: 1 });
+  });
+
+  it("con pocos vaciados, el freno no corta", async () => {
+    const d = doble(10);
+    const r = await resolverLosEnlacesDeAvisos(d as never);
+    expect(r.frenado).toBeUndefined();
+    expect(d.updates.some((u) => (u.payload as { ot_resuelta_en: unknown }).ot_resuelta_en === null)).toBe(true);
+  });
+
+  it("pasado el tope no vacía nada, lo dice con el número, y igual enlaza", async () => {
+    const d = doble(120);
+    const r = await resolverLosEnlacesDeAvisos(d as never);
+    expect(r.vaciados).toBe(0);
+    expect(r.frenado).toMatch(/121 de 123/);
+    expect(r.frenado).toMatch(/tope es 50/);
+    // ningún update vació: el único que escribió es el que enlaza
+    expect(d.updates.every((u) => (u.payload as { ot_resuelta_en: unknown }).ot_resuelta_en !== null)).toBe(true);
+    expect(r.enlazados).toBe(1);
+  });
+
+  it("con sinFreno vacía igual", async () => {
+    const d = doble(120);
+    const r = await resolverLosEnlacesDeAvisos(d as never, { sinFreno: true });
+    expect(r.frenado).toBeUndefined();
+    expect(d.updates.some((u) => (u.payload as { ot_resuelta_en: unknown }).ot_resuelta_en === null)).toBe(true);
+    expect(r.vaciados).toBeGreaterThan(0);
   });
 });

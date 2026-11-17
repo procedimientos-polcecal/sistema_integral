@@ -575,7 +575,7 @@ function textoDelTrabajo(t: ReturnType<typeof estadoDelTrabajo>, sinOt: string) 
       return (
         <>
           OT #{t.ot} ·{" "}
-          <span style={{ color: c.color, fontWeight: t.tipo === "abierto" ? 600 : undefined }}>
+          <span style={{ color: c.color, fontWeight: c.peso }}>
             {c.texto}
           </span>
         </>

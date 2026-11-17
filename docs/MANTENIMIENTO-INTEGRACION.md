@@ -3326,6 +3326,14 @@ Eso contesta «¿alguien lo tomó?» y deja sin contestar la que importa:
 aviso cuya orden se cerró hace tres semanas que para uno cuya orden está
 atrasada desde diciembre.
 
+**Lo primero, para quien lo retome: la migración `20261117090055` todavía no
+está aplicada y el relleno (`scripts/rellenar-el-enlace-de-avisos.mts`) todavía
+no se corrió.** Todo lo que sigue describe el estado al que se llega cuando las
+dos cosas estén hechas: hoy `ot_resuelta_en` no existe en la base, el grupo de
+los 182 sigue siendo texto en `ot_asignada` y las dos listas muestran el estado
+sólo de los 39 avisos que ya tenían `work_order_id`. El orden es migración,
+relleno, y recién después la primera sincronización con este código.
+
 El diseño está en
 [el spec](superpowers/specs/2026-11-16-avisos-el-estado-del-trabajo-design.md)
 y el plan en
@@ -3364,6 +3372,25 @@ que alguien genere una segunda orden para el mismo problema, que es
 **exactamente lo que `loQueImpideDesenlazar` se niega a hacer**, con ese
 argumento escrito. La sincronización habría hecho callada lo que la ruta
 rechaza.
+
+Y hay un **cuarto estado**, que no es de los tres de arriba sino de después de
+la migración, que pasa `work_order_id` a `on delete set null`: el aviso cuya
+orden se borró. El argumento del `set null` es que **el aviso no se borra** —hoy
+borrar una OT borra el reporte de una persona—; **no** que «vuelva a decir sin
+orden», porque no toca `ot_asignada` y `finalDelAviso()` devuelve `con-ot`
+mientras esa columna tenga texto. Queda con `work_order_id` en null y
+`ot_resuelta_en` puesto, y la resolución **no lo limpia** a propósito:
+`loQueHayQueReenlazar` no vacía cuando el número no resuelve, para no perder un
+enlace bueno por una sincronización a medias.
+
+**Vaciar tiene freno** (`resolverElEnlace.ts`): si habría que vaciar más de 50
+enlaces o del 10 % de los avisos leídos, lo que sea mayor —los mismos topes de
+`borradoDeEspejo.ts`—, no se vacía nada, el resultado trae `enlace_frenado` con
+el número y la corrida se anota como fallo. Existe por si una importación trae
+`OT ASIGNADA` en blanco, que mandaría los 182 a «Pendiente» sin avisar: es el
+mismo caso del 13/10/2026, cuando una planilla recalculando devolvió 2 filas de
+623. Se levanta con `?confirmar_borrado=1` y el cron no lo levanta nunca.
+Enlazar no se frena, porque completar un enlace no destruye nada.
 
 **2. «Cerrada» lo decide `estado` y jamás la presencia de una fecha.** De las
 2.489 OT, **220 están en `REALIZADO` sin `fecha_cierre`** —cerca de una de cada

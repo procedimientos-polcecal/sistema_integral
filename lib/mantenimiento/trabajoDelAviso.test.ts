@@ -74,24 +74,24 @@ describe("comoSeMuestraElTrabajo", () => {
     comoSeMuestraElTrabajo(estadoDelTrabajo(conOt, { ot_number: 2814, estado, fecha_cierre }));
 
   it("cerrada con fecha: d/m y verde", () => {
-    expect(de("REALIZADO", "2026-11-06")).toEqual({ texto: "Cerrada el 6/11", color: "#15803D" });
+    expect(de("REALIZADO", "2026-11-06")).toEqual({ texto: "Cerrada el 6/11", color: "#15803D", peso: 500 });
   });
 
   it("cerrada sin fecha: sólo «Cerrada»", () => {
-    expect(de("REALIZADO")).toEqual({ texto: "Cerrada", color: "#15803D" });
+    expect(de("REALIZADO")).toEqual({ texto: "Cerrada", color: "#15803D", peso: 500 });
   });
 
   it("abierta: el nombre del estado en ámbar", () => {
-    expect(de("EN_PROCESO")).toEqual({ texto: "En proceso", color: "#B45309" });
-    expect(de("POR_HACER")).toEqual({ texto: "Por hacer", color: "#B45309" });
+    expect(de("EN_PROCESO")).toEqual({ texto: "En proceso", color: "#B45309", peso: 500 });
+    expect(de("POR_HACER")).toEqual({ texto: "Por hacer", color: "#B45309", peso: 500 });
   });
 
   it("atrasada: en rojo", () => {
-    expect(de("ATRASADO")).toEqual({ texto: "Atrasada", color: "#DC2626" });
+    expect(de("ATRASADO")).toEqual({ texto: "Atrasada", color: "#DC2626", peso: 500 });
   });
 
   it("estado null: «sin estado», pintado como abierta", () => {
-    expect(de(null)).toEqual({ texto: "sin estado", color: "#B45309" });
+    expect(de(null)).toEqual({ texto: "sin estado", color: "#B45309", peso: 500 });
   });
 
   it("sin-enlace y sin-ot no son una orden con estado", () => {

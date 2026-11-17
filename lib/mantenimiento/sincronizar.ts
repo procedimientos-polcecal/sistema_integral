@@ -422,12 +422,18 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
     cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
   });
 
-  // El enlace de cada aviso a su OT. Un fallo acá **no cambia el `ok`** de lo
-  // que se anota abajo, a diferencia de las áreas, y la asimetría es a propósito:
-  // el área decide en qué pantalla aparece un aviso, y un fallo sostenido lo
-  // esconde; el enlace se recalcula entero en la próxima corrida y lo único que
-  // se pierde mientras tanto es decir si el trabajo terminó. No unificarlas.
-  const enlace = await resolverLosEnlacesDeAvisos(admin);
+  // El enlace de cada aviso a su OT. **Un fallo de lectura acá no cambia el `ok`**
+  // de lo que se anota abajo, a diferencia de las áreas, y la asimetría es a
+  // propósito: el área decide en qué pantalla aparece un aviso y un fallo
+  // sostenido lo esconde; el enlace se recalcula entero en la próxima corrida y
+  // lo único que se pierde mientras tanto es decir si el trabajo terminó. No
+  // unificarlas.
+  //
+  // **El freno de los vaciados sí lo cambia**, y es la otra mitad de esa misma
+  // asimetría: un fallo de lectura se arregla solo, pero un freno quiere decir
+  // que la planilla trajo algo raro y que hay 182 enlaces esperando que alguien
+  // mire. `sinFreno` viene de `?confirmar_borrado=1`, que el cron no pasa nunca.
+  const enlace = await resolverLosEnlacesDeAvisos(admin, { sinFreno: opciones.sinFreno });
 
   // Si no se pudieron leer las áreas, la corrida **no se anota como limpia**: el
   // JSON de abajo lo ve quien la dispara a mano, pero el cron corre solo, y si
@@ -436,11 +442,22 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
   // el motivo en `error`—, que es lo que la pantalla de Avisos muestra en rojo
   // con el texto al pasar el mouse. Los avisos sí se guardaron, y el mensaje lo
   // dice para que no se lea como una corrida perdida.
+  //
+  // El freno de los vaciados también se anota como fallo y no sólo en el JSON:
+  // el cron corre solo y nadie vería ese número, y un freno que se repite todos
+  // los días es justo lo que tiene que quedar en rojo hasta que alguien lo mire.
+  // Si además fallaron las áreas, el motivo lleva las dos cosas: tapar una con
+  // la otra dejaría un problema sin nombre.
+  const loQueSalioMal = [
+    "error" in areas ? `no se pudieron leer las áreas: ${areas.error}` : "",
+    enlace.frenado ?? "",
+  ].filter((m) => m !== "").join("; y ");
+
   await registrarSincronizacion(
-    "error" in areas
+    loQueSalioMal
       ? {
           modulo: "mantenimiento", recurso: "avisos", ok: false, filas: guardados,
-          error: `Los avisos se guardaron pero no se pudieron leer las áreas: ${areas.error}`,
+          error: `Los avisos se guardaron pero ${loQueSalioMal}`,
         }
       : { modulo: "mantenimiento", recurso: "avisos", ok: true, filas: guardados }
   );
@@ -457,6 +474,7 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
     enlaces_resueltos: enlace.enlazados, enlaces_vaciados: enlace.vaciados,
     // Igual que `area_sin_leer`: sólo cuando lo hay.
     ...(enlace.error ? { enlace_sin_resolver: enlace.error } : {}),
+    ...(enlace.frenado ? { enlace_frenado: enlace.frenado } : {}),
     borrados: borrado.borradas, borrado: borrado.aviso,
   });
 }

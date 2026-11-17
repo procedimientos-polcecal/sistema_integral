@@ -223,7 +223,7 @@ export async function DELETE(request: Request) {
 
   const { data: aviso, error: errorDelAviso } = await admin
     .from("avisos")
-    .select("id, oa_number, work_order_id, ot_asignada, ot_enlazada_en, sheets_row")
+    .select("id, oa_number, work_order_id, ot_asignada, ot_enlazada_en, ot_resuelta_en, sheets_row")
     .eq("id", id)
     .maybeSingle();
 

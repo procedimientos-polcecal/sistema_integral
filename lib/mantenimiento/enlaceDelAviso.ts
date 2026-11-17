@@ -30,8 +30,16 @@
  *   función los vaciara cuando alguien borra la celda de la planilla, la
  *   sincronización haría callada lo que esa ruta se niega a hacer.
  *
+ * Y hay un **cuarto estado**, que no es de los 39 sino de después: el aviso
+ * cuya orden se **borró**. La migración `20261117090055` pasó `work_order_id` a
+ * `on delete set null`, así que el aviso no se borra con ella y queda con
+ * `work_order_id` en null y `ot_resuelta_en` puesto. Esta función **no lo
+ * limpia** —un número que el mapa no conoce no produce vaciado, a propósito— y
+ * tampoco vuelve a decir «sin orden»: `ot_asignada` conserva su texto y
+ * `finalDelAviso()` devuelve `con-ot`.
+ *
  * Los otros **199 no tienen enlace**, y tampoco son todos lo mismo: **182**
- * traen el número escrito y son los que esta función resuelve, **10** traen un
+ * traen el número escrito y son los que esta función resuelve, **10** (medido el 17/11/2026) traen un
  * texto que no es un número —«Revision», «-», «1889 - 1886»— que no se
  * interpreta, y **7** no traen nada.
  *
