@@ -175,7 +175,7 @@ regla del `UPDATE` queda:
 | `ot_resuelta_en` puesto | **sí**: se corrige y se vacía siguiendo la planilla |
 | los dos en null y `work_order_id` puesto (22) | **no**, la OT nació de este aviso |
 | los dos en null y `work_order_id` en null (182) | **sí**, se completa |
-| `work_order_id` en null con `ot_resuelta_en` puesto (**cuarto estado**: la orden se borró y el `set null` dejó el aviso vivo) | **no se limpia**: `loQueHayQueReenlazar` no vacía cuando el número no resuelve, a propósito, para no perder un enlace bueno por una sincronización a medias; el sello queda hasta que el número vuelva a resolver o la celda se vacíe |
+| `work_order_id` en null con `ot_resuelta_en` puesto (**cuarto estado**: la orden se borró y el `set null` dejó el aviso vivo) | **se limpia**, y es la única excepción a «un número que no resuelve no se toca»: esa regla protege un enlace bueno de una sincronización a medias, y acá no hay enlace que proteger —la columna ya está en null—, sólo un sello que miente. Si la celda vuelve a nombrar una orden que existe, se reenlaza y el sello se reescribe solo |
 
 Y el desenlazar pasa a decir la verdad en los tres casos, sin inventar nada:
 con `ot_resuelta_en` el número lo escribió alguien en la planilla y se arregla
@@ -228,7 +228,7 @@ corregirlo.
 que `scripts/rellenar-area-de-avisos.mts`. Es DML, así que lo puede correr un
 agente por PostgREST. Sólo toca filas con `work_order_id is null`, y sólo
 cuando `ot_asignada` es **exactamente dígitos** y ese número existe como
-`ot_number`. Esperado: **182 filas**, y los otros 53 sin tocar. El relleno sí
+`ot_number`. Esperado: **182 filas**, y los otros 56 sin tocar. El relleno sí
 mira `work_order_id is null` —corre una sola vez y no tiene que corregir
 nada—; el que mira `ot_enlazada_en` es el de la sincronización.
 
@@ -328,8 +328,9 @@ si marca algo, quiere decir que se tocó un camino de escritura sin querer.
 
 Y dos comprobaciones contra el dato, que ningún test ve:
 
-- Después del relleno, **182 avisos con enlace nuevo** y 53 sin tocar; en
-  total, 221 de 238 resueltos.
+- Después del relleno, **182 avisos con enlace nuevo** y 56 sin tocar —17
+  enlazados a mano, 10 con texto no numérico y 7 sin nada—; en total, 221 de
+  238 resueltos.
 - Después de la primera sincronización, que los avisos nuevos del Forms entren
   **con `work_order_id` puesto**. Es la única prueba de que no se congeló, y es
   la misma que en octubre confirmó que el área se completaba sola.

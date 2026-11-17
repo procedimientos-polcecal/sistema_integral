@@ -89,4 +89,44 @@ describe("loQueHayQueReenlazar", () => {
     }], mapa);
     expect(r).toEqual({ aEnlazar: [], aVaciar: [] });
   });
+
+  // El estado que deja `on delete set null` al borrarse la orden: la columna
+  // del enlace queda en null y el sello sobrevive. Mientras esté puesto, el
+  // aviso no se puede desenlazar y la orden que nazca de él queda desprotegida.
+  it("limpia el sello huérfano cuando la celda quedó vacía", () => {
+    const r = loQueHayQueReenlazar([{
+      id: "a1", ot_asignada: "", work_order_id: null,
+      ot_resuelta_en: "2026-11-17T10:00:00Z",
+    }], mapa);
+    expect(r).toEqual({ aEnlazar: [], aVaciar: ["a1"] });
+  });
+
+  // El camino por el que llega de verdad: se borra la OT #2814 y su número
+  // sigue escrito en la celda, así que ya no resuelve contra nada.
+  it("limpia el sello huérfano cuyo número el sistema ya no conoce", () => {
+    const r = loQueHayQueReenlazar([{
+      id: "a1", ot_asignada: "9999", work_order_id: null,
+      ot_resuelta_en: "2026-11-17T10:00:00Z",
+    }], mapa);
+    expect(r).toEqual({ aEnlazar: [], aVaciar: ["a1"] });
+  });
+
+  // Y si la celda pasó a nombrar una orden que sí existe, se reenlaza: el
+  // sello se reescribe solo y no hay nada que limpiar.
+  it("reenlaza el sello huérfano si el número vuelve a resolver", () => {
+    const r = loQueHayQueReenlazar([{
+      id: "a1", ot_asignada: "2814", work_order_id: null,
+      ot_resuelta_en: "2026-11-17T10:00:00Z",
+    }], mapa);
+    expect(r).toEqual({ aEnlazar: [{ otId: "ot-a", avisoIds: ["a1"] }], aVaciar: [] });
+  });
+
+  // La otra mitad de la regla, que es la que no hay que romper al barrer: sin
+  // sello y sin enlace no hay nada que limpiar, y el aviso se queda quieto.
+  it("no inventa un vaciado para el aviso que nunca estuvo enlazado", () => {
+    const r = loQueHayQueReenlazar([{
+      id: "a1", ot_asignada: "Revision", work_order_id: null, ot_resuelta_en: null,
+    }], mapa);
+    expect(r).toEqual({ aEnlazar: [], aVaciar: [] });
+  });
 });

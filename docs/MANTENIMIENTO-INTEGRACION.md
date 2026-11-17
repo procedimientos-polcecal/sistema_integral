@@ -3379,9 +3379,23 @@ orden se borró. El argumento del `set null` es que **el aviso no se borra** —
 borrar una OT borra el reporte de una persona—; **no** que «vuelva a decir sin
 orden», porque no toca `ot_asignada` y `finalDelAviso()` devuelve `con-ot`
 mientras esa columna tenga texto. Queda con `work_order_id` en null y
-`ot_resuelta_en` puesto, y la resolución **no lo limpia** a propósito:
-`loQueHayQueReenlazar` no vacía cuando el número no resuelve, para no perder un
-enlace bueno por una sincronización a medias.
+`ot_resuelta_en` puesto, y **la resolución lo limpia**, que es la única
+excepción a «un número que no resuelve no se toca». Esa regla existe para no
+perder un enlace bueno por una sincronización a medias, y acá no hay enlace que
+perder —la columna ya está en null—: lo que queda es un sello que miente dos
+veces. A `loQueImpideDesenlazar`, que se niega a desenlazar mandando a corregir
+una celda que puede estar vacía; y al guard que protege a la orden nacida de un
+aviso (`work_order_id && !ot_resuelta_en`), que con el sello puesto deja de
+aplicarse justo sobre la orden que debería cuidar. Si la celda vuelve a nombrar
+una orden que existe, se reenlaza y el sello se reescribe solo.
+
+Lo que no se puede deducir mirando una de las dos puntas: **ese estado no lo
+produce nada más que el borrado de la orden.** Los dos UPDATE de
+`resolverElEnlace` escriben y borran `work_order_id` y `ot_resuelta_en` juntos,
+y `marcarElAviso` no toca el sello. Por eso un aviso con `ot_enlazada_en` **y**
+`ot_resuelta_en` a la vez es siempre un sello huérfano y nunca un enlace doble
+—la resolución no sella lo que enlazó una persona, su UPDATE lleva
+`.is("ot_enlazada_en", null)`—, y ahí manda lo que hizo la persona.
 
 **Vaciar tiene freno** (`resolverElEnlace.ts`): si habría que vaciar más de 50
 enlaces o del 10 % de los avisos leídos, lo que sea mayor —los mismos topes de
