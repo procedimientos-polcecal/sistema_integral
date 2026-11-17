@@ -7,19 +7,23 @@ import { contarAusenciasDesde, lineaDeAusencias } from "./ausenciasRecientes";
  * `fecha_desde` esta cuenta no diría nunca que se acaba de cargar algo.
  */
 function clienteFalso(opciones: { count?: number; error?: string }) {
-  const filtros: { columna: string; valor: string }[] = [];
+  const filtros: { como: string; columna: string; valor: string }[] = [];
 
   const consulta = () => {
     const self: Record<string, unknown> = {};
     self.select = () => self;
-    self.gte = (columna: string, valor: string) => {
-      filtros.push({ columna, valor });
-      return Promise.resolve(
+    const anotar = (como: string) => (columna: string, valor: string) => {
+      filtros.push({ como, columna, valor });
+      return self;
+    };
+    self.gte = anotar("gte");
+    self.lt = anotar("lt");
+    self.then = (r: (v: unknown) => unknown) =>
+      Promise.resolve(
         opciones.error
           ? { count: null, error: { message: opciones.error } }
           : { count: opciones.count ?? 0, error: null }
-      );
-    };
+      ).then(r);
     return self;
   };
 
@@ -31,22 +35,38 @@ describe("lineaDeAusencias", () => {
     expect(lineaDeAusencias(0)).toBeNull();
   });
 
-  it("una sola se dice en singular", () => {
+  /*
+   * EL NUMERO NO VA EN EL TITULO, y el diseño decia que si.
+   *
+   * `resumirElMovimiento` imprime la cantidad como incremento: con el titulo
+   * "Se cargaron 3 ausencias" el push decia "3 más · Se cargaron 3 ausencias",
+   * o sea el mismo 3 como total y como incremento en la misma linea. El
+   * docstring de esa funcion lo prohibe con todas las letras -- "un «3» que
+   * ayer era el total y hoy es el incremento es peor que cualquiera de los
+   * dos" -- y esta era la unica Notificacion del sistema que nacia siendo un
+   * delta en vez de un stock.
+   */
+  it("el titulo no lleva el numero, porque lo imprime el resumen", () => {
     expect(lineaDeAusencias(1)).toEqual({
       id: "rrhh-ausencias-cargadas",
-      titulo: "Se cargó una ausencia",
+      titulo: "Ausencias cargadas",
       cantidad: 1,
-      href: "/rrhh/ausencias",
+      href: "/disponibilidad",
     });
+    expect(lineaDeAusencias(105)?.titulo).toBe("Ausencias cargadas");
   });
 
-  it("varias dicen cuantas", () => {
-    expect(lineaDeAusencias(105)?.titulo).toBe("Se cargaron 105 ausencias");
+  it("la cantidad es cuantas son", () => {
+    expect(lineaDeAusencias(105)?.cantidad).toBe(105);
   });
 
-  // Dos es plural: el limite del singular es exactamente 1.
-  it("dos ya es plural", () => {
-    expect(lineaDeAusencias(2)?.titulo).toBe("Se cargaron 2 ausencias");
+  /*
+   * Le llega a todos, asi que no puede llevar a una pantalla cerrada:
+   * `/rrhh/ausencias` pide RRHH y de 16 personas 8 no lo tienen.
+   * `/disponibilidad` es transversal y la ve cualquiera con sesion.
+   */
+  it("lleva a una pantalla que puede abrir cualquiera", () => {
+    expect(lineaDeAusencias(3)?.href).toBe("/disponibilidad");
   });
 
   // Un numero negativo no deberia llegar nunca, pero si llega no se inventa
@@ -68,15 +88,36 @@ describe("contarAusenciasDesde", () => {
    */
   it("cuenta por created_at y no por la fecha de la ausencia", async () => {
     const { cliente, filtros } = clienteFalso({ count: 3 });
-    const r = await contarAusenciasDesde(cliente, "2026-11-16T14:45:00Z");
+    const r = await contarAusenciasDesde(cliente, "2026-11-16T14:45:00Z", "2026-11-16T15:00:00Z");
 
     expect(r).toEqual({ cuantas: 3 });
-    expect(filtros).toEqual([{ columna: "created_at", valor: "2026-11-16T14:45:00Z" }]);
+    expect(filtros.map((f) => f.columna)).toEqual(["created_at", "created_at"]);
+  });
+
+  /*
+   * LA VENTANA ES SEMIABIERTA: [desde, hasta).
+   *
+   * `hasta` es el instante que la corrida va a guardar como `visto_en`, y se
+   * captura ANTES de contar. Sin el corte de arriba, una ausencia cargada
+   * entre que se captura la hora y que corre el `count` entra en esta corrida
+   * y otra vez en la siguiente -- `created_at >= visto_en` la vuelve a
+   * agarrar--, y el mismo hecho se avisa dos veces.
+   */
+  it("la ventana es semiabierta, para que nada se cuente dos veces", async () => {
+    const { cliente, filtros } = clienteFalso({ count: 1 });
+    await contarAusenciasDesde(cliente, "2026-11-16T14:45:00Z", "2026-11-16T15:00:00Z");
+
+    expect(filtros).toEqual([
+      { como: "gte", columna: "created_at", valor: "2026-11-16T14:45:00Z" },
+      { como: "lt", columna: "created_at", valor: "2026-11-16T15:00:00Z" },
+    ]);
   });
 
   it("sin ninguna devuelve cero", async () => {
     const { cliente } = clienteFalso({ count: 0 });
-    expect(await contarAusenciasDesde(cliente, "2026-11-16T14:45:00Z")).toEqual({ cuantas: 0 });
+    expect(
+      await contarAusenciasDesde(cliente, "2026-11-16T14:45:00Z", "2026-11-16T15:00:00Z")
+    ).toEqual({ cuantas: 0 });
   });
 
   /*
@@ -86,15 +127,16 @@ describe("contarAusenciasDesde", () => {
    */
   it("si la base falla devuelve el motivo y no tira", async () => {
     const { cliente } = clienteFalso({ error: "se corto la conexion" });
-    expect(await contarAusenciasDesde(cliente, "2026-11-16T14:45:00Z")).toEqual({
-      cuantas: 0,
-      error: "se corto la conexion",
-    });
+    expect(
+      await contarAusenciasDesde(cliente, "2026-11-16T14:45:00Z", "2026-11-16T15:00:00Z")
+    ).toEqual({ cuantas: 0, error: "se corto la conexion" });
   });
 
   // PostgREST devuelve `count: null` en un head sin filas en algunas versiones.
   it("un count nulo se lee como cero y no como NaN", async () => {
     const { cliente } = clienteFalso({ count: undefined });
-    expect((await contarAusenciasDesde(cliente, "2026-11-16T14:45:00Z")).cuantas).toBe(0);
+    expect(
+      (await contarAusenciasDesde(cliente, "2026-11-16T14:45:00Z", "2026-11-16T15:00:00Z")).cuantas
+    ).toBe(0);
   });
 });

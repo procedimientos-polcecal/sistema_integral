@@ -197,6 +197,13 @@ export const ES_POR_PERSONA: ReadonlySet<string> = new Set(["agenda-divergencias
  * en `MODULOS_ORDEN` y las ve cualquiera con sesión. Son exactamente las dos de
  * `ES_POR_PERSONA`, y `lib/home/moduloDelAviso.test.ts` fija ese invariante:
  * toda entrada declara su módulo salvo las que son de una persona.
+ *
+ * **Este mapa no son todos los avisos que circulan, y creerlo costó una fuga.**
+ * Tiene sólo las entradas de `AVISOS`; los ids que se arman en el momento
+ * —`ritmo-`, `salud-` y `mant-ciclo-sospechoso-`— no están acá y no pueden
+ * estar. Quien decide su módulo es `moduloDelAviso`, por prefijo, y hay un
+ * segundo test que lee **este archivo** para que un productor dinámico nuevo
+ * no se cuele sin declararlo.
  */
 export const MODULO_POR_AVISO: ReadonlyMap<string, Modulo | null> = new Map(
   AVISOS.map((a) => [a.id, a.modulo])

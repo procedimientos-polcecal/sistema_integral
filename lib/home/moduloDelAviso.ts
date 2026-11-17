@@ -17,6 +17,25 @@ import { MODULO_POR_AVISO } from "./avisos";
  * y después filtra. Ahí ya no hay dónde aplicar aquella condición, así que el
  * módulo pasa a estar declarado en la definición del aviso.
  *
+ * ── NO ALCANZA CON LA TABLA, Y ESO COSTÓ UNA FUGA ────────────────────────────
+ *
+ * `MODULO_POR_AVISO` sólo tiene las entradas de `AVISOS`, que son las de
+ * conteo. Hay además tres familias cuyo **id se arma en el momento** —el
+ * ritmo, la salud y las sospechas de ciclo— y que por lo tanto no pueden estar
+ * en ninguna tabla tecleada.
+ *
+ * `mant-ciclo-sospechoso-${equipo}` es de Mantenimiento y nada en su id lo
+ * dice. Mientras cada persona tenía su propia pasada eso no importaba: el
+ * aviso se calculaba detrás de `tiene("mantenimiento")`. Con la pasada global
+ * ese portón desapareció, el aviso salía sin módulo, y **lo que no tiene
+ * módulo pasa siempre**: un push diciendo «puede que se hayan cambiado
+ * rodamientos de EM-12 sin avisar al ciclo» a alguien que sólo tiene Remises.
+ *
+ * Por eso los prefijos se declaran acá y hay un test que **lee
+ * `avisos.ts`** —como `sw.test.ts` lee `public/sw.js`— y exige que todo id
+ * armado en el momento tenga el suyo. Un productor dinámico nuevo se pone en
+ * rojo solo; una lista escrita a mano no puede hacer eso.
+ *
  * ── `null` NO ES UN OLVIDO ───────────────────────────────────────────────────
  *
  * Tres familias no son de ningún módulo, y cada una por su motivo:
@@ -36,11 +55,35 @@ import { MODULO_POR_AVISO } from "./avisos";
  * sería negarle la salud a `admin_sistema` sin que ninguna pantalla lo diga.
  */
 
-/** El prefijo de los avisos de ritmo, que llevan su módulo en el id. */
+/** El prefijo de los avisos de ritmo, que llevan su módulo **en el id**. */
 const RITMO = "ritmo-";
+
+/**
+ * Los demás ids que se arman en el momento, con el módulo que les toca.
+ *
+ * `salud-` está acá con `null` **a propósito y no por omisión**: es del
+ * sistema, y quien la frena es `sinLoQueNoPuedeAtender`, que por el prefijo la
+ * manda sólo a `admin_sistema`. Si estuviera sólo por ausencia, nadie sabría
+ * si alguien se olvidó de ponerla.
+ */
+const POR_PREFIJO: { prefijo: string; modulo: Modulo | null }[] = [
+  { prefijo: "mant-ciclo-sospechoso-", modulo: "mantenimiento" },
+  { prefijo: "salud-", modulo: null },
+];
+
+/**
+ * Todos los prefijos que esta función sabe reconocer. Lo usa el test que lee
+ * `avisos.ts`: ver el encabezado.
+ */
+export const PREFIJOS_DECLARADOS: readonly string[] = [
+  RITMO,
+  ...POR_PREFIJO.map((p) => p.prefijo),
+];
 
 export function moduloDelAviso(id: string): Modulo | null {
   if (id.startsWith(RITMO)) return id.slice(RITMO.length) as Modulo;
+  const porPrefijo = POR_PREFIJO.find((p) => id.startsWith(p.prefijo));
+  if (porPrefijo) return porPrefijo.modulo;
   return MODULO_POR_AVISO.get(id) ?? null;
 }
 

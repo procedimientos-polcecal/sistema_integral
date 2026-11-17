@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
-import { moduloDelAviso, soloDeSusModulos } from "./moduloDelAviso";
+import { moduloDelAviso, soloDeSusModulos, PREFIJOS_DECLARADOS } from "./moduloDelAviso";
 import { MODULO_POR_AVISO, ES_POR_PERSONA } from "./avisos";
 import type { Notificacion } from "./notificaciones";
 
@@ -67,10 +68,60 @@ describe("moduloDelAviso", () => {
   it("el contrato mira todas las entradas y no una lista escrita a mano", () => {
     expect(MODULO_POR_AVISO.size).toBeGreaterThan(15);
   });
+
+  /*
+   * EL OTRO CONTRATO, Y EL QUE FALTABA.
+   *
+   * `MODULO_POR_AVISO` sólo tiene las entradas de la tabla `AVISOS`, y hay
+   * avisos cuyo id se arma en el momento: el ritmo, la salud y las sospechas
+   * de ciclo. El contrato de arriba es ciego a esos, y por esa ceguera
+   * `mant-ciclo-sospechoso-*` -- que es de Mantenimiento -- salia sin modulo y
+   * `soloDeSusModulos` lo dejaba pasar a TODO EL MUNDO: un push diciendo que
+   * se cambiaron rodamientos de un equipo a alguien que solo tiene Remises.
+   *
+   * Asi que este test lee el archivo, como `sw.test.ts` lee `public/sw.js`:
+   * saca los prefijos de los ids armados a mano y exige que cada uno este
+   * declarado. Un productor dinamico nuevo se pone en rojo solo, que es lo que
+   * una lista escrita a mano no puede hacer.
+   */
+  it("todo id armado en el momento tiene su prefijo declarado", () => {
+    const fuente = readFileSync(new URL("./avisos.ts", import.meta.url), "utf8");
+    const prefijos = [...fuente.matchAll(/id: `([^$`]*)\$\{/g)].map((m) => m[1]);
+
+    expect(prefijos.length, "ningun id dinamico: ¿cambio la forma de escribirlos?").toBeGreaterThan(2);
+    for (const prefijo of prefijos) {
+      expect(
+        PREFIJOS_DECLARADOS.includes(prefijo),
+        `el prefijo "${prefijo}" no esta declarado en moduloDelAviso.ts`
+      ).toBe(true);
+    }
+  });
+
+  /*
+   * La sospecha de ciclo es de Mantenimiento y nada en su id lo dice: el
+   * prefijo es `mant-` como el de los conteos, pero el id completo no esta en
+   * ninguna tabla porque lleva el equipo adentro.
+   */
+  it("una sospecha de ciclo es de mantenimiento", () => {
+    expect(moduloDelAviso("mant-ciclo-sospechoso-EM-12")).toBe("mantenimiento");
+    expect(moduloDelAviso("mant-ciclo-sospechoso-Pala CAT 950")).toBe("mantenimiento");
+  });
 });
 
 describe("soloDeSusModulos", () => {
   const avisos = [aviso("mant-atrasadas"), aviso("ritmo-trituracion"), aviso("salud-x/y")];
+
+  /*
+   * EL BUG QUE ESTE TEST CIERRA, y la razon por la que `PREFIJOS_DECLARADOS`
+   * existe. Hasta que se declaro el prefijo, una sospecha de ciclo no tenia
+   * modulo, y lo que no tiene modulo pasa siempre: el push le llegaba a
+   * cualquiera con suscripcion, tuviera o no Mantenimiento.
+   */
+  it("una sospecha de ciclo no le llega a quien no tiene mantenimiento", () => {
+    const sospecha = [aviso("mant-ciclo-sospechoso-EM-12")];
+    expect(soloDeSusModulos(sospecha, ["remises"])).toEqual([]);
+    expect(soloDeSusModulos(sospecha, ["mantenimiento"])).toHaveLength(1);
+  });
 
   it("deja solo los de sus modulos", () => {
     expect(soloDeSusModulos(avisos, ["mantenimiento"]).map((a) => a.id)).toEqual([

@@ -75,14 +75,27 @@ export async function ultimoVistazo(
  * **El orden importa**: borrar y después escribir. Al revés, el borrado se
  * llevaría lo recién escrito.
  *
- * Si el borrado anda y la escritura falla, la tabla queda vacía: la corrida
- * siguiente ve `cuando: null`, se trata como la primera y **no manda nada**.
- * Se pierde una pasada de quince minutos, que es el lado seguro del fallo —el
- * otro sería mandar el stock entero rotulado como novedad—.
+ * **Los dos fallos posibles no son iguales, y el llamador tiene que saberlo:**
+ *
+ *   - si el borrado anda y la escritura falla, la tabla queda vacía: la
+ *     corrida siguiente ve `cuando: null`, se trata como la primera y **no
+ *     manda nada**. Se pierde una pasada de quince minutos, que es el lado
+ *     seguro del fallo;
+ *   - si falla **el borrado**, la tabla queda **congelada** con los valores
+ *     viejos, y entonces cada corrida vuelve a calcular la misma novedad
+ *     contra la misma referencia: **el mismo push cada quince minutos hasta
+ *     las nueve de la noche**, cuarenta veces. Por eso el `error` de esta
+ *     función no es para loguear y seguir: quien la llama tiene que contestar
+ *     con un código de error, o el log va a decir 200 cuarenta veces mientras
+ *     el teléfono de alguien suena cuarenta veces.
+ *
+ * Recibe `{ id, cantidad }` y no `Notificacion` entera porque lo que se guarda
+ * son esos dos campos, y porque el llamador a veces arma filas que no son
+ * avisos de nadie: ver el arrastre de la salud en el cron.
  */
 export async function guardarElVistazo(
   admin: SupabaseClient,
-  avisos: Notificacion[],
+  avisos: { id: string; cantidad: number }[],
   cuando: string
 ): Promise<{ error?: string }> {
   // El `neq` está porque PostgREST se niega a borrar sin ningún filtro, y
@@ -111,8 +124,12 @@ export async function guardarElVistazo(
  *     avisos al instante. Se importa de `avisoAlInstante.ts` en vez de
  *     repetirse: dos ventanas que pueden separarse terminan en un push a las
  *     tres de la mañana que nadie entiende de dónde salió. Fuera de hora no se
- *     encola nada — el resumen de las 8:30 cuenta los stocks sin mirar cuándo
- *     entraron, así que el repesque existe sin código;
+ *     encola nada, **y el repesque de la noche no es el resumen de las 8:30**
+ *     —ése manda sólo los lunes— sino esta misma tabla: el vistazo no se borra
+ *     a la noche, así que la corrida de las 7:11 compara contra las 20:56 del
+ *     día anterior y lo que pasó de madrugada sale ahí. Decirlo importa porque
+ *     el día que alguien agregue un corte o cambie el horario del cron, la red
+ *     que lo sostiene es ésta y no aquélla;
  *   - **tiene que haber un vistazo anterior.** Sin él no hay con qué comparar
  *     y todo parecería nuevo: un push de estreno con el stock entero rotulado
  *     como novedad, que es exactamente lo que este diseño evita.
@@ -130,4 +147,43 @@ export function queMandarAhora({
   if (!esHoraDeAvisar(ahora)) return "nada";
   if (cuando === null) return "nada";
   return "novedades";
+}
+
+/** El id que `avisosDeSalud` emite cuando no pudo leer la salud. */
+const SIN_COMPROBAR = "salud-sin-comprobar";
+
+/**
+ * Lo que el vistazo tiene que guardar cuando **la salud no se pudo
+ * comprobar**.
+ *
+ * `leerLaSalud` falla cerrado: si la vista `ultima_sincronizacion` no
+ * contesta, devuelve cero caídas y emite su propio aviso,
+ * `salud-sin-comprobar`. Eso está bien para la campana —«no sé» no es «todo
+ * bien»— pero sería un desastre para el vistazo: los `salud-*` que sí estaban
+ * caídos desaparecerían de la tabla, y la corrida siguiente, al verlos volver,
+ * **dispararía el flanco de nuevo** — un push por cada recurso roto, a
+ * `admin_sistema`, sin que nada se haya roto. Y como `salud-sin-comprobar`
+ * está en `CRECE_CON_EL_DIA`, el instantáneo tampoco avisa que el vigilante se
+ * quedó ciego: el admin vería el re-anuncio sin la causa.
+ *
+ * Así que en esa corrida los `salud-*` del vistazo anterior **se arrastran tal
+ * cual**. Una lectura que falló no afirma nada —ni que siguen rotos ni que se
+ * arreglaron—, y arrastrarlos es lo único que no inventa una novedad.
+ *
+ * Lo que esto **no** cubre, dicho: un recurso que se rompe justo durante la
+ * corrida ciega no se ve hasta la siguiente. Quince minutos tarde, que es el
+ * lado barato del error.
+ */
+export function conLaSaludQueNoSePudoComprobar(
+  todos: { id: string; cantidad: number }[],
+  vistos: ReadonlyMap<string, number>
+): { id: string; cantidad: number }[] {
+  if (!todos.some((a) => a.id === SIN_COMPROBAR)) return todos;
+
+  const ahora = new Set(todos.map((a) => a.id));
+  const arrastradas = [...vistos]
+    .filter(([id]) => id.startsWith("salud-") && !ahora.has(id))
+    .map(([id, cantidad]) => ({ id, cantidad }));
+
+  return [...todos, ...arrastradas];
 }

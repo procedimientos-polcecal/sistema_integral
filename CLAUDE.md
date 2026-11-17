@@ -875,9 +875,15 @@ Seis cosas que no se deducen del código:
   rama, y las dos cosas por accidente—. Esa relación vivía implícita en la
   llamada al conteo, que se hacía una vez por persona; el instantáneo calcula
   **una sola vez para los dieciséis** y filtra después, así que ya no hay dónde
-  aplicarla. Las únicas entradas sin módulo son las transversales —la Agenda y
-  la mensajería—, que son exactamente las dos de `ES_POR_PERSONA`, y hay un
-  test del contrato que lo fija.
+  aplicarla. Las únicas entradas **de la tabla** sin módulo son las
+  transversales —la Agenda y la mensajería—, que son exactamente las dos de
+  `ES_POR_PERSONA`. Y **los ids que se arman en el momento no están en esa
+  tabla y no pueden estar**: `ritmo-` lleva el módulo adentro, `salud-` es del
+  sistema a propósito, y `mant-ciclo-sospechoso-` se declara por prefijo en
+  `moduloDelAviso.ts`. Ése último ya se escapó una vez —sin módulo, el push de
+  una sospecha de ciclo le llegaba a quien sólo tiene Remises—, así que hay un
+  test que **lee `avisos.ts`** y exige que todo id dinámico tenga su prefijo
+  declarado.
 - **Los lunes son la red, no un extra.** Contando sólo movimiento, algo que
   dejó de moverse no se nombra nunca más — y hay una OT atrasada desde
   diciembre de 2025. Si sacás el recordatorio semanal, el depósito se pudre en

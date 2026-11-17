@@ -6,7 +6,12 @@ import { enviarPush } from "@/lib/core/webpush";
 import { avisosDeTodoElSistema, sinLoQueNoPuedeAtender } from "@/lib/home/avisosDeUsuario";
 import { soloDeSusModulos } from "@/lib/home/moduloDelAviso";
 import { novedadesAlInstante } from "@/lib/home/novedadAlInstante";
-import { ultimoVistazo, guardarElVistazo, queMandarAhora } from "@/lib/home/vistazoDeAvisos";
+import {
+  ultimoVistazo,
+  guardarElVistazo,
+  queMandarAhora,
+  conLaSaludQueNoSePudoComprobar,
+} from "@/lib/home/vistazoDeAvisos";
 import { contarAusenciasDesde, lineaDeAusencias } from "@/lib/rrhh/ausenciasRecientes";
 import { resumirElMovimiento } from "@/lib/home/resumenDeAvisos";
 import { filtrarDescartadas, type DescarteNotificacion } from "@/lib/home/notificaciones";
@@ -43,10 +48,16 @@ import type { Rol, UsuarioModulo } from "@/lib/core/types";
  *
  * ── POR QUÉ `compras-por-aprobar` NO ENTRA ───────────────────────────────────
  *
- * Ya avisa solo, en el momento en que el requerimiento nace esperando
+ * Ya avisa solo, en el momento en que el requerimiento **nace** esperando
  * (`lib/compras/avisoDeAprobacion.ts`), y a la lista de quien puede aprobar.
  * Dejarlo acá sería el mismo push dos veces por lo mismo. Se pidió
  * explícitamente dejarlo como está.
+ *
+ * **Lo que eso deja sin avisar, dicho:** el aviso cuenta `PENDIENTE` y
+ * `EN_REVISION`, pero el push del alta sólo se dispara al nacer. Un
+ * requerimiento que **vuelve** a `EN_REVISION` sube el conteo y no genera
+ * ningún push —ni éste ni el de las 8:30, salvo los lunes—. Hoy se acepta: lo
+ * que se pidió fue no tocar Compras.
  *
  * Como es el único aviso que `QuePuedeAtender.apruebaCompras` gobierna,
  * sacarlo deja esa consulta sin objeto: no se le pregunta a
@@ -77,6 +88,16 @@ import type { Rol, UsuarioModulo } from "@/lib/core/types";
 
 /** Los avisos que ya tienen su propio push y llegarían dos veces. Ver arriba. */
 const YA_AVISA_SOLO = new Set(["compras-por-aprobar"]);
+
+/**
+ * El mismo tope que las dieciséis rutas de cron de este repo.
+ *
+ * No es decorativo acá: los pushes se mandan **en serie**, uno por aparato,
+ * después de 1,2 s de conteos. Si la corrida se cortara por tiempo después de
+ * mandar y antes de guardar el vistazo, los que ya recibieron volverían a
+ * recibir lo mismo a los quince minutos.
+ */
+export const maxDuration = 300;
 
 export async function GET(request: Request) {
   const rechazo = revisarElSecreto(request);
@@ -109,10 +130,30 @@ export async function GET(request: Request) {
   // Los conteos de todo el sistema, una sola vez. Se leen **aunque no haya que
   // mandar nada**, porque el vistazo se guarda igual: si no, la primera
   // corrida nunca deja de ser la primera.
-  const todos = await avisosDeTodoElSistema(admin);
+  //
+  // Tira si un conteo falla, y acá no se atrapa para seguir: un conteo que
+  // falló vale 0, ese 0 sacaría el aviso del vistazo, y la corrida siguiente
+  // lo vería aparecer de cero y mandaría el stock entero rotulado como delta
+  // —«23 más» sin que se haya atrasado ninguna—. Se corta sin guardar nada,
+  // que deja el vistazo anterior intacto y la corrida siguiente lo recupera.
+  let todos;
+  try {
+    todos = await avisosDeTodoElSistema(admin);
+  } catch (e) {
+    const mensaje = (e as Error)?.message ?? String(e);
+    console.error("avisos-al-instante: no se pudieron contar los avisos:", mensaje);
+    return NextResponse.json(
+      { error: "No se pudieron contar los avisos; no se guardó el vistazo.", detalle: mensaje },
+      { status: 503 }
+    );
+  }
   const paraElInstante = todos.filter((a) => !YA_AVISA_SOLO.has(a.id));
 
-  let novedadesGlobales = 0;
+  // Cuántas novedades hay en todo el sistema, independientemente de si alguien
+  // está suscripto. Va acá y no adentro del envío porque es **el número con el
+  // que se va a medir si la cadencia molesta**, y adentro diría 0 los días en
+  // que nadie tiene el push prendido.
+  const novedadesGlobales = novedadesAlInstante(paraElInstante, vistos).length;
   let ausencias = 0;
   let personas = 0;
   let enviadas = 0;
@@ -123,7 +164,14 @@ export async function GET(request: Request) {
     // Cuántas ausencias entraron desde la corrida anterior. No es un aviso de
     // `lib/home/avisos.ts` —no hay stock que contar— y le llega a todos: se
     // pidió que una ausencia se sepa enseguida en todo el sistema.
-    const { cuantas, error: errorDeAusencias } = await contarAusenciasDesde(admin, cuando);
+    // La ventana es `[cuando, ahora)`: cerrada abajo y abierta arriba. Sin el
+    // corte de arriba, una ausencia cargada entre que se capturó `ahora` y que
+    // corre este conteo entra en esta corrida y otra vez en la siguiente.
+    const { cuantas, error: errorDeAusencias } = await contarAusenciasDesde(
+      admin,
+      cuando,
+      ahora.toISOString()
+    );
     if (errorDeAusencias) {
       console.error("avisos-al-instante: no se pudieron contar las ausencias:", errorDeAusencias);
     }
@@ -152,31 +200,56 @@ export async function GET(request: Request) {
       porUsuario.set(s.usuario_id, [...(porUsuario.get(s.usuario_id) ?? []), s]);
     }
 
-    // Las tres lecturas de personas, de una. Se piden sólo si hay alguien
-    // suscripto: hoy puede no haber nadie y entonces no hay nada que filtrar.
+    // ── Las tres lecturas de personas, de una ──
+    //
+    // **Un error acá no es una lista vacía, y las tres fallan distinto y
+    // callado:** sin `usuarios` no recibe nadie y el delta se pierde para
+    // siempre; sin `usuario_modulos` todo el que no sea `admin_sistema` se
+    // queda sin módulos y pierde sus novedades; y sin
+    // `notificaciones_descartes` la gente recibe pushes de avisos que había
+    // silenciado explícitamente, que es justo lo que termina con alguien
+    // apagando las notificaciones. Las tres cortan con 503 **antes** de
+    // guardar el vistazo, así que la corrida siguiente recupera el delta
+    // entero.
+    //
+    // Los `.in()` van sin `traerTodo` porque el tope es la gente suscripta
+    // —hoy 2, como mucho 16— y los descartes son uno por (persona × aviso).
+    // Si alguna vez hubiera cientos de personas, los descartes son lo primero
+    // que cruza las 1000 filas que PostgREST corta sin avisar.
     const ids = [...porUsuario.keys()];
     if (ids.length > 0) {
-      const [usuarios, grants, descartes] = await Promise.all([
-        admin
-          .from("usuarios")
-          .select("id, rol, activo")
-          .in("id", ids)
-          .then((r) => (r.data ?? []) as { id: string; rol: Rol; activo: boolean }[]),
-        admin
-          .from("usuario_modulos")
-          .select("id, usuario_id, modulo, nivel")
-          .in("usuario_id", ids)
-          .then((r) => (r.data ?? []) as UsuarioModulo[]),
+      const [leerUsuarios, leerGrants, leerDescartes] = await Promise.all([
+        admin.from("usuarios").select("id, rol, activo").in("id", ids),
+        admin.from("usuario_modulos").select("id, usuario_id, modulo, nivel").in("usuario_id", ids),
         admin
           .from("notificaciones_descartes")
           .select("usuario_id, notificacion_id, cantidad_vista")
-          .in("usuario_id", ids)
-          .then(
-            (r) => (r.data ?? []) as (DescarteNotificacion & { usuario_id: string })[]
-          ),
+          .in("usuario_id", ids),
       ]);
 
-      novedadesGlobales = novedadesAlInstante(paraElInstante, vistos).length;
+      const queFallo = [
+        ["usuarios", leerUsuarios.error],
+        ["usuario_modulos", leerGrants.error],
+        ["notificaciones_descartes", leerDescartes.error],
+      ].find(([, error]) => error);
+
+      if (queFallo) {
+        const detalle = (queFallo[1] as { message: string }).message;
+        console.error(`avisos-al-instante: no se pudo leer ${queFallo[0]}:`, detalle);
+        return NextResponse.json(
+          {
+            error: `No se pudo leer ${queFallo[0]}; no se guardó el vistazo.`,
+            detalle,
+          },
+          { status: 503 }
+        );
+      }
+
+      const usuarios = (leerUsuarios.data ?? []) as { id: string; rol: Rol; activo: boolean }[];
+      const grants = (leerGrants.data ?? []) as UsuarioModulo[];
+      const descartes = (leerDescartes.data ?? []) as (DescarteNotificacion & {
+        usuario_id: string;
+      })[];
 
       for (const usuario of usuarios) {
         // Una cuenta dada de baja no recibe: sigue teniendo suscripciones
@@ -239,9 +312,27 @@ export async function GET(request: Request) {
   // Sale de `todos` y no de lo que se le calculó a nadie: si dependiera de
   // quién está suscripto, un módulo que nadie mira quedaría sin vistazo para
   // aparecer entero como novedad el día que alguien se suscriba.
-  const { error: errorAlGuardar } = await guardarElVistazo(admin, todos, ahora.toISOString());
+  const { error: errorAlGuardar } = await guardarElVistazo(
+    admin,
+    conLaSaludQueNoSePudoComprobar(todos, vistos),
+    ahora.toISOString()
+  );
+
+  // **Un fallo acá se contesta con 500 y no con un `console.error`.** Si lo
+  // que falló fue el borrado, la tabla queda congelada y cada corrida vuelve a
+  // calcular la misma novedad contra la misma referencia: el mismo push cada
+  // quince minutos hasta las nueve de la noche. Un 200 en el log mientras un
+  // teléfono suena cuarenta veces es el peor de los dos.
   if (errorAlGuardar) {
     console.error("avisos-al-instante: no se pudo guardar el vistazo:", errorAlGuardar);
+    return NextResponse.json(
+      {
+        error: "No se pudo guardar el vistazo: la corrida siguiente puede repetir este aviso.",
+        detalle: errorAlGuardar,
+        enviadas,
+      },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({

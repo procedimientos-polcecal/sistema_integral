@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { ultimoVistazo, guardarElVistazo, queMandarAhora } from "./vistazoDeAvisos";
+import {
+  ultimoVistazo,
+  guardarElVistazo,
+  queMandarAhora,
+  conLaSaludQueNoSePudoComprobar,
+} from "./vistazoDeAvisos";
 import { SIN_AVISOS } from "./fotoDeAvisos";
 import type { Notificacion } from "./notificaciones";
+import type { Foto } from "./movimiento";
 
 /**
  * Un PostgREST de mentira, con el mismo molde que `fotoDeAvisos.test.ts`. Lo
@@ -64,9 +70,10 @@ describe("queMandarAhora", () => {
   /*
    * La ventana 7:00-21:00 es la misma que la del resto de los avisos al
    * instante, y es lo que hace que esto no termine con la gente apagando las
-   * notificaciones. Fuera de ella no se encola nada: el resumen de las 8:30
-   * cuenta los stocks sin mirar cuándo entraron, así que el repesque existe
-   * sin código.
+   * notificaciones. Fuera de ella no se encola nada, y el repesque de la
+   * noche NO es el resumen de las 8:30 -- ese manda solo los lunes -- sino
+   * `avisos_vistos`, que no se borra: la corrida de las 7:11 compara contra
+   * las 20:56 del dia anterior.
    */
   it("fuera de la ventana no se manda nada", () => {
     expect(queMandarAhora({ cuando: "2026-11-16T14:00:00Z", ahora: DE_NOCHE })).toBe("nada");
@@ -190,5 +197,60 @@ describe("guardarElVistazo", () => {
     expect(await guardarElVistazo(cliente, [aviso("ot", 1)], "2026-11-16T15:00:00Z")).toEqual({
       error: "se lleno el disco",
     });
+  });
+});
+
+/*
+ * EL ARRASTRE DE LA SALUD CIEGA.
+ *
+ * `leerLaSalud` falla cerrado: devuelve cero caidas y emite
+ * `salud-sin-comprobar`. Sin esto, los recursos que SI estaban rotos salen del
+ * vistazo, y la corrida siguiente los ve volver y dispara el flanco de nuevo:
+ * un push por cada recurso roto, a admin_sistema, sin que nada se haya roto.
+ * Y como `salud-sin-comprobar` esta en CRECE_CON_EL_DIA, el instantaneo
+ * tampoco avisa que el vigilante quedo ciego -- o sea que el re-anuncio
+ * llegaria sin la causa.
+ */
+describe("conLaSaludQueNoSePudoComprobar", () => {
+  const vistos: Foto = new Map([
+    ["salud-rrhh/lenox", 4],
+    ["salud-calidad/carbonilla", 9],
+    ["mant-atrasadas", 23],
+  ]);
+
+  it("en una corrida normal no toca nada", () => {
+    const todos = [aviso("mant-atrasadas", 24), aviso("salud-rrhh/lenox", 5)];
+    expect(conLaSaludQueNoSePudoComprobar(todos, vistos)).toBe(todos);
+  });
+
+  it("si la salud quedo ciega, arrastra los salud- del vistazo anterior", () => {
+    const todos = [aviso("mant-atrasadas", 24), aviso("salud-sin-comprobar", 20261117)];
+    expect(conLaSaludQueNoSePudoComprobar(todos, vistos).map((a) => [a.id, a.cantidad])).toEqual([
+      ["mant-atrasadas", 24],
+      ["salud-sin-comprobar", 20261117],
+      ["salud-rrhh/lenox", 4],
+      ["salud-calidad/carbonilla", 9],
+    ]);
+  });
+
+  // Lo que NO es de la salud no se arrastra: su conteo se hizo igual y un 23
+  // que ya no esta quiere decir que se resolvio.
+  it("no arrastra nada que no sea de la salud", () => {
+    const todos = [aviso("salud-sin-comprobar", 20261117)];
+    expect(
+      conLaSaludQueNoSePudoComprobar(todos, vistos).some((a) => a.id === "mant-atrasadas")
+    ).toBe(false);
+  });
+
+  // Un recurso que la corrida ciega SI reporta no se duplica.
+  it("no duplica uno que ya viene en la corrida", () => {
+    const todos = [aviso("salud-sin-comprobar", 20261117), aviso("salud-rrhh/lenox", 7)];
+    const ids = conLaSaludQueNoSePudoComprobar(todos, vistos).map((a) => a.id);
+    expect(ids.filter((id) => id === "salud-rrhh/lenox")).toHaveLength(1);
+  });
+
+  it("con el vistazo vacio no inventa nada", () => {
+    const todos = [aviso("salud-sin-comprobar", 20261117)];
+    expect(conLaSaludQueNoSePudoComprobar(todos, new Map())).toEqual(todos);
   });
 });

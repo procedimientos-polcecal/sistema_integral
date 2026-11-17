@@ -190,8 +190,21 @@ export async function GET(request: Request) {
   //
   // Si falla no se voltea nada: ya se mandó lo que había que mandar, y la
   // comparación de mañana se hace contra la última foto que exista.
-  const todos = await avisosDeTodoElSistema(admin);
-  const { error: errorDeLaFoto } = await guardarFoto(admin, hoy, todos);
+  //
+  // **`avisosDeTodoElSistema` tira si un conteo falla, y acá eso significa no
+  // guardar foto.** Un conteo fallido vale 0, y un 0 espurio en la foto de hoy
+  // es un delta del tamaño del stock mañana: «23 más · Órdenes de trabajo
+  // atrasadas» sin que se haya atrasado ninguna. Sin foto, mañana se compara
+  // contra la última que exista y el delta abarca los dos días, que es la
+  // verdad.
+  let todos: Awaited<ReturnType<typeof avisosDeTodoElSistema>> = [];
+  let errorDeLaFoto: string | undefined;
+  try {
+    todos = await avisosDeTodoElSistema(admin);
+    errorDeLaFoto = (await guardarFoto(admin, hoy, todos)).error;
+  } catch (e) {
+    errorDeLaFoto = (e as Error)?.message ?? String(e);
+  }
   if (errorDeLaFoto) console.error("avisos-diarios: no se pudo guardar la foto:", errorDeLaFoto);
 
   return NextResponse.json({

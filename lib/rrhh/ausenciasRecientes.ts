@@ -34,7 +34,15 @@ import type { Notificacion } from "@/lib/home/notificaciones";
 const ID = "rrhh-ausencias-cargadas";
 
 /**
- * Cuántas ausencias entraron al sistema desde `desde`.
+ * Cuántas ausencias entraron al sistema en la ventana `[desde, hasta)`.
+ *
+ * **La ventana es semiabierta y eso no es cosmética.** `hasta` es el instante
+ * que la corrida va a guardar como `visto_en`, y se captura **antes** de
+ * contar. Sin el corte de arriba, una ausencia cargada entre que se captura la
+ * hora y que corre el `count` entra en esta corrida y otra vez en la siguiente
+ * —`created_at >= visto_en` la vuelve a agarrar—, y el mismo hecho se avisa
+ * dos veces. Es el único canal de este cron que compara por tiempo en vez de
+ * por conteo, así que es el único expuesto a esto.
  *
  * **Por `created_at` y nunca por `fecha_desde`**, y la diferencia no es
  * cosmética: la mediana entre que una ausencia empieza y que alguien la carga
@@ -53,12 +61,14 @@ const ID = "rrhh-ausencias-cargadas";
  */
 export async function contarAusenciasDesde(
   admin: SupabaseClient,
-  desde: string
+  desde: string,
+  hasta: string
 ): Promise<{ cuantas: number; error?: string }> {
   const { count, error } = await admin
     .from("ausencias")
     .select("id", { count: "exact", head: true })
-    .gte("created_at", desde);
+    .gte("created_at", desde)
+    .lt("created_at", hasta);
 
   if (error) return { cuantas: 0, error: error.message };
   return { cuantas: count ?? 0 };
@@ -70,7 +80,20 @@ export async function contarAusenciasDesde(
  * `null` y no una línea que diga cero: no se manda una notificación para
  * avisar que no pasó nada — ésa es la que enseña a ignorarlas.
  *
- * El `href` lleva a la pantalla de ausencias, que es donde se ve cuáles son.
+ * **El número no va en el título**, aunque sea lo primero que uno escribe.
+ * `resumirElMovimiento` imprime la `cantidad` como incremento, así que con el
+ * título «Se cargaron 3 ausencias» el push decía «3 más · Se cargaron 3
+ * ausencias»: el mismo 3 como total y como incremento en la misma línea. El
+ * docstring de esa función lo prohíbe con todas las letras —«un “3” que ayer
+ * era el total y hoy es el incremento es peor que cualquiera de los dos»— y
+ * ésta es la única `Notificacion` del sistema que nace siendo un delta en vez
+ * de un stock, así que era la única que podía caer en eso.
+ *
+ * **El `href` va a `/disponibilidad` y no a `/rrhh/ausencias`**, porque esto le
+ * llega a todos: RRHH lo tienen 8 de 16 personas, y una notificación que lleva
+ * a una pantalla cerrada es peor que no llevar a ninguna. Disponibilidad es
+ * transversal —la ve cualquiera con sesión— y es donde se ve quién no viene.
+ *
  * El mensaje dice cuántas y no quiénes a propósito: el motivo de una ausencia
  * no sale nunca del lado abierto, y un push lo leería cualquiera que mire el
  * teléfono de otro.
@@ -80,8 +103,8 @@ export function lineaDeAusencias(cuantas: number): Notificacion | null {
 
   return {
     id: ID,
-    titulo: cuantas === 1 ? "Se cargó una ausencia" : `Se cargaron ${cuantas} ausencias`,
+    titulo: "Ausencias cargadas",
     cantidad: cuantas,
-    href: "/rrhh/ausencias",
+    href: "/disponibilidad",
   };
 }
