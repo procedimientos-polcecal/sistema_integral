@@ -3231,6 +3231,59 @@ ciclo.
 La carga a mano sigue existiendo en la ficha del equipo, para quien no quiera
 esperar al próximo cambio. Dejó de ser el camino principal y pasó a ser el atajo.
 
+### La primera corrida real (17/11/2026)
+
+**Anduvo, y de las cuatro máquinas salió el único caso que el diseño no cubría.**
+
+| Equipo | Qué pasó |
+|---|---|
+| PY-A1-05 Filler 1 | Arrancó solo con la OT 3095 «Cambio de martillos» (14/11) → **OT 3096**, rotación a 2ª cara para el 20/11 |
+| PY-B1-06 Filler 2 | Arrancó solo con la OT 3094 (15/11) → **OT 3097**, para el 21/11 |
+| PO-C1-04 Hidratación | Sin arrancar, **y está bien**: llegó a la 4ª cara el 14/11, así que lo que le toca es un cambio, que es justo lo que espera |
+| PY-C1-03 Planta 0-2 | Cargado a mano → **OT 3111**, en ATRASADO |
+
+Las tres llegaron a la planilla con `sheets_pendiente` en null.
+
+Dos cosas que esa corrida enseñó y que no se deducen del código:
+
+- **El cambio de Filler 2 venía escondido**: «Se desatora rompedora (Por corte
+  de energía) **y se realiza cambio de martillos**». `pareceUnCambio` lo agarró
+  por el patrón pegado al verbo. Es la confirmación de que el matcher no
+  necesita que la descripción hable sólo del cambio.
+- **Un equipo configurado a mitad de ciclo espera hasta el final de su ciclo**,
+  que es el precio de mirar sólo hacia adelante. PY-C1-03 había cambiado
+  martillos el 31/10 —antes de configurarse— y no rotó desde entonces: su
+  próximo cambio estaba a tres rotaciones, o sea un mes, y mientras tanto el
+  ciclo no generaba nada y nada lo marcaba. Se resolvió con la carga a mano
+  (`desde` 31/10, `vuelta_desde` 0), y la OT nació **en ATRASADO con fecha
+  10/11**, que es la verdad y no un fantasma: esa rotación había que hacerla.
+
+**Y la trampa de medir el estado a mano, que casi muerde.** El 13/11 el análisis
+ubicó a Hidratación en 2ª cara y se estuvo por cargarla así. Era falso: la
+rotación a 3ª del 12/11 ya estaba hecha y todavía no había llegado por el
+`IMPORTRANGE` del master, que tarda entre 3 y 53 h. Cargarla con ese dato habría
+pedido rotar a 3ª cara unos martillos ya rotados a 3ª — el anti-objetivo exacto.
+Dos reglas de ahí: **el ancla válida es la última rotación y nunca el último
+cambio**, y **antes de cargar un arranque a mano hay que mirar el historial
+completo del equipo**, no la foto que tenga el sistema ese día. El arranque
+automático no tiene el problema porque espera a que el dato se asiente.
+
+### Quién vigila que esto corra
+
+Desde el 17/11/2026, `ciclos` **anota su corrida** en `sincronizaciones` y está
+declarado en el `REGISTRO` de `lib/core/saludDeLasSincronizaciones.ts` con 24 h
+de tolerancia. Antes no hacía ninguna de las dos cosas, y eso dejaba la
+generación sin testigo: `recursosSinDeclarar` nombra lo que la vista trae, así
+que un recurso que nunca escribe una fila no llega a la vista y nadie lo nombra.
+El síntoma de una rotura habría sido que no nacen OT, en silencio — y una orden
+que no nace no se atrasa, de modo que `mant-atrasadas` tampoco la ve.
+
+Lo que hay que saber si se toca: **un ciclo que no se pudo crear cuenta como
+corrida fallida** (`porQueFallaron`), porque si los cuatro fallan al escribir la
+planilla el generador termina perfecto y no nace ninguna orden. Quedan afuera
+los estados que no son errores: `trabados`, `sinArrancar`, `sinEstadoTodavia` y
+`sinCalendario`.
+
 ## Los datos: qué está y qué no
 
 **Todo lo que viene de las planillas está.** Avisos 138, órdenes de trabajo
