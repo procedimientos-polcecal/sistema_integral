@@ -7,11 +7,15 @@ import { useCargar } from "@/lib/core/useCargar";
 import { createClient } from "@/lib/supabase/client";
 import { fecha } from "@/lib/compras/constants";
 import { finalDelAviso } from "@/lib/mantenimiento/desestimarAviso";
+import { estadoDelTrabajo, type OtDelAviso } from "@/lib/mantenimiento/trabajoDelAviso";
 import type { Aviso } from "@/lib/mantenimiento/types";
 import NuevoAvisoModal from "@/app/(app)/mantenimiento/avisos/NuevoAvisoModal";
 import Select from "@/components/Select";
 
 type Opcion = { id: string; nombre: string };
+
+/** Lo que devuelve `GET /api/mantenimiento/avisos/trabajo`. */
+type OrdenDelAviso = OtDelAviso & { id: string };
 
 const POR_PAGINA = 50;
 
@@ -72,6 +76,7 @@ export default function MisAvisosClient({
   const [busqueda, setBusqueda] = useState("");
   const [busquedaAplicada, setBusquedaAplicada] = useState("");
   const [urgencia, setUrgencia] = useState("");
+  const [sinCerrar, setSinCerrar] = useState(false);
   const [pagina, setPagina] = useState(0);
 
   const [avisos, setAvisos] = useState<Aviso[]>([]);
@@ -87,16 +92,58 @@ export default function MisAvisosClient({
 
   // Al cambiar un filtro se vuelve a la primera página, ajustado durante el
   // render y no en un efecto: ver la nota de `MisPedidosClient`.
-  const filtro = `${alcance}|${busquedaAplicada}|${urgencia}`;
+  const filtro = `${alcance}|${busquedaAplicada}|${urgencia}|${sinCerrar}`;
   const [filtroPrevio, setFiltroPrevio] = useState(filtro);
   if (filtro !== filtroPrevio) {
     setFiltroPrevio(filtro);
     setPagina(0);
   }
 
+  // El estado de las órdenes de trabajo, por id de OT. Se pide **una vez al
+  // montar** (sin dependencias) y no en cada página ni en cada filtro: son unas
+  // 220 filas de cuatro campos y no dependen de lo que se esté mirando.
+  //
+  // **No se lee `ordenes_trabajo` desde acá.** Esa tabla tiene el SELECT cerrado
+  // con `mant_puede_ver()` y esta pantalla la abren los 14 usuarios, 6 sin el
+  // módulo: un embebido les daría null en silencio y diría «sin orden» sobre
+  // trabajo que existe. Por eso hay una ruta (admin, permiso de la ruta).
+  //
+  // `null` = todavía no llegó. Si falla queda un mapa vacío y `falloOrdenes`: la
+  // pantalla no empeora, `estadoDelTrabajo` recibe `undefined` y dice «OT #2814»
+  // como hasta ahora, nunca «sin orden». Un mapa vacío es un estado válido, no
+  // un error que tape la lista.
+  const [ordenes, setOrdenes] = useState<Map<string, OtDelAviso> | null>(null);
+  const [falloOrdenes, setFalloOrdenes] = useState(false);
+  useCargar(async (vigente) => {
+    try {
+      const r = await fetch("/api/mantenimiento/avisos/trabajo");
+      if (!r.ok) throw new Error(String(r.status));
+      const j = (await r.json()) as { ordenes?: OrdenDelAviso[] };
+      if (!vigente()) return;
+      setOrdenes(new Map((j.ordenes ?? []).map((o) => [o.id, o])));
+    } catch {
+      if (!vigente()) return;
+      setOrdenes(new Map());
+      setFalloOrdenes(true);
+    }
+  }, []);
+
+  // Los ids de las órdenes sin cerrar: 13 hoy y 55 en todo el sistema, a dos
+  // órdenes de magnitud de donde un `.in()` arma una URL que PostgREST rechaza.
+  // «Cerrada» la decide `estado === "REALIZADO"`, igual que `estadoDelTrabajo`.
+  const abiertas = ordenes
+    ? [...ordenes.entries()].filter(([, o]) => o.estado !== "REALIZADO").map(([id]) => id)
+    : [];
+  // El filtro sólo se aplica con el mapa leído. Si falló, no filtra y lo dice.
+  const filtraAbiertas = sinCerrar && ordenes !== null && !falloOrdenes;
+
   // `useCargar` y no un efecto que llama y listo: descarta la respuesta que
   // llega tarde. Ver `lib/core/useCargar.ts`.
   const cargar = useCargar(async (vigente) => {
+    // Con «Sin cerrar» puesto y el mapa todavía en camino, una lista vacía sería
+    // una respuesta falsa («no hay ninguno»): se queda en «Cargando…» y la
+    // consulta corre sola cuando el mapa llega (está en las dependencias).
+    if (sinCerrar && ordenes === null) { setCargando(true); return; }
     setCargando(true);
     setError("");
     const supabase = createClient();
@@ -109,6 +156,18 @@ export default function MisAvisosClient({
     // que PostgREST rechaza.
     if (alcance === "mios") q = q.in("area_id", misAreas);
     if (urgencia) q = q.eq("urgencia", urgencia);
+
+    if (filtraAbiertas) {
+      // Sin ninguna abierta no se consulta: un `.in()` vacío no es «ninguno».
+      if (abiertas.length === 0) {
+        if (!vigente()) return;
+        setCargando(false);
+        setAvisos([]);
+        setTotal(0);
+        return;
+      }
+      q = q.in("work_order_id", abiertas);
+    }
 
     if (busquedaAplicada) {
       const p = `%${busquedaAplicada.replace(/[%,()*\\]/g, " ")}%`;
@@ -131,7 +190,9 @@ export default function MisAvisosClient({
     if (err) { setError(err.message); setAvisos([]); return; }
     setAvisos((data ?? []) as Aviso[]);
     setTotal(count ?? 0);
-  }, [alcance, busquedaAplicada, urgencia, pagina, misAreas]);
+    // `ordenes` entra sólo con el chip puesto: si no, su llegada volvería a pedir
+    // la página sin que cambie nada de lo que se ve.
+  }, [alcance, busquedaAplicada, urgencia, pagina, misAreas, sinCerrar, sinCerrar ? ordenes : null]);
 
   const paginas = Math.ceil(total / POR_PAGINA);
   const nombreDeArea = (id: string | null) =>
@@ -146,7 +207,7 @@ export default function MisAvisosClient({
     .map((a) => a.nombre)
     .join(" y ");
 
-  const hayFiltro = Boolean(busquedaAplicada || urgencia);
+  const hayFiltro = Boolean(busquedaAplicada || urgencia || filtraAbiertas);
 
   return (
     <div className="space-y-4">
@@ -202,6 +263,20 @@ export default function MisAvisosClient({
           {urgencias.map((u) => <option key={u} value={u}>{u}</option>)}
         </Select>
 
+        {/* Arranca apagado: la pantalla abre como siempre. */}
+        <button
+          type="button"
+          aria-pressed={sinCerrar}
+          onClick={() => setSinCerrar((v) => !v)}
+          className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
+            sinCerrar
+              ? "border-slate-900 bg-slate-900 text-white"
+              : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          Sin cerrar
+        </button>
+
         {!cargando && (
           <span className="text-xs text-slate-400">
             {total.toLocaleString("es-AR")} {total === 1 ? "aviso" : "avisos"}
@@ -223,6 +298,13 @@ export default function MisAvisosClient({
             la tuya en Administración → Usuarios y vas a ver acá todo lo que avisó
             tu área.
           </p>
+        </div>
+      )}
+
+      {sinCerrar && falloOrdenes && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          No se pudo saber cuáles trabajos siguen abiertos, así que «Sin cerrar» no
+          está filtrando. Recargá la página para reintentar.
         </div>
       )}
 
@@ -277,7 +359,7 @@ export default function MisAvisosClient({
               </div>
 
               <div className="mt-2.5 border-t border-slate-100 pt-2.5 text-xs">
-                <EnQueTermino aviso={a} tieneMantenimiento={tieneMantenimiento} />
+                <EnQueTermino aviso={a} ot={ordenes?.get(a.work_order_id ?? "")} tieneMantenimiento={tieneMantenimiento} />
               </div>
             </article>
           ))}
@@ -335,7 +417,7 @@ export default function MisAvisosClient({
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-slate-600">{a.urgencia ?? "—"}</td>
                     <td className="px-3 py-2 text-xs">
-                      <EnQueTermino aviso={a} tieneMantenimiento={tieneMantenimiento} />
+                      <EnQueTermino aviso={a} ot={ordenes?.get(a.work_order_id ?? "")} tieneMantenimiento={tieneMantenimiento} />
                     </td>
                   </tr>
                 ))}
@@ -405,18 +487,52 @@ function Area({ nombre }: { nombre: string | null }) {
  * le dice a quien avisó que alguien lo miró y por qué no se hizo nada.
  */
 function EnQueTermino({
-  aviso, tieneMantenimiento,
+  aviso, ot, tieneMantenimiento,
 }: {
   aviso: Aviso;
+  /** La orden enlazada. `undefined` = no llegó o no se pudo leer: se muestra lo de siempre. */
+  ot: OtDelAviso | undefined;
   tieneMantenimiento: boolean;
 }) {
   const final = finalDelAviso(aviso);
 
   if (final === "con-ot") {
-    // `ot_asignada` es texto libre de la planilla: un número de OT en casi todos,
-    // pero también «si», «Revision» y «-». Sólo un número se presenta como OT; lo
-    // demás se muestra tal cual lo escribieron, sin interpretarlo.
-    const crudo = String(aviso.ot_asignada ?? "").trim();
+    const trabajo = estadoDelTrabajo(aviso, ot);
+
+    if (trabajo.tipo === "cerrado" || trabajo.tipo === "abierto") {
+      const numero = String(trabajo.ot);
+      // El color va por `style` y no por una utilidad: `.card` y los `.btn-*`
+      // están fuera de toda capa y le ganan a cualquier `text-*` de al lado.
+      const estado = trabajo.tipo === "cerrado" ? (
+        <span style={{ color: "#15803d" }} className="font-medium">
+          Terminado{trabajo.fecha ? ` el ${fecha(trabajo.fecha)}` : ""}
+        </span>
+      ) : (
+        <span style={{ color: "#b45309" }} className="font-medium">
+          Sin cerrar{trabajo.comoSeLlama ? ` · ${trabajo.comoSeLlama}` : ""}
+        </span>
+      );
+      return (
+        <span className="flex flex-wrap items-baseline gap-x-1.5">
+          {tieneMantenimiento ? (
+            <Link href={`/mantenimiento/ordenes?q=${numero}`} className="font-medium text-slate-700 underline">
+              OT #{numero}
+            </Link>
+          ) : (
+            <span className="font-medium text-slate-700">OT #{numero}</span>
+          )}
+          <span className="text-slate-400">·</span>
+          {estado}
+        </span>
+      );
+    }
+
+    // Sin orden leída: lo que ya se mostraba. `ot_asignada` es texto libre de la
+    // planilla: un número de OT en casi todos, pero también «si», «Revision» y
+    // «-». Sólo un número se presenta como OT; lo demás se muestra tal cual, sin
+    // interpretarlo. Enlace con la celda vacía y «si» dicen «Con orden de
+    // trabajo»: la pantalla nunca se queda muda.
+    const crudo = trabajo.tipo === "sin-enlace" ? trabajo.texto : "";
     if (/^\d+$/.test(crudo)) {
       return tieneMantenimiento ? (
         // Lleva al listado de órdenes ya buscando ese número: el buscador de
