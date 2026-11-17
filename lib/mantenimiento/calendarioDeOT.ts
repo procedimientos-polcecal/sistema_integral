@@ -18,6 +18,8 @@ import type { GenteDelDia } from "./genteDelDia";
 export interface DiaDelCalendario {
   dia: string;
   ordenes: {
+    /** El uuid, para poder llamar a `postergar` desde la grilla. */
+    id: string;
     ot_number: number;
     especialidad: string | null;
     tipo: string | null;
@@ -27,12 +29,25 @@ export interface DiaDelCalendario {
     equipo_raw: string | null;
     /** true si ese día es parte de la ventana, no el inicio */
     arrastre: boolean;
+    /**
+     * Los tres que deciden si la orden se puede mover desde el sistema, para
+     * que la grilla lo conteste sin otro viaje. Lo decide `porQueNoSePuedeMover`
+     * de `moverLaOT.ts`, y **`fecha_ejecucion` va cruda a propósito**: es la
+     * fecha contra la que `postergar` cuenta los días, y no la que esta grilla
+     * pinta —que puede ser la pendiente—. Confundirlas manda la orden a un día
+     * que nadie eligió. El porqué completo está en el encabezado de aquel
+     * archivo.
+     */
+    app_created: boolean | null;
+    estado: string | null;
+    fecha_ejecucion: string | null;
   }[];
   gente: GenteDelDia;
 }
 
 /** Una fila de `ordenes_trabajo` como la lee la grilla. */
 export interface OrdenDelCalendario {
+  id: string;
   ot_number: number;
   fecha_ejecucion: string | null;
   fecha_ejecucion_pendiente: string | null;
@@ -43,6 +58,8 @@ export interface OrdenDelCalendario {
   descripcion: string | null;
   sector_raw: string | null;
   equipo_raw: string | null;
+  app_created: boolean | null;
+  estado: string | null;
 }
 
 /**
@@ -102,6 +119,7 @@ export function armarElCalendario(
     const primero = inicio < desde ? desde : inicio;
     for (const dia of diasQueOcupa(primero, fin)) {
       dias.get(dia)?.ordenes.push({
+        id: o.id,
         ot_number: o.ot_number,
         especialidad: o.especialidad,
         tipo: o.tipo,
@@ -110,6 +128,9 @@ export function armarElCalendario(
         sector_raw: o.sector_raw,
         equipo_raw: o.equipo_raw,
         arrastre: dia !== inicio,
+        app_created: o.app_created,
+        estado: o.estado,
+        fecha_ejecucion: o.fecha_ejecucion,
       });
     }
   }

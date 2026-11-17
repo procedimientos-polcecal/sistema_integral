@@ -10,7 +10,10 @@ const orden = (
   ot_number: number,
   extra: Partial<OrdenDelCalendario> = {},
 ): OrdenDelCalendario => ({
+  id: `id-${ot_number}`,
   ot_number,
+  app_created: true,
+  estado: "POR_HACER",
   fecha_ejecucion: null,
   fecha_ejecucion_pendiente: null,
   fecha_fin: null,
@@ -171,6 +174,7 @@ describe("armar el calendario", () => {
       new Map(),
     );
     expect(cal[0].ordenes[0]).toEqual({
+      id: "id-7",
       ot_number: 7,
       especialidad: "MECANICO",
       tipo: "CORRECTIVO",
@@ -179,6 +183,30 @@ describe("armar el calendario", () => {
       sector_raw: "Molienda",
       equipo_raw: "Molino 1",
       arrastre: false,
+      app_created: true,
+      estado: "POR_HACER",
+      fecha_ejecucion: "2026-11-02",
+    });
+  });
+
+  /**
+   * La grilla pinta la orden en la pendiente y la manda a mover contra
+   * `fecha_ejecucion`. Son dos días distintos y este test fija que los dos
+   * viajen: con uno solo, mover una orden con pendiente la deja en un día que
+   * nadie eligió. Ver el encabezado de `moverLaOT.ts`.
+   */
+  it("la pendiente decide donde se pinta y la de la planilla viaja igual", () => {
+    const cal = armarElCalendario(
+      [orden(8, { fecha_ejecucion: "2026-11-02", fecha_ejecucion_pendiente: "2026-11-05" })],
+      "2026-11-02",
+      "2026-11-05",
+      new Map(),
+    );
+    expect(cal[0].ordenes).toHaveLength(0);
+    expect(cal[3].ordenes[0]).toMatchObject({
+      ot_number: 8,
+      arrastre: false,
+      fecha_ejecucion: "2026-11-02",
     });
   });
 

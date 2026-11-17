@@ -7,6 +7,7 @@ import { comoSeLee, diaDeLaSemana, hoyEnArgentina, semanaDe, sumarDias } from "@
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import HojaDePersona from "./HojaDePersona";
 import LaReferencia from "./LaReferencia";
+import MesDeOrdenes from "./MesDeOrdenes";
 import PadronDelTaller, { type EmpleadoElegible } from "./PadronDelTaller";
 import {
   DIA_CORTO, OFICIO_TEXTO, ORDEN_OFICIO, TURNOS, TURNO_TEXTO,
@@ -43,6 +44,10 @@ export default function ProgramacionClient({ empleados }: { empleados: EmpleadoE
 
   const [lunes, setLunes] = useState(() => semanaDe(hoy)[0]);
   const [dia, setDia] = useState(hoy);
+  // Qué mitad se está mirando. Dos pestañas y no una sola pantalla larga: la
+  // semana del taller ya ocupa dos pantallas de teléfono, y un calendario
+  // debajo quedaría a un scroll que nadie hace.
+  const [vista, setVista] = useState<"semana" | "mes">("semana");
   const [semana, setSemana] = useState<Semana | null>(null);
   const [propias, setPropias] = useState<AusenciaPropia[]>([]);
   // Si se pudo traer lo que cargó el encargado. Distingue "esta falta no es
@@ -236,6 +241,33 @@ export default function ProgramacionClient({ empleados }: { empleados: EmpleadoE
         </p>
       </div>
 
+      {/* Las dos mitades de programar: la gente y el trabajo. */}
+      <div className="flex gap-1" role="tablist" aria-label="Qué se está programando">
+        {([
+          ["semana", "Semana"],
+          ["mes", "Mes"],
+        ] as const).map(([clave, texto]) => (
+          <button
+            key={clave}
+            type="button"
+            role="tab"
+            aria-selected={vista === clave}
+            onClick={() => { setVista(clave); setHoja(null); }}
+            className={`min-h-[44px] flex-1 rounded-lg border px-3 py-2 text-sm font-medium ${
+              vista === clave
+                ? "border-[var(--primary)] bg-[var(--primary-light)] text-slate-900"
+                : "border-slate-200 bg-white text-slate-600"
+            }`}
+          >
+            {texto}
+          </button>
+        ))}
+      </div>
+
+      {vista === "mes" && <MesDeOrdenes />}
+
+      {vista === "semana" && (
+      <>
       {/* La semana: anterior, esta, siguiente. */}
       <div className="flex items-center gap-2">
         <button type="button" className="btn-secondary" onClick={() => moverSemana(-1)} aria-label="Semana anterior">
@@ -495,6 +527,8 @@ export default function ProgramacionClient({ empleados }: { empleados: EmpleadoE
           abiertaAlPrincipio={semana.personas.length === 0}
           alCambiar={recargar}
         />
+      )}
+      </>
       )}
 
       {/* La hoja de una persona: desde acá se anota la falta. */}
