@@ -4,20 +4,21 @@
 -- POR QUÉ
 --
 -- La migración 20261018160209 decidió que un aviso se borra con su orden de
--- trabajo (`on delete cascade`). En ese momento era una decisión correcta: sólo
--- **39** avisos tenían enlace a una OT, y la pregunta era qué hacer cuando la
--- sincronización borra una OT que la planilla dejó de traer. Se eligió que el
--- aviso se vaya con ella.
+-- trabajo (`on delete cascade`). En ese momento la decisión no costaba nada y
+-- ella misma lo dice: de 172 avisos, **ninguno** tenía `work_order_id`, y su
+-- nota deja escrito que la cascada «empieza a importar cuando se empiecen a
+-- enlazar». Eso es lo que está pasando ahora.
 --
--- Ya no es correcta, por dos razones medidas:
+-- Ya no es correcta, por dos razones medidas el 17/11/2026:
 --
--- 1. El relleno que viene (las tareas siguientes) enlaza **182 avisos más**, y
---    la superficie de la cascada pasa de 39 a **221**. La sincronización borra
---    OT en cada corrida cuando la planilla deja de traerlas, así que el borrado
---    en cascada deja de ser un caso raro. El aviso es el reporte de una persona,
---    no un detalle de la orden: si la orden se va, el aviso sobrevive y vuelve a
---    decir «sin orden», que es lo verdadero. Borrarlo con ella hace desaparecer
---    un pedido de atención que nadie resolvió.
+-- 1. Hoy son **39** los avisos con enlace, y el relleno que viene suma **182
+--    más**: la superficie de la cascada queda en **221** de 238. Lo que la
+--    dispara es que la sincronización borra las OT que la planilla dejó de
+--    traer, así que el borrado en cascada deja de ser un caso raro. El aviso es
+--    el reporte de una persona, no un detalle de la orden: si la orden se va, el
+--    aviso sobrevive y vuelve a decir «sin orden», que es lo verdadero.
+--    Borrarlo con ella hace desaparecer un pedido de atención que nadie
+--    resolvió.
 --
 -- 2. `ot_enlazada_en is null` no separa los avisos en dos sino en tres: 17
 --    enlaces manuales (Ya tiene OT), 22 OT generadas desde el aviso y 182 por

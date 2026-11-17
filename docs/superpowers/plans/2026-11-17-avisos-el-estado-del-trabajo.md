@@ -106,9 +106,11 @@ npm run migracion "el aviso sobrevive a su orden"
 
 Encabezado largo en castellano, con estas dos razones medidas:
 
-- La cascada se decidió el 18/10/2026 (`20261018160209`) cuando sólo **39**
-  avisos tenían enlace. Rellenar los 182 sube la superficie a **221**, y la
-  sincronización borra OT que la planilla deja de traer en cada corrida. El
+- La cascada se decidió el 18/10/2026 (`20261018160209`) cuando **ninguno** de
+  los 172 avisos tenía enlace —eso lo mide el encabezado de esa migración, que
+  además avisa que la cascada «empieza a importar cuando se empiecen a
+  enlazar»—. Hoy son 39 y el relleno suma 182: la superficie queda en **221**,
+  y la sincronización borra las OT que la planilla deja de traer. El
   aviso es el reporte de una persona, no un detalle de la orden: si la orden se
   va, el aviso sobrevive y vuelve a decir «sin orden».
 - `ot_resuelta_en` existe porque `ot_enlazada_en is null` no separa en dos sino
