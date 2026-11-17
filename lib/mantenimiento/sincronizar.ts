@@ -37,6 +37,7 @@ import { linkDeCelda } from "@/lib/core/links";
 import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
 import { filaDeAviso } from "@/lib/mantenimiento/avisos";
 import { resolverElArea, repartirPorArea } from "@/lib/mantenimiento/areaDelAviso";
+import { resolverLosEnlacesDeAvisos } from "@/lib/mantenimiento/resolverElEnlace";
 import {
   filaDeOrden, paraLaBase, columnaDeFechaFin, fechaFinDeLaFila, faltaLaColumna, celdasParaRegistrar, COLUMNA_ESTADO, COLUMNA_OT,
   type OrdenLeida,
@@ -421,6 +422,13 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
     cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
   });
 
+  // El enlace de cada aviso a su OT. Un fallo acá **no cambia el `ok`** de lo
+  // que se anota abajo, a diferencia de las áreas, y la asimetría es a propósito:
+  // el área decide en qué pantalla aparece un aviso, y un fallo sostenido lo
+  // esconde; el enlace se recalcula entero en la próxima corrida y lo único que
+  // se pierde mientras tanto es decir si el trabajo terminó. No unificarlas.
+  const enlace = await resolverLosEnlacesDeAvisos(admin);
+
   // Si no se pudieron leer las áreas, la corrida **no se anota como limpia**: el
   // JSON de abajo lo ve quien la dispara a mano, pero el cron corre solo, y si
   // esa lectura fallara todos los días los avisos nuevos entrarían sin área sin
@@ -446,6 +454,9 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
     // Un fallo acá no frena la corrida, así que se dice en el resultado: si no,
     // los avisos nuevos quedarían sin área sin que nadie supiera por qué.
     ...("error" in areas ? { area_sin_leer: areas.error } : {}),
+    enlaces_resueltos: enlace.enlazados, enlaces_vaciados: enlace.vaciados,
+    // Igual que `area_sin_leer`: sólo cuando lo hay.
+    ...(enlace.error ? { enlace_sin_resolver: enlace.error } : {}),
     borrados: borrado.borradas, borrado: borrado.aviso,
   });
 }

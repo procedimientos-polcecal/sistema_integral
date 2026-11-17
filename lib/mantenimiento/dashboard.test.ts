@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  ultimosMeses, sectoresAParar, ventanasDeReparacion, nombreDelMes,
+  ultimosMeses, paradasExigidas, ventanasDeReparacion, nombreDelMes,
 } from "./dashboard";
 
 describe("ultimosMeses", () => {
@@ -30,15 +30,54 @@ describe("ultimosMeses", () => {
   });
 });
 
-describe("sectoresAParar", () => {
+describe("paradasExigidas", () => {
   it("junta los sectores con una OT pendiente que obliga a parar", () => {
-    const sectores = sectoresAParar([
-      { sector_id: "a", requiere_parada_sector: true },
-      { sector_id: "a", requiere_parada_sector: true },
-      { sector_id: "b", requiere_parada_sector: false },
-      { sector_id: "c", requiere_parada_sector: null },
+    const paradas = paradasExigidas([
+      { sector_id: "a", requiere_parada_sector: true, ot_number: 10 },
+      { sector_id: "a", requiere_parada_sector: true, ot_number: 11 },
+      { sector_id: "b", requiere_parada_sector: false, ot_number: 12 },
+      { sector_id: "c", requiere_parada_sector: null, ot_number: 13 },
     ]);
-    expect([...sectores]).toEqual(["a"]);
+    expect(Object.keys(paradas)).toEqual(["a"]);
+    expect(paradas.a).toHaveLength(2);
+  });
+
+  it("devuelve cuáles son, y no sólo cuántas", () => {
+    const paradas = paradasExigidas([
+      {
+        sector_id: "a", requiere_parada_sector: true, ot_number: 2822,
+        estado: "EN_PROCESO", descripcion: "Rellenar espira de sin fin",
+        equipo_raw: "Sin fin 1",
+      },
+    ]);
+    expect(paradas.a[0]).toEqual({
+      ot_number: 2822,
+      estado: "EN_PROCESO",
+      descripcion: "Rellenar espira de sin fin",
+      equipo_raw: "Sin fin 1",
+    });
+  });
+
+  it("pone primero la atrasada, y dentro de un estado la más vieja", () => {
+    const paradas = paradasExigidas([
+      { sector_id: "a", requiere_parada_sector: true, ot_number: 300, estado: "POR_HACER" },
+      { sector_id: "a", requiere_parada_sector: true, ot_number: 100, estado: "POR_HACER" },
+      { sector_id: "a", requiere_parada_sector: true, ot_number: 500, estado: "ATRASADO" },
+      { sector_id: "a", requiere_parada_sector: true, ot_number: 200, estado: "EN_PROCESO" },
+    ]);
+    expect(paradas.a.map((o) => o.ot_number)).toEqual([500, 200, 100, 300]);
+  });
+
+  it("un estado que no conoce va al final y no rompe el orden", () => {
+    const paradas = paradasExigidas([
+      { sector_id: "a", requiere_parada_sector: true, ot_number: 1, estado: "INVENTADO" },
+      { sector_id: "a", requiere_parada_sector: true, ot_number: 2, estado: "ATRASADO" },
+    ]);
+    expect(paradas.a.map((o) => o.ot_number)).toEqual([2, 1]);
+  });
+
+  it("sin ninguna que lo exija, no hay sectores", () => {
+    expect(paradasExigidas([{ sector_id: "a", requiere_parada_sector: false }])).toEqual({});
   });
 });
 

@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import InfoTip from "@/components/InfoTip";
 import KpiCard from "@/components/KpiCard";
-import type { VentanaDeReparacion } from "@/lib/mantenimiento/dashboard";
+import type { VentanaDeReparacion, OtQueExigeParar } from "@/lib/mantenimiento/dashboard";
 import { diasDeAtraso } from "@/lib/mantenimiento/alertas";
 import Select from "@/components/Select";
 import { Modal, PieDeModal } from "@/components/Modal";
@@ -44,6 +44,20 @@ const PLANT_STATUS_META: Record<string, { label: string; color: string; bg: stri
   PARADA:        { label: "Parada",        color: "var(--status-rep)", bg: "#FEF2F2", border: "#FECACA" },
   EN_REPARACION: { label: "En reparación", color: "var(--status-st)",  bg: "#FFFBEB", border: "#FDE68A" },
 };
+
+/**
+ * Cómo se pinta un sector que tiene una OT pendiente que exige pararlo.
+ *
+ * Pisa el color de su estado, incluido el verde de "Activa": que el sector
+ * esté produciendo es justamente lo que vuelve urgente el pedido, así que una
+ * tarjeta verde es lo contrario de lo que hay que mirar. El borde es un rojo
+ * más fuerte que el de `PARADA` a propósito — un sector ya parado está en
+ * regla y éste tiene un pedido sin atender.
+ */
+const ALERTA_PARAR = { bg: "#FEF2F2", border: "#FCA5A5" };
+
+/** Cuántas OT entran en la tarjeta antes de mandar al listado. */
+const CUANTAS_OT_DE_PARADA = 3;
 
 const PLANT_STATUS_OPTIONS = [
   { value: "ACTIVA",        label: "Activa" },
@@ -83,6 +97,65 @@ function nombresDeSectores(sectores: any[], ids: string[]): string {
   return nombres.length <= 3
     ? nombres.join(", ")
     : `${nombres.slice(0, 3).join(", ")} y ${nombres.length - 3} más`;
+}
+
+/**
+ * Qué OT exigen parar este sector.
+ *
+ * Va dentro de la tarjeta del sector y no en un recuadro aparte: la decisión
+ * de frenar una planta se toma mirando el sector, y el número solo —"2 OT
+ * exigen parar"— obliga a abrir el listado y filtrar a mano para saber si son
+ * media hora de trabajo o dos días.
+ *
+ * El número de OT enlaza a la orden por `?q=`, que la ruta resuelve por
+ * `ot_number` exacto cuando lo que se busca son dígitos.
+ */
+function OtsQueExigenParar({ ots, sectorId }: {
+  ots: OtQueExigeParar[];
+  sectorId: string;
+}) {
+  const demas = ots.length - CUANTAS_OT_DE_PARADA;
+
+  return (
+    <div className="mt-2 rounded-lg border border-red-200 bg-white/70 px-2.5 py-2">
+      <p className="text-xs font-semibold text-red-800">
+        {ots.length} OT exige{ots.length === 1 ? "" : "n"} parar el sector
+      </p>
+      <ul className="mt-1 space-y-0.5">
+        {ots.slice(0, CUANTAS_OT_DE_PARADA).map((o) => {
+          // Sin descripción queda el equipo, que es como se la nombra en
+          // planta. La planilla no obliga ninguno de los dos.
+          const que = o.descripcion ?? o.equipo_raw ?? "—";
+          return (
+            <li key={o.ot_number} className="flex items-baseline gap-1.5 text-xs">
+              <Link
+                href={`/mantenimiento/ordenes?q=${o.ot_number}`}
+                className="shrink-0 font-mono text-red-500 hover:underline"
+              >
+                #{o.ot_number}
+              </Link>
+              <span className="min-w-0 flex-1 truncate text-red-900" title={que}>
+                {que}
+              </span>
+              {o.estado === "ATRASADO" && (
+                <span className="shrink-0 text-[10px] font-bold uppercase text-red-600">
+                  atrasada
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {demas > 0 && (
+        <Link
+          href={`/mantenimiento/ordenes?estado=ATRASADO,EN_PROCESO,POR_HACER&sector=${sectorId}`}
+          className="mt-1 inline-block text-xs font-semibold text-red-700 hover:underline"
+        >
+          y {demas} más →
+        </Link>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -391,7 +464,7 @@ function empresaDe(s: any): string {
 export default function DashboardClient({
   usuario, equipos, upcoming, overdue,
   empresas, sectores, sectoresStatusLog, recentExecutions, otStats, tipoTally, quienTally,
-  otPorMes, otMes, mesActual, ventanas, semanaQueViene, sectoresParados, atrasadas, hoy,
+  otPorMes, otMes, mesActual, ventanas, semanaQueViene, paradas, atrasadas, hoy,
   avisosSinOT, osPendientes, canEdit, esAdmin,
 }: {
   usuario: any;
@@ -417,7 +490,8 @@ export default function DashboardClient({
   hoy: string;
   ventanas: VentanaDeReparacion[];
   semanaQueViene: string;
-  sectoresParados: string[];
+  /** Por sector, las OT pendientes que obligan a pararlo. Sin entrada = ninguna. */
+  paradas: Record<string, OtQueExigeParar[]>;
   avisosSinOT: number;
   osPendientes: number;
   canEdit: boolean;
@@ -433,6 +507,14 @@ export default function DashboardClient({
   const [statusSaving, setStatusSaving] = useState(false);
   const [statusError, setStatusError] = useState("");
   const [showLog, setShowLog] = useState(false);
+
+  // Las claves de `paradas` son justamente los sectores a parar: un sector sin
+  // ninguna OT que lo exija no tiene entrada.
+  const sectoresParados = useMemo(() => Object.keys(paradas), [paradas]);
+  const cuantasExigenParar = useMemo(
+    () => Object.values(paradas).reduce((a, ots) => a + ots.length, 0),
+    [paradas]
+  );
 
   const hayTransversales = useMemo(() => sectores.some((s: any) => !s.empresas), [sectores]);
   const plantChips = ["TODAS", ...empresas.map((p: any) => p.nombre), ...(hayTransversales ? ["TRANSVERSAL"] : [])];
@@ -592,7 +674,7 @@ export default function DashboardClient({
           <Acceso href="/mantenimiento/ordenes" label="Órdenes de trabajo" />
           <Acceso href="/mantenimiento/ordenes-servicio" label="Órdenes de servicio" />
           <Acceso href="/mantenimiento/partes-contratista" label="Partes de contratista" />
-          <Acceso href="/mantenimiento/planificacion" label="Planificación" />
+          <Acceso href="/mantenimiento/planificacion" label="Programación" />
           <Acceso href="/mantenimiento/produccion" label="Producción" />
           <Acceso href="/mantenimiento/historial" label="Historial" />
           {esAdmin && <Acceso href="/mantenimiento/configuracion" label="Configuración" />}
@@ -600,7 +682,6 @@ export default function DashboardClient({
       </div>
 
       {(() => {
-        const aParar = new Set(sectoresParados);
         const visibleSectors = plantFilter === "TODAS"
           ? sectores
           : sectores.filter((s: any) => empresaDe(s) === plantFilter);
@@ -610,9 +691,12 @@ export default function DashboardClient({
               {visibleSectors.map((sector: any) => {
                 const meta = PLANT_STATUS_META[sector.status ?? "ACTIVA"] ?? PLANT_STATUS_META.ACTIVA;
                 const lastChange = sectoresStatusLog.find((l: any) => l.sector_id === sector.id);
+                // Las OT que piden pararlo mandan sobre el color del estado.
+                const exigenParar = paradas[sector.id] ?? [];
+                const pinta = exigenParar.length > 0 ? ALERTA_PARAR : meta;
                 return (
                   <div key={sector.id} className="rounded-xl border p-4 flex items-start justify-between gap-3"
-                    style={{ background: meta.bg, borderColor: meta.border }}>
+                    style={{ background: pinta.bg, borderColor: pinta.border }}>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: meta.color }} />
@@ -623,16 +707,20 @@ export default function DashboardClient({
                           style={{ color: meta.color, borderColor: meta.border, background: "white" }}>
                           {meta.label}
                         </span>
-                        {/* Hay una OT pendiente que necesita el sector parado. */}
-                        {aParar.has(sector.id) && (
+                        {/* Hay OT pendientes que necesitan el sector parado.
+                            Cuáles son se listan abajo, en la tarjeta. */}
+                        {exigenParar.length > 0 && (
                           <span
-                            className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-600"
-                            title="Hay una OT pendiente que requiere parar este sector"
+                            className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-red-300 bg-red-100 text-red-700"
+                            title={`${exigenParar.length} OT pendiente${exigenParar.length === 1 ? "" : "s"} que requiere${exigenParar.length === 1 ? "" : "n"} parar este sector`}
                           >Parar</span>
                         )}
                       </div>
                       {plantFilter === "TODAS" && (
                         <p className="text-xs text-slate-400 mt-0.5">{empresaDe(sector) === "TRANSVERSAL" ? "Transversal" : empresaDe(sector)}</p>
+                      )}
+                      {exigenParar.length > 0 && (
+                        <OtsQueExigenParar ots={exigenParar} sectorId={sector.id} />
                       )}
                       {lastChange && (
                         <p className="text-xs text-slate-500 mt-1.5 leading-snug">
@@ -705,7 +793,11 @@ export default function DashboardClient({
           label="Sectores a parar"
           value={sectoresParados.length}
           color={sectoresParados.length > 0 ? "var(--status-rep)" : "var(--status-op)"}
-          sub={sectoresParados.length > 0 ? nombresDeSectores(sectores, sectoresParados) : undefined}
+          sub={
+            sectoresParados.length > 0
+              ? `${nombresDeSectores(sectores, sectoresParados)} · ${cuantasExigenParar} OT`
+              : undefined
+          }
         />
       </div>
 

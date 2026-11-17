@@ -56,8 +56,12 @@ const ICONOS: Record<string, () => ReactElement> = {
   "Mantenimientos": IconClipboard,
   "Ejecuciones": IconBolt,
   "Órdenes de trabajo": IconClipboard,
-  "Planificación diaria": IconCalendar,
-  "Planificación": IconCalendar,
+  // La clave de este mapa es el RÓTULO del nav y no la ruta, así que el día que
+  // se renombra una entrada hay que renombrarla también acá: si no, el ítem se
+  // queda con el ícono genérico y nada avisa. Estas dos se cruzaron el
+  // 17/11/2026 — el porqué está en `lib/core/nav.ts`.
+  "Programación": IconCalendar,
+  "Asignación RR.HH": IconUsers,
   "Avisos": IconAlert,
   // Calidad. "Por período" ya está más arriba: el mismo concepto se reusa entre
   // módulos y la clave no se duplica.

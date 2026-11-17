@@ -233,7 +233,7 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-5">
-      <Link href="/mantenimiento/planificacion" className="text-sm text-slate-400 hover:text-slate-700">← Planificación</Link>
+      <Link href="/mantenimiento/planificacion" className="text-sm text-slate-400 hover:text-slate-700">← Programación</Link>
 
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>

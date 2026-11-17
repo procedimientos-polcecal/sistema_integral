@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { nivelMantenimientoDe } from "@/lib/mantenimiento/auth";
 import { lunesDe } from "@/lib/mantenimiento/produccion";
 import {
-  ultimosMeses, sectoresAParar, ventanasDeReparacion, nombreDelMes,
+  ultimosMeses, paradasExigidas, ventanasDeReparacion, nombreDelMes,
 } from "@/lib/mantenimiento/dashboard";
 import { resumirAtrasadas, hoyISO } from "@/lib/mantenimiento/alertas";
 import { sumarDias } from "@/lib/core/fechas";
@@ -133,9 +133,14 @@ export default async function MantenimientoDashboardPage() {
   const [{ data: planes }, { data: otPendientes }, { count: avisosSinOT }, { count: osPendientes }] =
     await Promise.all([
       supabase.from("produccion_semanal").select("sector_id, days").eq("week_start", semanaQueViene),
+      // Las cuatro columnas de más son para poder decir en el tablero *cuáles*
+      // son las OT que exigen parar un sector, y no sólo cuántas. Son 50 filas
+      // pendientes con sector al 16/11/2026 —muy lejos del corte de 1.000 de
+      // PostgREST—, así que traer la descripción no cambia nada; el día que
+      // esto crezca, va `traerTodo()`.
       supabase
         .from("ordenes_trabajo")
-        .select("sector_id, requiere_parada_sector")
+        .select("sector_id, requiere_parada_sector, ot_number, estado, descripcion, equipo_raw")
         .in("estado", ["POR_HACER", "EN_PROCESO", "ATRASADO"])
         .not("sector_id", "is", null),
       supabase
@@ -169,7 +174,7 @@ export default async function MantenimientoDashboardPage() {
     .limit(500);
 
   const atrasadas = resumirAtrasadas(candidatas ?? [], hoy);
-  const sectoresParados = [...sectoresAParar(pendientes)];
+  const paradas = paradasExigidas(pendientes);
 
   const nivel = await nivelMantenimientoDe(supabase, user.id);
   const canEdit = nivel === "edicion" || nivel === "admin";
@@ -194,7 +199,7 @@ export default async function MantenimientoDashboardPage() {
       mesActual={mesActual}
       ventanas={ventanas}
       semanaQueViene={semanaQueViene}
-      sectoresParados={sectoresParados}
+      paradas={paradas}
       avisosSinOT={avisosSinOT ?? 0}
       osPendientes={osPendientes ?? 0}
       canEdit={canEdit}

@@ -106,7 +106,7 @@ export function finalDelAviso(aviso: {
 }
 
 /** "2026-10-21" → "21/10". El día y el mes, que es como se nombra una fecha acá. */
-function enDiaMes(fecha: string): string {
+export function enDiaMes(fecha: string): string {
   const [, mes, dia] = String(fecha ?? "").split("-");
   return mes && dia ? `${Number(dia)}/${Number(mes)}` : String(fecha ?? "");
 }
