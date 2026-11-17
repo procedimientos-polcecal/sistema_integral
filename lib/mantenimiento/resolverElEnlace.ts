@@ -106,7 +106,14 @@ export async function resolverLosEnlacesDeAvisos(
         .select("id, ot_number")
         .in("ot_number", lote);
       if (error) return { enlazados, vaciados, error: `${paso}: ${error.message}` };
-      for (const ot of data ?? []) idPorNumero.set(Number(ot.ot_number), ot.id as string);
+      // Una orden sin número no entra: `Number(null)` da 0 y dejaría una entrada
+      // 0 → id, contra la que enlazaría un aviso cuya celda diga «0». Un enlace
+      // equivocado no se nota nunca.
+      for (const ot of data ?? []) {
+        const numero = Number(ot.ot_number);
+        if (ot.ot_number === null || !Number.isFinite(numero)) continue;
+        idPorNumero.set(numero, ot.id as string);
+      }
     }
 
     const { aEnlazar, aVaciar } = loQueHayQueReenlazar(avisos, idPorNumero);

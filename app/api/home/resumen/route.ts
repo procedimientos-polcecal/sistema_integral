@@ -157,7 +157,7 @@ async function resumenMantenimiento(supabase: Awaited<ReturnType<typeof createCl
     // sincronización guarda el número de la planilla como texto en
     // `ot_asignada`, y `work_order_id` lo llenan los generados desde la app y,
     // desde el 17/11/2026, también la sincronización al resolver ese número.
-    // Se siguen mirando las dos porque hay avisos (10 al medirlo) cuyo texto no
+    // Se siguen mirando las dos porque hay avisos (10 el 17/11/2026) cuyo texto no
     // es un número —«si», «Revision»— y nunca van a tener enlace, aunque
     // alguien los dio por atendidos. Mirando una sola, parecerían sin atender.
     traerTodo<{ work_order_id: string | null; ot_asignada: string | null }>((desde, hasta) =>

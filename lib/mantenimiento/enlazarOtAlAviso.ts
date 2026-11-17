@@ -66,10 +66,12 @@
  *
  * 1. **Lo escribió una persona en la planilla.** Es el caso normal, no el
  *    raro: medido el 26/10/2026, de 186 avisos con algo en esa columna, 182
- *    no tenían `work_order_id` —«RI 1888», «Revision», «si», «1889 - 1886»—.
- *    Desde el 17/11/2026 esos 182 **sí lo tienen**: la sincronización resuelve
- *    el número a la orden y lo que los distingue pasa a ser `ot_resuelta_en`
- *    (los que dicen texto que no es un número, como «si», siguen sin enlace).
+ *    no tenían `work_order_id`.
+ *    Desde el 17/11/2026 ya no se reconocen por esa ausencia, sino por
+ *    `ot_resuelta_en`: a los que dicen un número —la enorme mayoría— la
+ *    resolución automática les completó el enlace y les puso ese sello. Los
+ *    que dicen otra cosa —«RI 1888», «Revision», «si», «1889 - 1886»— siguen
+ *    sin enlace y sin sello, y caen en la primera regla de abajo.
  *    Vaciar esa celda es borrar lo que alguien puso donde lee quien no entra
  *    al sistema. No se ofrece, y se distingue solo.
  * 2. **La OT la generó el sistema desde este aviso.** Desenlazarla deja una

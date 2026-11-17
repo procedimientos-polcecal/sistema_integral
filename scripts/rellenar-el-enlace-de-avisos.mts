@@ -83,7 +83,14 @@ const ordenes = await traerTodo((desde, hasta) =>
   admin.from("ordenes_trabajo").select("id, ot_number").order("id").range(desde, hasta)
 );
 const idPorNumero = new Map<number, string>();
-for (const ot of ordenes) idPorNumero.set(Number(ot.ot_number), ot.id as string);
+// `ot_number` nulo daría `Number(null) === 0` y metería una entrada 0 → id,
+// contra la que un aviso que diga «0» enlazaría. Un enlace equivocado no se
+// nota nunca, así que esa orden no entra al mapa.
+for (const ot of ordenes) {
+  const numero = Number(ot.ot_number);
+  if (!Number.isFinite(numero) || ot.ot_number === null) continue;
+  idPorNumero.set(numero, ot.id as string);
+}
 
 /* ── Qué haría ──────────────────────────────────────────────────────────── */
 

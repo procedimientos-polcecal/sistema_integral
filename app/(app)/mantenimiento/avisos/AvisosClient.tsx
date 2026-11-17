@@ -11,7 +11,7 @@ import GenerarOTModal, { type EquipoDelAviso } from "./GenerarOTModal";
 import DesestimarModal from "./DesestimarModal";
 import EnlazarOTModal from "./EnlazarOTModal";
 import Select from "@/components/Select";
-import { finalDelAviso, estaDesestimado, enDiaMes } from "@/lib/mantenimiento/desestimarAviso";
+import { finalDelAviso, estaDesestimado } from "@/lib/mantenimiento/desestimarAviso";
 import { comoSeMuestraElTrabajo, estadoDelTrabajo } from "@/lib/mantenimiento/trabajoDelAviso";
 import { sePuedeDesenlazar } from "@/lib/mantenimiento/enlazarOtAlAviso";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
