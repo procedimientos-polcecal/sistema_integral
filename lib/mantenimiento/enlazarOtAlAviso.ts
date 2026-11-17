@@ -258,7 +258,15 @@ export function loQueImpideDesenlazar(
   // que alguien tipeó en `OT ASIGNADA`. Es el caso 1 del encabezado con otro
   // aspecto: el dato de origen está en la planilla, y vaciarlo desde acá es
   // pisar lo que alguien puso donde lee quien no entra al sistema.
-  if (aviso.ot_resuelta_en) {
+  //
+  // `!ot_enlazada_en` no es de más: si una persona enlazó, lo suyo es lo que
+  // vale y el sello son restos de un enlace automático anterior. La resolución
+  // nunca sella un aviso enlazado a mano —su UPDATE lleva
+  // `.is("ot_enlazada_en", null)`—, así que las dos columnas juntas sólo salen
+  // del sello huérfano que describe `enlaceDelAviso`. Sin la guarda, el aviso
+  // queda sin forma de desenlazarse y el mensaje manda a corregir una celda
+  // vacía.
+  if (aviso.ot_resuelta_en && !aviso.ot_enlazada_en) {
     return [
       `El aviso ${oa} está enlazado a la OT #${dice || "—"} porque alguien escribió ese ` +
       `número en OT ASIGNADA en la planilla y el sistema lo resolvió. Borrarlo desde acá ` +

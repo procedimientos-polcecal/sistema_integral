@@ -45,11 +45,29 @@
  * contador que sobrecuenta la vuelve inútil. Los ids que vuelven no se usan
  * para otra cosa. Un error sigue llegando en `error` igual con `.select()`.
  *
+ * ── EL FRENO DE LOS VACIADOS ────────────────────────────────────────────────
+ *
+ * Vaciar es lo único destructivo de esta función, y su disparador es una
+ * lectura que puede estar mal: si una corrida importa la columna `OT ASIGNADA`
+ * en blanco, `aVaciar` trae hasta los ~182 enlaces automáticos de una vez y
+ * todos esos avisos vuelven a «Pendiente» sin que nada se ponga rojo. Es el
+ * caso que `borradoDeEspejo.ts` ya resuelve para los borrados —el 13/10/2026
+ * una planilla recalculando devolvió 2 filas de 623—, así que acá va el mismo
+ * criterio y los mismos topes (`TOPE` y `TOPE_PORCENTAJE`, lo que sea mayor):
+ * si habría que vaciar más que eso, **no se vacía nada** y el resultado lo dice
+ * en `frenado`. Levantarlo es `sinFreno`, que viene de `?confirmar_borrado=1`;
+ * el cron nunca lo levanta. **Enlazar no se frena**: completar un enlace no
+ * destruye nada.
+ *
+ * El porcentaje se mide contra los avisos que esta función leyó (los que no
+ * tienen enlace manual), que es la población de la que sale lo que se vacía.
+ *
  * Nunca tira: cualquier fallo vuelve en `error` y la corrida sigue. El enlace se
  * recalcula entero en la próxima, así que lo único que se pierde es el tiempo.
  */
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { traerTodo } from "@/lib/core/paginado";
+import { TOPE, TOPE_PORCENTAJE } from "@/lib/core/borradoDeEspejo";
 import {
   loQueHayQueReenlazar,
   numeroDeOtDelTexto,
@@ -60,6 +78,8 @@ import {
 export interface EnlacesResueltos {
   enlazados: number;
   vaciados: number;
+  /** Con texto, no se vació nada: cuántos habría vaciado y cómo se levanta. */
+  frenado?: string;
   error?: string;
 }
 
@@ -73,7 +93,8 @@ function lotes<T>(lista: readonly T[]): T[][] {
 }
 
 export async function resolverLosEnlacesDeAvisos(
-  admin: ReturnType<typeof createAdminClient>
+  admin: ReturnType<typeof createAdminClient>,
+  opciones: { sinFreno?: boolean } = {}
 ): Promise<EnlacesResueltos> {
   let enlazados = 0;
   let vaciados = 0;
@@ -135,6 +156,16 @@ export async function resolverLosEnlacesDeAvisos(
     }
 
     paso = "vaciando enlaces";
+    const limite = Math.max(TOPE, Math.ceil((avisos.length * TOPE_PORCENTAJE) / 100));
+    if (!opciones.sinFreno && aVaciar.length > limite) {
+      return {
+        enlazados, vaciados,
+        frenado:
+          `No se vació ningún enlace: habría que vaciar ${aVaciar.length} de ${avisos.length} avisos ` +
+          `y el tope es ${limite}. Puede ser que la columna OT ASIGNADA haya llegado en blanco. ` +
+          "Si es correcto, hay que confirmarlo a mano.",
+      };
+    }
     for (const lote of lotes(aVaciar)) {
       const { data, error } = await admin
         .from("avisos")

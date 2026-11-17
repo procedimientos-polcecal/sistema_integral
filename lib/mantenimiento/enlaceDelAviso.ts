@@ -30,8 +30,16 @@
  *   función los vaciara cuando alguien borra la celda de la planilla, la
  *   sincronización haría callada lo que esa ruta se niega a hacer.
  *
+ * Y hay un **cuarto estado**, que no es de los 39 sino de después: el aviso
+ * cuya orden se **borró**. La migración `20261117090055` pasó `work_order_id` a
+ * `on delete set null`, así que el aviso no se borra con ella y queda con
+ * `work_order_id` en null y `ot_resuelta_en` puesto. Esta función **no lo
+ * limpia** —un número que el mapa no conoce no produce vaciado, a propósito— y
+ * tampoco vuelve a decir «sin orden»: `ot_asignada` conserva su texto y
+ * `finalDelAviso()` devuelve `con-ot`.
+ *
  * Los otros **199 no tienen enlace**, y tampoco son todos lo mismo: **182**
- * traen el número escrito y son los que esta función resuelve, **10** traen un
+ * traen el número escrito y son los que esta función resuelve, **10** (medido el 17/11/2026) traen un
  * texto que no es un número —«Revision», «-», «1889 - 1886»— que no se
  * interpreta, y **7** no traen nada.
  *
@@ -52,6 +60,17 @@
  * es un número solo (`1889 - 1886`, `RI 1888`) no se adivina: o es un número
  * o no lo es. Sólo si el texto dejó de ser un número —celda vacía, «Revision»—
  * se vacía el enlace automático, porque ahí la planilla dejó de afirmar nada.
+ *
+ * **Y hay un estado que no viene de la planilla sino del borrado de una orden:
+ * `work_order_id` en null con `ot_resuelta_en` puesto.** Lo deja el `on delete
+ * set null` de la migración `20261117090055` —que anula la columna del enlace y
+ * no toca el sello— y no lo produce nada más: los dos UPDATE de
+ * `resolverElEnlace` escriben y borran las dos columnas juntas, y
+ * `marcarElAviso` no toca el sello. Un sello sin enlace es basura, y mientras
+ * esté puesto miente dos veces: a `loQueImpideDesenlazar`, que se niega a
+ * desenlazar mandando a corregir una celda que puede estar vacía, y al guard de
+ * acá abajo, que deja de proteger a la orden que nazca después de ese aviso. Se
+ * barre, y por eso el vaciado no mira sólo si hay enlace.
  */
 
 export interface AvisoAResolver {
@@ -95,13 +114,22 @@ export function loQueHayQueReenlazar(
     const numero = numeroDeOtDelTexto(aviso.ot_asignada);
 
     if (numero === null) {
-      // Si no hay nada enlazado, no hay nada que vaciar. Si lo hay, es nuestro.
-      if (aviso.work_order_id) aVaciar.push(aviso.id);
+      // Si lo hay, el enlace es nuestro. Si no, puede quedar el sello huérfano
+      // de una orden borrada, y eso también se limpia: ver el encabezado.
+      if (aviso.work_order_id || aviso.ot_resuelta_en) aVaciar.push(aviso.id);
       continue;
     }
 
     const otId = idPorNumero.get(numero);
-    if (!otId) continue; // número desconocido: ni enlace ni vaciado
+    if (!otId) {
+      // Número desconocido: un enlace bueno no se vacía —la sincronización de
+      // OT pudo correr a medias y la orden llegar en la próxima—. Pero un sello
+      // sin enlace no es un enlace: no hay nada que proteger y sí algo que
+      // limpiar, y éste es el camino por el que llega el caso real —se borra la
+      // orden y su número sigue escrito en la celda, así que no resuelve—.
+      if (!aviso.work_order_id && aviso.ot_resuelta_en) aVaciar.push(aviso.id);
+      continue;
+    }
     if (otId === aviso.work_order_id) continue; // ya es el que corresponde
 
     const lista = grupos.get(otId);

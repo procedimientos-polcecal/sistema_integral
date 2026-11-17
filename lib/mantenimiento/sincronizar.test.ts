@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { SINCRONIZACIONES, unaPorNumero, unaPorCelda } from "./sincronizar";
+import { SINCRONIZACIONES, unaPorNumero, unaPorCelda, porQueFallaron } from "./sincronizar";
+import { REGISTRO } from "@/lib/core/saludDeLasSincronizaciones";
 
 /**
  * Los nombres de recurso son un contrato con afuera: van escritos en la
@@ -56,6 +57,66 @@ describe("los recursos que se sincronizan", () => {
 
   it("cada una sabe correr", () => {
     for (const s of SINCRONIZACIONES) expect(typeof s.correr).toBe("function");
+  });
+
+  /**
+   * ── EL LADO CIEGO DE `recursosSinDeclarar` ────────────────────────────────
+   *
+   * Aquella función mira **lo que la vista trae** y nombra lo que no está
+   * declarado. Eso atrapa «escribe sin declararse» y no puede atrapar lo
+   * contrario: **un recurso que el cron corre y que nunca escribe una fila**
+   * jamás llega a la vista, así que nunca lo nombra nadie.
+   *
+   * No es hipotético. Medido el 17/11/2026 en producción: `periodicas` y
+   * `ciclos` —las dos únicas entradas que **generan** en vez de espejar— no
+   * llamaban a `registrarSincronizacion`, no tenían una sola fila en
+   * `sincronizaciones` y no estaban en `REGISTRO`. O sea que el día que
+   * `generarLasEncadenadas()` empezara a tirar en cada corrida, el único
+   * síntoma habría sido que no nacen OT, en silencio — que es exactamente el
+   * modo de falla que el ciclo entero existe para evitar: una OT que no nace
+   * no se atrasa, así que `mant-atrasadas` tampoco puede verla.
+   *
+   * Este test cierra el círculo por el otro lado: va **del código a la tabla**
+   * en vez de de la tabla al código.
+   */
+  it("cada recurso que el cron corre está declarado en el monitor de salud", () => {
+    const declarados = new Set(
+      REGISTRO.filter((e) => e.modulo === "mantenimiento").flatMap((e) => e.recursos)
+    );
+    const sinDeclarar = SINCRONIZACIONES.map((s) => s.recurso).filter((r) => !declarados.has(r));
+    expect(sinDeclarar).toEqual([]);
+  });
+});
+
+/**
+ * Qué hace que la corrida de un generador se anote como fallida. La pregunta
+ * que contesta no es «¿terminó el proceso?» sino **«¿nacieron las órdenes?»**,
+ * y las dos se separan justo cuando la planilla no se deja escribir.
+ */
+describe("porQueFallaron", () => {
+  it("sin fallas no hay nada que anotar", () => {
+    expect(porQueFallaron([])).toBeNull();
+  });
+
+  /**
+   * El caso que justifica que esto exista: el generador termina perfecto, no
+   * tira ninguna excepción, y **no nació una sola orden**. Anotarlo como `ok`
+   * deja la generación verde en el monitor mientras no genera nada.
+   */
+  it("un ciclo que no se pudo crear ya es una corrida fallida", () => {
+    expect(porQueFallaron([{ error: "La planilla está calculando" }]))
+      .toBe("1 no se pudieron crear: La planilla está calculando");
+  });
+
+  it("dice cuántos fueron y no repite el mismo motivo", () => {
+    const mismo = "Google: 403 The caller does not have permission";
+    expect(porQueFallaron([{ error: mismo }, { error: mismo }, { error: mismo }, { error: mismo }]))
+      .toBe(`4 no se pudieron crear: ${mismo}`);
+  });
+
+  it("con motivos distintos los nombra a todos", () => {
+    expect(porQueFallaron([{ error: "sin equipo" }, { error: "sin período" }]))
+      .toBe("2 no se pudieron crear: sin equipo · sin período");
   });
 });
 

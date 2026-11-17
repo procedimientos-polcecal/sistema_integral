@@ -3237,6 +3237,59 @@ ciclo.
 La carga a mano sigue existiendo en la ficha del equipo, para quien no quiera
 esperar al próximo cambio. Dejó de ser el camino principal y pasó a ser el atajo.
 
+### La primera corrida real (17/11/2026)
+
+**Anduvo, y de las cuatro máquinas salió el único caso que el diseño no cubría.**
+
+| Equipo | Qué pasó |
+|---|---|
+| PY-A1-05 Filler 1 | Arrancó solo con la OT 3095 «Cambio de martillos» (14/11) → **OT 3096**, rotación a 2ª cara para el 20/11 |
+| PY-B1-06 Filler 2 | Arrancó solo con la OT 3094 (15/11) → **OT 3097**, para el 21/11 |
+| PO-C1-04 Hidratación | Sin arrancar, **y está bien**: llegó a la 4ª cara el 14/11, así que lo que le toca es un cambio, que es justo lo que espera |
+| PY-C1-03 Planta 0-2 | Cargado a mano → **OT 3111**, en ATRASADO |
+
+Las tres llegaron a la planilla con `sheets_pendiente` en null.
+
+Dos cosas que esa corrida enseñó y que no se deducen del código:
+
+- **El cambio de Filler 2 venía escondido**: «Se desatora rompedora (Por corte
+  de energía) **y se realiza cambio de martillos**». `pareceUnCambio` lo agarró
+  por el patrón pegado al verbo. Es la confirmación de que el matcher no
+  necesita que la descripción hable sólo del cambio.
+- **Un equipo configurado a mitad de ciclo espera hasta el final de su ciclo**,
+  que es el precio de mirar sólo hacia adelante. PY-C1-03 había cambiado
+  martillos el 31/10 —antes de configurarse— y no rotó desde entonces: su
+  próximo cambio estaba a tres rotaciones, o sea un mes, y mientras tanto el
+  ciclo no generaba nada y nada lo marcaba. Se resolvió con la carga a mano
+  (`desde` 31/10, `vuelta_desde` 0), y la OT nació **en ATRASADO con fecha
+  10/11**, que es la verdad y no un fantasma: esa rotación había que hacerla.
+
+**Y la trampa de medir el estado a mano, que casi muerde.** El 13/11 el análisis
+ubicó a Hidratación en 2ª cara y se estuvo por cargarla así. Era falso: la
+rotación a 3ª del 12/11 ya estaba hecha y todavía no había llegado por el
+`IMPORTRANGE` del master, que tarda entre 3 y 53 h. Cargarla con ese dato habría
+pedido rotar a 3ª cara unos martillos ya rotados a 3ª — el anti-objetivo exacto.
+Dos reglas de ahí: **el ancla válida es la última rotación y nunca el último
+cambio**, y **antes de cargar un arranque a mano hay que mirar el historial
+completo del equipo**, no la foto que tenga el sistema ese día. El arranque
+automático no tiene el problema porque espera a que el dato se asiente.
+
+### Quién vigila que esto corra
+
+Desde el 17/11/2026, `ciclos` **anota su corrida** en `sincronizaciones` y está
+declarado en el `REGISTRO` de `lib/core/saludDeLasSincronizaciones.ts` con 24 h
+de tolerancia. Antes no hacía ninguna de las dos cosas, y eso dejaba la
+generación sin testigo: `recursosSinDeclarar` nombra lo que la vista trae, así
+que un recurso que nunca escribe una fila no llega a la vista y nadie lo nombra.
+El síntoma de una rotura habría sido que no nacen OT, en silencio — y una orden
+que no nace no se atrasa, de modo que `mant-atrasadas` tampoco la ve.
+
+Lo que hay que saber si se toca: **un ciclo que no se pudo crear cuenta como
+corrida fallida** (`porQueFallaron`), porque si los cuatro fallan al escribir la
+planilla el generador termina perfecto y no nace ninguna orden. Quedan afuera
+los estados que no son errores: `trabados`, `sinArrancar`, `sinEstadoTodavia` y
+`sinCalendario`.
+
 ## Pegar un RI a un repuesto y cuánto de lo que viene es de cada OT (13/11/2026)
 
 Mantenimiento escribe el número de un RI sobre el repuesto de una OT, y puede
@@ -3433,3 +3486,158 @@ update mantenimientos_ejecuciones
 `datetime-local`— e `instanteDeArgentina()` —para mandarlo con huso `-03:00`—,
 las dos con tests. Y `eslint.config.mjs` tiene una regla que rechaza
 `new Date().toISOString().slice(0, 16)`, que es la forma exacta que causó esto.
+
+
+## Un aviso no termina cuando nace la OT (17/11/2026)
+
+Un aviso dice que una máquina anda mal. De un aviso sale una orden de trabajo,
+y hasta ahora las dos listas que muestran avisos —`/mis-avisos`, abierta a los
+catorce usuarios, y `/mantenimiento/avisos`— decían **«OT #2814» y nada más**.
+Eso contesta «¿alguien lo tomó?» y deja sin contestar la que importa:
+**¿se terminó de tratar?** `finalDelAviso()` devuelve `con-ot` igual para un
+aviso cuya orden se cerró hace tres semanas que para uno cuya orden está
+atrasada desde diciembre.
+
+**Lo primero, para quien lo retome: la migración `20261117090055` todavía no
+está aplicada y el relleno (`scripts/rellenar-el-enlace-de-avisos.mts`) todavía
+no se corrió.** Todo lo que sigue describe el estado al que se llega cuando las
+dos cosas estén hechas: hoy `ot_resuelta_en` no existe en la base, el grupo de
+los 182 sigue siendo texto en `ot_asignada` y las dos listas muestran el estado
+sólo de los 39 avisos que ya tenían `work_order_id`. El orden es migración,
+relleno, y recién después la primera sincronización con este código.
+
+El diseño está en
+[el spec](superpowers/specs/2026-11-16-avisos-el-estado-del-trabajo-design.md)
+y el plan en
+[su plan](superpowers/plans/2026-11-17-avisos-el-estado-del-trabajo.md). Lo
+medido el 17/11/2026 contra producción, que es de donde sale todo lo demás:
+
+| | |
+|---|---|
+| avisos en total | 238 |
+| con `work_order_id` | 39 |
+| con el número sólo como texto en `ot_asignada` | 182, y los 182 resuelven a una OT existente |
+| texto que no es un número | 10 |
+| sin nada | 7 |
+| de los 221 resolubles, **con la OT abierta** | **13** — el resto, 208, cerradas |
+| OT abiertas en todo el sistema | 55 de 2.489 |
+
+O sea que esto existe para encontrar **esos 13 entre 238**.
+
+### Lo que no se deduce del código
+
+**1. `ot_enlazada_en is null` no separa los avisos en dos sino en tres.** Es la
+trampa central, y la que obligó a corregir el diseño después de escrito:
+
+| El aviso | Cómo se reconoce | Quién lo enlazó | Lo toca la sincronización |
+|---|---|---|---|
+| 17 | `ot_enlazada_en` puesto | una persona, con «Ya tiene OT» | **no** |
+| 22 | los dos sellos en null y `work_order_id` puesto | el sistema, al generar la OT desde el aviso | **no** |
+| 182 | `ot_resuelta_en` puesto | la resolución automática, desde el número tipeado en la planilla | **sí**: se corrige y se vacía siguiendo la planilla |
+
+`ot_resuelta_en` es la columna que lo hace posible (migración
+`20261117090055`), y la escribe **sólo** la resolución automática —el relleno y
+la sincronización—, igual que `ot_enlazada_en` la escribe sólo la ruta de
+enlazar. Sin ella, vaciar la celda `OT ASIGNADA` de la planilla dejaría
+huérfana una de esas 22 órdenes: el aviso volvería a «pendiente» invitando a
+que alguien genere una segunda orden para el mismo problema, que es
+**exactamente lo que `loQueImpideDesenlazar` se niega a hacer**, con ese
+argumento escrito. La sincronización habría hecho callada lo que la ruta
+rechaza.
+
+Y hay un **cuarto estado**, que no es de los tres de arriba sino de después de
+la migración, que pasa `work_order_id` a `on delete set null`: el aviso cuya
+orden se borró. El argumento del `set null` es que **el aviso no se borra** —hoy
+borrar una OT borra el reporte de una persona—; **no** que «vuelva a decir sin
+orden», porque no toca `ot_asignada` y `finalDelAviso()` devuelve `con-ot`
+mientras esa columna tenga texto. Queda con `work_order_id` en null y
+`ot_resuelta_en` puesto, y **la resolución lo limpia**, que es la única
+excepción a «un número que no resuelve no se toca». Esa regla existe para no
+perder un enlace bueno por una sincronización a medias, y acá no hay enlace que
+perder —la columna ya está en null—: lo que queda es un sello que miente dos
+veces. A `loQueImpideDesenlazar`, que se niega a desenlazar mandando a corregir
+una celda que puede estar vacía; y al guard que protege a la orden nacida de un
+aviso (`work_order_id && !ot_resuelta_en`), que con el sello puesto deja de
+aplicarse justo sobre la orden que debería cuidar. Si la celda vuelve a nombrar
+una orden que existe, se reenlaza y el sello se reescribe solo.
+
+Lo que no se puede deducir mirando una de las dos puntas: **ese estado no lo
+produce nada más que el borrado de la orden.** Los dos UPDATE de
+`resolverElEnlace` escriben y borran `work_order_id` y `ot_resuelta_en` juntos,
+y `marcarElAviso` no toca el sello. Por eso un aviso con `ot_enlazada_en` **y**
+`ot_resuelta_en` a la vez es siempre un sello huérfano y nunca un enlace doble
+—la resolución no sella lo que enlazó una persona, su UPDATE lleva
+`.is("ot_enlazada_en", null)`—, y ahí manda lo que hizo la persona.
+
+**Vaciar tiene freno** (`resolverElEnlace.ts`): si habría que vaciar más de 50
+enlaces o del 10 % de los avisos leídos, lo que sea mayor —los mismos topes de
+`borradoDeEspejo.ts`—, no se vacía nada, el resultado trae `enlace_frenado` con
+el número y la corrida se anota como fallo. Existe por si una importación trae
+`OT ASIGNADA` en blanco, que mandaría los 182 a «Pendiente» sin avisar: es el
+mismo caso del 13/10/2026, cuando una planilla recalculando devolvió 2 filas de
+623. Se levanta con `?confirmar_borrado=1` y el cron no lo levanta nunca.
+Enlazar no se frena, porque completar un enlace no destruye nada.
+
+**2. «Cerrada» lo decide `estado` y jamás la presencia de una fecha.** De las
+2.489 OT, **220 están en `REALIZADO` sin `fecha_cierre`** —cerca de una de cada
+diez—, y ninguna de las 55 abiertas tiene fecha. La fecha, cuando está, es
+confiable; lo que no se puede es deducir el estado de su ausencia. Una pantalla
+que lo leyera al revés diría «abierta» sobre trabajo terminado. La regla vive en
+`estadoDelTrabajo()`, en
+[lib/mantenimiento/trabajoDelAviso.ts](../lib/mantenimiento/trabajoDelAviso.ts),
+con sus tests.
+
+**3. `/mis-avisos` lee el estado de la OT por una ruta con cliente admin, y no
+embebido.** `ordenes_trabajo` tiene el SELECT cerrado con `mant_puede_ver()`
+desde la migración `20260916110349`, y esa pantalla lee con el cliente del
+navegador: a los **6 de 14 usuarios sin el módulo** el embebido les devolvería
+null **en silencio**, y la pantalla diría «sin orden» sobre trabajo que existe.
+Por eso el estado viaja por `GET /api/mantenimiento/avisos/trabajo`, que lee con
+el cliente admin y pone el permiso ella —el mismo patrón que Disponibilidad con
+`ausencias`— y expone sólo `ot_number`, `estado` y `fecha_cierre`.
+`/mantenimiento/avisos` **sí** embebe, porque ahí sólo entra quien tiene el
+módulo.
+
+Vale anotar cómo se descubrió, porque el error es fácil de repetir: el embebido
+se había probado con la `SUPABASE_SERVICE_ROLE_KEY`, **que saltea RLS**, así que
+la prueba no valía para la pantalla que importaba.
+
+**4. Si la ruta falla, la pantalla no empeora.** `estadoDelTrabajo` recibe
+`undefined` —que quiere decir «no se pudo leer la orden» y no «no hay orden»— y
+devuelve el texto que ya se mostraba. Nunca «sin orden de trabajo» sobre trabajo
+que existe. Y con el filtro «Sin cerrar» puesto, una lista vacía sería una
+mentira: se dice que no se pudo saber, en vez de mostrarla.
+
+**5. Nada de esto se exporta.** La columna `OT ASIGNADA` sigue siendo la que
+escribe una persona y la que la sincronización lee; `work_order_id` y
+`ot_resuelta_en` son del sistema. El enlace se resuelve leyendo `ot_asignada`
+**de la tabla y no de la fila de la planilla**, que es lo que hace que respete
+sola a los avisos que el upsert saltea por tener la exportación pendiente.
+
+**6. El `UPDATE` de la sincronización va aparte y no dentro del upsert.**
+supabase-js arma el parámetro `columns` con la **unión de las claves de todo el
+lote** y le manda `null` a la fila que no la trae, así que meterlo adentro
+obligaría a partir las filas en cuatro grupos —ya hay dos por
+`repartirPorArea`—. Un fallo ahí **no cambia el `ok`** de la corrida, a
+diferencia de las áreas: el área decide en qué pantalla aparece un aviso y un
+fallo sostenido lo esconde, mientras que el enlace se recalcula entero en la
+próxima corrida y lo único que se pierde mientras tanto es decir si el trabajo
+terminó.
+
+**7. Y las dos pantallas dicen lo mismo del mismo aviso.** El texto y el color
+salen de `comoSeMuestraElTrabajo()`, al lado de `estadoDelTrabajo`. Lo que
+**no** se unifica, a propósito, son los casos sin enlace: `/mantenimiento/avisos`
+dice «Ya tiene OT» y `/mis-avisos` «Con orden de trabajo», porque le hablan a
+gente distinta.
+
+### Cómo se comprueba que no se congeló
+
+Dos cosas que ningún test ve:
+
+- Después del relleno (`npx tsx scripts/rellenar-el-enlace-de-avisos.mts
+  --aplicar`), **221 avisos de 238 con `work_order_id`**; los 17 restantes son
+  los 10 de texto que no es un número y los 7 sin nada.
+- Después de la primera sincronización, que un aviso nuevo del Forms con su
+  número en `OT ASIGNADA` entre con `work_order_id` puesto y `ot_resuelta_en`
+  sellado. Es la única prueba de que la resolución sigue viva, y es la misma que
+  en octubre confirmó que el área se completaba sola.

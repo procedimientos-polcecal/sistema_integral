@@ -276,3 +276,26 @@ describe("loQueImpideDesenlazar: el aviso que resolvió la sincronización", () 
     }
   });
 });
+
+describe("loQueImpideDesenlazar: el sello que dejó una orden borrada", () => {
+  // Un aviso con las dos columnas puestas sólo existe por el sello huérfano:
+  // la resolución automática nunca sella un aviso enlazado a mano. Lo que vale
+  // es lo que hizo la persona, así que desenlazar tiene que poder.
+  it("deja desenlazar cuando además lo enlazó una persona", () => {
+    const problemas = loQueImpideDesenlazar({
+      oa_number: "186", work_order_id: "ot-a", ot_asignada: "2814",
+      ot_enlazada_en: "2026-11-17T12:00:00Z",
+      ot_resuelta_en: "2026-11-10T10:00:00Z",
+    }, 2814);
+    expect(problemas).toEqual([]);
+  });
+
+  it("sigue negándose cuando el sello es el único enlace que hay", () => {
+    const problemas = loQueImpideDesenlazar({
+      oa_number: "186", work_order_id: "ot-a", ot_asignada: "2814",
+      ot_enlazada_en: null, ot_resuelta_en: "2026-11-10T10:00:00Z",
+    }, 2814);
+    expect(problemas).toHaveLength(1);
+    expect(problemas[0]).toContain("OT ASIGNADA");
+  });
+});

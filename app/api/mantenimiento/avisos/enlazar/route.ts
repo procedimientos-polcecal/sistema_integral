@@ -223,7 +223,15 @@ export async function DELETE(request: Request) {
 
   const { data: aviso, error: errorDelAviso } = await admin
     .from("avisos")
-    .select("id, oa_number, work_order_id, ot_asignada, ot_enlazada_en, sheets_row")
+    // `*` y no la lista de columnas, a propósito: hace falta `ot_resuelta_en`,
+    // que la migración `20261117090055` todavía puede no haber creado, y
+    // nombrarla en el select hace que PostgREST conteste 42703 y que esta ruta
+    // devuelva 500. Desenlazar funciona desde antes de esta columna y no se
+    // puede romper mientras se espera que alguien corra la migración; con `*`
+    // llega `undefined` y la rama que la mira simplemente no corre, que es el
+    // comportamiento viejo. Es la misma tolerancia que declara el tipo
+    // `AvisoADesenlazar` al tenerla opcional.
+    .select("*")
     .eq("id", id)
     .maybeSingle();
 

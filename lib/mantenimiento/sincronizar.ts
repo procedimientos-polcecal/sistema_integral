@@ -422,12 +422,18 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
     cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
   });
 
-  // El enlace de cada aviso a su OT. Un fallo acá **no cambia el `ok`** de lo
-  // que se anota abajo, a diferencia de las áreas, y la asimetría es a propósito:
-  // el área decide en qué pantalla aparece un aviso, y un fallo sostenido lo
-  // esconde; el enlace se recalcula entero en la próxima corrida y lo único que
-  // se pierde mientras tanto es decir si el trabajo terminó. No unificarlas.
-  const enlace = await resolverLosEnlacesDeAvisos(admin);
+  // El enlace de cada aviso a su OT. **Un fallo de lectura acá no cambia el `ok`**
+  // de lo que se anota abajo, a diferencia de las áreas, y la asimetría es a
+  // propósito: el área decide en qué pantalla aparece un aviso y un fallo
+  // sostenido lo esconde; el enlace se recalcula entero en la próxima corrida y
+  // lo único que se pierde mientras tanto es decir si el trabajo terminó. No
+  // unificarlas.
+  //
+  // **El freno de los vaciados sí lo cambia**, y es la otra mitad de esa misma
+  // asimetría: un fallo de lectura se arregla solo, pero un freno quiere decir
+  // que la planilla trajo algo raro y que hay 182 enlaces esperando que alguien
+  // mire. `sinFreno` viene de `?confirmar_borrado=1`, que el cron no pasa nunca.
+  const enlace = await resolverLosEnlacesDeAvisos(admin, { sinFreno: opciones.sinFreno });
 
   // Si no se pudieron leer las áreas, la corrida **no se anota como limpia**: el
   // JSON de abajo lo ve quien la dispara a mano, pero el cron corre solo, y si
@@ -436,11 +442,22 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
   // el motivo en `error`—, que es lo que la pantalla de Avisos muestra en rojo
   // con el texto al pasar el mouse. Los avisos sí se guardaron, y el mensaje lo
   // dice para que no se lea como una corrida perdida.
+  //
+  // El freno de los vaciados también se anota como fallo y no sólo en el JSON:
+  // el cron corre solo y nadie vería ese número, y un freno que se repite todos
+  // los días es justo lo que tiene que quedar en rojo hasta que alguien lo mire.
+  // Si además fallaron las áreas, el motivo lleva las dos cosas: tapar una con
+  // la otra dejaría un problema sin nombre.
+  const loQueSalioMal = [
+    "error" in areas ? `no se pudieron leer las áreas: ${areas.error}` : "",
+    enlace.frenado ?? "",
+  ].filter((m) => m !== "").join("; y ");
+
   await registrarSincronizacion(
-    "error" in areas
+    loQueSalioMal
       ? {
           modulo: "mantenimiento", recurso: "avisos", ok: false, filas: guardados,
-          error: `Los avisos se guardaron pero no se pudieron leer las áreas: ${areas.error}`,
+          error: `Los avisos se guardaron pero ${loQueSalioMal}`,
         }
       : { modulo: "mantenimiento", recurso: "avisos", ok: true, filas: guardados }
   );
@@ -457,6 +474,7 @@ export async function sincronizarAvisos(opciones: OpcionesDeCorrida = {}): Promi
     enlaces_resueltos: enlace.enlazados, enlaces_vaciados: enlace.vaciados,
     // Igual que `area_sin_leer`: sólo cuando lo hay.
     ...(enlace.error ? { enlace_sin_resolver: enlace.error } : {}),
+    ...(enlace.frenado ? { enlace_frenado: enlace.frenado } : {}),
     borrados: borrado.borradas, borrado: borrado.aviso,
   });
 }
@@ -1348,6 +1366,76 @@ export async function sincronizarComparativas(): Promise<Resultado> {
 }
 
 /** Las cuatro, en el orden en que conviene traerlas. */
+/**
+ * Por qué falló una corrida que genera órdenes, o `null` si anduvo.
+ *
+ * **Acá vive la decisión, y es una sola**: que un ciclo o un programado no se
+ * haya podido crear cuenta como **corrida fallida**, no sólo una excepción del
+ * generador. La corrida existe para contestar «¿se están creando las órdenes?»,
+ * y si los cuatro ciclos fallan porque la planilla no se deja escribir, el
+ * generador termina perfecto y no nace ninguna orden: anotar eso como `ok` es
+ * justo la respuesta que no sirve.
+ *
+ * Lo que **no** cuenta son los estados que el resultado ya lleva y que no son
+ * errores —`trabados`, `sinArrancar`, `incompletos`, `sinEstadoTodavia`,
+ * `sinCalendario`—: ninguno impide que nazca la orden que tenía que nacer.
+ *
+ * Los mensajes se dedupean porque el caso normal es que los cuatro fallen por
+ * lo mismo, y cuatro copias de la misma frase sólo hacen ilegible la columna.
+ * Van **sin traducir**, que es la regla de la casa para lo que dijo el otro
+ * lado.
+ */
+export function porQueFallaron(fallaron: readonly { error: string }[]): string | null {
+  if (fallaron.length === 0) return null;
+  const distintos = [...new Set(fallaron.map((f) => f.error))];
+  return `${fallaron.length} no se pudieron crear: ${distintos.join(" · ")}`;
+}
+
+/**
+ * ── LAS DOS QUE GENERAN TAMBIÉN ANOTAN SU CORRIDA ───────────────────────────
+ *
+ * Las cuatro que espejan una planilla llaman a `registrarSincronizacion` desde
+ * adentro. `periodicas` y `ciclos` no lo hacían, y eso **no se podía ver desde
+ * ninguna pantalla**: `recursosSinDeclarar` mira lo que la vista trae y nombra
+ * lo que no está declarado, así que atrapa «escribe sin declararse» y es ciego
+ * a lo contrario — un recurso que corre y nunca escribe una fila jamás llega a
+ * la vista. Medido el 17/11/2026 en producción: cero filas de las dos, y
+ * ninguna de las dos en `REGISTRO`.
+ *
+ * Lo que eso costaba: si `generarLasEncadenadas()` empezara a tirar en cada
+ * corrida, el único síntoma sería que no nacen OT, en silencio. Y una OT que no
+ * nace no se atrasa, así que `mant-atrasadas` tampoco puede verla. Es el mismo
+ * agujero que el de un ciclo sin arrancar, por la puerta de al lado.
+ *
+ * Qué cuenta como corrida fallida lo decide `porQueFallaron`, acá arriba.
+ *
+ * Y atrapa la excepción en vez de dejarla subir: la ruta del cron ya la
+ * atrapaba, pero desde allá no se puede anotar nada, que es lo que dejaba la
+ * falla muda. `falla(500)` le dice lo mismo a la ruta.
+ */
+async function generarYAnotar<R extends { generadas: unknown[]; fallaron: { error: string }[] }>(
+  recurso: string,
+  generar: () => Promise<R>,
+  aDatos: (r: R) => Datos
+): Promise<Resultado> {
+  try {
+    const r = await generar();
+    const error = porQueFallaron(r.fallaron);
+    await registrarSincronizacion({
+      modulo: "mantenimiento",
+      recurso,
+      ok: error === null,
+      error,
+      filas: r.generadas.length,
+    });
+    return logra(aDatos(r));
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    await registrarSincronizacion({ modulo: "mantenimiento", recurso, ok: false, error, filas: 0 });
+    return falla(500, error);
+  }
+}
+
 export const SINCRONIZACIONES = [
   // Los equipos y sectores ya están; lo demás cuelga de ellos. Las órdenes de
   // servicio antes que sus comparativas, para que una cotización nunca quede
@@ -1376,9 +1464,8 @@ export const SINCRONIZACIONES = [
   // siguiente, y ninguno frena las cuatro sincronizaciones de arriba.
   {
     recurso: "periodicas",
-    correr: async (_o?: OpcionesDeCorrida): Promise<Resultado> => {
-      const r = await generarLasPeriodicas();
-      return logra({
+    correr: (_o?: OpcionesDeCorrida): Promise<Resultado> =>
+      generarYAnotar("periodicas", generarLasPeriodicas, (r) => ({
         generadas: r.generadas.length,
         ot: r.generadas.map((g) => g.ot_number),
         incompletos: r.incompletos,
@@ -1388,8 +1475,7 @@ export const SINCRONIZACIONES = [
         // El evento que no se pudo crear de una periódica no tiene otro
         // lugar donde decirse: la corrida de estas no tiene pantalla.
         ...(r.sinCalendario.length > 0 ? { sin_calendario: r.sinCalendario } : {}),
-      });
-    },
+      })),
   },
   // ── Y LOS CICLOS ENCADENADOS ──────────────────────────────────────────────
   //
@@ -1404,9 +1490,8 @@ export const SINCRONIZACIONES = [
   // las cuatro sincronizaciones de arriba.
   {
     recurso: "ciclos",
-    correr: async (_o?: OpcionesDeCorrida): Promise<Resultado> => {
-      const r = await generarLasEncadenadas();
-      return logra({
+    correr: (_o?: OpcionesDeCorrida): Promise<Resultado> =>
+      generarYAnotar("ciclos", generarLasEncadenadas, (r) => ({
         generadas: r.generadas.length,
         ot: r.generadas.map((g) => g.ot_number),
         // Los que arrancaron en esta corrida, con la OT del cambio que los
@@ -1420,7 +1505,6 @@ export const SINCRONIZACIONES = [
         fallaron: r.fallaron,
         sin_estado_todavia: r.sinEstadoTodavia,
         ...(r.sinCalendario.length > 0 ? { sin_calendario: r.sinCalendario } : {}),
-      });
-    },
+      })),
   },
 ] as const;
