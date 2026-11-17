@@ -208,6 +208,25 @@ export const REGISTRO: readonly EntradaDelRegistro[] = [
   { modulo: "mantenimiento", recursos: ["ordenes-servicio"], titulo: "Órdenes de servicio", toleranciaHoras: 24 },
   { modulo: "mantenimiento", recursos: ["comparativas"], titulo: "Comparativas de Mantenimiento", toleranciaHoras: 24 },
 
+  // ── Las dos que GENERAN órdenes en vez de espejar una planilla ──
+  //
+  // Declaradas el 17/11/2026, y hasta ese día **no existían para este
+  // monitor**: no llamaban a `registrarSincronizacion`, así que no tenían una
+  // sola fila y `recursosSinDeclarar` —que nombra lo que la vista trae— no
+  // podía verlas. El porqué de que eso importe está en `generarYAnotar`, en
+  // `lib/mantenimiento/sincronizar.ts`: una orden que no nace no se atrasa, de
+  // modo que `mant-atrasadas` tampoco la nombra, y las dos juntas dejaban la
+  // generación sin ningún testigo.
+  //
+  // 24 h, el mismo número que sus cuatro vecinas, y por el motivo más simple:
+  // **las seis las corre el mismo bucle del mismo cron**, así que el silencio
+  // de una es el de la otra. Medido el 17/11/2026 sobre las 1.000 corridas
+  // canónicas de `mantenimiento/ordenes` (11/09 al 17/11, las dos cadencias —la
+  // de Actions y la de Vercel cada 10 min—): hueco mayor **15,4 h**, mediana
+  // 0,2 h, percentil 99 7,9 h. 24 h deja afuera el peor hueco real.
+  { modulo: "mantenimiento", recursos: ["periodicas"], titulo: "OT de los mantenimientos programados", toleranciaHoras: 24 },
+  { modulo: "mantenimiento", recursos: ["ciclos"], titulo: "OT de los ciclos encadenados", toleranciaHoras: 24 },
+
   // ── Inventario: cada 15 min declarado. Hueco mayor 10,2 h (mediana 4,1 h) ──
   { modulo: "inventario", recursos: ["movimientos"], titulo: "Movimientos de inventario", toleranciaHoras: 24 },
   { modulo: "inventario", recursos: ["articulos"], titulo: "Artículos de inventario", toleranciaHoras: 24 },
