@@ -44,6 +44,7 @@ function Balance({ empleados }: { empleados: any[] }) {
   const [balance, setBalance] = useState<any | null>(null);
   const [form, setForm] = useState({ fechaDesde: "", fechaHasta: "" });
   const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const cargarBalance = useCargar(async (vigente) => {
     if (!employeeId) { setBalance(null); return; }
@@ -55,7 +56,8 @@ function Balance({ empleados }: { empleados: any[] }) {
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
     setGuardando(true);
-    await fetch("/api/rrhh/vacaciones", {
+    setError(null);
+    const res = await fetch("/api/rrhh/vacaciones", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -64,6 +66,14 @@ function Balance({ empleados }: { empleados: any[] }) {
       }),
     });
     setGuardando(false);
+    // Sin esto el formulario se limpiaba igual que si hubiera guardado, así que
+    // un 400 —rango al revés, año vacío— era indistinguible del éxito: el
+    // período no aparecía en la lista y nadie sabía por qué.
+    if (!res.ok) {
+      const cuerpo = await res.json().catch(() => ({}));
+      setError(cuerpo.error ?? "No se pudo guardar el período de vacaciones");
+      return;
+    }
     setForm({ fechaDesde: "", fechaHasta: "" });
     cargarBalance();
   }
@@ -131,6 +141,7 @@ function Balance({ empleados }: { empleados: any[] }) {
                 {guardando ? "Guardando..." : "Guardar"}
               </button>
             </form>
+            {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
           </div>
 
           <div className="card p-5">

@@ -49,10 +49,26 @@ export interface CuerpoDePeriodo {
  * EL AÑO NO SE INVENTA. Antes la ruta lo rellenaba con el año en curso cuando
  * no venía, y eso descuenta los días del balance equivocado sin decir nada.
  * Dejándolo en `undefined`, `altaDeAusencia()` contesta 400 («Para Vacaciones
- * hay que indicar a qué año corresponden los días»), que es lo correcto. Un
- * `NaN` cuenta como no haber venido: la ficha del empleado manda
- * `Number(nuevaVacacion.anioCorrespondiente)` y el campo vacío da `NaN`.
+ * hay que indicar a qué año corresponden los días»), que es lo correcto.
+ *
+ * NO ALCANZA CON `Number.isInteger`, y la trampa es fina: **`Number("")` es
+ * `0`, no `NaN`**. Las dos pantallas mandan `Number(campoDeAño)`, y el campo de
+ * Balance —a diferencia del de la ficha— **no tiene `required`**: vaciarlo
+ * posteaba un período cargado al año 0, que `Number.isInteger(0)` acepta. Por
+ * eso el piso en 1900, que ningún año de vacaciones de nadie va a cruzar por
+ * abajo. El `NaN` también queda afuera, porque `Number.isInteger(NaN)` es
+ * falso.
  */
+/**
+ * Si `v` puede ser el año al que corresponden unas vacaciones.
+ *
+ * El piso existe por `Number("") === 0`; ver el docstring de abajo. No hay
+ * techo: cargar vacaciones del año que viene es normal.
+ */
+function esUnAnio(v: number | undefined): v is number {
+  return Number.isInteger(v) && (v as number) > 1900;
+}
+
 export function datosDeAusenciaDeVacaciones(
   cuerpo: CuerpoDePeriodo,
   cargadoPorId: string,
@@ -65,7 +81,7 @@ export function datosDeAusenciaDeVacaciones(
     tipo: "VACACIONES",
     justificada: true,
     observaciones: cuerpo.observaciones ?? null,
-    anioCorrespondiente: Number.isInteger(anio) ? anio : undefined,
+    anioCorrespondiente: esUnAnio(anio) ? anio : undefined,
     cargadoPorId,
   };
 }
@@ -107,6 +123,31 @@ export function hayAlgoQueCambiar(cuerpo: CuerpoDePeriodo): boolean {
   return (
     Object.keys(cambiosParaLaAusencia(cuerpo)).length > 0 || cuerpo.anioCorrespondiente !== undefined
   );
+}
+
+/**
+ * Si un `PUT` que pasó `hayAlgoQueCambiar()` igual no cambia nada.
+ *
+ * Son dos preguntas distintas y confundirlas fue el bug. `hayAlgoQueCambiar`
+ * mira si **vinieron** campos; ésta mira si esos campos **traen otra cosa**. La
+ * ficha del empleado manda los cuatro siempre, así que abrir «Editar», no tocar
+ * nada y guardar pasaba el primer freno: se escribía un `corregir` con
+ * `valor_anterior` idéntico a `valor_nuevo`. `auditoria` no tiene policy de
+ * update ni de delete y además un trigger las rechaza, o sea que esa fila queda
+ * **para siempre** diciendo que alguien corrigió algo que no corrigió.
+ *
+ * El empleado va aparte porque **no entra en el texto del período**
+ * (`comoSeLeeElPeriodo`): sin esa condición, mover un período de una persona a
+ * otra se vería como «nada cambió» y no se escribiría ni se registraría.
+ */
+export function nadaCambioDeVerdad(
+  antes: string,
+  despues: string,
+  empleadoAnterior: string,
+  empleadoNuevo: string | undefined,
+): boolean {
+  if (antes !== despues) return false;
+  return empleadoNuevo === undefined || empleadoNuevo === empleadoAnterior;
 }
 
 /**

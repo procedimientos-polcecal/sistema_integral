@@ -3,6 +3,7 @@ import {
   datosDeAusenciaDeVacaciones,
   cambiosParaLaAusencia,
   hayAlgoQueCambiar,
+  nadaCambioDeVerdad,
   rangoAlReves,
 } from "./periodoDeVacaciones";
 
@@ -31,12 +32,74 @@ describe("datosDeAusenciaDeVacaciones", () => {
     expect(d.anioCorrespondiente).toBeUndefined();
   });
 
-  it('no inventa el año cuando llegó NaN (la ficha manda Number(""))', () => {
+  it("no inventa el año cuando llegó NaN", () => {
     const d = datosDeAusenciaDeVacaciones(
       { employeeId: "e1", anioCorrespondiente: NaN, fechaDesde: "a", fechaHasta: "b" },
       "u1",
     );
     expect(d.anioCorrespondiente).toBeUndefined();
+  });
+
+  // `Number("")` es **0**, no NaN. Las dos pantallas mandan
+  // `Number(campoDeAño)`, y el año de Balance no tiene `required`: vaciarlo
+  // posteaba un período cargado al año 0, que `Number.isInteger` aceptaba.
+  it("no acepta el año 0, que es lo que manda un campo de año vacío", () => {
+    expect(Number("")).toBe(0); // la premisa, fijada acá para que no se vuelva a suponer
+    const d = datosDeAusenciaDeVacaciones(
+      { employeeId: "e1", anioCorrespondiente: Number(""), fechaDesde: "a", fechaHasta: "b" },
+      "u1",
+    );
+    expect(d.anioCorrespondiente).toBeUndefined();
+  });
+
+  it("no acepta un año anterior a 1900, que no es un año de vacaciones de nadie", () => {
+    const d = datosDeAusenciaDeVacaciones(
+      { employeeId: "e1", anioCorrespondiente: 202, fechaDesde: "a", fechaHasta: "b" },
+      "u1",
+    );
+    expect(d.anioCorrespondiente).toBeUndefined();
+  });
+
+  it("acepta un año de verdad", () => {
+    const d = datosDeAusenciaDeVacaciones(
+      { employeeId: "e1", anioCorrespondiente: 1999, fechaDesde: "a", fechaHasta: "b" },
+      "u1",
+    );
+    expect(d.anioCorrespondiente).toBe(1999);
+  });
+});
+
+/*
+ * El freno contra la fila de auditoría que miente.
+ *
+ * `hayAlgoQueCambiar` sólo mira si vinieron campos, y la ficha del empleado
+ * manda los cuatro **siempre**: abrir «Editar», no tocar nada y guardar pasaba
+ * ese freno y escribía un `corregir` con `valor_anterior` idéntico a
+ * `valor_nuevo`. `auditoria` no tiene policy de update ni de delete y un
+ * trigger las rechaza, así que esa fila queda para siempre diciendo que alguien
+ * corrigió algo que no corrigió.
+ */
+describe("nadaCambioDeVerdad", () => {
+  const igual = "Vacaciones 2025 del 2026-07-27 al 2026-08-03 (8 días)";
+
+  it("dice que sí cuando el período queda igual y el empleado no vino", () => {
+    expect(nadaCambioDeVerdad(igual, igual, "e1", undefined)).toBe(true);
+  });
+
+  it("dice que sí cuando el empleado vino pero es el mismo", () => {
+    expect(nadaCambioDeVerdad(igual, igual, "e1", "e1")).toBe(true);
+  });
+
+  // El empleado NO entra en el texto del período, así que sin esta condición un
+  // cambio de persona quedaría sin registro y sin escribirse.
+  it("dice que no cuando cambia el empleado, aunque el texto sea idéntico", () => {
+    expect(nadaCambioDeVerdad(igual, igual, "e1", "e2")).toBe(false);
+  });
+
+  it("dice que no cuando el período queda distinto", () => {
+    expect(
+      nadaCambioDeVerdad(igual, "Vacaciones 2026 del 2026-07-27 al 2026-08-03 (8 días)", "e1", "e1"),
+    ).toBe(false);
   });
 });
 

@@ -79,12 +79,34 @@ export async function POST(request: Request) {
   );
   if (error) return NextResponse.json({ error }, { status: status ?? 500 });
 
-  const { data: periodo, error: errorPeriodo } = await supabase
+  /*
+   * Si el período no está, la ausencia se deshace.
+   *
+   * `sincronizarPeriodoVacaciones()` —que `altaDeAusencia` llama por dentro—
+   * **no mira el error de su propio insert**, así que un fallo ahí no vuelve
+   * como error: la ausencia queda escrita y esto se entera recién acá, al no
+   * encontrar el período. Sin este rescate quedaba una ausencia de vacaciones
+   * sin período, o sea una persona marcada ausente a la que no se le
+   * descuentan los días — y como la pantalla contesta igual que si hubiera
+   * fallado todo, el reintento creaba una segunda.
+   *
+   * Es el mismo orden que usa el relleno: lo que no se pudo completar no se
+   * deja a medias.
+   */
+  const idDeLaAusencia = (ausencia as { id: string }).id;
+  const { data: periodo } = await supabase
     .from("vacaciones")
     .select("*")
-    .eq("ausencia_id", (ausencia as { id: string }).id)
-    .single();
-  if (errorPeriodo) return NextResponse.json({ error: errorPeriodo.message }, { status: 500 });
+    .eq("ausencia_id", idDeLaAusencia)
+    .maybeSingle();
+
+  if (!periodo) {
+    await supabase.from("ausencias").delete().eq("id", idDeLaAusencia);
+    return NextResponse.json(
+      { error: "No se pudo guardar el período de vacaciones, así que la ausencia se deshizo. Probá de nuevo." },
+      { status: 500 }
+    );
+  }
 
   return NextResponse.json(periodo, { status: 201 });
 }

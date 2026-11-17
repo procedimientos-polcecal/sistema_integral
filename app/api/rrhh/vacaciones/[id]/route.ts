@@ -9,6 +9,7 @@ import { sincronizarPeriodoVacaciones, diasEntre } from "@/lib/rrhh/vacacionesDe
 import {
   cambiosParaLaAusencia,
   hayAlgoQueCambiar,
+  nadaCambioDeVerdad,
   rangoAlReves,
 } from "@/lib/rrhh/periodoDeVacaciones";
 import {
@@ -167,6 +168,23 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     observaciones:
       body.observaciones !== undefined ? body.observaciones || null : periodo.observaciones,
   });
+
+  /*
+   * Un «Guardar cambios» que no cambió nada no se escribe ni se audita.
+   *
+   * `hayAlgoQueCambiar` mira si **vinieron** campos; esto mira si traen otra
+   * cosa. La ficha del empleado manda los cuatro siempre, así que abrir
+   * «Editar», arrepentirse y guardar pasaba aquel freno y dejaba una fila de
+   * `auditoria` con `valor_anterior` idéntico a `valor_nuevo` — y esa tabla no
+   * se puede limpiar.
+   *
+   * Contesta 200 con el período tal cual está, no un 400: desde el lado de
+   * quien apretó el botón no pasó nada malo.
+   */
+  if (nadaCambioDeVerdad(comoSeLeeElPeriodo(periodo), comoVaAQuedar, empleadoAnterior, body.employeeId)) {
+    const { data: sinTocar } = await supabase.from("vacaciones").select("*").eq("id", id).maybeSingle();
+    return NextResponse.json(sinTocar);
+  }
 
   // El registro va antes del cambio: si no entra, no se toca nada.
   const sinRegistro = await problemaDeAuditoriaDelPeriodo(

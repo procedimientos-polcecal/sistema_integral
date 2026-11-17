@@ -251,8 +251,10 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
   });
   const [editandoVacacionId, setEditandoVacacionId] = useState<string | null>(null);
   const [guardandoVacacion, setGuardandoVacacion] = useState(false);
+  const [errorVacacion, setErrorVacacion] = useState<string | null>(null);
   function cancelarEdicionVacacion() {
     setEditandoVacacionId(null);
+    setErrorVacacion(null);
     setNuevaVacacion({ fechaDesde: "", fechaHasta: "", anioCorrespondiente: String(anioVacaciones) });
   }
   async function refrescarVacaciones() {
@@ -263,18 +265,27 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
   async function guardarVacacion(e: React.FormEvent) {
     e.preventDefault();
     setGuardandoVacacion(true);
+    setErrorVacacion(null);
     const data = {
       employeeId: empleado.id,
       anioCorrespondiente: Number(nuevaVacacion.anioCorrespondiente),
       fechaDesde: nuevaVacacion.fechaDesde,
       fechaHasta: nuevaVacacion.fechaHasta,
     };
-    await fetch(editandoVacacionId ? `/api/rrhh/vacaciones/${editandoVacacionId}` : "/api/rrhh/vacaciones", {
+    const res = await fetch(editandoVacacionId ? `/api/rrhh/vacaciones/${editandoVacacionId}` : "/api/rrhh/vacaciones", {
       method: editandoVacacionId ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
     setGuardandoVacacion(false);
+    // Sin esto el formulario se limpiaba igual que si hubiera guardado, así que
+    // un 400 —rango al revés, año faltante— era indistinguible del éxito: el
+    // período no aparecía y nadie sabía por qué.
+    if (!res.ok) {
+      const cuerpo = await res.json().catch(() => ({}));
+      setErrorVacacion(cuerpo.error ?? "No se pudo guardar el período de vacaciones");
+      return;
+    }
     cancelarEdicionVacacion();
     refrescarVacaciones();
   }
@@ -750,6 +761,7 @@ export default function EmpleadoDetalle({ empleado, empresas, sectores, canEdit 
               </button>
               {editandoVacacionId && <button type="button" onClick={cancelarEdicionVacacion} className="text-sm text-slate-600 px-2 py-2">Cancelar edición</button>}
             </form>
+            {errorVacacion && <p className="text-sm text-red-600 mb-6">{errorVacacion}</p>}
 
             <p className="text-xs text-slate-400 mb-2">Todos los períodos de vacaciones cargados, de cualquier año.</p>
             <div className="overflow-x-auto">
