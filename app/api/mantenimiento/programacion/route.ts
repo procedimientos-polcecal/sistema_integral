@@ -53,7 +53,9 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   if (!(await esAdminMantenimiento(supabase, user.id))) {
     return NextResponse.json(
-      { error: "La programación del taller requiere ser admin de Mantenimiento" },
+      // El nombre de la pantalla, no el de la ruta: desde el 17/11/2026 ésta se
+      // llama «Asignación RR.HH» y «Programación» es la otra. Ver `lib/core/nav.ts`.
+      { error: "Asignación RR.HH requiere ser admin de Mantenimiento" },
       { status: 403 }
     );
   }

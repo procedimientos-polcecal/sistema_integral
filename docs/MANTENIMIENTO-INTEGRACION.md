@@ -1373,6 +1373,32 @@ ninguno, por la orden.
 administra para todos los módulos —igual que hace RRHH— en vez de tener una
 pantalla propia.
 
+### Dos rótulos se cruzaron, y ya no coinciden con su ruta (17/11/2026)
+
+Se pidió, y es la primera vez en el módulo que el nombre de una pantalla y su
+url dicen cosas distintas. Vale la pena saberlo antes de escribir cualquier
+texto que nombre una de las dos:
+
+| Dice el menú | Es la ruta | Era |
+|---|---|---|
+| **Programación** | `/mantenimiento/planificacion` | «Planificación» |
+| **Asignación RR.HH** | `/mantenimiento/programacion` | «Programación» |
+
+El motivo: en la planta «programar» es decidir el trabajo del día —el plan
+diario— y la semana de turnos del taller es repartir gente, no trabajo.
+
+**Las urls no se tocaron, a propósito.** Cambiarlas rompería los enlaces que ya
+circulan, obligaría a tocar los `href` de media docena de pantallas y no le
+cambiaría el nombre a ninguna tabla: `planificacion_diaria`,
+`mant_programacion_referencia` y `mant_programacion_pisadas` siguen diciendo lo
+de antes, y renombrarlas es una migración que no compra nada.
+
+Lo que esto cuesta, dicho: **el nombre viejo es ahora el nombre de la otra
+pantalla**, así que un texto desactualizado no queda raro —manda a la persona al
+lugar equivocado—. Ya pasó con el cartel del parte diario, que decía «se carga
+en Programación» y apuntaba al padrón del taller. Cuando un texto de usuario
+nombre una de las dos, el nombre que vale es el de `lib/core/nav.ts`.
+
 ## Configuración de Mantenimiento
 
 Las listas de las que come el módulo, para que registrar una orden de trabajo
@@ -1794,6 +1820,10 @@ entra a mirar. Si hiciera falta que llegue solo, la lógica ya está separada en
 `lib/mantenimiento/alertas.ts` y sirve igual para cualquier canal.
 
 ## La programación semanal del taller (26/10/2026)
+
+**En el menú esta pantalla se llama «Asignación RR.HH» desde el 17/11/2026**, y
+«Programación» es ahora la otra —el plan diario, `/mantenimiento/planificacion`—.
+El resto de esta sección, el spec y el plan la siguen nombrando por la ruta.
 
 `/mantenimiento/programacion`: la semana del taller mecánico y del eléctrico —tres
 turnos por siete días—, los huecos que dejan las ausencias y quién puede
