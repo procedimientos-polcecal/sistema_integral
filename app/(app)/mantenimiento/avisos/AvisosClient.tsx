@@ -12,7 +12,7 @@ import DesestimarModal from "./DesestimarModal";
 import EnlazarOTModal from "./EnlazarOTModal";
 import Select from "@/components/Select";
 import { finalDelAviso, estaDesestimado, enDiaMes } from "@/lib/mantenimiento/desestimarAviso";
-import { estadoDelTrabajo } from "@/lib/mantenimiento/trabajoDelAviso";
+import { comoSeMuestraElTrabajo, estadoDelTrabajo } from "@/lib/mantenimiento/trabajoDelAviso";
 import { sePuedeDesenlazar } from "@/lib/mantenimiento/enlazarOtAlAviso";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
 
@@ -568,23 +568,19 @@ function ConOt({ aviso, sinOt, puedeEditar, onDesenlazar }: {
 function textoDelTrabajo(t: ReturnType<typeof estadoDelTrabajo>, sinOt: string) {
   switch (t.tipo) {
     case "cerrado":
+    case "abierto": {
+      // Texto y color salen de `comoSeMuestraElTrabajo`, la misma regla que usa
+      // `/mis-avisos`: dos pantallas no pueden decir cosas distintas del aviso.
+      const c = comoSeMuestraElTrabajo(t)!;
       return (
         <>
           OT #{t.ot} ·{" "}
-          <span style={{ color: "#15803D" }}>
-            {t.fecha ? `Cerrada el ${enDiaMes(t.fecha)}` : "Cerrada"}
+          <span style={{ color: c.color, fontWeight: t.tipo === "abierto" ? 600 : undefined }}>
+            {c.texto}
           </span>
         </>
       );
-    case "abierto":
-      return (
-        <>
-          OT #{t.ot} ·{" "}
-          <span style={{ color: t.estado === "ATRASADO" ? "#DC2626" : "#B45309", fontWeight: 600 }}>
-            {t.comoSeLlama || "sin estado"}
-          </span>
-        </>
-      );
+    }
     case "sin-enlace": {
       const texto = t.texto.trim();
       if (texto === "" || /^s[ií]$/i.test(texto)) return sinOt;

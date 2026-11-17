@@ -7,7 +7,7 @@ import { useCargar } from "@/lib/core/useCargar";
 import { createClient } from "@/lib/supabase/client";
 import { fecha } from "@/lib/compras/constants";
 import { finalDelAviso } from "@/lib/mantenimiento/desestimarAviso";
-import { estadoDelTrabajo, type OtDelAviso } from "@/lib/mantenimiento/trabajoDelAviso";
+import { comoSeMuestraElTrabajo, estadoDelTrabajo, type OtDelAviso } from "@/lib/mantenimiento/trabajoDelAviso";
 import type { Aviso } from "@/lib/mantenimiento/types";
 import NuevoAvisoModal from "@/app/(app)/mantenimiento/avisos/NuevoAvisoModal";
 import Select from "@/components/Select";
@@ -276,6 +276,11 @@ export default function MisAvisosClient({
         >
           Sin cerrar
         </button>
+        {sinCerrar && !falloOrdenes && (
+          <span className="text-xs text-slate-400">
+            Sólo cuenta los avisos con la orden enlazada.
+          </span>
+        )}
 
         {!cargando && (
           <span className="text-xs text-slate-400">
@@ -318,6 +323,8 @@ export default function MisAvisosClient({
         <Vacio
           alcance={alcance}
           filtrando={hayFiltro}
+          sinCerrar={filtraAbiertas}
+          otroFiltro={Boolean(busquedaAplicada || urgencia)}
           onVerTodos={() => setAlcance("todos")}
           onAvisar={() => setModalAbierto(true)}
         />
@@ -503,15 +510,11 @@ function EnQueTermino({
       const numero = String(trabajo.ot);
       // El color va por `style` y no por una utilidad: `.card` y los `.btn-*`
       // están fuera de toda capa y le ganan a cualquier `text-*` de al lado.
-      const estado = trabajo.tipo === "cerrado" ? (
-        <span style={{ color: "#15803d" }} className="font-medium">
-          Terminado{trabajo.fecha ? ` el ${fecha(trabajo.fecha)}` : ""}
-        </span>
-      ) : (
-        <span style={{ color: "#b45309" }} className="font-medium">
-          Sin cerrar{trabajo.comoSeLlama ? ` · ${trabajo.comoSeLlama}` : ""}
-        </span>
-      );
+      // Texto y color salen de `comoSeMuestraElTrabajo`, la misma regla que usa
+      // `/mantenimiento/avisos`. El color va por `style` y no por una utilidad:
+      // `.card` y los `.btn-*` están fuera de toda capa y le ganan a `text-*`.
+      const c = comoSeMuestraElTrabajo(trabajo)!;
+      const estado = <span style={{ color: c.color }} className="font-medium">{c.texto}</span>;
       return (
         <span className="flex flex-wrap items-baseline gap-x-1.5">
           {tieneMantenimiento ? (
@@ -578,11 +581,15 @@ function EnQueTermino({
  * o no resultados.
  */
 function Vacio({
-  alcance, filtrando, onVerTodos, onAvisar,
+  alcance, filtrando, sinCerrar, otroFiltro, onVerTodos, onAvisar,
 }: {
   alcance: "mios" | "todos";
   /** Hay una búsqueda o una urgencia puesta. */
   filtrando: boolean;
+  /** El chip «Sin cerrar» está filtrando de verdad (no sólo apretado). */
+  sinCerrar: boolean;
+  /** Además hay búsqueda o urgencia puesta. */
+  otroFiltro: boolean;
   onVerTodos: () => void;
   onAvisar: () => void;
 }) {
@@ -590,7 +597,11 @@ function Vacio({
     return (
       <div className="rounded-xl border border-dashed border-slate-300 px-6 py-14 text-center">
         <p className="text-sm text-slate-500">
-          Nada coincide con lo que buscaste
+          {sinCerrar
+            ? otroFiltro
+              ? "Ningún aviso sin cerrar coincide con lo que buscaste"
+              : "No hay avisos sin cerrar"
+            : "Nada coincide con lo que buscaste"}
           {alcance === "mios" && " entre los avisos de tu área"}.
         </p>
         {alcance === "mios" && (

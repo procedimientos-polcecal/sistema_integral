@@ -48,6 +48,8 @@
  * (El enlace automático aviso → OT es otra cosa y vive en `enlaceDelAviso.ts`.)
  */
 
+import { enDiaMes } from "./desestimarAviso";
+
 /** Lo que hace falta saber de la orden. Es una proyección chica a propósito. */
 export interface OtDelAviso {
   ot_number: number | null;
@@ -99,4 +101,44 @@ export function estadoDelTrabajo(
   if (texto !== "" || aviso.work_order_id) return { tipo: "sin-enlace", texto };
 
   return { tipo: "sin-ot" };
+}
+
+/** Cómo se dice y se pinta el estado de una orden. Lo usan las dos pantallas. */
+export interface ComoSeMuestra {
+  /** «Cerrada el 6/11», «En proceso», «sin estado»… */
+  texto: string;
+  /** El color del estado, listo para un `style` (no una utilidad: ver abajo). */
+  color: string;
+}
+
+/**
+ * La voz única de las dos listas de avisos.
+ *
+ * `/mantenimiento/avisos` y `/mis-avisos` decían cosas distintas del mismo
+ * aviso («Cerrada el 6/11» contra «Terminado el 6/11/2026», y el atrasado en
+ * rojo sólo de un lado). Gana el vocabulario de Mantenimiento: «Cerrada» es la
+ * palabra que el módulo usa para una OT en `REALIZADO`.
+ *
+ * El color es un valor y no una clase porque `.card` y los `.btn-*` están
+ * fuera de toda capa y le ganan a cualquier `text-*` de al lado.
+ *
+ * Devuelve `null` para `sin-enlace` y `sin-ot`: no son una orden con estado, y
+ * cada pantalla los dice con su propio vocabulario a propósito («Ya tiene OT»
+ * contra «Con orden de trabajo»).
+ *
+ * Un estado null es una orden que existe y de la que no se sabe en qué está:
+ * se dice «sin estado» y se pinta como abierta, porque «no está cerrada» es lo
+ * único cierto.
+ */
+export function comoSeMuestraElTrabajo(t: EstadoDelTrabajo): ComoSeMuestra | null {
+  if (t.tipo === "cerrado") {
+    return { texto: t.fecha ? `Cerrada el ${enDiaMes(t.fecha)}` : "Cerrada", color: "#15803D" };
+  }
+  if (t.tipo === "abierto") {
+    return {
+      texto: t.comoSeLlama || "sin estado",
+      color: t.estado === "ATRASADO" ? "#DC2626" : "#B45309",
+    };
+  }
+  return null;
 }
