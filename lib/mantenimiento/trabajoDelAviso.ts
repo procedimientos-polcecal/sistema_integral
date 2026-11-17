@@ -25,15 +25,18 @@
  * diría «abierta» sobre una de cada diez órdenes ya hechas. Por eso la fecha
  * viaja como dato opcional de lo cerrado y nunca decide nada.
  *
- * ── `ot` EN `undefined` NO ES «NO HAY ORDEN» ─────────────────────────────────
+ * ── SIN ORDEN LEÍDA, LO QUE DECIDE ES EL AVISO ───────────────────────────────
  *
  * `/mis-avisos` la abren catorce personas y seis no tienen el módulo
  * Mantenimiento, así que esa pantalla lee el estado de la OT por una ruta
- * aparte que puede fallar. `undefined` quiere decir **«no se pudo leer la
- * orden»**, no «el aviso no tiene orden»: cae en `sin-enlace` con el texto que
- * ya se mostraba. Si cayera en `sin-ot`, la pantalla diría «sin orden de
- * trabajo» sobre trabajo que existe, que es el peor error posible acá.
- * `null`, en cambio, sí es «se buscó y no hay».
+ * aparte que puede fallar. Una `ot` ausente quiere decir **«no se pudo leer la
+ * orden»**, no «el aviso no tiene orden». **`null` y `undefined` se tratan
+ * igual**: la diferencia sólo la hacen los campos del aviso. Si tiene
+ * `work_order_id` o texto en `ot_asignada`, cae en `sin-enlace` con lo que ya
+ * se mostraba; sólo sin ninguno de los dos es `sin-ot`. Así la pantalla nunca
+ * dice «sin orden de trabajo» sobre un aviso que tiene enlace o texto, que es
+ * el peor error posible acá. (Con `work_order_id` y sin texto, `sin-enlace`
+ * trae `texto: ""` y la pantalla tiene que decidir qué decir.)
  *
  * ── EL TEXTO CRUDO NO SE INTERPRETA ──────────────────────────────────────────
  *

@@ -45,6 +45,23 @@ describe("estadoDelTrabajo", () => {
     expect(estadoDelTrabajo(conOt, undefined)).toEqual({ tipo: "sin-enlace", texto: "2814" });
   });
 
+  it("con enlace pero sin texto y sin orden leída: sin-enlace con texto vacío, nunca sin-ot", () => {
+    expect(estadoDelTrabajo({ work_order_id: "ot-a", ot_asignada: null }, null))
+      .toEqual({ tipo: "sin-enlace", texto: "" });
+    expect(estadoDelTrabajo({ work_order_id: "ot-a", ot_asignada: "" }, undefined))
+      .toEqual({ tipo: "sin-enlace", texto: "" });
+  });
+
+  it("estado null en una orden leída: abierto con comoSeLlama vacío (a decidir en la pantalla)", () => {
+    expect(estadoDelTrabajo(conOt, { ot_number: 2814, estado: null, fecha_cierre: null }))
+      .toEqual({ tipo: "abierto", ot: 2814, estado: "", comoSeLlama: "" });
+  });
+
+  it("orden sin ot_number: se ignora y manda el aviso", () => {
+    expect(estadoDelTrabajo(conOt, { ot_number: null, estado: "REALIZADO", fecha_cierre: null }))
+      .toEqual({ tipo: "sin-enlace", texto: "2814" });
+  });
+
   it("el guión suelto de la planilla no es una orden", () => {
     expect(estadoDelTrabajo({ work_order_id: null, ot_asignada: "-" }, null))
       .toEqual({ tipo: "sin-enlace", texto: "-" });
