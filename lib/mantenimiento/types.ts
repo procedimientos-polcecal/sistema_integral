@@ -300,6 +300,8 @@ export interface Aviso {
   created_at: string;
   equipos?: { name: string; code: string | null } | null;
   sectores?: { nombre: string } | null;
+  /** La orden enlazada, si se la embebió: ver `trabajoDelAviso.ts`. */
+  ordenes_trabajo?: { ot_number: number | null; estado: string | null; fecha_cierre: string | null } | null;
 }
 
 /**

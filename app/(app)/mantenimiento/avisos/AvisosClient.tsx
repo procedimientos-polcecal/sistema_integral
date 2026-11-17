@@ -11,7 +11,8 @@ import GenerarOTModal, { type EquipoDelAviso } from "./GenerarOTModal";
 import DesestimarModal from "./DesestimarModal";
 import EnlazarOTModal from "./EnlazarOTModal";
 import Select from "@/components/Select";
-import { finalDelAviso, estaDesestimado } from "@/lib/mantenimiento/desestimarAviso";
+import { finalDelAviso, estaDesestimado, enDiaMes } from "@/lib/mantenimiento/desestimarAviso";
+import { estadoDelTrabajo } from "@/lib/mantenimiento/trabajoDelAviso";
 import { sePuedeDesenlazar } from "@/lib/mantenimiento/enlazarOtAlAviso";
 import type { SectorDePlanta } from "@/lib/mantenimiento/sectores";
 
@@ -536,9 +537,10 @@ function ConOt({ aviso, sinOt, puedeEditar, onDesenlazar }: {
   puedeEditar: boolean;
   onDesenlazar: (a: Aviso) => void;
 }) {
+  const trabajo = estadoDelTrabajo(aviso, aviso.ordenes_trabajo);
   return (
     <span className="text-xs text-slate-500">
-      {aviso.ot_asignada ? `OT #${aviso.ot_asignada}` : sinOt}
+      {textoDelTrabajo(trabajo, sinOt)}
       {puedeEditar && sePuedeDesenlazar(aviso) && (
         <button
           onClick={() => onDesenlazar(aviso)}
@@ -549,4 +551,48 @@ function ConOt({ aviso, sinOt, puedeEditar, onDesenlazar }: {
       )}
     </span>
   );
+}
+
+/**
+ * Qué dice la lista sobre el trabajo. El color va por `style` y no por una
+ * utilidad: `.card` y los `.btn-*` están fuera de toda capa y le ganan a
+ * cualquier `text-*`, así que una clase de color acá no pintaría nada.
+ *
+ * Los casos que traen texto vacío no pueden dejar la pantalla muda:
+ * - `sin-enlace` sin texto, o con «si»/«sí»: el aviso tiene trabajo pero no se
+ *   sabe cuál, y se dice `sinOt` como siempre («Ya tiene OT» / «sí»).
+ * - `abierto` con estado null: la orden existe y no sabemos en qué está; se
+ *   dice «sin estado» en vez de dejar «OT #2814 ·» colgando, y se pinta como
+ *   abierta porque «no está cerrada» es lo único cierto.
+ */
+function textoDelTrabajo(t: ReturnType<typeof estadoDelTrabajo>, sinOt: string) {
+  switch (t.tipo) {
+    case "cerrado":
+      return (
+        <>
+          OT #{t.ot} ·{" "}
+          <span style={{ color: "#15803D" }}>
+            {t.fecha ? `Cerrada el ${enDiaMes(t.fecha)}` : "Cerrada"}
+          </span>
+        </>
+      );
+    case "abierto":
+      return (
+        <>
+          OT #{t.ot} ·{" "}
+          <span style={{ color: t.estado === "ATRASADO" ? "#DC2626" : "#B45309", fontWeight: 600 }}>
+            {t.comoSeLlama || "sin estado"}
+          </span>
+        </>
+      );
+    case "sin-enlace": {
+      const texto = t.texto.trim();
+      if (texto === "" || /^s[ií]$/i.test(texto)) return sinOt;
+      // Un número suelto es una OT que la planilla nombra; lo demás es texto
+      // libre («1889 - 1886») y se muestra como vino, sin elegir una.
+      return /^\d+$/.test(texto) ? `OT #${texto}` : `la planilla dice «${texto}»`;
+    }
+    case "sin-ot":
+      return sinOt;
+  }
 }
