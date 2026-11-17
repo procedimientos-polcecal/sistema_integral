@@ -17,15 +17,19 @@ type ConfirmOptions = {
  * mentira: lo que pasó es que nadie montó el proveedor. Un `if (await
  * confirm(…))` queda entonces en un botón que no hace nada —sin error, sin
  * aviso— y eso vivió nueve días en `/inventario/stock` sin que lo notara ni el
- * build ni la suite. Al 14/10/2026 los siete módulos que usan el hook tienen su
- * `<ConfirmProvider>`; el día que alguien agregue el octavo y se olvide, se va
- * a enterar en el primer click y no nueve días después.
+ * build ni la suite. El proveedor se monta **una sola vez**, en
+ * `app/(app)/layout.tsx`, y lo heredan todos los módulos; una lista de
+ * módulos con su propio proveedor se quedaba corta sola. Lo que queda afuera de
+ * ese grupo de rutas (`app/cargar/CargarClient.tsx`) monta el suyo. El día que
+ * alguien agregue una pantalla fuera de `(app)` y se olvide, se va a enterar en
+ * el primer click y no nueve días después.
  */
 const ConfirmContext = createContext<(o: ConfirmOptions) => Promise<boolean>>(
   async () => {
     throw new Error(
-      "useConfirm() sin <ConfirmProvider>. Envolvé el layout del módulo, " +
-      "como hacen app/(app)/<modulo>/layout.tsx en los demás."
+      "useConfirm() sin <ConfirmProvider>. El proveedor se monta una sola vez, " +
+      "en app/(app)/layout.tsx; fuera de ese grupo de rutas hay que montar el " +
+      "propio, como hace app/cargar/CargarClient.tsx."
     );
   }
 );

@@ -7,6 +7,7 @@ import KpiCard from "@/components/KpiCard";
 import { armarTarjetasHoy, tituloDeDetalle, type ClaveTarjeta, type ResumenHoy } from "@/lib/rrhh/tarjetasHoy";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { Modal } from "@/components/Modal";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
 /**
@@ -267,12 +268,8 @@ export default function DashboardClient({
 
 function ModalListaEmpleados({ titulo, empleados, onClose }: { titulo: string; empleados: any[] | undefined; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium text-slate-800">{titulo}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
-        </div>
+    // Un visor: sin nada que cargar, la X y el fondo salen derecho.
+    <Modal titulo={titulo} alSalir={onClose} soloLectura>
         {!empleados ? (
           <p className="text-sm text-slate-500">Cargando...</p>
         ) : empleados.length === 0 ? (
@@ -293,19 +290,13 @@ function ModalListaEmpleados({ titulo, empleados, onClose }: { titulo: string; e
           </table>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
 function ModalDetalleSector({ titulo, detalle, onClose }: { titulo: string; detalle: any | undefined; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium text-slate-800">{titulo}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
-        </div>
+    <Modal titulo={titulo} alSalir={onClose} soloLectura ancho="ancho">
         {!detalle ? (
           <p className="text-sm text-slate-500">Cargando...</p>
         ) : detalle.empleados.length === 0 ? (
@@ -335,7 +326,6 @@ function ModalDetalleSector({ titulo, detalle, onClose }: { titulo: string; deta
           </table>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -194,6 +194,113 @@ export function controlarHoras(
   return { ok: true, total: suma };
 }
 
+// ── El cuerpo del parte ─────────────────────────────
+
+/** Un renglón del parte, ya leído y limpio. */
+export interface RenglonDelParte {
+  actividad: string;
+  lugar_raw: string;
+  horas: number;
+  sector_id: string | null;
+  equipo_id: string | null;
+}
+
+/** La cabecera del parte, ya leída y limpia. */
+export interface CabeceraDelParte {
+  proveedor_id: string;
+  numero: number;
+  fecha: string;
+  dirigido_a: string | null;
+  hora_entrada: string | null;
+  hora_salida: string | null;
+  horas_declaradas: number;
+  horas_50: number | null;
+  horas_100: number | null;
+  materiales: string | null;
+}
+
+export type LecturaDelParte =
+  | { ok: true; cabecera: CabeceraDelParte; renglones: RenglonDelParte[]; total: number }
+  | { ok: false; problemas: string[] };
+
+/** Un número que puede venir vacío: `null` si no hay nada, no cero. */
+function numeroOVacio(x: unknown): number | null {
+  if (x === "" || x === null || x === undefined) return null;
+  const n = Number(x);
+  return Number.isFinite(n) ? n : null;
+}
+
+const textoOVacio = (x: unknown): string | null => String(x ?? "").trim() || null;
+
+/**
+ * Leer el cuerpo de un parte: qué falta, qué no cierra, y cómo quedan los
+ * valores si está todo bien.
+ *
+ * **Vive acá porque lo usan dos rutas que tienen que decidir igual**: el alta
+ * de un parte y su corrección. Son la misma hoja leída dos veces, y con una
+ * copia en cada ruta el día que el control cambie una de las dos lo sigue
+ * haciendo viejo —y el control de la factura es justamente para lo que existe
+ * esto—.
+ *
+ * Los mensajes son los que ya tenía el alta y no se tocaron: dicen qué pasa
+ * con **esta hoja** —«la suma da 16 y el papel dice 18»—, que es mejor que
+ * cualquier cosa genérica. Se devuelven **todos juntos**, la vara de
+ * `validar()` del núcleo: quien tiene el papel delante quiere saber de una sola
+ * vez todo lo que no cierra.
+ *
+ * No mira la base y no sabe nada de ids: si el contratista existe, o si el
+ * número está repetido, lo contesta Postgres y lo traduce la ruta.
+ */
+export function leerElParte(cuerpo: Record<string, unknown> | null | undefined): LecturaDelParte {
+  const c = cuerpo ?? {};
+  const crudos = Array.isArray(c.renglones) ? (c.renglones as Record<string, unknown>[]) : [];
+
+  // Lo que falta, en una sola frase, como la escribía el alta.
+  const falta: string[] = [];
+  if (!c.proveedor_id) falta.push("el contratista");
+  if (!Number.isFinite(Number(c.numero)) || Number(c.numero) <= 0) falta.push("el número del parte");
+  if (!c.fecha) falta.push("la fecha");
+  if (!Number.isFinite(Number(c.horas_declaradas)) || Number(c.horas_declaradas) <= 0) {
+    falta.push("el total de horas que dice el papel");
+  }
+  for (const [i, r] of crudos.entries()) {
+    if (!String(r?.actividad ?? "").trim()) falta.push(`la actividad del renglón ${i + 1}`);
+    if (!String(r?.lugar_raw ?? "").trim()) falta.push(`el lugar del renglón ${i + 1}`);
+  }
+  if (falta.length > 0) return { ok: false, problemas: [`Falta cargar ${falta.join(", ")}.`] };
+
+  const renglones: RenglonDelParte[] = crudos.map((r) => ({
+    actividad: String(r.actividad).trim(),
+    lugar_raw: String(r.lugar_raw).trim(),
+    horas: Number(r.horas),
+    sector_id: (r.sector_id as string) || null,
+    equipo_id: (r.equipo_id as string) || null,
+  }));
+
+  // El control de la factura. Las horas las escribió quien tiene la hoja
+  // delante, así que acá no se reparte nada: se comprueba.
+  const control = controlarHoras(renglones, Number(c.horas_declaradas));
+  if (!control.ok) return { ok: false, problemas: control.problemas };
+
+  return {
+    ok: true,
+    cabecera: {
+      proveedor_id: String(c.proveedor_id),
+      numero: Number(c.numero),
+      fecha: String(c.fecha),
+      dirigido_a: textoOVacio(c.dirigido_a),
+      hora_entrada: textoOVacio(c.hora_entrada),
+      hora_salida: textoOVacio(c.hora_salida),
+      horas_declaradas: Number(c.horas_declaradas),
+      horas_50: numeroOVacio(c.horas_50),
+      horas_100: numeroOVacio(c.horas_100),
+      materiales: textoOVacio(c.materiales),
+    },
+    renglones,
+    total: control.total,
+  };
+}
+
 // ── La quincena ─────────────────────────────────────────────
 
 /** Una fecha UTC armada a mano, para no depender del huso de quien corra esto. */
@@ -415,27 +522,43 @@ export function agruparEnOrdenes(
 }
 
 /**
- * Qué va a decir la OT.
+ * Qué va a decir la OT: **la actividad y nada más**.
  *
- * Lleva **los textos originales de Candia con su número de parte**, que es lo
- * único que permite volver del sistema al papel, y deja dicho **de dónde
- * salen las horas**: las anotó quien cargó el parte, repartiendo el total
- * escrito entre los frentes del día. Eso último no es decoración — en seis
- * meses alguien va a leer "4 h" y va a querer saber quién las contó, y la
- * respuesta no es "las midió un reloj".
+ * ── QUÉ DECÍA ANTES, Y POR QUÉ CAMBIÓ (04/11/2026) ──────────────────────────
+ *
+ *     Limpieza — CANDIA. Quincena del 1/10 al 15/10. 24 h en total. Según los
+ *     partes diarios: Horno N°1 (parte 1301, 1/10, 4 h); Horno 1 (parte 1303,
+ *     5/10, 4 h); … Las horas de cada renglón las anotó quien cargó el parte
+ *     repartiendo el total escrito en la hoja…
+ *
+ * El contratista, las horas, el cierre y el estado **tienen columna propia en
+ * el master** —N, O, K y M—, y desde una celda de prosa no se filtra ni se
+ * suma. Lo que hacía falta no era repetirlos acá sino que esas columnas
+ * llegaran llenas, que es lo que arregla el drenaje de la ruta.
+ *
+ * ── POR QUÉ ALCANZA CON LA ACTIVIDAD ────────────────────────────────────────
+ *
+ * **Es lo que la planilla ya dice.** Las OT de CANDIA cargadas a mano —las que
+ * esto viene a reemplazar— tienen exactamente esta forma, una por sector:
+ * «Limpieza general», «Corte de pasto», «Riego en planta», «Limpieza en
+ * hidratación». No se está inventando un formato: se está dejando de agregar
+ * uno.
+ *
+ * Y no hace falta ningún denominador común como en el cuaderno de PIPARO:
+ * acá el grupo **se arma por la actividad normalizada**, así que todos sus
+ * renglones dicen la misma. Medido sobre las 19 OT generadas: **cero tienen más
+ * de una forma de escribirla**.
+ *
+ * ── LO QUE SE PIERDE, DICHO ─────────────────────────────────────────────────
+ *
+ * Los lugares de Candia con su número de parte —«Horno N°1 (parte 1301…)»—
+ * salen de la planilla, y **10 de las 19 OT tienen más de un lugar**. No se
+ * pierden del sistema: cada renglón vive en `mant_partes_contratista_renglones`
+ * con su `lugar_raw` y su parte, enlazado a esta misma OT. Lo que se pierde es
+ * poder volver al papel **mirando sólo la planilla**, y eso fue a pedido.
  */
-export function descripcionDeLaOT(grupo: GrupoDeOT, contratista: string): string {
-  const dias = grupo.detalle
-    .map((d) => `${d.lugar_raw.trim()} (parte ${d.parte_numero}, ${fechaCorta(d.fecha)}, ${d.horas} h)`)
-    .join("; ");
-
-  return (
-    `${grupo.actividad} — ${contratista}. ` +
-    `Quincena del ${fechaCorta(grupo.quincena)} al ${fechaCorta(finDeLaQuincena(grupo.quincena))}. ` +
-    `${grupo.horas} h en total. Según los partes diarios: ${dias}. ` +
-    `Las horas de cada renglón las anotó quien cargó el parte repartiendo el ` +
-    `total escrito en la hoja, así que no son una medición por frente de trabajo.`
-  );
+export function descripcionDeLaOT(grupo: GrupoDeOT): string {
+  return grupo.actividad.trim();
 }
 
 /** "2026-10-01" → "1/10". El día y el mes, que es como se nombra una fecha acá. */

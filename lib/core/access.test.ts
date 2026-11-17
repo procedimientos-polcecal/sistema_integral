@@ -24,7 +24,15 @@ describe("modulosVisibles", () => {
       "calidad",
       "taller_vial",
       "trituracion",
+      "seguridad_higiene",
+      "ventas",
     ]);
+  });
+
+  it("un grant de seguridad_higiene en edicion hace visible el módulo y da ese nivel", () => {
+    const grants: UsuarioModulo[] = [{ ...grant("seguridad_higiene"), nivel: "edicion" }];
+    expect(modulosVisibles("operario", grants)).toEqual(["seguridad_higiene"]);
+    expect(nivelEnModulo("operario", grants, "seguridad_higiene")).toBe("edicion");
   });
 
   it("un rol no-admin ve solo los módulos concedidos, en orden canónico", () => {

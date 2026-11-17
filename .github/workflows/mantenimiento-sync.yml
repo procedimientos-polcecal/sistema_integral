@@ -1,9 +1,15 @@
 # Sincroniza Mantenimiento con sus planillas cada 15 minutos.
 #
-# El cron vive acá y no en vercel.json por lo mismo que el de Compras: el plan
-# Hobby de Vercel sólo admite crons diarios, y poner una frecuencia mayor no
-# degrada el cron, hace fallar el deploy entero. En vercel.json queda uno diario
-# como red por si Actions falla.
+# EL CRON VIVE EN vercel.json, NO ACÁ. Hasta el 05/11/2026 era al revés, y el
+# motivo escrito era que el plan Hobby de Vercel sólo admite crons diarios.
+# **Ese motivo ya no vale: el plan es Pro.** Se descubrió midiendo, porque el
+# comentario decía Hobby en siete archivos mientras vercel.json tenía trece
+# crons y cinco de ellos disparaban todos los días a la hora exacta — con
+# Hobby, que admite dos, eso es imposible.
+#
+# Y la vuelta no es cosmética: **un cron de Actions no cumple lo que declara.**
+# Éste decía cada 15 minutos y corría cada 4 a 8 horas (medido el 05/11/2026
+# sobre las últimas corridas). Desde vercel.json corre cada 10 de verdad.
 #
 # El endpoint se protege solo: exige el mismo CRON_SECRET, y sin él responde 503
 # en vez de quedar abierto.
@@ -11,8 +17,9 @@
 name: Sincronizar Mantenimiento
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"
+  # SIN `schedule` DESDE EL 05/11/2026: el cron volvió a vercel.json, que ahora
+  # sí puede correrlo cada 10 minutos. Dejar el de acá lo dispararía dos veces,
+  # desde dos programadores distintos y sin nada que los coordine.
   # Para poder correrlo a mano desde la pestaña Actions cuando haga falta.
   workflow_dispatch:
 

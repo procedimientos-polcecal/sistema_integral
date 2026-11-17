@@ -5,9 +5,10 @@ import EquipoDetalle from "./EquipoDetalle";
 import { sectoresDePlanta } from "@/lib/mantenimiento/sectores";
 import { traerTodo } from "@/lib/core/paginado";
 import { hoyEnArgentina } from "@/lib/core/fechas";
-import { mtbfDeLaPlanta } from "@/lib/mantenimiento/mtbfDatos";
+import { indicadoresDeLaPlanta } from "@/lib/mantenimiento/mtbfDatos";
 import { confiabilidadDeLaFicha } from "@/lib/mantenimiento/mtbfVista";
 import { rankingDeFallas, type OtConFalla } from "@/lib/mantenimiento/fallas";
+import { ESTADO_CANCELADA } from "@/lib/mantenimiento/cancelacion";
 import {
   costoDelEquipo,
   type OrdenDeServicio,
@@ -15,6 +16,7 @@ import {
   type TarifaHora,
 } from "@/lib/mantenimiento/costoEquipo";
 import type { RequerimientoDelEquipo } from "./CostoDelEquipo";
+import type { CicloDeLaFicha } from "./CicloDeOT";
 
 export default async function EquipoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -25,7 +27,7 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: equipo }, sectores, { data: historial }, mtbf, fallas] = await Promise.all([
+  const [{ data: equipo }, sectores, { data: historial }, indicadores, fallas] = await Promise.all([
     supabase
       .from("equipos")
       .select("*, sectores(id, nombre, empresas(id, nombre))")
@@ -44,8 +46,8 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
     // ve igual. Pero el fallo se devuelve como `null` y no como "sin fallas":
     // `confiabilidadDeLaFicha` lo convierte en "no se pudo calcular", que es lo
     // único verdadero.
-    mtbfDeLaPlanta(supabase, hoyEnArgentina()).catch((error: unknown) => {
-      console.error("No se pudo calcular el MTBF de la ficha del equipo", error);
+    indicadoresDeLaPlanta(supabase, hoyEnArgentina()).catch((error: unknown) => {
+      console.error("No se pudieron calcular los indicadores de la ficha del equipo", error);
       return null;
     }),
     // Las OT de este equipo donde alguien anoto una falla. `traerTodo` y no un
@@ -76,6 +78,7 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
   const canEdit = nivel === "edicion" || nivel === "admin";
 
   const costo = await costoDeLaMaquina(supabase, id, equipo.sector_id);
+  const ciclo = await elCicloDelEquipo(supabase, id);
 
   return (
     <EquipoDetalle
@@ -84,10 +87,61 @@ export default async function EquipoPage({ params }: { params: Promise<{ id: str
       historial={historial ?? []}
       canEdit={canEdit}
       costo={costo}
-      confiabilidad={confiabilidadDeLaFicha(mtbf, id)}
+      confiabilidad={confiabilidadDeLaFicha(indicadores, id)}
       fallas={rankingDeFallas(fallas)}
+      ciclo={ciclo}
     />
   );
+}
+
+/**
+ * El ciclo de órdenes encadenadas de este equipo, con la orden que espera.
+ *
+ * Son dos consultas y no una porque la segunda depende del id de la primera, y
+ * hoy hay cuatro ciclos en toda la planta: los otros 265 equipos pagan una
+ * consulta que devuelve nada y no renderizan la sección.
+ */
+async function elCicloDelEquipo(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  equipmentId: string
+): Promise<CicloDeLaFicha | null> {
+  const { data } = await supabase
+    .from("mant_ciclos_de_ot")
+    // La cadena va **literal**: armada en una variable o concatenada, Supabase
+    // pierde la inferencia y todo lo de abajo pasa a ser `GenericStringError`.
+    .select("id, repeticiones, desde, vuelta_desde, madre:tarea_madre_id(nombre, componente), hija:tarea_hija_id(nombre, componente, periodo_dias)")
+    .eq("equipment_id", equipmentId)
+    .eq("activo", true)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  const madre = data.madre as unknown as { nombre: string; componente: string } | null;
+  const hija = data.hija as unknown as
+    { nombre: string; componente: string; periodo_dias: number | null } | null;
+  if (!madre || !hija) return null;
+
+  // La que está esperando: ni hecha ni cancelada. Tiene que decir lo mismo que
+  // el filtro de `ciclos/[id]/reiniciar`, que es el que decide cuál es la viva:
+  // si los dos no coinciden, la ficha muestra una orden que el reinicio no ve.
+  const { data: vivas } = await supabase
+    .from("ordenes_trabajo")
+    .select("ot_number, ciclo_vuelta, fecha_ejecucion")
+    .eq("ciclo_id", data.id)
+    .not("estado", "in", `(REALIZADO,${ESTADO_CANCELADA})`)
+    .limit(1);
+
+  return {
+    id: data.id,
+    repeticiones: data.repeticiones,
+    desde: data.desde,
+    vuelta_desde: data.vuelta_desde,
+    tareaMadre: madre.nombre,
+    tareaHija: hija.nombre,
+    componente: hija.componente,
+    periodoDias: hija.periodo_dias,
+    viva: (vivas ?? [])[0] ?? null,
+  };
 }
 
 /**

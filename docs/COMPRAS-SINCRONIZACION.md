@@ -48,13 +48,13 @@ porque ese bloque exige una pestaña de área de verdad. El porqué largo está 
   proveedor, costo y empresa. Ver "La orden de compra se crea desde acá".
 - Omite los RI ya gestionados en el sistema.
 - Se dispara por: el webhook del Apps Script cuando alguien edita la planilla,
-  el botón de `/compras/configuracion`, y un cron diario a las 9 UTC (6 de la
-  mañana en Argentina), para que el día arranque con los datos frescos.
+  el botón de `/compras/configuracion`, y el cron de `vercel.json`, que desde el
+  05/11/2026 corre **cada 10 minutos**.
 
-  El cron es diario y no más seguido porque **el plan Hobby de Vercel sólo
-  admite una ejecución por día**: una frecuencia mayor hace fallar el deploy
-  entero, no sólo el cron. Con plan Pro se puede bajar a `0 */2 * * *`. Igual el
-  webhook cubre la inmediatez, así que el cron es sólo la red de seguridad.
+  Hasta ese día el cron era diario, y lo que decía acá era que **el plan Hobby
+  sólo admite una ejecución por día**. Era falso: el plan es Pro. El webhook
+  sigue cubriendo la inmediatez y el cron sigue siendo la red de seguridad —
+  sólo que ahora es una red de diez minutos y no de veinticuatro horas.
 
 **Sistema → planilla, el alta** (`exportarAltaAlFormulario`)
 

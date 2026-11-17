@@ -11,7 +11,10 @@
  * importadas, 368 no tienen equipo enlazado.
  */
 
-import { loQueFaltaParaCerrar, type DatosDelCierre } from "@/lib/mantenimiento/cierreDeOT";
+import {
+  loQueFaltaParaCerrar, loQueImpideCerrar, type DatosDelCierre,
+} from "@/lib/mantenimiento/cierreDeOT";
+import { loQueFaltaPorElCierreAdelantado } from "@/lib/mantenimiento/cierreAnteriorAlInicio";
 
 export interface DatosDelAltaDeOT extends DatosDelCierre {
   sector_id: string | null | undefined;
@@ -19,8 +22,56 @@ export interface DatosDelAltaDeOT extends DatosDelCierre {
   descripcion: string | null | undefined;
   especialidad: string | null | undefined;
   tipo: string | null | undefined;
-  /** Cuándo se compromete a hacerse. Sin ella la OT no se atrasa nunca. */
+  /**
+   * Cuándo se compromete a **empezar**. Sin ella la OT no se atrasa nunca.
+   *
+   * Por dentro se sigue llamando `fecha_ejecucion` y en pantalla es «la fecha
+   * de inicio» desde el 02/11/2026, cuando la columna J de la planilla pasó de
+   * «FECHA DE EJECUCIÓN» a «FECHA DE INICIO». Es la misma fecha con mejor
+   * nombre: renombrar la columna arrastraría el MTBF, el contraste, el GUT y
+   * la programación del taller sin cambiar nada de lo que hacen.
+   */
   fecha_ejecucion: string | null | undefined;
+  /**
+   * Cuándo se estima que **termina**. Obligatoria desde el 04/11/2026.
+   *
+   * No es la de cierre: ésa es la real, y ésta la estimación que se carga al
+   * crear la orden. **Nació opcional** con el argumento de que quien carga una
+   * OT no siempre sabe cuándo termina y un campo obligatorio que no se sabe se
+   * llena con cualquier cosa. Se pidió al revés dos días después, y el
+   * argumento viejo queda escrito acá porque es el que hay que contestar si
+   * alguien propone sacarla: lo que se gana es que toda orden cargada a mano
+   * tenga ventana, y lo que se arriesga es una fecha puesta de compromiso.
+   *
+   * **Obligatoria sólo donde completa una persona**, que es lo que la hace
+   * sostenible: los cuatro generadores automáticos —los periódicos, el
+   * cuaderno, los partes de contratista y los grupos del cuaderno— arman el
+   * registro sin pasar por `loQueFaltaParaCrear`, así que ninguno se cayó al
+   * volverla obligatoria. El de los periódicos dice por qué en su propio
+   * comentario: «el periódico sabe cuándo arranca, no cuánto dura».
+   *
+   * **La clave es obligatoria en el tipo aunque el valor pueda faltar**, y eso
+   * no es una sutileza: el día que se volvió obligatoria, la ruta del alta
+   * seguía armando el objeto sin nombrarla, así que la regla la veía
+   * `undefined` y **habría rechazado todas las órdenes del sistema**. Con la
+   * clave opcional, `tsc` no decía nada — es la misma forma del bug del
+   * 19/10/2026, cuando la regla creció y el botón de los avisos se quedó atrás
+   * en silencio. Exigir la clave y permitir el valor vacío deja que el
+   * compilador nombre a quien se olvide, y que la regla nombre a quien la
+   * mande vacía. Una carga sin señal encolada antes de que el campo existiera
+   * vuelve sin ella: llega como `undefined` y recibe un 400 que la nombra.
+   */
+  fecha_fin: string | null | undefined;
+  /**
+   * Por qué se cerró antes de la fecha de inicio. Sólo se pide cuando el cierre
+   * es anterior al inicio; ver `cierreAnteriorAlInicio.ts`.
+   *
+   * **La clave es obligatoria en el tipo aunque el valor pueda faltar**, por la
+   * misma razón que `fecha_fin` (léase su docstring): con la clave opcional, un
+   * lugar que arma este objeto sin nombrarla la manda `undefined` y `tsc` no
+   * dice nada. Exigirla hace que el compilador nombre a quien se olvide.
+   */
+  cierre_justificacion: string | null | undefined;
 }
 
 /**
@@ -35,7 +86,10 @@ const IMPRESCINDIBLES: readonly [keyof DatosDelAltaDeOT, string][] = [
   ["especialidad", "la especialidad"],
   ["tipo", "el tipo de trabajo"],
   ["quien", "quién lo realiza"],
-  ["fecha_ejecucion", "la fecha de ejecución"],
+  ["fecha_ejecucion", "la fecha de inicio"],
+  // Las dos juntas y en este orden: son el par de una ventana estimada, y en
+  // los cuatro formularios están una al lado de la otra.
+  ["fecha_fin", "la fecha de fin estimada"],
 ];
 
 /**
@@ -55,5 +109,61 @@ export function loQueFaltaParaCrear(datos: DatosDelAltaDeOT): string[] {
     .filter(([campo]) => String(datos[campo] ?? "").trim() === "")
     .map(([, nombre]) => nombre);
 
-  return [...falta, ...loQueFaltaParaCerrar(datos)];
+  // La justificación va al final porque su campo está al final del formulario.
+  return [
+    ...falta,
+    ...loQueFaltaParaCerrar(datos),
+    ...loQueFaltaPorElCierreAdelantado(datos),
+  ];
+}
+
+/**
+ * Lo que una orden nueva dice y se contradice.
+ *
+ * Va aparte de `loQueFaltaParaCrear` porque es otra clase de problema, y
+ * mezclarlas daría un mensaje falso: aquello dice que **falta** un dato, y un
+ * «Falta cargar la fecha de fin» cuando la fecha está cargada —sólo que dada
+ * vuelta— manda a buscar lo que no es.
+ *
+ * Nombra **las dos fechas**: decir «la fecha de fin es anterior» obliga a
+ * volver al formulario a ver contra qué, y la que está mal puede ser
+ * cualquiera de las dos.
+ *
+ * Mira **dos pares distintos contra la misma fecha de inicio**: la de fin, que
+ * es la estimación, y la de cierre, que es la real. Son dos preguntas —cuándo
+ * se calcula que termina y cuándo terminó— y las dos tienen la misma respuesta
+ * imposible: antes de empezar. La segunda la contesta `loQueImpideCerrar`, que
+ * es **la misma función que corre el PATCH** al registrar el trabajo: una orden
+ * que nace cerrada y una que se cierra después tienen que recibir el mismo
+ * mensaje, y dos copias de la regla es como el botón de los avisos se quedó
+ * atrás dos días en silencio el 19/10/2026.
+ *
+ * **Pero desde el 12/11/2026 las dos dejaron de contestarse igual, y la
+ * diferencia es deliberada:** el cierre anterior al inicio se acepta cuando hay
+ * una justificación que lo explica —se pidió así— y la fecha de **fin** no,
+ * porque es la ventana estimada que se promete al crear la orden y nadie pidió
+ * poder prometer una que termina antes de empezar. Por eso la justificación
+ * viaja sólo al segundo chequeo.
+ *
+ * Y si falta la de inicio se calla —el `if (inicio)`—, porque de eso ya habla
+ * `loQueFaltaParaCrear`, que la exige, y dos mensajes por un solo hueco es
+ * ruido. Allá esa rama sí habla, y tiene que hacerlo: el que registra trabajo
+ * sobre una OT vieja no tiene el campo de inicio delante para completarlo.
+ */
+export function loQueSeContradice(datos: DatosDelAltaDeOT): string[] {
+  const inicio = String(datos.fecha_ejecucion ?? "").trim();
+  const fin = String(datos.fecha_fin ?? "").trim();
+  if (!inicio) return [];
+
+  const problemas: string[] = [];
+  if (fin && fin < inicio) {
+    problemas.push(`la fecha de fin (${fin}) es anterior a la de inicio (${inicio})`);
+  }
+  // La justificación va con las fechas porque desde el 12/11/2026 es parte de
+  // la regla: un cierre anterior al inicio deja de contradecirse cuando hay un
+  // texto que lo explica. Sin pasarla, esta pantalla seguiría mostrando el
+  // cartel rojo al lado del campo que lo levanta.
+  problemas.push(...loQueImpideCerrar(inicio, datos.fecha_cierre, datos.cierre_justificacion));
+
+  return problemas;
 }

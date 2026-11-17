@@ -23,6 +23,8 @@
 import { texto, fechaDeSheets, codigoDeEquipo } from "@/lib/mantenimiento/planilla";
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 import { textoParaLaCelda } from "@/lib/core/sheets";
+import { indiceDeColumnas } from "@/lib/mantenimiento/formulario";
+import { observacionDelCierreAdelantado } from "@/lib/mantenimiento/cierreAnteriorAlInicio";
 
 /**
  * Las especialidades que usa la planilla, verificadas contra ella.
@@ -119,6 +121,12 @@ export const COLUMNAS_DE_DERRAME: readonly number[] = [
 /** La que calcula la planilla sola. No se escribe, pero no es derrame. */
 export const COLUMNA_CALCULADA = 11;
 
+/** La del ESTADO. Se exporta porque la rellena también la sincronización. */
+export const COLUMNA_ESTADO: number = COL.estado;
+
+/** La del N° de OT, que es la que dice si una fila es una orden. */
+export const COLUMNA_OT: number = COL.otNumber;
+
 /** Las que sí son literales del master y el sistema puede escribir. */
 export const COLUMNAS_ESCRIBIBLES: readonly number[] = [
   COL.fechaCierre, COL.estado, COL.contratista, COL.horas,
@@ -139,7 +147,7 @@ export const TODAS_LAS_COLUMNAS: readonly number[] = Object.values(COL);
 export const LO_QUE_NO_SE_CORRIGE_EN_EL_MASTER: readonly string[] = [
   "la fecha de la orden", "el sector", "el equipo", "la especialidad",
   "el tipo", "quién lo realiza", "la descripción", "el repuesto",
-  "la fecha de ejecución", "la prioridad",
+  "la fecha de inicio", "la prioridad",
 ];
 
 /**
@@ -283,6 +291,13 @@ export interface RegistroDeOT {
   operario_3?: string | null;
   observaciones?: string | null;
   foto_url?: string | null;
+  /**
+   * Por qué se cerró antes de empezar. Va opcional acá y obligatoria en
+   * `DatosDelAltaDeOT`, a propósito: allá la obligación hace que `tsc` nombre
+   * a quien arme el objeto sin ella; acá los generadores automáticos no tienen
+   * justificación que mandar y no hay por qué pedirles un `undefined`.
+   */
+  cierre_justificacion?: string | null;
 }
 
 /**
@@ -376,7 +391,108 @@ export function repartirRegistroDeOT(body: Record<string, unknown>): {
   if (body.observaciones !== undefined) registro.observaciones = texto(body.observaciones);
   if (body.foto_url !== undefined) registro.foto_url = texto(body.foto_url);
 
+  // Sólo a la tabla, y no al `registro` a propósito: la celda de observaciones
+  // se compone desde la fila y no desde el cuerpo del pedido. Si viajara en el
+  // `registro`, el segundo registro de una OT —que no la trae— reescribiría la
+  // W sin el renglón de la justificación.
+  if (body.cierre_justificacion !== undefined) {
+    update.cierre_justificacion = texto(body.cierre_justificacion);
+  }
+
   return { update, registro };
+}
+
+/**
+ * En qué columna del master está la FECHA DE FIN. `-1` es que todavía no la trae.
+ *
+ * **Por el nombre del encabezado y no por la letra**, a diferencia del resto de
+ * esta planilla, que se lee por posición. Es una columna nueva (04/11/2026) y
+ * el mismo contenido ya se mudó de `K:O` a `A:E` en un solo día en este módulo:
+ * una letra fija es un `#REF!` esperando. El alias es el mismo que usa el alta
+ * para escribirla en la hoja de respuestas, así que los dos lados no pueden
+ * llamarla distinto.
+ */
+export function columnaDeFechaFin(encabezado: readonly string[]): number {
+  return indiceDeColumnas(encabezado).fechaFin;
+}
+
+/**
+ * La fecha de fin que va a la base para una fila del master.
+ *
+ * **Una celda vacía no pisa lo que el sistema ya sabe.** El alta guarda la
+ * fecha en la base y la manda a la hoja de respuestas, pero el master la recibe
+ * por `IMPORTRANGE` y tarda entre 3 y 53 horas (medido el 21/10/2026): importar
+ * la celda vacía en esa ventana borraría la fecha recién escrita. Es el mismo
+ * principio que `fecha_ejecucion_pendiente`. Lo que se pierde, a propósito: una
+ * fecha que alguien borra del master no se borra del sistema.
+ *
+ * Y vacía, en la base, quiere decir «dura un día», no «falta»: por eso no hace
+ * falta distinguir acá entre una orden vieja y una que se cargó sin fin.
+ */
+export function fechaFinDeLaFila(
+  fila: readonly unknown[],
+  columna: number,
+  delSistema: string | null
+): string | null {
+  if (columna < 0) return delSistema;
+  return fechaDeSheets(fila[columna]) ?? delSistema;
+}
+
+/**
+ * Si un error de la base dice que **esa columna no existe** —que la migración
+ * todavía no corrió—, y no cualquier otra cosa.
+ *
+ * Lo necesita la importación de OT para decidir si el silencio sobre
+ * `fecha_fin` es esperable. Antes de la migración, la lectura falla y no pasa
+ * nada que contar. Después de la migración, la misma lectura puede fallar por
+ * un corte de red o un timeout, y ahí **esa corrida no importa `fecha_fin`** y
+ * hay que decirlo: un `catch` pelado no distingue una cosa de la otra.
+ *
+ * Los dos textos son los que da el sistema: el de PostgreSQL («column
+ * ordenes_trabajo.fecha_fin does not exist») y el del caché de esquema de
+ * PostgREST («Could not find the 'fecha_fin' column of … in the schema cache»).
+ */
+export function faltaLaColumna(mensaje: string, columna: string): boolean {
+  if (!mensaje.includes(columna)) return false;
+  return /does not exist|could not find/i.test(mensaje);
+}
+
+/**
+ * La orden **como la espera la tabla**: sin los campos que existen sólo para
+ * leer la planilla.
+ *
+ * ── POR QUÉ HACE FALTA UN FILTRO Y NO ALCANZA CON `...orden` ────────────────
+ *
+ * `OrdenLeida` fue uno a uno con las columnas de `ordenes_trabajo` desde que
+ * nació, y por eso la sincronización manda la orden entera al `upsert`. El
+ * 29/10/2026 entró `estado_raw` —la celda del ESTADO sin interpretar, que es
+ * lo que le faltaba al contraste para distinguir «dice Por hacer» de «no dice
+ * nada»— y con eso dejó de serlo. PostgREST no ignora un campo que no es
+ * columna: **corta el lote entero** con «Could not find the 'estado_raw'
+ * column of 'ordenes_trabajo' in the schema cache», así que la importación de
+ * OT no entró más hasta que se arregló.
+ *
+ * Y no lo vio nadie porque lo que se probó fue el parseo, que es puro y
+ * seguía bien. Lo que rompió es el empalme con la base, y eso no lo prueba
+ * ningún test del lado de acá.
+ *
+ * ── QUE NO SE GUARDE ES LA DECISIÓN, NO UN OLVIDO ──────────────────────────
+ *
+ * La celda cruda sirve durante la corrida, que es el único momento en que las
+ * dos versiones existen a la vez —la de la planilla y la del sistema—. Después
+ * los dos lados coinciden por construcción. Guardarla sería una columna que
+ * repite a `estado` en todas las filas menos en las ocho a las que les falta
+ * la fórmula, y que nadie volvería a leer.
+ *
+ * Vive **al lado de la interfaz** a propósito: lo que hay que acordarse al
+ * agregar un campo a `OrdenLeida` es si es columna o no, y ésta es la lista.
+ */
+export function paraLaBase(orden: OrdenLeida): Omit<OrdenLeida, "estado_raw"> {
+  // Nombrar `estado_raw` es justamente lo que lo saca del resto, así que el
+  // "no se usa" de acá es el efecto buscado y no un descuido.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { estado_raw, ...columnas } = orden;
+  return columnas;
 }
 
 /**
@@ -441,6 +557,14 @@ export function celdaDeEstado(estado: string | null | undefined, fila: number): 
  * sumarlos. **Y el estado además puede ser una fórmula** —ver `celdaDeEstado`—,
  * que es otra razón para que no lo toque `textoParaLaCelda`: le pondría el
  * apóstrofo delante y la escribiría como texto.
+ *
+ * **Costo que se acepta a conciencia, en la W.** Cuando drena la cola, el
+ * registro se rearma desde la fila y las observaciones no tienen columna para
+ * rearmarse: la W sale con la justificación sola. Si esa OT ya tenía las dos,
+ * el drenaje se lleva la parte de las observaciones. No se pierde el dato
+ * —quedan en `mantenimientos_ejecuciones.observations`, y las altas no tienen
+ * observaciones— pero sí esa copia en la planilla. La alternativa era que la
+ * justificación del alta no saliera nunca.
  */
 export function celdasParaRegistrar(
   registro: RegistroDeOT
@@ -467,8 +591,15 @@ export function celdasParaRegistrar(
   if (registro.operario_2 !== undefined) sumar(COL.operario2, textoParaLaCelda(registro.operario_2));
   if (registro.operario_3 !== undefined) sumar(COL.operario3, textoParaLaCelda(registro.operario_3));
   if (registro.foto_url !== undefined) sumar(COL.fotos, registro.foto_url ?? "");
-  if (registro.observaciones !== undefined) {
-    sumar(COL.observaciones, textoParaLaCelda(registro.observaciones));
+  // La W lleva las observaciones y la justificación del cierre adelantado, y se
+  // escribe si vino alguna de las dos.
+  if (registro.observaciones !== undefined || registro.cierre_justificacion !== undefined) {
+    sumar(
+      COL.observaciones,
+      textoParaLaCelda(
+        observacionDelCierreAdelantado(registro.cierre_justificacion, registro.observaciones)
+      )
+    );
   }
 
   return celdas;

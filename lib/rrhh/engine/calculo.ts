@@ -80,7 +80,18 @@ export function calcularDia(
       horasNormales: 0,
       horasExtra50: 0,
       horasExtra100: total,
-      francoGenerado: total > 0,
+      // EL RECARGO Y EL FRANCO SON DOS COSAS DISTINTAS, y estaban pegadas:
+      // `feriadoComoDomingo` decidía las dos de una sola vez. Un feriado
+      // trabajado se sigue pagando al 100 % —eso no se toca—, pero el franco
+      // compensatorio lo genera **sólo el domingo**, por pedido del
+      // 02/11/2026. Medido ese día: de los 259 francos de la base, 39 los
+      // había generado un feriado.
+      //
+      // Se pregunta por el día de la semana y no por `tipoDia` a propósito:
+      // `determinarTipoDia` le da precedencia a FERIADO, así que un feriado
+      // que cae domingo se etiqueta FERIADO — y ése sí tiene que generar
+      // franco, porque es un domingo trabajado.
+      francoGenerado: dayOfWeekUtc(fecha) === 0 && total > 0,
     };
   }
 

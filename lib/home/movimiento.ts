@@ -1,5 +1,7 @@
 import { diaDeLaSemana } from "@/lib/core/fechas";
 import type { Notificacion } from "./notificaciones";
+import { ES_POR_PERSONA } from "./avisos";
+import { CRECE_CON_EL_DIA } from "./notificaciones";
 
 /**
  * Lo que se movió desde el resumen anterior.
@@ -45,7 +47,7 @@ export type Foto = Map<string, number>;
  * Los avisos que **subieron** desde la foto, con `cantidad` reemplazada por
  * cuánto subieron.
  *
- * Tres casos que no son obvios:
+ * Cuatro casos que no son obvios:
  *
  *   - **Lo que bajó no sale.** Que una cola se vacíe es una buena noticia y no
  *     pide nada; avisarlo duplicaría el volumen para no pedir nada.
@@ -54,9 +56,20 @@ export type Foto = Map<string, number>;
  *   - **Lo que está en la foto y hoy no existe no genera nada.** Su conteo
  *     llegó a cero y `avisosDeConteos` ya no lo devuelve; la foto lo recuerda y
  *     eso no es motivo para decir nada.
+ *   - **Lo que depende de quién mira no sale nunca** (`ES_POR_PERSONA`): la
+ *     foto es global, y compararlo contra ella inventaría una novedad todos los
+ *     días. Ese aviso queda en la campana y en los totales del lunes.
+ *   - **Lo que sube solo con el calendario tampoco** (`CRECE_CON_EL_DIA`): su
+ *     número es un reloj y no un stock, así que «subió desde ayer» es cierto
+ *     todas las mañanas y no significa nada. Mismo destino: campana y lunes.
  */
 export function loQueSeMovio(avisos: Notificacion[], foto: Foto): Notificacion[] {
   return avisos.flatMap((a) => {
+    // Su número es de una persona y la foto es de todos: ver `ES_POR_PERSONA`.
+    if (ES_POR_PERSONA.has(a.id)) return [];
+    // Su número es el día: comparar un reloj contra la foto de ayer da siempre
+    // una novedad. Ver `CRECE_CON_EL_DIA`.
+    if (CRECE_CON_EL_DIA.has(a.id)) return [];
     const subio = a.cantidad - (foto.get(a.id) ?? 0);
     return subio > 0 ? [{ ...a, cantidad: subio }] : [];
   });

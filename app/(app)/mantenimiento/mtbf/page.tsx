@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { traerTodo } from "@/lib/core/paginado";
 import { hoyEnArgentina } from "@/lib/core/fechas";
-import { mtbfDeLaPlanta } from "@/lib/mantenimiento/mtbfDatos";
+import { indicadoresDeLaPlanta } from "@/lib/mantenimiento/mtbfDatos";
 import {
   sectoresDePlanta,
   empresaDelSector,
@@ -15,7 +15,8 @@ import MtbfClient from "./MtbfClient";
 /**
  * Cada cuánto falla cada máquina, el peor arriba.
  *
- * La cuenta se hace en el servidor (`mtbfDeLaPlanta`) y el cliente sólo ordena
+ * Las cuentas se hacen en el servidor (`indicadoresDeLaPlanta`, una sola lectura
+ * para los dos números) y el cliente sólo ordena
  * y filtra lo que ya viene hecho. El nivel de acceso lo resuelve el layout del
  * módulo: alcanza con lectura.
  *
@@ -31,8 +32,8 @@ export default async function MtbfPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [mtbf, equiposDb, sectores] = await Promise.all([
-    mtbfDeLaPlanta(supabase, hoyEnArgentina()),
+  const [{ mtbf, mttr }, equiposDb, sectores] = await Promise.all([
+    indicadoresDeLaPlanta(supabase, hoyEnArgentina()),
     traerTodo<{ id: string; code: string; name: string; sector_id: string | null }>((de, a) =>
       supabase
         .from("equipos")
@@ -57,6 +58,7 @@ export default async function MtbfPage() {
   return (
     <MtbfClient
       mtbf={mtbf}
+      mttr={mttr}
       equipos={equipos}
       // La empresa viaja resuelta: el embed de PostgREST llega como objeto o
       // como arreglo según cómo esté declarada la relación, y eso no tiene por

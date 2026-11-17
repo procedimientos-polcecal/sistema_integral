@@ -15,11 +15,14 @@ import { totalMetros, totalPozos, type Tramo } from "@/lib/cantera/tramos";
 import { ETIQUETA_TIPO_CONSUMO } from "@/lib/cantera/vocabulario";
 import type { Consumo, Insumo, Voladura, Yacimiento } from "@/lib/cantera/types";
 import ConciliacionOdoo from "../../ConciliacionOdoo";
+import { numeroDeCampo } from "@/lib/cantera/numero";
 
 const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const num1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 const money = (v: number | null) => (v === null ? "—" : `$ ${ars.format(v)}`);
-const n = (v: string) => (v.trim() === "" ? null : Number(v));
+// La misma lectura que la ruta, que es el punto: `Number("2,5")` daba NaN y
+// el campo terminaba guardado vacío (ver `lib/cantera/numero.ts`).
+const n = (v: string) => numeroDeCampo(v);
 const INPUT_CLS = "mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50";
 
 /** Un color por tipo de consumo, para que la lista de insumos no sea un bloque gris — detonador en ámbar (material peligroso), otros insumos en celeste. */
@@ -123,9 +126,11 @@ function tramosIniciales(
 function tramosLimpios(filas: TramoUI[]): Tramo[] {
   const out: Tramo[] = [];
   for (const f of filas) {
-    const p = Number(f.pozos);
-    const m = Number(f.metros.replace(",", "."));
-    if (Number.isInteger(p) && p > 0 && isFinite(m) && m > 0) out.push({ pozos: p, metros: m });
+    const p = numeroDeCampo(f.pozos);
+    // Antes tenía su propio `replace(",", ".")`: entendía la coma pero no el
+    // punto de miles, y era la cuarta lectura distinta de la misma cadena.
+    const m = numeroDeCampo(f.metros);
+    if (p !== null && m !== null && Number.isInteger(p) && p > 0 && m > 0) out.push({ pozos: p, metros: m });
   }
   return out;
 }

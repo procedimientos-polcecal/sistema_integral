@@ -2,13 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-
-interface Notificacion {
-  id: string;
-  titulo: string;
-  cantidad: number;
-  href: string;
-}
+import {
+  suNumeroSeMuestra,
+  totalDeLaCampana,
+  type Notificacion,
+} from "@/lib/home/notificaciones";
 
 export function NotificationsBell() {
   const [notificaciones, setNotificaciones] = useState<Notificacion[] | null>(null);
@@ -39,7 +37,9 @@ export function NotificationsBell() {
     }).catch(() => {});
   }
 
-  const total = (notificaciones ?? []).reduce((acc, n) => acc + n.cantidad, 0);
+  // La suma vive en `lib/home/notificaciones.ts` y no acá porque es una
+  // decisión —qué números cuentan y cuáles no— y las decisiones se prueban.
+  const total = totalDeLaCampana(notificaciones ?? []);
 
   return (
     <div ref={wrapRef} className="relative">
@@ -90,9 +90,20 @@ export function NotificationsBell() {
                     className="flex flex-1 items-center justify-between gap-2 overflow-hidden"
                   >
                     <span className="truncate text-slate-700">{n.titulo}</span>
-                    <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--accent-light)", color: "var(--accent-dark)" }}>
-                      {n.cantidad}
-                    </span>
+                    {/*
+                      Sin insignia cuando el número no cuenta cosas: el de «no
+                      se pudo comprobar la salud» lleva el día de la época
+                      (20.763), y los de ritmo y de salud llevan umbrales o
+                      rachas —un «8» y un «9» al lado de dos recursos caídos el
+                      11/11/2026—. El título ya es la frase completa. Lo decide
+                      `suNumeroSeMuestra`, que es el mismo criterio que usa el
+                      push.
+                    */}
+                    {suNumeroSeMuestra(n) && (
+                      <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--accent-light)", color: "var(--accent-dark)" }}>
+                        {n.cantidad}
+                      </span>
+                    )}
                   </Link>
                   <button
                     type="button"

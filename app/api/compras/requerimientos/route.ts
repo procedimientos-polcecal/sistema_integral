@@ -70,6 +70,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Hay que describir qué se necesita" }, { status: 400 });
   }
 
+  // El lugar también, desde el 11/11/2026. La regla vive acá y no sólo en el
+  // formulario: una validación que existe en el botón deja de existir apenas
+  // alguien llame a la API de otra forma.
+  //
+  // Vale para el alta y no para la sincronización, que inserta por su cuenta
+  // sin pasar por esta ruta: si la planilla trae un lugar que no se reconoce,
+  // ese RI tiene que entrar igual con `ubicacion_raw` y el enlace en null.
+  if (!body.ubicacion_id) {
+    return NextResponse.json({ error: "Hay que decir dónde se necesita" }, { status: 400 });
+  }
+
   // Sin valor por defecto: si no la sugieren, queda sin definir hasta que
   // alguien apruebe. Poner "NORMAL" sería inventar una decisión.
   const prioridad = PRIORIDADES.includes(body.prioridad) ? body.prioridad : null;

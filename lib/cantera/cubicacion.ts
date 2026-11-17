@@ -188,17 +188,24 @@ function rangoDeMeses(mesesConCierre: string[]): string[] {
  * `mesAIncluir` fuerza a que ese mes aparezca aunque todavía no tenga ningún
  * cierre cargado —el mes en curso, típicamente—: las voladuras y el acarreo
  * ya están y sirven para decidir qué existencia final cargar, así que no
- * tiene sentido esperar a la primera carga para mostrarlos.
+ * tiene sentido esperar a la primera carga para mostrarlos. Puede ser más de
+ * uno: la cubicación por material (`./cubicacionPorMaterial.ts`) fuerza el mes
+ * de corte además del mes en curso, para poder cargar el primer cierre.
+ *
+ * Las "claves" de `yacimientos` no tienen por qué ser códigos de yacimiento:
+ * el balance por material (`Chocolata`, `Caliza`) usa esta misma función con
+ * el nombre del material en ese lugar.
  */
 export function armarCierresCubicacion(
   yacimientos: string[],
   voladuras: VoladuraParaCubicacion[],
   acarreos: AcarreoPorYacimiento[],
   cierresCargados: CierreCargado[],
-  mesAIncluir?: string
+  mesAIncluir?: string | string[]
 ): FilaCierreCubicacion[] {
   const mesesConCierre = cierresCargados.map((c) => c.mes);
-  const meses = rangoDeMeses(mesAIncluir ? [...mesesConCierre, mesAIncluir] : mesesConCierre);
+  const extra = mesAIncluir === undefined ? [] : Array.isArray(mesAIncluir) ? mesAIncluir : [mesAIncluir];
+  const meses = rangoDeMeses([...mesesConCierre, ...extra]);
   const filas: FilaCierreCubicacion[] = [];
 
   for (const yacimientoCodigo of yacimientos) {

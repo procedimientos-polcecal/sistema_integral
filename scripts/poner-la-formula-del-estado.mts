@@ -52,10 +52,10 @@ if (existsSync(env)) {
 
 const { leerValores, escribirCeldas, leerFormulasDeRango } = await import("../lib/core/sheets.ts");
 const { letraDeColumna } = await import("../lib/core/columnaDeSheets.ts");
-const { celdaDeEstado } = await import("../lib/mantenimiento/ordenes.ts");
+const { lasQueLesFaltaLaFormula } =
+  await import("../lib/mantenimiento/formulaDelEstado.ts");
 
 const ESCRIBIR = process.argv.includes("--escribir");
-const FRENO = 50;
 
 /** A = 0. La M es el ESTADO y la L la fórmula de atrasado/al día. */
 const COL_OT = 0;
@@ -79,37 +79,24 @@ if (dice !== "ESTADO") {
 }
 console.log(`Columna ${letraDeColumna(COL_ESTADO)} = «${dice}» · ${filas.length - 1} filas leídas\n`);
 
-// ── «VACÍA» ES SIN FÓRMULA, NO SIN TEXTO ───────────────────────────────────
+// ── LA DECISIÓN NO VIVE ACÁ ────────────────────────────────────────────────
 //
-// Una celda que ya tiene `=IF(Jn="","",Ln)` se ve vacía cuando esa OT no tiene
-// fecha de ejecución —es el caso de la 622—, y eso está bien: no hay estado
-// que calcular todavía. Mirando sólo el texto, este script la proponía otra
-// vez en cada corrida y nunca quedaba conforme. Lo que decide es si hay
-// fórmula; así además es idempotente, que es lo que uno quiere de algo que
-// escribe en una planilla de producción.
+// `lasQueLesFaltaLaFormula` está en `lib/` con sus tests, y la usan **los dos**
+// que escriben esta columna: esto y la sincronización. Tenerla dos veces es
+// cómo el script y el cron terminan discrepando sobre qué es una celda vacía.
 const letraEstado = letraDeColumna(COL_ESTADO);
-const tieneFormula = await leerFormulasDeRango(
+const formulas = await leerFormulasDeRango(
   planilla, pestana, `${letraEstado}1:${letraEstado}${filas.length}`
 );
 
-/** Las celdas a escribir. Se arman UNA vez: es lo que se informa y lo que va. */
-const aEscribir = [];
-for (let i = 1; i < filas.length; i++) {
-  const fila = i + 1;                       // la planilla cuenta desde 1
-  const ot = Number(String(filas[i][COL_OT] ?? "").trim());
-  if (!ot || isNaN(ot)) continue;
-  if (String(filas[i][COL_ESTADO] ?? "").trim() !== "") continue;
-  if (tieneFormula[i]?.[0] === true) continue;
+const { celdas, freno } = lasQueLesFaltaLaFormula(filas, formulas, COL_OT, COL_ESTADO);
 
-  aEscribir.push({
-    pestana,
-    fila,
-    columna: COL_ESTADO,
-    valor: celdaDeEstado("POR_HACER", fila),
-    ot,
-    loQueCalculaLaL: String(filas[i][COL_L] ?? "").trim() || "(vacío)",
-  });
-}
+if (freno) { console.log(freno); process.exit(1); }
+
+const aEscribir = celdas.map((c) => ({
+  pestana, fila: c.fila, columna: c.columna, valor: c.valor, ot: c.ot_number,
+  loQueCalculaLaL: String(filas[c.fila - 1]?.[COL_L] ?? "").trim() || "(vacío)",
+}));
 
 if (aEscribir.length === 0) {
   console.log("Ninguna OT tiene el ESTADO en blanco. No hay nada que hacer.");
@@ -125,14 +112,6 @@ for (const c of aEscribir) {
 }
 console.log(`\n${aEscribir.length} celda(s) en blanco.`);
 
-if (aEscribir.length > FRENO) {
-  console.log(
-    `FRENO: son más de ${FRENO}. Una planilla recalculando devuelve vacías las ` +
-    `celdas que no resolvió, y «vacío» es justo el criterio de este script. ` +
-    `Mirala antes de forzar nada.`
-  );
-  process.exit(1);
-}
 
 if (!ESCRIBIR) {
   console.log("Simulación: no se escribió nada. Con --escribir va de verdad.");

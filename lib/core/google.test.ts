@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { obtenerToken, olvidarLosTokens, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA } from "./google";
+import { obtenerToken, olvidarLosTokens, SCOPE_CALENDAR, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA } from "./google";
 
 /**
  * El caché de tokens.
@@ -24,13 +24,23 @@ const CUENTA = JSON.stringify({
 });
 
 let pedidos = 0;
+// El cuerpo de cada POST a oauth2.googleapis.com, para poder leer el JWT que viajó.
+let cuerpos: string[] = [];
+
+/** El payload del JWT (`cabecera.payload.firma`, en base64url) del pedido `n`. */
+function cargaDelPedido(n: number): Record<string, unknown> {
+  const assertion = new URLSearchParams(cuerpos[n]).get("assertion") ?? "";
+  return JSON.parse(Buffer.from(assertion.split(".")[1], "base64url").toString());
+}
 
 beforeEach(() => {
   pedidos = 0;
+  cuerpos = [];
   olvidarLosTokens();
   process.env.GOOGLE_SERVICE_ACCOUNT_JSON = CUENTA;
-  vi.stubGlobal("fetch", async () => {
+  vi.stubGlobal("fetch", async (_url: unknown, init?: { body?: unknown }) => {
     pedidos++;
+    cuerpos.push(String(init?.body ?? ""));
     return new Response(
       JSON.stringify({ access_token: `token-${pedidos}`, expires_in: 3600 }),
       { status: 200, headers: { "Content-Type": "application/json" } }
@@ -71,6 +81,48 @@ describe("obtenerToken", () => {
     expect(pedidos).toBe(1);
   });
 
+  /**
+   * Con impersonación el token ya no es el mismo para todos: es el de esa
+   * casilla. Si el caché ignorara a quién se impersona, a un usuario se le
+   * entregaría el token de otro y la escritura iría al calendario equivocado
+   * sin ningún error.
+   */
+  it("dos casillas distintas no comparten el token", async () => {
+    await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
+    await obtenerToken([SCOPE_CALENDAR], "b@polcecal.com");
+    expect(pedidos).toBe(2);
+  });
+
+  it("la misma casilla reusa el suyo", async () => {
+    await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
+    await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
+    expect(pedidos).toBe(1);
+  });
+
+  it("impersonar y no impersonar son entradas distintas", async () => {
+    await obtenerToken([SCOPE_CALENDAR]);
+    await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
+    expect(pedidos).toBe(2);
+  });
+
+  /**
+   * Los tres casos de arriba prueban que las claves del caché son distintas, no
+   * que el JWT impersone: si `sub` no llegara al payload seguirían en verde y la
+   * Agenda escribiría en el calendario de la cuenta de servicio, con el síntoma
+   * —"los eventos no le aparecen a nadie"— lejos de la causa. Éste lee el JWT
+   * que de verdad viajó a Google.
+   */
+  it("con comoQuien el JWT lleva sub, y sin él no", async () => {
+    await obtenerToken([SCOPE_CALENDAR], "a@polcecal.com");
+    await obtenerToken([SCOPE_CALENDAR]);
+
+    expect(cargaDelPedido(0).sub).toBe("a@polcecal.com");
+
+    // Sin la clave `sub` —no vacía— es lo que deja igual a los 21 llamadores
+    // que no impersonan.
+    expect("sub" in cargaDelPedido(1)).toBe(false);
+  });
+
   /** Uno que ya vencio no se reusa: se pide de nuevo. */
   it("vuelve a pedirlo cuando vence", async () => {
     vi.stubGlobal("fetch", async () => {
@@ -102,5 +154,39 @@ describe("obtenerToken", () => {
     await expect(obtenerToken([SCOPE_SHEETS])).rejects.toThrow(/Google OAuth/);
     await expect(obtenerToken([SCOPE_SHEETS])).rejects.toThrow(/Google OAuth/);
     expect(pedidos).toBe(2);
+  });
+});
+
+describe("el canje del token tiene cota", () => {
+  it("manda un AbortSignal: sin él, un Google colgado mata la función desde adentro de una iteración", async () => {
+    let signal: AbortSignal | null | undefined;
+    vi.stubGlobal("fetch", async (_url: unknown, init?: { signal?: AbortSignal | null }) => {
+      signal = init?.signal;
+      return new Response(JSON.stringify({ access_token: "t", expires_in: 3600 }), { status: 200 });
+    });
+
+    await obtenerToken([SCOPE_SHEETS]);
+
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("si Google no contesta, el error lo dice y nombra a quién se impersonaba, y no queda cacheado", async () => {
+    vi.stubGlobal("fetch", async () => {
+      pedidos++;
+      throw Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+    });
+
+    await expect(obtenerToken([SCOPE_CALENDAR], "ana@polcecal.com")).rejects.toThrow(
+      /no contestó el canje del token de ana@polcecal.com en 30 segundos/
+    );
+    await expect(obtenerToken([SCOPE_CALENDAR], "ana@polcecal.com")).rejects.toThrow(/no contestó/);
+    expect(pedidos).toBe(2);
+  });
+
+  it("un error de red que no es de tiempo se propaga como estaba", async () => {
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("getaddrinfo ENOTFOUND");
+    });
+    await expect(obtenerToken([SCOPE_SHEETS])).rejects.toThrow(/ENOTFOUND/);
   });
 });

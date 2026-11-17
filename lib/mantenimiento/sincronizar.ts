@@ -25,14 +25,28 @@ import { traerTodo } from "@/lib/core/paginado";
 import { avisarAQuienDecide } from "@/lib/core/avisoAlInstante";
 import { lasOSQueNacenEsperando } from "@/lib/mantenimiento/aprobacion";
 import { borrarLoQueLaPlanillaNoTrajo } from "@/lib/core/borradoDeEspejo";
-import { leerValores, leerFormulas, listarPestanas } from "@/lib/core/sheets";
+import {
+  borrarLosEventosDeLasOT, loQueSeAnotaDeLosEventos, presupuestoDeGoogle, seguirALasOT,
+} from "@/lib/agenda/elEventoSigueALaOT";
+import {
+  barrerLasQueFaltan, juntarLoAnotado, loQueSeAnotaDelBarrido, TOPE_POR_CORRIDA, type LoQueBarrio,
+} from "@/lib/agenda/barridoDeNuevas";
+import { leerValores, leerFormulas, listarPestanas, escribirCeldas, leerFormulasDeRango
+} from "@/lib/core/sheets";
 import { linkDeCelda } from "@/lib/core/links";
 import { cargarEnlaces, resolver, proveedorDe } from "@/lib/mantenimiento/enlaces";
 import { filaDeAviso } from "@/lib/mantenimiento/avisos";
 import { resolverElArea, repartirPorArea } from "@/lib/mantenimiento/areaDelAviso";
-import { filaDeOrden, celdasParaRegistrar, type OrdenLeida } from "@/lib/mantenimiento/ordenes";
+import {
+  filaDeOrden, paraLaBase, columnaDeFechaFin, fechaFinDeLaFila, faltaLaColumna, celdasParaRegistrar, COLUMNA_ESTADO, COLUMNA_OT,
+  type OrdenLeida,
+} from "@/lib/mantenimiento/ordenes";
+import { letraDeColumna } from "@/lib/core/columnaDeSheets";
+import { lasQueLesFaltaLaFormula } from "@/lib/mantenimiento/formulaDelEstado";
 import { contrastar, type OrdenDelSistema } from "@/lib/mantenimiento/contraste";
 import { loQueSeGuardaDelContraste } from "@/lib/mantenimiento/divergencias";
+import { generarLasPeriodicas } from "@/lib/mantenimiento/generarPeriodicas";
+import { generarLasEncadenadas } from "@/lib/mantenimiento/generarEncadenadas";
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
 import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
 import { escribirEnLaFilaDeLaOS } from "@/lib/mantenimiento/planillaDeOS";
@@ -474,7 +488,7 @@ export async function exportarLoPendiente(
 
   const { data: todos } = await admin
     .from("ordenes_trabajo")
-    .select("id, ot_number, estado, fecha_cierre, horas, contratista, operario_1, operario_2, operario_3, sheets_intentado_en")
+    .select("id, ot_number, estado, fecha_cierre, horas, contratista, operario_1, operario_2, operario_3, cierre_justificacion, sheets_intentado_en")
     .not("sheets_pendiente", "is", null);
 
   // Con freno cuando lo dispara una visita a la pantalla, y sin freno cuando lo
@@ -542,7 +556,7 @@ async function anotarLasDivergencias(
     const delSistema = await traerTodo<OrdenDelSistema & { id: string }>((desde, hasta) =>
       admin
         .from("ordenes_trabajo")
-        .select("id, ot_number, sector_raw, equipo_raw, especialidad, tipo, quien, descripcion, fecha_ejecucion, fecha_cierre, estado, contratista, horas, operario_1, operario_2, operario_3, prioridad, sheets_pendiente")
+        .select("id, ot_number, sector_raw, equipo_raw, especialidad, tipo, quien, descripcion, fecha_ejecucion, fecha_cierre, estado, contratista, horas, operario_1, operario_2, operario_3, prioridad, sheets_pendiente, fecha_ejecucion_pendiente")
         .range(desde, hasta)
     );
 
@@ -597,6 +611,40 @@ async function anotarLasDivergencias(
   }
 }
 
+/**
+ * Les escribe la fórmula del ESTADO a las órdenes que nacieron sin ella.
+ *
+ * Qué celdas son lo decide `lasQueLesFaltaLaFormula`, en `lib/` y con tests; lo
+ * de acá es hablar con Google. **Nunca tira**: la sincronización no puede
+ * fallar porque una escritura de más no salga, así que devuelve el motivo.
+ */
+async function ponerLaFormulaDelEstado(
+  planilla: string,
+  pestana: string,
+  filas: readonly (readonly unknown[])[]
+): Promise<{ escritas: number; freno: string | null; error: string | null }> {
+  try {
+    const letra = letraDeColumna(COLUMNA_ESTADO);
+    const formulas = await leerFormulasDeRango(
+      planilla, pestana, `${letra}1:${letra}${filas.length}`
+    );
+
+    const { celdas, freno } = lasQueLesFaltaLaFormula(
+      filas, formulas, COLUMNA_OT, COLUMNA_ESTADO
+    );
+    if (freno) return { escritas: 0, freno, error: null };
+    if (celdas.length === 0) return { escritas: 0, freno: null, error: null };
+
+    await escribirCeldas(
+      planilla,
+      celdas.map((c) => ({ pestana, fila: c.fila, columna: c.columna, valor: c.valor }))
+    );
+    return { escritas: celdas.length, freno: null, error: null };
+  } catch (e) {
+    return { escritas: 0, freno: null, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Promise<Resultado> {
   const planilla = process.env.GOOGLE_SHEETS_OT_ID ?? "";
   const pestana = process.env.GOOGLE_SHEETS_OT_TAB ?? "OT";
@@ -642,6 +690,61 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   /** Todas las de la planilla, para contrastarlas antes de pisar nada. */
   const leidasDeLaPlanilla: OrdenLeida[] = [];
 
+  // ── LAS FECHAS QUE YA SALIERON Y TODAVIA NO DERRAMARON ────────────────────
+  //
+  // Postergar una OT escribe su fecha en «Altas del sistema», y de ahi al
+  // master derrama entre 3 y 53 horas despues (medido el 21/10/2026). En esa
+  // ventana la J del master sigue diciendo la fecha vieja: importarla seria
+  // deshacer la postergacion, y a la corrida siguiente volver a deshacerla.
+  //
+  // `fecha_ejecucion_pendiente` es lo que lo evita. Se lee entero y no por OT
+  // porque son dos columnas de una tabla que ya se consulta igual.
+  const enCamino = new Map<number, string>();
+  {
+    const { data } = await admin
+      .from("ordenes_trabajo")
+      .select("ot_number, fecha_ejecucion_pendiente")
+      .not("fecha_ejecucion_pendiente", "is", null);
+    for (const o of data ?? []) {
+      enCamino.set(o.ot_number as number, String(o.fecha_ejecucion_pendiente));
+    }
+  }
+  /** Las que el derrame ya alcanzo: se les limpia la marca al final. */
+  const yaDerramaron: number[] = [];
+
+  // ── LA FECHA DE FIN, QUE LLEGA POR EL ENCABEZADO ──────────────────────────
+  //
+  // Se lee lo que el sistema ya sabe porque una celda vacía del master no
+  // puede borrarlo: ver `fechaFinDeLaFila`. La columna se busca por su nombre.
+  //
+  // Si la lectura falla —la migración `ot_fecha_fin` todavía no corrió y la
+  // columna no existe— `finDelSistema` queda en null y **la clave no entra al
+  // upsert**: PostgREST corta el lote entero si le llega una columna que no
+  // conoce, y eso sería dejar sin importar las 2.300 órdenes por un dato
+  // secundario.
+  const columnaDeFin = columnaDeFechaFin(filas[0] ?? []);
+  let finDelSistema: Map<number, string> | null = null;
+  let fechaFinSinImportar: string | null = null;
+  try {
+    const conFin = await traerTodo<{ ot_number: number; fecha_fin: string }>((desde, hasta) =>
+      admin
+        .from("ordenes_trabajo")
+        .select("ot_number, fecha_fin")
+        .not("fecha_fin", "is", null)
+        .order("ot_number")
+        .range(desde, hasta)
+    );
+    finDelSistema = new Map(conFin.map((o) => [o.ot_number, String(o.fecha_fin)]));
+  } catch (e) {
+    finDelSistema = null;
+    // Sin la columna es lo esperado (la migración no corrió). Cualquier otra
+    // cosa es un fallo de esta corrida, y se dice: si no, tras aplicar la
+    // migración un corte pasajero dejaría de importar `fecha_fin` sin que nadie
+    // lo sepa.
+    const mensaje = e instanceof Error ? e.message : String(e);
+    if (!faltaLaColumna(mensaje, "fecha_fin")) fechaFinSinImportar = mensaje;
+  }
+
   for (let i = 0; i < filas.length - 1; i++) {
     const orden = filaDeOrden(filas[i + 1], i + 2);
     if (!orden) continue;
@@ -661,7 +764,25 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     const proveedor_id = proveedorDe(enlaces, orden.contratista);
     if (orden.contratista && !proveedor_id) sinProveedor.add(orden.contratista);
 
-    registros.push({ ...orden, equipment_id, sector_id, proveedor_id, synced_at: cuando });
+    // Una fecha en camino no se pisa con la del master. Y si el master YA la
+    // trae, el derrame llego: se importa normal y la marca se limpia al final.
+    // Limpiarla acá, antes de que el upsert entre, dejaría la OT descubierta
+    // si el lote falla.
+    const esperando = enCamino.get(orden.ot_number);
+    const fecha_ejecucion = esperando && esperando !== orden.fecha_ejecucion
+      ? esperando
+      : orden.fecha_ejecucion;
+    if (esperando && esperando === orden.fecha_ejecucion) yaDerramaron.push(orden.ot_number);
+
+    // `paraLaBase` y no `...orden`: la orden leída lleva campos que no son
+    // columnas —hoy `estado_raw`, que es del contraste— y PostgREST corta el
+    // lote entero si le llega uno. Ver el comentario de esa función.
+    registros.push({
+      ...paraLaBase(orden), fecha_ejecucion, equipment_id, sector_id, proveedor_id, synced_at: cuando,
+      ...(finDelSistema
+        ? { fecha_fin: fechaFinDeLaFila(filas[i + 1], columnaDeFin, finDelSistema.get(orden.ot_number) ?? null) }
+        : {}),
+    });
   }
 
   // ── EL CONTRASTE VA ACÁ: ANTES DE PISAR, NO DESPUÉS ───────────────────────
@@ -695,14 +816,91 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     guardadas += lote.length;
   }
 
+  // El derrame alcanzó a estas: el master ya dice la fecha que se había
+  // escrito, así que la marca dejó de proteger algo y se saca. Va DESPUÉS del
+  // upsert a propósito —si el lote hubiera fallado, la OT tiene que seguir
+  // protegida— y es lo único que cierra el ciclo: sin esto la marca quedaría
+  // puesta para siempre y la OT invisible para el contraste.
+  if (yaDerramaron.length > 0) {
+    await admin
+      .from("ordenes_trabajo")
+      .update({ fecha_ejecucion_pendiente: null })
+      .in("ot_number", yaDerramaron);
+  }
+
+  // ── Y SE LES PONE LA FÓRMULA A LAS QUE NACIERON SIN ESTADO ───────────────
+  //
+  // Una OT que entra por el formulario no pasa por ninguna ruta del SdG, así
+  // que nadie le escribe la `M`: nace con el ESTADO en blanco y se queda así
+  // para siempre. Medido el 02/11/2026: tres en tres días, las tres
+  // `app_created = false`. Mientras esa celda está vacía esa orden **no tiene
+  // estado para quien mira la planilla**, ni siquiera cuando se vence.
+  //
+  // Va acá, al final y después del upsert, porque necesita las dos lecturas y
+  // porque escribir es lo último que conviene hacer. Cuesta una lectura más
+  // —las fórmulas de la columna M, que `leerValores` no trae—, y tiene el
+  // mismo freno que el borrado: si hubiera demasiadas, no escribe ninguna y
+  // dice por qué, porque una planilla recalculando devuelve vacío lo que no
+  // resolvió y «vacío» es justo el criterio de esto.
+  const estadosPuestos = await ponerLaFormulaDelEstado(planilla, pestana, filas);
+
+  const presupuestoDeLaAgenda = presupuestoDeGoogle();
   const borrado = await borrarLoQueLaPlanillaNoTrajo(admin, ESPEJO_DE_OT, {
     clavesLeidas: trajoLaPlanilla,
     cuando, inicio, sinFreno: opciones.sinFreno, actor: opciones.actor,
+    // El evento de Google de una OT se borra ANTES que la OT, y si no se puede,
+    // esa OT no se borra en esta corrida. Ver `borrarLosEventosDeLasOT`.
+    // Y el tiempo que se le dedica a Google es UNO para borrar y para mover, con
+    // la mitad reservada para mover: ver `LIMITE_DE_GOOGLE_MS`.
+    antesDeBorrar: (ids) => borrarLosEventosDeLasOT(admin, ids, { presupuesto: presupuestoDeLaAgenda.borrar }),
   });
 
+  // La corrida se anota ANTES de tocar la Agenda. Lo que sigue habla con Google,
+  // que puede colgarse, y si la invocación muere por tiempo el registro de que
+  // las órdenes se importaron bien no puede perderse con ella: la pantalla
+  // mostraría la corrida vieja y los avisos de ritmo mentirían sobre un módulo
+  // que sí se actualizó.
   await registrarSincronizacion({
     modulo: "mantenimiento", recurso: "ordenes", ok: true, filas: guardadas,
   });
+
+  // ── EL EVENTO DE LA AGENDA SIGUE A LA OT ──────────────────────────────────
+  //
+  // Va después del borrado: las OT que acaban de irse se llevaron su evento y
+  // no hay nada que mover. Un evento que ya divergió en Google no se pisa y un
+  // fallo de escritura va a la cola (`google_pendiente`); lo que no se pudo ni
+  // guardar sale acá y en el registro, y no en un `console.warn`. Tiene un
+  // límite de tiempo (`LIMITE_DE_GOOGLE_MS`): corre dentro del cron que sigue
+  // con las otras tres sincronizaciones.
+  const eventos = await seguirALasOT(admin, { presupuesto: presupuestoDeLaAgenda.mover });
+
+  // ── Y LAS QUE FALTAN, ENTRAN ──────────────────────────────────────────────
+  //
+  // Toda OT con fecha futura, abierta y sin evento. Va **después** de mover: lo
+  // que acaba de crear no tiene nada que reubicar, y mover primero no lo cuenta.
+  // Comparte el tramo `mover` del presupuesto de Google (no tiene uno propio, así
+  // que la Agenda en conjunto no se pasa del límite que ya tenía): si el
+  // movimiento se comió el tiempo, el barrido no empieza y lo dice en `quedaron`.
+  // No lanza —su contrato—, y aun así va atrapado: la sincronización ya está
+  // anotada como buena y un error acá no puede deshacerlo.
+  let barrido: LoQueBarrio;
+  try {
+    barrido = await barrerLasQueFaltan(admin, new Date(), TOPE_POR_CORRIDA, presupuestoDeLaAgenda.mover);
+  } catch (e) {
+    barrido = {
+      creados: 0, quedaron: 0, fechasIlegibles: [],
+      fallos: [`El barrido de las órdenes sin evento se cortó: ${e instanceof Error ? e.message : String(e)}`],
+    };
+  }
+
+  // Si no se pudo mover algún evento, o no se alcanzó, la última anotación pasa a
+  // decirlo: las OT sí se guardaron, y el mensaje lo dice para que no se lea
+  // como una corrida perdida. Mismo criterio que las áreas de los avisos. El
+  // barrido suma lo suyo al mismo renglón: es una sola anotación por corrida.
+  const loAnotado = juntarLoAnotado(loQueSeAnotaDeLosEventos(eventos), loQueSeAnotaDelBarrido(barrido));
+  if (loAnotado) {
+    await registrarSincronizacion({ modulo: "mantenimiento", recurso: "ordenes", filas: guardadas, ...loAnotado });
+  }
   return logra({
     leidas: filas.length - 1,
     guardadas,
@@ -713,6 +911,20 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     borrado: borrado.aviso,
     // Cuántas dicen distinto los dos lados. Va en el resultado aunque el aviso
     // ya lo cuente: quien corre la sincronización a mano lo ve en el momento.
+    fechas_que_derramaron: yaDerramaron.length,
+    eventos_movidos: eventos.movidos,
+    eventos_avisados: eventos.avisados,
+    eventos_divergidos_sin_tocar: eventos.respetados,
+    eventos_pendientes_de_google: eventos.pendientes,
+    eventos_sin_alcanzar: eventos.sinAlcanzar,
+    ...(eventos.fallos.length > 0 ? { eventos_con_fallos: eventos.fallos } : {}),
+    eventos_creados_por_el_barrido: barrido.creados,
+    eventos_sin_crear_todavia: barrido.quedaron,
+    ...(barrido.fallos.length > 0 ? { eventos_que_no_entraron: barrido.fallos } : {}),
+    ...(barrido.fechasIlegibles.length > 0 ? { eventos_con_fecha_ilegible: barrido.fechasIlegibles } : {}),
+    estados_sin_formula: estadosPuestos.escritas,
+    ...(estadosPuestos.freno ? { estado_freno: estadosPuestos.freno } : {}),
+    ...(estadosPuestos.error ? { estado_error: estadosPuestos.error } : {}),
     divergencias: divergencias.cuantas,
     ...(divergencias.recortadas > 0 ? { divergencias_recortadas: divergencias.recortadas } : {}),
     // Un fallo acá no frena la corrida —anotar es secundario, importar no—, así
@@ -723,6 +935,9 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     ...(divergencias.sinRevisarCanceladas
       ? { canceladas_sin_revisar: divergencias.sinRevisarCanceladas }
       : {}),
+    // Las órdenes entraron, pero esta corrida no trajo `fecha_fin`: la lectura
+    // falló por algo que no es la migración sin correr.
+    ...(fechaFinSinImportar ? { fecha_fin_sin_importar: fechaFinSinImportar } : {}),
   });
 }
 
@@ -1174,4 +1389,65 @@ export const SINCRONIZACIONES = [
   { recurso: "ordenes", correr: (o?: OpcionesDeCorrida) => sincronizarOrdenes(o) },
   { recurso: "ordenes-servicio", correr: (o?: OpcionesDeCorrida) => sincronizarOrdenesDeServicio(o) },
   { recurso: "comparativas", correr: (_o?: OpcionesDeCorrida) => sincronizarComparativas() },
+  // ── Y AL FINAL, LAS PERIÓDICAS ────────────────────────────────────────────
+  //
+  // Va **después** de `ordenes` y no antes, y es la única razón por la que
+  // tiene un lugar fijo en esta lista: una OT recién creada todavía no está en
+  // el master —su fila llega por `IMPORTRANGE`—, así que si la importación
+  // corriera después la encontraría ausente. No la borra, porque `app_created`
+  // con `sheets_row` en null la protege, pero igual no tiene sentido crear algo
+  // y leer la planilla sin eso adentro en la misma corrida.
+  //
+  // No tira: `generarLasPeriodicas` devuelve qué pasó con cada programado y
+  // esto lo pasa a `Resultado`. Un programado que no se pudo crear no frena al
+  // siguiente, y ninguno frena las cuatro sincronizaciones de arriba.
+  {
+    recurso: "periodicas",
+    correr: async (_o?: OpcionesDeCorrida): Promise<Resultado> => {
+      const r = await generarLasPeriodicas();
+      return logra({
+        generadas: r.generadas.length,
+        ot: r.generadas.map((g) => g.ot_number),
+        incompletos: r.incompletos,
+        fallaron: r.fallaron,
+        cerrados: r.cerrados,
+        sin_estado_todavia: r.sinEstadoTodavia,
+        // El evento que no se pudo crear de una periódica no tiene otro
+        // lugar donde decirse: la corrida de estas no tiene pantalla.
+        ...(r.sinCalendario.length > 0 ? { sin_calendario: r.sinCalendario } : {}),
+      });
+    },
+  },
+  // ── Y LOS CICLOS ENCADENADOS ──────────────────────────────────────────────
+  //
+  // Lo mismo que las periódicas por otro lado: en vez de mirar un calendario,
+  // mira si la OT anterior del ciclo se cerró. Va **después de `ordenes`** y no
+  // es negociable: el `estado` y la `fecha_cierre` que esto lee los trae esa
+  // importación de la planilla, donde se cierran 225 de cada 248 órdenes de
+  // estos equipos. Al revés generaría sobre el estado de la corrida pasada.
+  //
+  // No tira: `generarLasEncadenadas` devuelve qué pasó con cada ciclo y esto lo
+  // pasa a `Resultado`. Un ciclo trabado no frena al siguiente, y ninguno frena
+  // las cuatro sincronizaciones de arriba.
+  {
+    recurso: "ciclos",
+    correr: async (_o?: OpcionesDeCorrida): Promise<Resultado> => {
+      const r = await generarLasEncadenadas();
+      return logra({
+        generadas: r.generadas.length,
+        ot: r.generadas.map((g) => g.ot_number),
+        // Los que arrancaron en esta corrida, con la OT del cambio que los
+        // arrancó: es el único registro de qué decidió el texto.
+        ...(r.arrancados.length > 0 ? { arrancados: r.arrancados } : {}),
+        // Los que todavía esperan el cambio que los arranque. Se informan en
+        // cada corrida porque un ciclo sin arrancar no genera ninguna OT, así
+        // que `mant-atrasadas` no tiene cómo verlo.
+        sin_arrancar: r.sinArrancar,
+        trabados: r.trabados,
+        fallaron: r.fallaron,
+        sin_estado_todavia: r.sinEstadoTodavia,
+        ...(r.sinCalendario.length > 0 ? { sin_calendario: r.sinCalendario } : {}),
+      });
+    },
+  },
 ] as const;

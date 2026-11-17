@@ -90,6 +90,8 @@ funcionando y se puede importar a mano.
 | `GOOGLE_SHEETS_RESPALDO_ID` | El libro de **respaldo legible**, que tiene que ser uno **nuevo y vacío** creado a mano. Lo escribe el cron `respaldo-sheets` todas las noches a las 00:00 de Argentina, con una pestaña por módulo **que no tiene planilla**: RRHH (padrón, asistencia y marcaciones), Remises, los ensayos de Calidad y el buzón de Facturación. Los módulos donde **manda la planilla** no entran, y no es un olvido: ésos ya tienen este respaldo por construcción, y escribirles encima el estado del sistema sería darle de comer al importador su propia salida — desde el 18/10/2026 su sincronización **borra** lo que la planilla dejó de tener. Ver [RESPALDO.md](RESPALDO.md) | La cuenta de servicio necesita **Editor**. **No puede ser ninguna de las planillas de arriba**: cada pestaña se borra entera y se reescribe. Sin la variable el cron devuelve 500 con el nombre de la variable en el mensaje — a propósito: un respaldo que se omite en silencio es peor que no tenerlo |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Credencial para leer y escribir la planilla | Ver abajo: conviene reutilizar la que ya existe |
 | `GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID` | Carpeta de Drive con las planillas de comparativa | El tramo después de `/folders/` en la URL de la carpeta |
+| `GOOGLE_DRIVE_SYH_FOTOS_FOLDER_ID` | La carpeta de Drive donde el cron `syh-respaldo-de-fotos` (04:30 UTC, la 01:30 de Argentina) deja **una copia de las fotos de Seguridad e Higiene**. Es respaldo y no la fuente: la app lee siempre del bucket `syh-fotos` y a nadie se le muestra un link de Drive. **TIENE QUE ESTAR EN UNA UNIDAD COMPARTIDA, no en «Mi unidad» de alguien**: una cuenta de servicio no tiene cuota de Drive, y subir a «Mi unidad» falla con *"Service Accounts do not have storage quota"* aunque la carpeta esté compartida como editor (es la misma trampa del backup de la base, ver `scripts/backup/subir-a-drive.mts`). **La cuenta de servicio necesita ser Colaborador o Administrador de contenido** de esa unidad: sube y no borra nunca. Sin la variable el cron contesta 200 diciendo qué falta, lo anota como fallido en `sincronizaciones` (`seguridad_higiene` / `respaldo_fotos`) y no rompe nada: `respaldada_en_drive_el` queda en null, que es un estado válido. Hasta 40 fotos por corrida, las más viejas primero. **Hay que crear la carpeta a mano** | El id de la carpeta: el tramo después de `/folders/` en la URL |
+| `GOOGLE_DRIVE_PCROBOT_FOLDER_ID` | La unidad compartida de Drive `PC Robot`, donde una tarea programada sube todos los días a las 09:30 un zip por molino (`Filler 1 2026-10-29.zip`, `Filler 2 ...`). Lo lee el cron `produccion-molinos-sync` (13:00 UTC, las 10 de Argentina) y el botón de importar: `0AH83x2YPTJdbUk9PVA`. **La cuenta de servicio sólo necesita ser Lector** y el SdG nunca escribe ahí. Al ser una unidad compartida, toda llamada a Drive va con `supportsAllDrives=true`; sin eso Drive contesta 404 sin explicar por qué. Sin la variable la importación falla con su nombre en el mensaje, y queda anotada en `sincronizaciones` | El id de la unidad: el tramo después de `/folders/` en la URL |
 
 Para la carpeta de comparativas hace falta además **habilitar la Google Drive
 API** en el proyecto de Google Cloud: es un servicio aparte del de Sheets. Sin
@@ -173,6 +175,34 @@ instrucciones de instalación están en el encabezado del propio archivo, y
 también la propiedad `DOMINIOS`, que es la que impide que una url filtrada se
 convierta en un relay para mandar correo desde la empresa.
 
+## El correo de novedades de RR.HH.
+
+| Variable | Qué es | De dónde sale |
+|---|---|---|
+| `SDG_CORREO_RRHH_URL` | La url de **un segundo** Apps Script, idéntico al de arriba pero publicado desde `gestiondepersonas@polcecal.com` | La da Google al implementar ese script |
+| `SDG_CORREO_RRHH_SECRET` | Lo mismo que el otro secreto, para esta otra implementación | Lo inventás vos, y el mismo valor va en las propiedades de **ese** script |
+
+**Es un segundo script y no un parámetro del primero**, y el motivo no es
+caprichoso: una aplicación web de Apps Script **se ejecuta como su dueño**, así
+que el remitente lo decide qué cuenta la publicó. El script no acepta un `from`
+en el pedido a propósito, para que una url filtrada no pueda falsear el
+remitente. Si lo que se quiere es que el correo salga de RR.HH., la cuenta de
+RR.HH. tiene que publicar su propia implementación.
+
+Es el mismo archivo ([docs/sdg-correo-apps-script.gs](sdg-correo-apps-script.gs)),
+pegado tal cual en un proyecto nuevo **desde la sesión de
+`gestiondepersonas@polcecal.com`**, con su propio `SECRETO` y el mismo
+`DOMINIOS`.
+
+**Sin estas dos, el cron de novedades no manda nada y lo dice** —devuelve 503
+con el motivo— en vez de caer a la casilla del sistema: el remitente es parte
+del mensaje, porque dice a dónde contestar, y mandarlo desde la cuenta
+equivocada es peor que no mandarlo.
+
+Lo otro que hace falta para que ese correo exista es la migración
+`20261116084955_rrhh_correo_de_novedades.sql`, que la aplica una persona en el
+editor SQL de Supabase.
+
 ## Odoo (Contabilidad, Tesorería y la orden de compra)
 
 Si faltan, las rutas de Odoo contestan **503 diciendo cuáles faltan** y el resto
@@ -230,12 +260,52 @@ cliente no traduce nada: lo que conteste Lenox queda anotado tal cual en la
 última sincronización (`Lenox respondió <status>: …`), que es lo primero que hay
 que mirar si el cartel de "actualizado hace…" se queda viejo.
 
+## Agenda (los avisos de Google Calendar)
+
+La Agenda espeja sus eventos en Google Calendar, y para enterarse **al instante**
+de que alguien borró o movió uno desde Google abre un *canal de observación* por
+cada usuario activo. Google avisa por `POST` a una dirección pública del SdG, así
+que **no hay variable nueva: usa `NEXT_PUBLIC_APP_URL`**, la misma de los links de
+los correos, y le pega `/api/agenda/google`.
+
+| Variable | Para qué |
+|---|---|
+| `NEXT_PUBLIC_APP_URL` | **El dominio completo y público, con `https`, sin barra final**: `https://www.polcecalpolysan.app`. La URL que se le registra a Google es `https://www.polcecalpolysan.app/api/agenda/google` |
+
+Tres cosas que no se deducen del código:
+
+**Con otra cosa no hay canal, y el cron lo dice.** Google exige `https` y valida
+que el dominio sea uno **verificado en el proyecto de Google Cloud** antes de abrir
+el canal (por eso no se puede probar desde `localhost`: se verifica recién en
+producción). El SdG **no cae en `VERCEL_URL` ni en el host del pedido**: un host de
+preview se rechazaría con un error de Google que no nombra la variable. Si falta o
+no es una `https` pública, el cron `/api/cron/agenda` lo anota como fallido en
+`sincronizaciones` (módulo `agenda`, recurso `canales`) diciendo qué casillas
+quedaron sin abrir. Si el dominio no está verificado en Google, el mensaje de Google
+queda anotado tal cual, con la casilla.
+
+**El aviso se verifica por un secreto por canal, no por una variable.** Cada canal
+lleva su propio `secreto` en `agenda_canales`, que Google devuelve en el header
+`X-Goog-Channel-Token`; un token que no coincide es `401`. El endpoint tiene que
+estar en la lista de endpoints de máquina de `lib/supabase/middleware.ts`: sin eso
+el login lo intercepta y la Agenda deja de enterarse sin ningún error.
+
+**Un canal muerto se ve igual que un calendario sin movimiento.** El cron corre a
+las 5 UTC, renueva los canales que vencen en menos de 48 horas y registra cada fallo
+con el nombre de la casilla. Si el cartel de la última sincronización de
+`agenda / canales` está en rojo, esa casilla dejó de avisar o está por dejarlo.
+Además, el mismo cron **barre todas las casillas** (`agenda / barrido`): un canal
+recién abierto o vencido no vio lo que pasó mientras no estaba, y sin el barrido
+ese cambio no se detectaría nunca más. El aviso de Google es el movimiento y el
+barrido es la red.
+
 ## Asistente de IA
 
 | Variable | Para qué | De dónde sale |
 |---|---|---|
 | `AI_GATEWAY_API_KEY` | La llave del Vercel AI Gateway, que es por donde el asistente habla con el modelo | En Vercel, si el proyecto tiene el Gateway habilitado, se inyecta sola vía OIDC y no hace falta cargarla. En local sí hace falta: se saca del panel de Vercel, **AI Gateway → API keys**. Sin ella, la ruta `/api/asistente` devuelve el error del proveedor tal cual, que es lo que corresponde. **Desde el 05/10/2026 también está cargada explícitamente** en Production y Preview: no porque el OIDC no alcance, sino porque una variable que está es más fácil de mirar que una que se inyecta sola |
 | `ASISTENTE_MODELO` | Con qué modelo contesta el asistente. **Opcional**: sin ella usa `anthropic/claude-sonnet-5`, que es el que corresponde | Sólo se carga para probar sin créditos (ver abajo). Borrarla vuelve al modelo bueno |
+| `CUADERNO_MODELO` | Con qué modelo lee el cuaderno de Piparo (`/mantenimiento/partes-contratista`). **Opcional**: sin ella usa `anthropic/claude-sonnet-5`, que es el que corresponde. Usa la misma `AI_GATEWAY_API_KEY` | Sólo se carga para probar la cañería sin créditos: con una llave del tier gratuito la lectura falla con el 403 de arriba. `google/gemini-2.5-flash` anduvo (02/11/2026) y **su lectura no sirve para juzgar la calidad**: se equivoca de año, de día y pega un «Hs» al número. Borrarla vuelve al modelo bueno |
 
 ### Probar el asistente sin comprar créditos
 
@@ -301,11 +371,15 @@ GOOGLE_SHEETS_SEGUIMIENTO_ID=1TS3JYzTF2M_XTlaqaACphSdSXc5K5rh6b6UsAXBSYx8
 GOOGLE_SHEETS_RESPALDO_ID=
 GOOGLE_SERVICE_ACCOUNT_JSON=
 GOOGLE_DRIVE_COMPARATIVAS_FOLDER_ID=
+GOOGLE_DRIVE_PCROBOT_FOLDER_ID=
+GOOGLE_DRIVE_SYH_FOTOS_FOLDER_ID=
 NEXT_PUBLIC_WEBPUSH_VAPID_PUBLIC_KEY=
 WEBPUSH_VAPID_PRIVATE_KEY=
 WEBPUSH_CONTACT_EMAIL=
 SDG_CORREO_URL=
 SDG_CORREO_SECRET=
+SDG_CORREO_RRHH_URL=
+SDG_CORREO_RRHH_SECRET=
 ```
 
 `GOOGLE_SERVICE_ACCOUNT_JSON` es la única incómoda: el JSON va **entero y en una

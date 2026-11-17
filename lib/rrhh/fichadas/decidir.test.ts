@@ -2,10 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   decidirQueAplicar, claveDia, motivoDeProteccion, elegirAbiertoPrevio, avisoDeAbiertasViejas,
   rangoDeRecalculo, diasLiquidadosDe, armarTurnos, turnosYaEmparejados, armarLote, legajoPorEmpleadoDe, textoDeMotivo,
-  avisosDeSalteados,
+  avisosDeSalteados, marcasYaContadas,
   type TurnoNuevo, type ContextoDeDecision, type FichadaAbierta, type DiasDeEmpleado,
 } from "./decidir";
-import { toUtcDateOnly, localDateTime } from "../dates";
+import { toUtcDateOnly, localDateTime, formatHHMM } from "../dates";
 
 function dia(y: number, m: number, d: number) {
   return toUtcDateOnly(y, m - 1, d);
@@ -861,5 +861,146 @@ describe("avisosDeSalteados", () => {
       { ...salteado("PC_009", "2026-09-30", "guardado sin fichadas, Lenox trae 08:00–16:00"), motivo: "liquidado" },
     ]);
     expect(avisos[0]).toContain("liquidación cerrada");
+  });
+});
+
+/**
+ * EL BORDE DE LA VENTANA, QUE ES DONDE SE ROMPE EL TURNO DE NOCHE.
+ *
+ * `reconciliarTokens` empareja las marcas de un día por posición, así que da
+ * por sentado que la primera marca del primer día es una entrada. Para quien
+ * hace noche eso es falso: su primera marca es la SALIDA de la noche anterior,
+ * y ese turno vive fuera de la ventana que se está importando.
+ *
+ * Mientras el turno de afuera sigue abierto, `elegirAbiertoPrevio` lo encadena
+ * y la marca se consume bien. El agujero aparece cuando una corrida anterior
+ * ya lo cerró **correctamente**: la marca queda huérfana, asciende a entrada y
+ * se empareja con la entrada de esa misma noche. Medido contra la base el
+ * 30/10/2026: 17 fichadas con esa forma desde que entró Lenox, todas del tipo
+ * `03:44 → 19:35`, dieciséis horas que nadie trabajó y que además se suman a
+ * las de la noche que ya estaba contada.
+ */
+describe("marcasYaContadas", () => {
+  const cerrada = (empleadoId: string, fecha: string, salida: Date) => ({ empleadoId, fecha, horaSalida: salida.toISOString() });
+
+  it("la salida de un turno de afuera que cae en el primer día del lote marca su hora", () => {
+    const d1 = dia(2026, 10, 21);
+    const r = marcasYaContadas(
+      [cerrada("emp-1", "2026-10-20", localDateTime(d1, 3, 44))],
+      new Map([["emp-1", "2026-10-21"]])
+    );
+    expect(r.get("emp-1")).toBe("03:44");
+  });
+
+  it("un turno de afuera que cerró en su propio día no marca nada", () => {
+    const d0 = dia(2026, 10, 20);
+    const r = marcasYaContadas(
+      [cerrada("emp-1", "2026-10-20", localDateTime(d0, 16, 0))],
+      new Map([["emp-1", "2026-10-21"]])
+    );
+    expect(r.has("emp-1")).toBe(false);
+  });
+
+  it("un turno que cerró DESPUÉS del primer día tampoco: esa marca no es del primer día", () => {
+    const d2 = dia(2026, 10, 22);
+    const r = marcasYaContadas(
+      [cerrada("emp-1", "2026-10-20", localDateTime(d2, 3, 44))],
+      new Map([["emp-1", "2026-10-21"]])
+    );
+    expect(r.has("emp-1")).toBe(false);
+  });
+
+  /**
+   * El que arranca DENTRO del lote no cuenta, aunque su salida caiga el mismo
+   * día. Esa fichada la va a borrar y reinsertar el propio lote, así que su
+   * marca no está "ya contada": sacarla la perdería. La consulta filtra por el
+   * primer día más tardío de todos los empleados, así que a uno que empieza
+   * antes sí le pueden llegar filas de su propio primer día.
+   */
+  it("un turno que arranca en el primer día del lote no marca nada", () => {
+    const d1 = dia(2026, 10, 21);
+    const r = marcasYaContadas(
+      [cerrada("emp-1", "2026-10-21", localDateTime(d1, 16, 0))],
+      new Map([["emp-1", "2026-10-21"]])
+    );
+    expect(r.has("emp-1")).toBe(false);
+  });
+
+  it("un empleado que no está en el lote no aporta nada", () => {
+    const d1 = dia(2026, 10, 21);
+    const r = marcasYaContadas([cerrada("emp-9", "2026-10-20", localDateTime(d1, 3, 44))], new Map([["emp-1", "2026-10-21"]]));
+    expect(r.size).toBe(0);
+  });
+});
+
+describe("armarTurnos con la salida de la noche anterior ya contada", () => {
+  const E = (hora: string) => ({ tipo: "E" as const, hora });
+  const S = (hora: string) => ({ tipo: "S" as const, hora });
+  const emp = (empleadoId: string, legajo: string, dias: DiasDeEmpleado["dias"]): DiasDeEmpleado => ({ empleadoId, legajo, dias });
+  const sinAbiertas = new Map<string, FichadaAbierta>();
+
+  /** El caso exacto que se midió en la base: `03:44 → 19:35`, 16 horas inventadas. */
+  it("sin la marca ya contada, la salida de la noche anterior deja de ser una entrada", () => {
+    const d1 = dia(2026, 10, 21);
+    const d2 = dia(2026, 10, 22);
+    const r = armarTurnos(
+      [emp("emp-1", "PC_147", [
+        { fecha: d1, tokens: [S("03:44"), E("19:35")] },
+        { fecha: d2, tokens: [S("03:45")] },
+      ])],
+      sinAbiertas,
+      new Map([["emp-1", "03:44"]])
+    );
+    // Queda el turno de la noche del 21, cerrado con la marca del 22. Y NADA
+    // que empiece a las 03:44.
+    expect(r.turnos).toHaveLength(1);
+    expect(r.turnos[0].horaEntrada).toEqual(localDateTime(d1, 19, 35));
+    expect(r.turnos[0].horaSalida).toEqual(localDateTime(d2, 3, 45));
+  });
+
+  /** Y el caso del usuario: tres marcas en un día, con la primera ya contada. */
+  it("04:00 ya contada, 12:00 y 20:00 quedan como su propio turno", () => {
+    const d1 = dia(2026, 10, 21);
+    const d2 = dia(2026, 10, 22);
+    const r = armarTurnos(
+      [emp("emp-1", "PC_147", [
+        { fecha: d1, tokens: [S("04:00"), E("12:00"), S("20:00")] },
+        { fecha: d2, tokens: [] },
+      ])],
+      sinAbiertas,
+      new Map([["emp-1", "04:00"]])
+    );
+    expect(r.turnos).toHaveLength(1);
+    expect(r.turnos[0].horaEntrada).toEqual(localDateTime(d1, 12, 0));
+    expect(r.turnos[0].horaSalida).toEqual(localDateTime(d1, 20, 0));
+  });
+
+  /** La hora tiene que coincidir: si no, la marca es otra y se deja. */
+  it("una hora que no coincide no se saca", () => {
+    const d1 = dia(2026, 10, 21);
+    const r = armarTurnos(
+      [emp("emp-1", "PC_147", [{ fecha: d1, tokens: [E("08:00"), S("16:00")] }])],
+      sinAbiertas,
+      new Map([["emp-1", "03:44"]])
+    );
+    expect(r.turnos).toHaveLength(1);
+    expect(r.turnos[0].horaEntrada).toEqual(localDateTime(d1, 8, 0));
+  });
+
+  /** Sólo el primer día: la misma hora en otro día es una marca de verdad. */
+  it("la misma hora en el segundo día no se toca", () => {
+    const d1 = dia(2026, 10, 21);
+    const d2 = dia(2026, 10, 22);
+    const r = armarTurnos(
+      [emp("emp-1", "PC_147", [
+        { fecha: d1, tokens: [S("03:44"), E("19:35")] },
+        { fecha: d2, tokens: [S("03:44"), E("19:30")] },
+      ])],
+      sinAbiertas,
+      new Map([["emp-1", "03:44"]])
+    );
+    // El 21 queda 19:35 → 03:44 del 22. La marca del 22 se usó para cerrarlo,
+    // que es lo correcto: lo que no puede pasar es que arranque un turno.
+    expect(r.turnos.every((t) => formatHHMM(t.horaEntrada) !== "03:44")).toBe(true);
   });
 });

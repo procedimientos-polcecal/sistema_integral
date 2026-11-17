@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { comoLeLlego, ETIQUETA_CUMPLIO, tiempoEnStock } from "@/lib/compras/seguimiento";
+import { fecha as enPantalla } from "@/lib/compras/constants";
 import type { RequerimientoConRelaciones, Cumplio } from "@/lib/compras/types";
 import Select from "@/components/Select";
 
@@ -31,7 +32,6 @@ export default function FormularioRecepcion({
   const [campos, setCampos] = useState({
     cantidad_comprada: String(requerimiento.cantidad_comprada ?? requerimiento.cantidad ?? ""),
     cantidad_recibida: requerimiento.cantidad_recibida !== null ? String(requerimiento.cantidad_recibida) : "",
-    fecha_estimada_recepcion: requerimiento.fecha_estimada_recepcion ?? "",
     fecha_recepcion: requerimiento.fecha_recepcion ?? "",
     cumplio_compras: requerimiento.cumplio_compras ?? ("" as Cumplio | ""),
     cumplio_proveedor: requerimiento.cumplio_proveedor ?? ("" as Cumplio | ""),
@@ -51,7 +51,7 @@ export default function FormularioRecepcion({
   const enStock = tiempoEnStock(campos.fecha_recepcion || null, campos.fecha_aplicacion || null);
 
   const dato = comoLeLlego({
-    fecha_estimada_recepcion: campos.fecha_estimada_recepcion || null,
+    fecha_estimada_recepcion: requerimiento.fecha_estimada_recepcion,
     fecha_recepcion: campos.fecha_recepcion || null,
     cantidad: requerimiento.cantidad,
     cantidad_comprada: campos.cantidad_comprada === "" ? null : Number(campos.cantidad_comprada),
@@ -67,7 +67,6 @@ export default function FormularioRecepcion({
       body: JSON.stringify({
         cantidad_comprada: campos.cantidad_comprada === "" ? null : Number(campos.cantidad_comprada),
         cantidad_recibida: campos.cantidad_recibida === "" ? null : Number(campos.cantidad_recibida),
-        fecha_estimada_recepcion: campos.fecha_estimada_recepcion || null,
         fecha_recepcion: campos.fecha_recepcion || null,
         cumplio_compras: campos.cumplio_compras || null,
         cumplio_proveedor: campos.cumplio_proveedor || null,
@@ -119,14 +118,6 @@ export default function FormularioRecepcion({
             onChange={(e) => setCampos({ ...campos, cantidad_recibida: e.target.value })}
           />
         </Campo>
-        <Campo label="Fecha estimada de recepción">
-          <input
-            type="date"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            value={campos.fecha_estimada_recepcion}
-            onChange={(e) => setCampos({ ...campos, fecha_estimada_recepcion: e.target.value })}
-          />
-        </Campo>
         <Campo label="Fecha de recepción">
           <input
             type="date"
@@ -139,6 +130,17 @@ export default function FormularioRecepcion({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo label="¿Cumplió Compras?">
+          {/*
+            La fecha estimada ya no se carga acá —se pide al registrar el
+            pedido, que es cuando todavía sirve—, pero se sigue mostrando:
+            es contra esto que se juzga si Compras cumplió, y sin verla ese
+            juicio se da a ciegas. Si hay que corregirla, se hace en la ficha.
+          */}
+          <p className="mb-1 text-xs text-slate-500">
+            {requerimiento.fecha_estimada_recepcion
+              ? `Se esperaba el ${enPantalla(requerimiento.fecha_estimada_recepcion)}.`
+              : "Se cargó sin fecha estimada."}
+          </p>
           {dato.demora && <p className="mb-1 text-xs text-slate-500">{dato.demora}</p>}
           <Select
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"

@@ -61,12 +61,38 @@ describe("las raíces del menú", () => {
   });
 
   /*
-   * El supuesto que hace falta el cambio: si algún grupo repitiera su raíz
-   * como hijo, ese ya se desplegaba solo y no necesitaba nada. Ninguno lo
-   * hace — son los trece.
+   * Lo que mantiene alcanzable la portada de cada módulo.
+   *
+   * Desde el 04/11/2026 el encabezado de un grupo **sólo despliega**: no
+   * navega. Así que su primer hijo —"Tablero", o "Gráficos" en Compras— es el
+   * único camino a la raíz del módulo desde el menú. Un grupo nuevo sin él
+   * deja su página huérfana, y eso no rompe nada: la pantalla existe, anda, y
+   * simplemente no se llega. Es el mismo tipo de falla silenciosa que el
+   * `<select>` nativo y la grilla sin breakpoint.
+   *
+   * Exige que sea el **primero** y no uno cualquiera: la portada arriba es lo
+   * que hace que el desplegable se lea como el módulo y no como una lista de
+   * secciones sueltas.
    */
-  it("ningún grupo repite su raíz como hijo", () => {
-    const repiten = NAV.filter((i) => i.children?.some((c) => c.href === i.href)).map((i) => i.label);
-    expect(repiten).toEqual([]);
+  it("cada grupo tiene su raíz como primer hijo", () => {
+    const sinPortada = NAV.filter((i) => i.children && i.children[0]?.href !== i.href).map((i) => i.label);
+    expect(sinPortada).toEqual([]);
+  });
+
+  /*
+   * Y que se vea cuando se ve el grupo. Si la portada pidiera un permiso más
+   * estricto que su grupo, habría gente que ve el desplegable abierto y no
+   * encuentra la página — que es la misma orfandad por otro camino.
+   */
+  it("la portada pide los mismos permisos que su grupo", () => {
+    const desparejas = NAV.filter((i) => i.children).flatMap((i) => {
+      const portada = i.children![0];
+      const igual =
+        portada.modulo === i.modulo &&
+        Boolean(portada.soloAdminGlobal) === Boolean(i.soloAdminGlobal) &&
+        Boolean(portada.soloAdmin) === Boolean(i.soloAdmin);
+      return igual ? [] : [i.label];
+    });
+    expect(desparejas).toEqual([]);
   });
 });

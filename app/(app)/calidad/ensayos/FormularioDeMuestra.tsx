@@ -4,6 +4,10 @@ import { useMemo, useState } from "react";
 import Select from "@/components/Select";
 import { calUtilVial, humedad, pesoVolumetrico } from "@/lib/calidad/ensayos/determinaciones";
 import { granulometria } from "@/lib/calidad/ensayos/granulometria";
+// La MISMA lectura que usa la validación del servidor, a propósito: tener una
+// de cada lado fue el bug del 05/11/2026 —la pantalla calculaba el porcentaje
+// de un "1,32" que el servidor leía NaN y reportaba como malla sin cargar—.
+import { numeroTipeado as aNumero } from "@/lib/calidad/ensayos/cuerpoDeLaMuestra";
 import { fueraDeLimite, limiteDe } from "@/lib/calidad/ensayos/limites";
 import type {
   Determinacion,
@@ -61,13 +65,6 @@ export function valoresVacios(hoy: string): ValoresDeLaMuestra {
     granulometria_peso_muestra_g: "",
     retenidos: [],
   };
-}
-
-function aNumero(s: string): number | null {
-  const t = s.trim();
-  if (t === "") return null;
-  const n = Number(t.replace(",", "."));
-  return Number.isFinite(n) ? n : null;
 }
 
 function Resultado({ valor, unidad }: { valor: ValorEvaluado; unidad: string }) {

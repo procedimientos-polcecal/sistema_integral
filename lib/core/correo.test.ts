@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { enviarCorreo, estaConfigurado } from "./correo";
 
 /**
- * Un solo test, y es el que protege el día del deploy.
+ * El primer test protege el día del deploy.
  *
  * Entre que esto se despliega y el día que alguien publique el Apps Script va
  * a pasar tiempo — igual que con las migraciones, que las aplica una persona.
@@ -10,8 +10,8 @@ import { enviarCorreo, estaConfigurado } from "./correo";
  * cada carga rechazada intente salir a la red o deje un error en los registros
  * todos los días.
  *
- * El resto del archivo no lleva tests: es una llamada HTTP sin decisiones,
- * igual que `enviarPush`.
+ * El segundo bloque fija lo que `detalle` dice de un fallo (ver el encabezado de
+ * `correo.ts`): es lo que la mensajería anota en la mención.
  */
 describe("enviarCorreo", () => {
   afterEach(() => {
@@ -33,9 +33,146 @@ describe("enviarCorreo", () => {
       cuerpo: "y",
     });
 
-    expect(resultado).toBe("sin-configurar");
+    expect(resultado).toEqual({ estado: "sin-configurar" });
     expect(fetchDoble).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Las dos casillas, y la garantía que importa: **una sin configurar no cae a
+ * la otra**.
+ *
+ * El remitente es parte del mensaje —dice quién lo manda y a dónde contestar—,
+ * así que un resumen de novedades de RR.HH. saliendo de la casilla de sistemas
+ * es peor que un resumen que no sale. Es la clase de error que nadie reporta
+ * como error: el correo llega, y recién semanas después alguien nota que las
+ * respuestas van a parar al lugar que no es.
+ */
+describe("enviarCorreo, la casilla", () => {
+  const correo = { para: "alguien@polcecal.com", asunto: "x", cuerpo: "y" };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * `comoFalta` existe porque la primera versión de este test probaba el caso
+   * más flojo y no se notó: ponía las variables de RR.HH. en `""`, y un
+   * `RRHH_URL ?? URL` —la forma más probable de que alguien le ponga un
+   * respaldo sin querer— **sobrevive** a eso, porque `?? ` sólo cae con
+   * `undefined`. El estado real entre el deploy y el día que alguien publique
+   * el script es **sin definir**, así que se prueban los dos.
+   */
+  function soloLaDelSistema(comoFalta: "" | undefined) {
+    vi.stubEnv("SDG_CORREO_URL", "https://script.google.com/macros/s/sistema/exec");
+    vi.stubEnv("SDG_CORREO_SECRET", "abc");
+    vi.stubEnv("SDG_CORREO_RRHH_URL", comoFalta);
+    vi.stubEnv("SDG_CORREO_RRHH_SECRET", comoFalta);
+  }
+
+  it.each([
+    ["sin definir", undefined],
+    ["vacías", ""],
+  ] as const)("pedir la de RRHH con las variables %s NO cae a la del sistema", async (_, comoFalta) => {
+    soloLaDelSistema(comoFalta);
+    const fetchDoble = vi.fn();
+    vi.stubGlobal("fetch", fetchDoble);
+
+    expect(await enviarCorreo(correo, "rrhh")).toEqual({ estado: "sin-configurar" });
+    expect(fetchDoble).not.toHaveBeenCalled();
+    expect(estaConfigurado("rrhh")).toBe(false);
+    // Y la del sistema sigue andando: una no apaga a la otra.
+    expect(estaConfigurado("sistema")).toBe(true);
+  });
+
+  it("cada casilla llama a su propia url con su propio secreto", async () => {
+    vi.stubEnv("SDG_CORREO_URL", "https://script.google.com/macros/s/sistema/exec");
+    vi.stubEnv("SDG_CORREO_SECRET", "secreto-sistema");
+    vi.stubEnv("SDG_CORREO_RRHH_URL", "https://script.google.com/macros/s/rrhh/exec");
+    vi.stubEnv("SDG_CORREO_RRHH_SECRET", "secreto-rrhh");
+    // Tipado a mano: `vi.fn()` sin argumentos infiere `[]` para `mock.calls`
+    // y después leer `calls[0][1]` no compila.
+    const fetchDoble = vi.fn(
+      async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ ok: true }))
+    );
+    vi.stubGlobal("fetch", fetchDoble);
+
+    const secretoDe = (i: number) => JSON.parse(String(fetchDoble.mock.calls[i][1]?.body)).secreto;
+
+    await enviarCorreo(correo, "rrhh");
+    expect(fetchDoble.mock.calls[0][0]).toContain("/rrhh/exec");
+    expect(secretoDe(0)).toBe("secreto-rrhh");
+
+    await enviarCorreo(correo);
+    expect(fetchDoble.mock.calls[1][0]).toContain("/sistema/exec");
+    expect(secretoDe(1)).toBe("secreto-sistema");
+  });
+
+  it("sin decir nada manda por la del sistema, como siempre", async () => {
+    soloLaDelSistema(undefined);
+    const fetchDoble = vi.fn(
+      async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ ok: true }))
+    );
+    vi.stubGlobal("fetch", fetchDoble);
+
+    expect(await enviarCorreo(correo)).toEqual({ estado: "enviado" });
+    expect(fetchDoble.mock.calls[0][0]).toContain("/sistema/exec");
+  });
+});
+
+describe("enviarCorreo, con el script configurado", () => {
+  const correo = { para: "alguien@polcecal.com", asunto: "x", cuerpo: "y" };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  function conScript(respuesta: () => Promise<Response>) {
+    vi.stubEnv("SDG_CORREO_URL", "https://script.google.com/macros/s/x/exec");
+    vi.stubEnv("SDG_CORREO_SECRET", "abc");
+    vi.stubGlobal("fetch", vi.fn(respuesta));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  }
+
+  it("si el script dice ok, está enviado y no hay detalle", async () => {
+    conScript(async () => new Response(JSON.stringify({ ok: true })));
+    expect(await enviarCorreo(correo)).toEqual({ estado: "enviado" });
+  });
+
+  it("si el script lo rechaza, el detalle es lo que contestó, sin traducir", async () => {
+    // Un Apps Script contesta 200 aunque rechace: el motivo está en el cuerpo.
+    const dijo = JSON.stringify({ ok: false, error: "dominio no permitido: gmail.com" });
+    conScript(async () => new Response(dijo, { status: 200 }));
+    expect(await enviarCorreo(correo)).toEqual({ estado: "fallo", detalle: dijo });
+  });
+
+  it("si contesta algo que no es su JSON, el detalle es ese texto", async () => {
+    conScript(async () => new Response("<html>Iniciar sesión</html>"));
+    expect(await enviarCorreo(correo)).toEqual({
+      estado: "fallo",
+      detalle: "<html>Iniciar sesión</html>",
+    });
+  });
+
+  it("si contesta con el cuerpo vacío, el detalle al menos lleva el status", async () => {
+    conScript(async () => new Response("", { status: 502 }));
+    expect(await enviarCorreo(correo)).toEqual({
+      estado: "fallo",
+      detalle: "HTTP 502, sin cuerpo",
+    });
+  });
+
+  it("si ni siquiera contesta, el detalle es el mensaje de la excepción", async () => {
+    conScript(async () => { throw new Error("the operation was aborted due to timeout"); });
+    expect(await enviarCorreo(correo)).toEqual({
+      estado: "fallo",
+      detalle: "the operation was aborted due to timeout",
+    });
   });
 });
 

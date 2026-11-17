@@ -2,10 +2,19 @@
 
 import { useState } from "react";
 import { useCargar } from "@/lib/core/useCargar";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 import { instanteDeArgentina } from "@/lib/core/fechas";
-import FallaDeLaOT, { type LaFalla } from "@/components/FallaDeLaOT";
+import FallaDeLaOT from "@/components/FallaDeLaOT";
 import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
+import { loQueImpideCerrar } from "@/lib/mantenimiento/cierreDeOT";
+import { comoSeLee } from "@/lib/core/fechas";
+import {
+  elCierreEsAnteriorAlInicio,
+  loQueFaltaPorElCierreAdelantado,
+} from "@/lib/mantenimiento/cierreAnteriorAlInicio";
 
 /**
  * Registrar el trabajo de una orden.
@@ -13,6 +22,11 @@ import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
  * Es el momento en que la OT deja de ser un pedido y pasa a ser algo que se
  * hizo: quién lo hizo, cuánto tardó, qué encontró. Queda de los dos lados —en
  * el sistema como ejecución y en la planilla, que sigue siendo la base—.
+ *
+ * `fecha_cierre` y `cierre_justificacion` se declaran obligatorias para que
+ * `tsc` nombre a quien se olvide de pasarlas, pero hoy el único call site llega
+ * como `any` (`useState<any | null>` en `OrdenesClient`): ese contrato es de
+ * palabra y el compilador no lo comprueba.
  */
 
 /*
@@ -33,13 +47,6 @@ const RESULTADOS = [
 const ESTADO_SEGUN: Record<string, string> = {
   completado: "REALIZADO",
   parcial: "EN_PROCESO",
-};
-
-const hoy = () => {
-  const d = new Date();
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const dia = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mes}-${dia}`;
 };
 
 export default function RegistrarOTModal({
@@ -65,30 +72,84 @@ export default function RegistrarOTModal({
     falla_modo: string | null;
     falla_causa: string | null;
     falla_detalle: string | null;
+    /**
+     * Cuándo empezó. No se edita acá: es el piso contra el que se compara la
+     * fecha de cierre, porque un trabajo no se cierra antes de empezar.
+     *
+     * Obligatoria y no opcional por lo mismo que las tres de arriba: si el
+     * listado dejara de traerla, el control de abajo no se caería — leería
+     * `undefined` y diría «la orden no dice cuándo empezó» sobre órdenes que sí
+     * lo dicen, trabando el registro del trabajo sin un solo error.
+     */
+    fecha_ejecucion: string | null;
+    /**
+     * Las dos que ya tiene la orden, para precargar el modal con ellas y no con
+     * lo que se le ocurra a la pantalla.
+     *
+     * Obligatorias y no opcionales por lo mismo que las de arriba, y acá la
+     * consecuencia es peor que un cartel de más: este modal manda todos sus
+     * campos en cada guardado, y el PATCH exige la justificación cuando el
+     * cierre queda antes del inicio. Si el listado dejara de traer
+     * `cierre_justificacion`, reabrir una OT adelantada para corregirle las
+     * horas mandaría el campo vacío y recibiría un 400 —o borraría la que
+     * había—, sin un solo error de tipos. Y si dejara de traer `fecha_cierre`,
+     * la fecha volvería a arrancar en hoy y se movería en silencio.
+     */
+    fecha_cierre: string | null;
+    cierre_justificacion: string | null;
   };
   onCerrar: () => void;
   onRegistrada: () => void;
 }) {
-  const [resultado, setResultado] = useState<string>("completado");
-  const [cuando, setCuando] = useState(hoy());
-  const [horas, setHoras] = useState(orden.horas != null ? String(orden.horas) : "");
-  const [contratista, setContratista] = useState(orden.contratista ?? "");
-  const [operario1, setOperario1] = useState(orden.operario_1 ?? "");
-  const [operario2, setOperario2] = useState(orden.operario_2 ?? "");
-  const [operario3, setOperario3] = useState(orden.operario_3 ?? "");
-  const [observaciones, setObservaciones] = useState("");
   /*
-   * Precargada y no vacía: este modal se abre cada vez que una orden se da por
-   * realizada y manda todos sus campos en cada guardado, así que arrancar en
-   * blanco le borraría la falla a quien reabre una OT para corregir las horas.
-   * Vaciar el desplegable sigue siendo "borrala": viaja como "" y la ruta lo
-   * guarda como null.
+   * Los once campos del formulario, en un solo objeto y recordados mientras la
+   * app esté abierta: **acá empezó todo**, con un toque fuera del formulario que
+   * se llevó diecisiete campos cargados.
+   *
+   * Van **planos y no anidados**, la falla incluida: el borrador guarda campo por
+   * campo lo que se tocó (`soloLoTocado`), así que escribir el detalle de la
+   * falla no se lleva puesto el modo ni la causa si alguien los corrigió desde
+   * otro lado mientras tanto. Este modal manda los once en un solo `PATCH`, que
+   * es justo lo que vuelve caro guardar el registro entero.
+   *
+   * La falla nace precargada y no vacía: este modal se abre cada vez que una
+   * orden se da por realizada y manda todos sus campos en cada guardado, así que
+   * arrancar en blanco le borraría la falla a quien reabre una OT para corregir
+   * las horas. Vaciar el desplegable sigue siendo "borrala": viaja como "" y la
+   * ruta lo guarda como null.
+   *
+   * Lo que **no** entra: `guardando`, el error, el aviso, la foto y las listas de
+   * Configuración. No son lo que la persona escribió.
    */
-  const [falla, setFalla] = useState<LaFalla>({
-    falla_modo: orden.falla_modo ?? "",
-    falla_causa: orden.falla_causa ?? "",
-    falla_detalle: orden.falla_detalle ?? "",
-  });
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-registrar-ot", { tipo: "ot", id: orden.id }),
+    {
+      resultado: "completado",
+      /*
+       * Arranca en la fecha de cierre que la orden ya tiene, y **vacía si no
+       * tiene**. Las dos mitades se pidieron y cada una arregla algo distinto:
+       * precargar la de la orden evita que reabrir una OT cerrada para
+       * corregirle las horas le mueva la fecha en silencio; no poner hoy
+       * (16/11/2026) evita que una fecha puesta por el sistema se confunda con
+       * una elegida — quien registra el jueves un lunes aceptaba el lunes sin
+       * mirar, y de esa fecha viven el MTTR y el historial del equipo.
+       */
+      cuando: orden.fecha_cierre ?? "",
+      // Precargada por lo mismo que la fecha: si arrancara vacía, corregir las
+      // horas de una OT adelantada mandaría "" y borraría el motivo guardado.
+      justificacion: orden.cierre_justificacion ?? "",
+      horas: orden.horas != null ? String(orden.horas) : "",
+      contratista: orden.contratista ?? "",
+      operario_1: orden.operario_1 ?? "",
+      operario_2: orden.operario_2 ?? "",
+      operario_3: orden.operario_3 ?? "",
+      observaciones: "",
+      falla_modo: orden.falla_modo ?? "",
+      falla_causa: orden.falla_causa ?? "",
+      falla_detalle: orden.falla_detalle ?? "",
+    },
+  );
+  const { resultado, cuando, justificacion, horas, contratista, observaciones } = valores;
 
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -134,11 +195,101 @@ export default function RegistrarOTModal({
     if (body.aviso) setAviso(body.aviso);
   }
 
+  /**
+   * Lo que impide cerrar, **calculado en cada render**.
+   *
+   * Se pidió que la alerta salte apenas estén las dos fechas y no recién al
+   * guardar, y por eso vive acá y no adentro de `guardar()`. Es una función
+   * pura de lo que la pantalla ya tiene —la fecha de inicio de la orden y la
+   * que se está eligiendo—, así que no necesita estado propio ni un efecto:
+   * un `useEffect` con `setState` sería un segundo render para guardar algo
+   * que ya se sabe, que es lo que marca `react-hooks/set-state-in-effect`.
+   *
+   * La fecha de inicio no se edita acá, así que de las dos sólo se mueve una:
+   * la alerta aparece y desaparece al cambiar el día, sin apretar nada.
+   *
+   * **Y desde el 12/11/2026 depende también de lo que se escriba**: el cartel
+   * se apaga cuando la justificación explica. Sin pasarla, seguiría encendido
+   * con el motivo ya escrito abajo — un cartel que dice que no se puede
+   * guardar lo que sí se puede.
+   */
+  const impideCerrar = loQueImpideCerrar(orden.fecha_ejecucion, cuando, justificacion);
+
+  // Sale y entra con las dos fechas, como la alerta de arriba.
+  const pideJustificacion = elCierreEsAnteriorAlInicio(cuando, orden.fecha_ejecucion);
+
+  /**
+   * Lo que falta, que mientras falte es lo único que hay que decir.
+   *
+   * Pasar la justificación apaga el cartel recién **después** de que el texto
+   * explique; en el medio —la fecha elegida y el campo todavía vacío— lo que
+   * quedaría es el impedimento, justo al lado del campo que lo levanta. Es la
+   * misma elección que hicieron las dos rutas: primero el faltante, que nombra
+   * lo que destraba el guardado, y después la contradicción.
+   *
+   * Y el impedimento no se va a ninguna parte: en esta pantalla es el único
+   * que puede decir «la orden no dice cuándo empezó», que no lo arregla ningún
+   * texto y que es lo que de verdad impide. Mientras falte el motivo, eso no
+   * corre: sin fecha de inicio no hay adelanto que justificar y esta lista
+   * viene vacía.
+   */
+  const faltaElPorQue = loQueFaltaPorElCierreAdelantado({
+    fecha_cierre: cuando,
+    fecha_ejecucion: orden.fecha_ejecucion,
+    cierre_justificacion: justificacion,
+  });
+
   async function guardar() {
     if (!observaciones.trim() && resultado !== "completado") {
       setError("Contá qué pasó: un trabajo parcial sin explicación no sirve después.");
       return;
     }
+
+    // ── LA FECHA, ANTES QUE TODO LO DEMÁS ───────────────────────────────────
+    //
+    // Es lo primero porque sin ella nada de lo que sigue se puede ni evaluar:
+    // el adelanto se mide contra una fecha, la contradicción compara dos, y la
+    // ejecución manda `${cuando}T00:00` — con el campo vacío eso es
+    // `"T00:00"`, una fecha inválida que terminaría en un 400 de la ruta de
+    // ejecuciones **después** de no haber guardado nada, o peor, en un
+    // `executed_at` que nadie eligió.
+    //
+    // Se exige en los tres resultados y no sólo en «completado», aunque el
+    // estado `REALIZADO` salga de ése: lo que se está diciendo con este campo
+    // es **qué día se trabajó**, y la ejecución se guarda igual en los tres.
+    if (!cuando) {
+      setError("Falta cargar la fecha de cierre.");
+      return;
+    }
+
+    // Antes de postear nada, por lo mismo que el control de las fechas de más
+    // abajo: la ejecución se guarda primero y no se deshace, así que un rechazo
+    // del servidor dejaría el trabajo registrado y la orden sin cerrar.
+    //
+    // El mismo valor que ya mostró el cartel de arriba, y en el mismo orden que
+    // el servidor: el faltante primero. «Falta cargar» y no «Falta», que es lo
+    // que contestan las dos rutas y lo que dicen los otros dos formularios: dos
+    // frases para el mismo hecho mandan a buscar dos cosas distintas.
+    if (faltaElPorQue.length > 0) {
+      setError(`Falta cargar ${faltaElPorQue.join(", ")}.`);
+      return;
+    }
+
+    // ── ANTES DE LA EJECUCIÓN, Y POR ESO ESTÁ ACÁ Y NO ABAJO ─────────────────
+    //
+    // La misma función que corre el servidor, para que lo que se ve en
+    // pantalla sea lo mismo que va a contestar la ruta. Pero acá no es sólo
+    // comodidad: **esta pantalla hace dos escrituras y la primera no se
+    // deshace.** La ejecución se guarda primero —es el registro de lo que se
+    // hizo y no depende de la planilla— y recién después se cierra la OT. Si
+    // el 400 del cierre llegara después, el trabajo quedaría registrado con
+    // una fecha imposible y la orden abierta, que es exactamente el estado del
+    // que esta pantalla ya avisa («El trabajo quedó registrado, pero...»).
+    if (impideCerrar.length > 0) {
+      setError(`No se puede guardar porque ${impideCerrar.join(", ")}.`);
+      return;
+    }
+
     setGuardando(true);
     setError("");
 
@@ -176,14 +327,17 @@ export default function RegistrarOTModal({
         id: orden.id,
         estado: ESTADO_SEGUN[resultado],
         fecha_cierre: cuando,
+        cierre_justificacion: justificacion.trim() || null,
         horas: horas ? Number(horas) : null,
         contratista: contratista.trim() || null,
-        operario_1: operario1.trim() || null,
-        operario_2: operario2.trim() || null,
-        operario_3: operario3.trim() || null,
+        operario_1: valores.operario_1.trim() || null,
+        operario_2: valores.operario_2.trim() || null,
+        operario_3: valores.operario_3.trim() || null,
         observaciones: observaciones.trim() || null,
         // Las tres claves son las de la base: viajan sin traducir.
-        ...falla,
+        falla_modo: valores.falla_modo,
+        falla_causa: valores.falla_causa,
+        falla_detalle: valores.falla_detalle,
         foto_url: foto?.link ?? undefined,
       }),
     });
@@ -194,6 +348,11 @@ export default function RegistrarOTModal({
       setError(`El trabajo quedó registrado, pero no se pudo cerrar la OT: ${body.error ?? ""}`);
       return;
     }
+
+    // El borrador se tira acá y no al apretar «Registrar»: son dos escrituras, y
+    // si la segunda falla el modal queda abierto con el error y lo cargado tiene
+    // que seguir estando. Recién con el `PATCH` en verde no hay nada que recordar.
+    tirar();
     // Quedó todo bien en la app y lo único que falta es la planilla. Qué decir
     // depende de si el sistema va a insistir: desde que el PATCH anota el
     // pendiente, fallar acá es lo normal —la fila del master llega por
@@ -210,17 +369,20 @@ export default function RegistrarOTModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div
-        className="max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div>
-          <h2 className="text-base font-bold text-slate-900">Registrar el trabajo</h2>
-          <p className="mt-0.5 text-xs text-slate-400">
-            OT #{orden.ot_number ?? "—"} · {orden.equipo_raw ?? orden.descripcion ?? ""}
-          </p>
-        </div>
+    // El fondo, la X y Escape salen conservando: lo cargado queda en el borrador
+    // y aparece igual al volver a abrir. Sólo «Cancelar» tira. Acá empezó todo:
+    // el fondo cerraba sin preguntar y se perdían diecisiete campos. Con el aviso
+    // de la planilla en pantalla el trabajo ya quedó registrado, así que salir
+    // por cualquier lado es «Entendido» (`onRegistrada`) y no sólo ocultar: quien
+    // llama tiene que refrescar el listado.
+    //
+    // `tocado` es false después de un guardado bueno, porque `tirar()` ya corrió:
+    // así el cartel del aviso de la planilla no se cruza con la pregunta al salir.
+    <Modal titulo="Registrar el trabajo" alSalir={aviso ? onRegistrada : onCerrar} tocado={tocado}>
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-400">
+          OT #{orden.ot_number ?? "—"} · {orden.equipo_raw ?? orden.descripcion ?? ""}
+        </p>
 
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>
@@ -236,20 +398,44 @@ export default function RegistrarOTModal({
           <Campo etiqueta="Cómo salió">
             <Select
               value={resultado}
-              onChange={(e) => setResultado(e.target.value)}
+              onChange={(e) => cambiar({ resultado: e.target.value })}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
               {RESULTADOS.map((r) => <option key={r.valor} value={r.valor}>{r.label}</option>)}
             </Select>
           </Campo>
 
-          <Campo etiqueta="Cuándo">
+          <Campo etiqueta="Cuándo" obligatorio>
+            {/*
+              **Sin `min`, desde el 12/11/2026.** Tenía la fecha de inicio de la
+              OT para que el calendario dejara los días anteriores en gris, y
+              eso dejó de corresponder cuando se pidió poder cerrar antes del
+              inicio explicando por qué: con el `min` puesto, **el camino normal
+              quedaba cerrado** —el calendario no ofrece los días en gris, así
+              que al campo del motivo sólo llegaba quien tipeara la fecha a
+              mano, que es la salida de emergencia y no la puerta—. Quien decide
+              sigue siendo `loQueImpideCerrar`, acá arriba y en el servidor; lo
+              que se perdió, dicho, es la defensa barata contra el dedo que erra
+              por un día, y lo que la reemplaza es tener que escribir el motivo.
+            */}
             <input
               type="date"
               value={cuando}
-              onChange={(e) => setCuando(e.target.value)}
+              onChange={(e) => cambiar({ cuando: e.target.value })}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
+            {/*
+              Y esto se queda, aunque ya no haya gris que explicar: quien
+              registra el trabajo no tiene la fecha de inicio delante —está en
+              la ficha de la OT— y sin ella no puede saber si lo que está
+              eligiendo cae antes. Sacado el `min`, es lo único que lo dice
+              antes de que aparezca el campo del motivo.
+            */}
+            {orden.fecha_ejecucion && (
+              <p className="mt-1 text-xs text-slate-400">
+                Empezó el {comoSeLee(orden.fecha_ejecucion)}
+              </p>
+            )}
           </Campo>
 
           <Campo etiqueta="Horas">
@@ -258,7 +444,7 @@ export default function RegistrarOTModal({
               min="0"
               step="0.5"
               value={horas}
-              onChange={(e) => setHoras(e.target.value)}
+              onChange={(e) => cambiar({ horas: e.target.value })}
               placeholder="—"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
@@ -267,7 +453,7 @@ export default function RegistrarOTModal({
           <Campo etiqueta="Contratista">
             <Select
               value={contratista}
-              onChange={(e) => setContratista(e.target.value)}
+              onChange={(e) => cambiar({ contratista: e.target.value })}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
               <option value="">Lo hizo personal propio</option>
@@ -281,21 +467,56 @@ export default function RegistrarOTModal({
           </Campo>
         </div>
 
+        {/* ── LA ALERTA, EN EL MOMENTO Y NO AL GUARDAR ─────────────────────
+            Se pidió que salte apenas estén las dos fechas. Va **debajo de la
+            grilla y no adentro de la celda**: la grilla es de dos columnas, y
+            ahí el mensaje —que nombra las dos fechas enteras— entra partido en
+            pedazos de 150 px.
+
+            El botón de guardar sigue habilitado a propósito. Deshabilitarlo
+            dejaría el porqué acá arriba y el botón mudo abajo, que en un
+            teléfono es media pantalla de distancia; apretarlo repite el mismo
+            texto donde la persona está mirando, y el guardado igual no pasa:
+            lo frena `guardar()` y, si llegara, el servidor.
+
+            **Y cuál de las dos frases, en el mismo orden que `guardar()` y que
+            las dos rutas**: mientras falte el motivo se pide el motivo, y el
+            impedimento queda para lo que de verdad impide — acá, una orden que
+            no dice cuándo empezó, que no lo arregla ningún texto. En ámbar y
+            no en rojo porque lo que falta es el campo que está acá abajo. */}
+        {faltaElPorQue.length > 0 ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+            Falta cargar {faltaElPorQue.join(", ")}.
+          </div>
+        ) : impideCerrar.length > 0 ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+            No se puede guardar porque {impideCerrar.join(", ")}.
+          </div>
+        ) : null}
+
+        {/* Debajo de la grilla y no adentro de la celda de la fecha, por lo
+            mismo que la alerta: en media columna el rótulo se parte. */}
+        {pideJustificacion && (
+          <Campo etiqueta="Por qué se cierra antes de la fecha de inicio">
+            <textarea
+              value={justificacion}
+              onChange={(e) => cambiar({ justificacion: e.target.value })}
+              className="input min-h-20"
+            />
+          </Campo>
+        )}
+
         <Campo etiqueta="Quiénes lo hicieron">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {[
-              [operario1, setOperario1],
-              [operario2, setOperario2],
-              [operario3, setOperario3],
-            ].map(([valor, set], i) => {
+            {(["operario_1", "operario_2", "operario_3"] as const).map((campo, i) => {
               // Cada columna de la orden tiene su propia lista de gente.
               const suyos = operarios.filter((o) => o.slot === i + 1).map((o) => o.nombre);
-              const elegido = valor as string;
+              const elegido = valores[campo];
               return (
                 <Select
-                  key={i}
+                  key={campo}
                   value={elegido}
-                  onChange={(e) => (set as (v: string) => void)(e.target.value)}
+                  onChange={(e) => cambiar({ [campo]: e.target.value })}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 >
                   <option value="">Operario {i + 1}</option>
@@ -311,14 +532,22 @@ export default function RegistrarOTModal({
         <Campo etiqueta="Qué se hizo y qué se encontró">
           <textarea
             value={observaciones}
-            onChange={(e) => setObservaciones(e.target.value)}
+            onChange={(e) => cambiar({ observaciones: e.target.value })}
             rows={3}
             placeholder="Se cambió el rodamiento del lado motor; el acople está gastado y va a haber que cambiarlo."
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
         </Campo>
 
-        <FallaDeLaOT falla={falla} onCambiar={setFalla} deshabilitado={guardando} />
+        <FallaDeLaOT
+          falla={{
+            falla_modo: valores.falla_modo,
+            falla_causa: valores.falla_causa,
+            falla_detalle: valores.falla_detalle,
+          }}
+          onCambiar={(f) => cambiar(f)}
+          deshabilitado={guardando}
+        />
 
         <Campo etiqueta="Foto del trabajo">
           {foto ? (
@@ -354,7 +583,7 @@ export default function RegistrarOTModal({
           {subiendo && <p className="text-xs text-slate-400">Subiendo…</p>}
         </Campo>
 
-        <div className="flex gap-2 pt-1">
+        <PieDeModal className="flex gap-2">
           <button
             onClick={guardar}
             disabled={guardando}
@@ -362,22 +591,37 @@ export default function RegistrarOTModal({
           >
             {guardando ? "Guardando…" : "Registrar"}
           </button>
+          {/* El único que tira: «Cancelar» descarta lo cargado a propósito. */}
           <button
-            onClick={onCerrar}
+            onClick={() => { tirar(); onCerrar(); }}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cancelar
           </button>
-        </div>
+        </PieDeModal>
       </div>
-    </div>
+    </Modal>
   );
 }
 
-function Campo({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+function Campo({
+  etiqueta, obligatorio = false, children,
+}: {
+  etiqueta: string;
+  /**
+   * Pinta el asterisco y nada más. **Quien exige es `guardar()`**, no esto:
+   * un `required` en el `<input>` lo frena el navegador con un mensaje suyo,
+   * en su idioma y sin el «Falta cargar» del resto del sistema.
+   */
+  obligatorio?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block space-y-1">
-      <span className="block text-xs font-medium text-slate-600">{etiqueta}</span>
+      <span className="block text-xs font-medium text-slate-600">
+        {etiqueta}
+        {obligatorio && <span className="ml-0.5 text-red-500">*</span>}
+      </span>
       {children}
     </label>
   );

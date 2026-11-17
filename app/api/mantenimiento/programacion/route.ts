@@ -4,9 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { esAdminMantenimiento } from "@/lib/mantenimiento/auth";
 import { esFechaIso, hoyEnArgentina, semanaDe } from "@/lib/core/fechas";
 import { traerTodo } from "@/lib/core/paginado";
+import { turnoDeLaPersona } from "@/lib/mantenimiento/referenciaDelTaller";
 import {
-  turnoDelElectricista,
-  turnoDelGrupo,
   type Grupo,
   type Oficio,
   type Referencia,
@@ -14,7 +13,8 @@ import {
 } from "@/lib/mantenimiento/programacion";
 import {
   candidatosParaElHueco,
-  estaAusente,
+  type FrancoCrudo,
+  noViene,
   estaVigente,
   type Asignacion,
   type AusenciaCruda,
@@ -192,6 +192,41 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
 
+  /*
+   * Los francos que se descansan esta semana.
+   *
+   * Un franco tomado es un día que la persona no viene, igual que una ausencia,
+   * y hasta el 26/10/2026 este cruce no podía mirarlos: la única fecha que
+   * había era `fecha_tomado`, que es el día en que alguien apretó el botón y no
+   * el del descanso —los 56 francos tomados de entonces caen en tres fechas, y
+   * cruzarlos habría pintado 35 huecos un lunes—. Desde esa fecha el día real
+   * se carga en `fecha_descanso` al marcarlo.
+   *
+   * Por eso se filtra por `fecha_descanso` y nunca por `fecha_tomado`: los
+   * francos viejos tienen la primera en null y no abren hueco, que es la
+   * verdad. `francos` también está cerrada con tiene_acceso_rrhh(), así que va
+   * con el cliente admin; no trae nada sensible —ni motivo ni tipo— y de acá
+   * sale sólo quién no viene y qué día.
+   */
+  let francos: FrancoCrudo[];
+  try {
+    const todos = await traerTodo<FrancoCrudo>((desde, hasta) =>
+      db
+        .from("francos")
+        .select("empleado_id, estado, fecha_descanso")
+        .eq("estado", "TOMADO")
+        .gte("fecha_descanso", lunes)
+        .lte("fecha_descanso", domingo)
+        .order("id")
+        .range(desde, hasta)
+    );
+    francos = todos
+      .filter((f) => idsDelPadron.has(f.empleado_id))
+      .map((f) => ({ ...f, fecha_descanso: f.fecha_descanso ? soloElDia(f.fecha_descanso) : null }));
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
+
   // ── Las asignaciones: el ciclo, y encima las pisadas ─────────
   const pisadasPorDia = new Map<string, Turno>();
   for (const p of filasPisadas ?? []) pisadasPorDia.set(`${p.empleado_id}|${soloElDia(p.dia)}`, p.turno as Turno);
@@ -210,12 +245,12 @@ export async function GET(request: Request) {
       if (yaAsignados.has(clave)) continue; // vigencias que se superponen: no debería pasar
 
       const pisada = pisadasPorDia.get(clave);
-      const delCiclo =
-        persona.oficio === "electricista"
-          ? turnoDelElectricista(ref, lunes, persona.empleadoId)
-          : persona.grupo
-            ? turnoDelGrupo(ref, lunes, persona.grupo)
-            : null;
+      // Compartida con el parte diario (`lib/mantenimiento/referenciaDelTaller.ts`):
+      // qué turno le toca a alguien no puede contestarse distinto en dos
+      // pantallas. Lo que sigue estando dos veces es **la búsqueda de cuál
+      // referencia rige** —acá en dos consultas, allá como función pura sobre
+      // todas las filas—, y las dos tienen que dar lo mismo.
+      const delCiclo = turnoDeLaPersona(ref, lunes, persona);
 
       const turno = pisada ?? delCiclo;
       if (!turno) {
@@ -229,7 +264,11 @@ export async function GET(request: Request) {
   }
 
   // ── Quién falta, y por cada hueco, quién puede taparlo ───────
-  const hayAusencia = (empleadoId: string, dia: string) => estaAusente(ausencias, empleadoId, dia);
+  // Las dos razones por las que alguien no viene —una ausencia cargada o un
+  // franco que descansa— se preguntan en un solo lugar, para que no puedan
+  // calcularse distinto en la grilla y en los candidatos.
+  const noVieneEseDia = (empleadoId: string, dia: string) =>
+    noViene(ausencias, francos, empleadoId, dia);
   // El oficio que tenía ese día: si cambió a mitad de semana, hay dos filas.
   const oficioEseDia = (empleadoId: string, dia: string) =>
     padron.find((p) => p.empleadoId === empleadoId && estaVigente(p, dia))!.oficio;
@@ -238,7 +277,7 @@ export async function GET(request: Request) {
   const candidatos: Record<string, string[]> = {};
 
   for (const a of asignaciones) {
-    if (!hayAusencia(a.empleadoId, a.dia)) continue;
+    if (!noVieneEseDia(a.empleadoId, a.dia)) continue;
     // Se manda el turno y el oficio *de ese día*, que son los ingredientes de la
     // clave de `candidatos`: así la pantalla no los reconstruye desde `personas`,
     // cuyo oficio es el de la última vigencia.
@@ -246,7 +285,7 @@ export async function GET(request: Request) {
     ausentes.push({ empleadoId: a.empleadoId, dia: a.dia, turno: a.turno, oficio });
     const clave = `${a.dia}|${a.turno}|${oficio}`;
     if (!(clave in candidatos)) {
-      candidatos[clave] = candidatosParaElHueco(asignaciones, hayAusencia, padron, {
+      candidatos[clave] = candidatosParaElHueco(asignaciones, noVieneEseDia, padron, {
         dia: a.dia,
         turno: a.turno,
         oficio,

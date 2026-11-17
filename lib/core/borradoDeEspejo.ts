@@ -265,6 +265,25 @@ export async function borrarLoQueLaPlanillaNoTrajo(
     fuentesSinLeer?: readonly string[] | null;
     sinFreno?: boolean;
     actor?: "sincronizacion" | "cron";
+    /**
+     * Lo que hay que hacer **afuera de la base** antes de borrar las filas, y
+     * que no se deshace: hoy, borrar en Google los eventos de las OT. Recibe los
+     * `id` que están por borrarse y devuelve **los que no se pueden borrar
+     * todavía** (`id` → por qué): esas filas se quedan y se reintentan en la
+     * próxima corrida. Si tira, no se borra ninguna.
+     *
+     * Va **después** del registro de auditoría y **antes** del `DELETE`. Después
+     * del registro por la misma regla de siempre —lo que no se deshace se
+     * audita antes de hacerse—; antes del `DELETE` porque la fila es lo único
+     * que nombra aquello que hay que limpiar afuera: una vez borrada, ya no hay
+     * forma de alcanzarlo desde el sistema.
+     *
+     * El precio, dicho: si esto falla corrida tras corrida (Google caído), el
+     * registro de auditoría anota cada vez las filas que se intentaron. Es lo
+     * que dice la última frase del aviso, y es preferible a borrar el evento de
+     * Google y que después el registro no entre.
+     */
+    antesDeBorrar?: (ids: string[]) => Promise<ReadonlyMap<string, string>>;
   }
 ): Promise<LoQuePaso> {
   const sinNada: LoQuePaso = { borradas: 0, aviso: null, numeros: [] };
@@ -353,9 +372,36 @@ export async function borrarLoQueLaPlanillaNoTrajo(
     };
   }
 
+  // Lo de afuera, antes del DELETE. Una fila que no pasa queda en la base y se
+  // vuelve a intentar: ver `antesDeBorrar`.
+  let aBorrar = veredicto.borrar;
+  let quedaron = "";
+  if (corrida.antesDeBorrar) {
+    let sinPoder: ReadonlyMap<string, string>;
+    try {
+      sinPoder = await corrida.antesDeBorrar(veredicto.borrar.map((f) => f.id));
+    } catch (e) {
+      const motivo = `No se pudo limpiar lo que cuelga de la fila afuera de la base: ${(e as Error).message}`;
+      sinPoder = new Map(veredicto.borrar.map((f) => [f.id, motivo]));
+    }
+    if (sinPoder.size > 0) {
+      aBorrar = veredicto.borrar.filter((f) => !sinPoder.has(f.id));
+      const cuales = veredicto.borrar
+        .filter((f) => sinPoder.has(f.id))
+        .slice(0, 5)
+        .map((f) => `${f.numero ?? f.id} (${sinPoder.get(f.id)})`);
+      const mas = sinPoder.size - cuales.length;
+      quedaron =
+        `Quedaron ${sinPoder.size} sin borrar porque no se pudo limpiar lo que tienen afuera de la base, ` +
+        `y se reintentan en la próxima corrida: ${cuales.join("; ")}${mas > 0 ? ` y ${mas} más` : ""}. ` +
+        `La auditoría de esta corrida anotó ${veredicto.borrar.length}, que es lo que se intentó.`;
+    }
+  }
+  if (aBorrar.length === 0) return { ...sinNada, aviso: quedaron || comoSeCuenta(veredicto) };
+
   // De a 200: un `.in()` con muchos ids arma una URL que PostgREST rechaza con
   // un 400 que no dice por qué.
-  const ids = veredicto.borrar.map((f) => f.id);
+  const ids = aBorrar.map((f) => f.id);
   let borradas = 0;
   for (let i = 0; i < ids.length; i += 200) {
     const lote = ids.slice(i, i + 200);
@@ -363,7 +409,7 @@ export async function borrarLoQueLaPlanillaNoTrajo(
     if (error) {
       return {
         borradas,
-        numeros: veredicto.borrar.slice(0, borradas).map((f) => f.numero ?? f.id),
+        numeros: aBorrar.slice(0, borradas).map((f) => f.numero ?? f.id),
         aviso:
           `Se borraron ${borradas} de ${ids.length} y el resto quedó: ${error.message}. ` +
           "Se van a ver de más hasta la próxima sincronización. " +
@@ -371,11 +417,18 @@ export async function borrarLoQueLaPlanillaNoTrajo(
           // las que se borraron. La auditoría es inmutable, así que la
           // corrección va acá y no allá: quien lea el registro tiene que saber
           // que ese número es una intención y no un hecho.
-          `La auditoría de esta corrida anotó ${ids.length}, que es lo que se intentó.`,
+          `La auditoría de esta corrida anotó ${veredicto.borrar.length}, que es lo que se intentó.`,
       };
     }
     borradas += lote.length;
   }
 
-  return { borradas, numeros, aviso: comoSeCuenta(veredicto) };
+  const hecho = comoSeCuenta({
+    ...veredicto, borrar: aBorrar, editadas: aBorrar.filter((f) => f.editadaEnLaApp).length,
+  });
+  return {
+    borradas,
+    numeros: aBorrar.map((f) => f.numero ?? f.id),
+    aviso: [hecho, quedaron].filter(Boolean).join(" ") || null,
+  };
 }

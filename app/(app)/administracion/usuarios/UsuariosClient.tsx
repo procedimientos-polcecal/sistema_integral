@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { MODULOS_ORDEN } from "@/lib/core/access";
 import type { Modulo } from "@/lib/core/types";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 type Rol = "admin_sistema" | "encargado" | "operario";
 type Nivel = "lectura" | "edicion" | "admin";
@@ -56,6 +57,8 @@ const MODULO_LABEL: Record<Modulo, string> = {
   calidad: "Calidad",
   taller_vial: "Taller Vial",
   trituracion: "Trituración",
+  seguridad_higiene: "Seguridad e Higiene",
+  ventas: "Ventas",
 };
 const NIVEL_LABEL: Record<Nivel, string> = { lectura: "Lectura", edicion: "Edición", admin: "Admin" };
 
@@ -174,18 +177,56 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<{ link: string; aviso: string | null } | null>(null);
+  const confirmar = useConfirm();
+  const preguntando = useRef(false);
+
+  // Fondo, X y Escape. No usa `tocado` del `Modal`: su cartel promete que lo
+  // cargado se encuentra al volver a abrir, y un link de un solo uso no vuelve.
+  async function salir() {
+    // Mientras se crea no se sale: el usuario se crea igual, y el modal
+    // desmontado nunca mostraría el link, que es la única forma de entrar si
+    // el correo no salió.
+    if (guardando) return;
+    if (!resultado) { onClose(); return; }
+    if (preguntando.current) return;
+    preguntando.current = true;
+    try {
+      const salgo = await confirmar({
+        title: "¿Cerrar sin copiar el link?",
+        message:
+          "El link no se vuelve a mostrar. Si todavía no se lo pasaste a la persona, no vas a poder recuperarlo desde acá.",
+        confirmText: "Cerrar",
+        cancelText: "Volver al link",
+      });
+      if (salgo) onSaved();
+    } finally {
+      preguntando.current = false;
+    }
+  }
 
   async function crear(e: React.FormEvent) {
     e.preventDefault();
     setGuardando(true);
     setError(null);
-    const res = await fetch("/api/administracion/usuarios", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
+    let res: Response;
+    let data: { error?: string; link_acceso?: string; aviso?: string };
+    try {
+      res = await fetch("/api/administracion/usuarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      data = await res.json().catch(() => ({}));
+    } catch (err) {
+      // Sin esto, un fallo de red dejaba `guardando` en true para siempre y,
+      // con las salidas bloqueadas mientras guarda, el modal sin salida.
+      setGuardando(false);
+      setError(`No se pudo crear el usuario: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    // Se baja `guardando` recién con la respuesta leída: entre una cosa y la otra
+    // salir tiene que seguir frenado.
     setGuardando(false);
-    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setError(data.error ?? "No se pudo crear el usuario");
       return;
@@ -200,10 +241,7 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <h2 className="font-medium text-slate-900 mb-4">Nuevo usuario</h2>
-
+    <Modal titulo="Nuevo usuario" alSalir={() => void salir()}>
         {resultado ? (
           <div className="space-y-3">
             <p className="text-sm text-slate-700">
@@ -261,16 +299,15 @@ function NuevoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved:
             Se le va a mandar un email a esa dirección para que defina su propia contraseña.
           </p>
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
+          <PieDeModal>
+            <button type="button" onClick={onClose} disabled={guardando} className="btn-secondary">Cancelar</button>
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Creando..." : "Crear usuario"}
             </button>
-          </div>
+          </PieDeModal>
         </form>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -304,7 +341,18 @@ function EditarUsuarioModal({
     e.preventDefault();
     setGuardando(true);
     setError(null);
+    try {
+      await guardarTodo();
+    } catch (err) {
+      // Un fallo de red en cualquiera de los tres pedidos no puede dejar
+      // `guardando` pegado: con las salidas bloqueadas, el modal quedaría sin
+      // salida. Puede haber guardado los primeros: se dice.
+      setGuardando(false);
+      setError(`No se pudo terminar de guardar (los primeros cambios pueden haber quedado): ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
+  async function guardarTodo() {
     const resUsuario = await fetch(`/api/administracion/usuarios/${usuario.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -344,9 +392,9 @@ function EditarUsuarioModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h2 className="font-medium text-slate-900 mb-1">Editar usuario</h2>
+    // Mientras guarda no se sale: son tres pedidos seguidos y cerrar a mitad
+    // dejaría los permisos a medio escribir sin que la pantalla se entere.
+    <Modal titulo="Editar usuario" alSalir={() => { if (!guardando) onClose(); }}>
         <p className="text-xs text-slate-500 mb-4">{usuario.email}</p>
         <form onSubmit={guardar} className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
@@ -444,14 +492,13 @@ function EditarUsuarioModal({
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
+          <PieDeModal>
+            <button type="button" onClick={onClose} disabled={guardando} className="btn-secondary">Cancelar</button>
             <button type="submit" disabled={guardando} className="btn-primary disabled:opacity-50">
               {guardando ? "Guardando..." : "Guardar"}
             </button>
-          </div>
+          </PieDeModal>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

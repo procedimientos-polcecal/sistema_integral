@@ -141,29 +141,58 @@ export function ajustarFichadasPorTurno(
 }
 
 /**
- * Arma los intervalos trabajados que corresponden al día calendario `dia`,
- * partiendo en la medianoche local cualquier fichada que la haya cruzado
- * (turnos como 20 a 4). La porción antes de medianoche queda para el día en
- * que arrancó el turno; la porción después, para el día siguiente. Así cada
- * mitad se calcula con las reglas (tipo de día, recargos) que le corresponden.
+ * Arma los intervalos trabajados que corresponden al día calendario `dia`.
+ *
+ * **Un turno va entero al día en que arrancó**, aunque cruce la medianoche.
+ * Las ocho horas de un 20 a 4 se cuentan el día que empezó, y el día siguiente
+ * no recibe nada.
+ *
+ * POR QUÉ, PORQUE ANTES ERA AL REVÉS
+ *
+ * Hasta el 30/10/2026 esto partía la fichada en la medianoche local, para que
+ * cada mitad se calculara con el tipo de día y los recargos que le tocaban. La
+ * idea era buena y en la práctica peleaba todos los días con quien liquida: de
+ * los **85 turnos de octubre que cruzan medianoche, 73 ya habían sido
+ * corregidos a mano** para poner las ocho horas en el día del turno. Partir
+ * dejaba además 347 horas del mes imputadas al día siguiente, y al día de la
+ * madrugada lo marcaba **ausente teniendo horas** — cuatro personas el 30/10.
+ *
+ * Una regla que hay que deshacer a mano el 86 % de las veces no es una regla.
+ *
+ * EL RIESGO QUE SE ASUME, ESCRITO
+ *
+ * Las horas posteriores a la medianoche de un sábado o de un feriado dejan de
+ * llevar el recargo de **ese** día y toman el del día en que empezó el turno.
+ * Se decidió así a pedido el 30/10/2026; si alguna vez hace falta lo contrario
+ * para un caso puntual, están las horas fijadas a mano, que esto nunca pisa.
  */
 export function intervalsParaDia(dia: Date, fichadas: FichadaLike[]): TimeInterval[] {
-  const inicioDia = localDateTime(dia, 0, 0);
-  const inicioSiguiente = localDateTime(addUtcDays(dia, 1), 0, 0);
   const diaKey = dia.getTime();
-  const diaAnteriorKey = addUtcDays(dia, -1).getTime();
 
   const result: TimeInterval[] = [];
   for (const f of fichadas) {
     if (!f.horaSalida) continue;
-    const fKey = startOfDay(f.fecha).getTime();
-    if (fKey === diaKey) {
-      const end = f.horaSalida > inicioSiguiente ? inicioSiguiente : f.horaSalida;
-      if (end > f.horaEntrada) result.push({ start: f.horaEntrada, end });
-    } else if (fKey === diaAnteriorKey && f.horaSalida > inicioDia) {
-      const end = f.horaSalida > inicioSiguiente ? inicioSiguiente : f.horaSalida;
-      if (end > inicioDia) result.push({ start: inicioDia, end });
-    }
+    if (startOfDay(f.fecha).getTime() !== diaKey) continue;
+    if (f.horaSalida > f.horaEntrada) result.push({ start: f.horaEntrada, end: f.horaSalida });
   }
   return result;
+}
+
+/**
+ * Si el turno de la víspera siguió trabajando dentro de `dia`.
+ *
+ * Es la otra mitad de la regla de arriba, y existe para no mentir en la otra
+ * dirección: con el turno imputado entero al día en que arrancó, la madrugada
+ * siguiente se queda sin horas, pero la persona **estuvo**. Marcarla ausente
+ * ese día es falso, y es lo que infla la cuenta de ausentes del tablero.
+ *
+ * Una fichada **abierta** no cuenta: sin hora de salida no se sabe hasta
+ * cuándo estuvo, y suponerlo sería inventar la prueba de una presencia.
+ */
+export function cubiertoPorTurnoDeLaVispera(dia: Date, fichadas: FichadaLike[]): boolean {
+  const inicioDia = localDateTime(dia, 0, 0);
+  const visperaKey = addUtcDays(dia, -1).getTime();
+  return fichadas.some(
+    (f) => f.horaSalida !== null && startOfDay(f.fecha).getTime() === visperaKey && f.horaSalida > inicioDia
+  );
 }

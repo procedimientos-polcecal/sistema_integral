@@ -1,0 +1,170 @@
+/**
+ * Cerrar una orden de trabajo con una fecha anterior a la de su inicio, y qué se
+ * le pide a quien lo hace.
+ *
+ * Por qué existe la regla. Una OT con el cierre anterior al inicio puede ser
+ * perfectamente cierta —una orden programada cuyo equipo se rompió antes de la
+ * fecha de inicio: se intervino y se cerró antes— y por eso NO se bloquea. Lo
+ * que se pierde hoy es el motivo: meses después, Mantenimiento mira una OT así
+ * y no tiene de dónde deducir si fue un adelanto real o un dedo equivocado.
+ * Medido el 12/11/2026: de las 2.176 OT que tienen las dos fechas, 66 ya están
+ * así —44 PROGRAMADO y 22 CORRECTIVO—, la mediana del adelanto es de 2 días y
+ * 57 de las 66 caen dentro de la semana; sólo 3 entraron por la app. Así que lo
+ * que se pide es que alguien lo diga, y queda escrito.
+ *
+ * **Lo que este encabezado decía hasta el 12/11/2026 era falso, y vale anotar
+ * en qué**: decía que «hoy nada lo frena», que `loQueSeContradice` no mira la
+ * fecha de cierre y que el PATCH no valida fechas. Las tres cosas dejaron de
+ * ser ciertas el **05/11/2026**, con `loQueImpideCerrar` (commit `2c38520c`):
+ * desde entonces el alta y el PATCH rechazaban con 400 **todos** estos casos.
+ * La frase sobrevivió de leer el archivo en una rama anterior a ese commit, y
+ * con ella en pie esta regla entera era inalcanzable — quien cargaba veía a la
+ * vez el campo que pide el motivo y el cartel que decía que igual no se podía
+ * guardar. El 12/11/2026 ese bloqueo cede cuando hay una justificación que
+ * explica, y la guarda pasa a ser ésta; el detalle de qué cedió y qué no está
+ * en el docstring de `loQueImpideCerrar`.
+ *
+ * Por qué se pide SIEMPRE y sin umbral. Un umbral («tolerar hasta dos días»)
+ * habría que justificarlo con la distribución de las diferencias, y la mediana de
+ * las que hay está en 2 días: cualquier corte razonable deja pasar sin una
+ * palabra justo los casos más comunes, que son también los que más cuesta
+ * distinguir de un error. Pedirla siempre es lo único que no pide decidir antes
+ * de tener datos. El riesgo asumido, dicho: si lo que se escribe cincuenta veces
+ * termina siendo «se hizo antes», la regla se volvió un trámite y lo que hay que
+ * revisar entonces es el umbral y no la regla. La defensa de hoy es que el texto
+ * pase por `justificacionQueExplica` —el mismo filtro de no-respuestas que usa
+ * Compras para denegar—, que rechaza «no», «x» o «prueba» y acepta «Rotura».
+ *
+ * Las seis funciones son puras y las llaman las tres pantallas y las dos rutas:
+ * que el formulario y el servidor vean exactamente lo mismo es el punto de
+ * tenerlas en un solo archivo.
+ */
+import { justificacionQueExplica } from "@/lib/core/justificacion";
+
+/** Cómo se llama lo que falta, tal como lo lee quien está cargando. */
+const LO_QUE_FALTA = "por qué se cerró antes de la fecha de inicio";
+
+/** Lo que se antepone en la celda de observaciones de la planilla. */
+const PREFIJO_EN_LA_PLANILLA = "Cerrada antes del inicio: ";
+
+/**
+ * Sólo el día. Las dos son columnas `date` y llegan como «AAAA-MM-DD», pero si
+ * una viniera con hora, comparar textos de distinto largo da un resultado y no
+ * un error: «2026-11-06» queda menor que «2026-11-06T00:00:00Z» y el mismo día
+ * pasaría por distinto. Son fechas ISO, así que como texto quedan en orden;
+ * `cuaderno/generar/route.ts` también compara dos cierres como texto, aunque los
+ * mira enteros y no recortados.
+ *
+ * Coacciona con `String()` porque lo que llega en un cuerpo no tiene tipo
+ * garantizado: un número en `fecha_cierre` reventaba con un 500 en el `.slice()`
+ * donde tenía que haber un 400. Está acá y no en el borde para que las dos rutas
+ * coincidan por construcción.
+ */
+const dia = (f: unknown): string => String(f ?? "").slice(0, 10);
+
+/** Si el cierre cae antes del inicio. Sin alguna de las dos no hay qué comparar. */
+export function elCierreEsAnteriorAlInicio(
+  cierre: unknown,
+  inicio: unknown,
+): boolean {
+  const c = dia(cierre);
+  const i = dia(inicio);
+  if (!c || !i) return false;
+  return c < i;
+}
+
+/**
+ * Si la fecha de cierre que llega es otra que la guardada.
+ *
+ * Existe porque `RegistrarOTModal` manda la fecha en todos los guardados: con
+ * «vino la clave» como criterio, quien sólo corrige las horas de una orden ya
+ * cerrada antes de su inicio tendría que justificarla de nuevo cada vez.
+ */
+export function elCierreCambio(
+  nuevo: unknown,
+  guardado: unknown,
+): boolean {
+  return dia(nuevo) !== dia(guardado);
+}
+
+export interface DatosDelCierreAdelantado {
+  fecha_cierre: string | null | undefined;
+  fecha_ejecucion: string | null | undefined;
+  cierre_justificacion: string | null | undefined;
+}
+
+/**
+ * Lo que falta para poder guardar, en la forma de las otras listas de faltantes
+ * de Mantenimiento: vacía si está todo.
+ *
+ * La clave ausente cuenta como faltante: una carga sin señal encolada antes de
+ * que el campo existiera no la trae, y dejarla pasar sería la vía por la que la
+ * regla se esquiva sin querer.
+ */
+export function loQueFaltaPorElCierreAdelantado(datos: DatosDelCierreAdelantado): string[] {
+  if (!elCierreEsAnteriorAlInicio(datos.fecha_cierre, datos.fecha_ejecucion)) return [];
+  return justificacionQueExplica(datos.cierre_justificacion) ? [] : [LO_QUE_FALTA];
+}
+
+/**
+ * La justificación que queda en la base: el texto recortado si el cierre sigue
+ * siendo anterior al inicio, y null si no.
+ *
+ * Dejarla llena cuando las fechas dejaron de contradecirse haría que la ficha y
+ * la planilla sigan diciendo «Cerrada antes del inicio» de una orden que ya no
+ * lo está.
+ *
+ * Aquí NO se pregunta si el texto explica: eso lo contesta
+ * `loQueFaltaPorElCierreAdelantado` antes de llegar. Separarlo deja que el día
+ * que se levante la exigencia —un umbral, por ejemplo— lo ya guardado no cambie
+ * de sentido.
+ */
+export function laJustificacionQueSeGuarda(
+  cierre: string | null | undefined,
+  inicio: string | null | undefined,
+  texto: unknown,
+): string | null {
+  if (!elCierreEsAnteriorAlInicio(cierre, inicio)) return null;
+  // Coacciona igual que `justificacionQueExplica`: lo que pasa el faltante tiene
+  // que ser exactamente lo que se guarda, o queda una OT con el cierre adelantado
+  // y la columna vacía.
+  const t = String(texto ?? "").trim();
+  return t === "" ? null : t;
+}
+
+/**
+ * Lo que se escribe en la celda de observaciones: la justificación primero, con
+ * un prefijo fijo para reconocerla de un vistazo, y las observaciones después.
+ *
+ * Devuelve vacío cuando no hay nada, y eso es a propósito: vacío vacía la celda,
+ * que es «sacá lo que había», y no «no la toques».
+ */
+export function observacionDelCierreAdelantado(
+  justificacion: string | null | undefined,
+  observaciones: string | null | undefined,
+): string {
+  const j = (justificacion ?? "").trim();
+  const o = (observaciones ?? "").trim();
+  const partes: string[] = [];
+  if (j) partes.push(PREFIJO_EN_LA_PLANILLA + j);
+  if (o) partes.push(o);
+  return partes.join("\n");
+}
+
+/**
+ * Si la justificación viaja a la planilla en este pedido, y con qué valor.
+ *
+ * `undefined` es «no la toques». Si viajara siempre, un PATCH que sólo cambia el
+ * estado reescribiría la celda con la justificación sola y se llevaría las
+ * observaciones, que no tienen columna propia desde la cual rearmarse. Viaja
+ * cuando el pedido toca las observaciones o la justificación; y `null` es «se
+ * borró», para que la celda deje de decirlo.
+ */
+export function justificacionParaLaPlanilla(
+  tocaLasObservaciones: boolean,
+  tocaLaJustificacion: boolean,
+  guardada: string | null,
+): string | null | undefined {
+  if (!tocaLasObservaciones && !tocaLaJustificacion) return undefined;
+  return guardada;
+}

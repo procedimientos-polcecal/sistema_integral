@@ -30,6 +30,11 @@ export default async function AdministracionPage() {
             Empresas y sectores
           </Link>
         </li>
+        <li>
+          <Link className="text-blue-700 hover:underline" href="/administracion/salud">
+            Salud de las sincronizaciones
+          </Link>
+        </li>
       </ul>
     </div>
   );

@@ -1,10 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { modulosVisibles, MODULOS_ORDEN } from "@/lib/core/access";
+import { modulosVisibles, nivelEnModulo, MODULOS_ORDEN } from "@/lib/core/access";
+import { FILTRO_FALTA_ALGO } from "@/lib/seguridadHigiene/condicion";
+import { corteDeFotosAtascadas } from "@/lib/seguridadHigiene/respaldoDeFotos";
 import { puedeAprobarCompras } from "@/lib/compras/auth";
 import type { Modulo, Rol, UsuarioModulo } from "@/lib/core/types";
+import {
+  sospechasDeCambio, type CicloVigilado, type Sospecha,
+} from "@/lib/mantenimiento/sospechaDeCambio";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { filtrarDescartadas, type Notificacion } from "./notificaciones";
-import { avisosDeConteos, avisosDeRitmo, type ConteosParaAvisos } from "./avisos";
+import { avisosDeCiclos, avisosDeConteos, avisosDeRitmo, avisosDeSalud, type ConteosParaAvisos } from "./avisos";
+import { contarDivergenciasSinVer } from "@/lib/agenda/avisosDeLaAgenda";
+import { leerLaSalud, type SaludDelSistema } from "@/lib/core/saludDeLasSincronizaciones";
+import { contarMencionesSinLeer } from "@/lib/mensajes/menciones";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ritmoPorModulo } from "./ritmo";
 import { traerRitmo, sinClasificarDelUltimoDiaHabil, equiposTallerVialSinService } from "./consultas";
 
@@ -32,12 +41,23 @@ export interface QuienMira {
  * `contarSiTiene`, y `avisosDeRitmo` recibe la lista de módulos— y el RLS de
  * este sistema gatea por acceso al módulo, no por fila. Quien tiene
  * Mantenimiento ve todas las órdenes; quien no lo tiene no cuenta ninguna, con
- * sesión o sin ella. Si algún día alguna tabla pasara a filtrar por fila, esto
- * deja de ser cierto y hay que volver acá.
+ * sesión o sin ella.
+ *
+ * **La Agenda es la excepción y es la primera:** sus eventos sí se ven por fila
+ * (dueño o invitado), así que el cliente admin los vería todos. Por eso su
+ * conteo recibe el `usuarioId` y **filtra explícito** (`divergenciasSinVer`), en
+ * vez de apoyarse en RLS: con sesión y sin ella da lo mismo. Si otra tabla pasara
+ * a filtrar por fila, tiene que hacer lo mismo.
+ *
+ * `opciones.usuarioId` es **de quién se cuenta la Agenda**; sin él la Agenda no
+ * entra (la foto diaria es de todos y no la lleva). `opciones.saludDelSistema`
+ * dice si se leen las sincronizaciones, que son del sistema y sólo le llegan a
+ * `admin_sistema`: es para no pagar esa lectura por cada persona del cron.
  */
 async function avisosDeLosModulos(
   supabase: SupabaseClient,
-  modulos: Modulo[]
+  modulos: Modulo[],
+  opciones: { usuarioId?: string; saludDelSistema?: boolean } = {}
 ): Promise<Notificacion[]> {
   const tiene = (m: Modulo) => modulos.includes(m);
   const hoy = hoyEnArgentina();
@@ -60,7 +80,8 @@ async function avisosDeLosModulos(
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
-    tallerVialSinEquipo, tallerVialSinService, filasRitmo,
+    tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar, filasRitmo,
+    agendaDivergencias, salud, mensajesMencionesSinLeer,
   ] = await Promise.all([
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
     contarSiTiene("mantenimiento", () => head("ordenes_trabajo").eq("estado", "ATRASADO")),
@@ -106,7 +127,36 @@ async function avisosDeLosModulos(
     tiene("taller_vial")
       ? equiposTallerVialSinService(supabase).then((r) => r.equiposSinService)
       : Promise.resolve(0),
+    // Vencida es no cerrada y con la fecha máxima ya pasada: la misma que
+    // `estadoDe` (`<` y no `<=`, porque la máxima de hoy todavía vence mañana).
+    contarSiTiene("seguridad_higiene", () => head("syh_condiciones").is("fecha_ejecucion", null).lt("fecha_maxima", hoy)),
+    // Tiene que decir lo mismo que `faltasPendientes` (gestion.ts): no cerrada y
+    // con algo de `loQueFalta()` (condicion.ts, la versión probada de esa regla).
+    // Por eso es una consulta propia: son varias condiciones `or` sobre columnas
+    // nullables. `FILTRO_FALTA_ALGO` vive junto a `loQueFalta` y un test las ata.
+    contarSiTiene("seguridad_higiene", () => head("syh_condiciones").is("fecha_ejecucion", null).or(FILTRO_FALTA_ALGO)),
+    // Las que nunca se respaldaron y llevan más de tres días: ver el aviso en
+    // `avisos.ts`. `subida_el` y no una fecha de corrida, porque lo que importa es
+    // cuánto hace que esa foto está expuesta.
+    contarSiTiene("seguridad_higiene", () =>
+      head("syh_fotos").is("respaldada_en_drive_el", null).lt("subida_el", corteDeFotosAtascadas(new Date()))
+    ),
     traerRitmo(supabase),
+    // **No pasa por `contarSiTiene`**: la Agenda no es un módulo y el número es
+    // de quien mira, no del sistema. Es la primera entrada de la lista así.
+    // Ver `agendaDivergencias` en `avisos.ts`.
+    opciones.usuarioId ? contarDivergenciasSinVer(supabase, opciones.usuarioId) : Promise.resolve(0),
+    // Tampoco por módulo: es la salud de las sincronizaciones de todo el
+    // sistema. Ver `avisosDeSalud`. Sin pedirla, sale una salud vacía —que no es
+    // `sinComprobar`: no se intentó mirar, así que no hay nada que declarar.
+    opciones.saludDelSistema
+      ? leerLaSalud(supabase)
+      : Promise.resolve<SaludDelSistema>({ caidas: [], sinDeclarar: [], sinComprobar: false, corridas: [] }),
+    // Tampoco por módulo y también de quien mira: las menciones sin leer. Va con
+    // el cliente admin aunque acá llegue el de la sesión, porque `puedeVerlo` lee
+    // los permisos de la persona nombrada y con la sesión `usuarios` sólo deja
+    // leer la fila propia. Ver `mensajesMencionesSinLeer` en `avisos.ts`.
+    opciones.usuarioId ? contarMencionesSinLeer(createAdminClient(), opciones.usuarioId) : Promise.resolve(0),
   ]);
 
   const conteos: Partial<ConteosParaAvisos> = {
@@ -115,10 +165,71 @@ async function avisosDeLosModulos(
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
-    tallerVialSinEquipo, tallerVialSinService,
+    tallerVialSinEquipo, tallerVialSinService, syhVencidas, syhSinCompletar, syhFotosSinRespaldar,
+    agendaDivergencias,
+    mensajesMencionesSinLeer,
   };
 
-  return [...avisosDeConteos(conteos), ...avisosDeRitmo(ritmoPorModulo(filasRitmo), modulos)];
+  // La salud va al final: es de `admin_sistema` y no desplaza en la campana a
+  // los avisos de los módulos, que son de todos y se leen primero.
+  //
+  // **El push la reordena, y es a propósito**: ahí se nombran tres y el resto
+  // se resume, así que «al final» quiere decir «en el "y N más"» — los lunes,
+  // con la lista larga de totales, eso dejaba a la salud fuera del mensaje
+  // todas las semanas. Lo hace `saludPrimero` en `./resumenDeAvisos.ts`, que es
+  // la superficie que recorta; acá el orden es el de la lista entera.
+  return [
+    ...avisosDeConteos(conteos),
+    ...avisosDeRitmo(ritmoPorModulo(filasRitmo), modulos),
+    ...avisosDeCiclos(tiene("mantenimiento") ? await lasSospechasDeLosCiclos(supabase) : []),
+    ...avisosDeSalud(salud),
+  ];
+}
+
+/**
+ * Los ciclos encadenados cuya pieza parece haberse cambiado sin avisarles.
+ *
+ * Va aparte del `Promise.all` de arriba porque **son dos consultas encadenadas
+ * y la segunda depende de la primera**: sin ciclos arrancados no hay nada que
+ * preguntar, y hoy hay cuatro en toda la planta. Meterla allá costaría una
+ * lectura de órdenes cerradas a todo el que abra el inicio, para nada.
+ *
+ * El corte por `desde` es lo que hace que esto no se vuelva ruido: sólo mira lo
+ * cerrado después del último trabajo conocido de cada ciclo. Sin él serían 56
+ * el primer día — ver `sospechaDeCambio.ts`.
+ */
+async function lasSospechasDeLosCiclos(
+  supabase: SupabaseClient
+): Promise<Sospecha[]> {
+  const { data } = await supabase
+    .from("mant_ciclos_de_ot")
+    .select("id, equipment_id, desde, equipos:equipment_id(code), hija:tarea_hija_id(componente)")
+    .eq("activo", true)
+    .not("desde", "is", null);
+
+  const ciclos: CicloVigilado[] = (data ?? []).flatMap((c) => {
+    const equipo = (c.equipos as unknown as { code: string | null } | null)?.code;
+    const componente = (c.hija as unknown as { componente: string } | null)?.componente;
+    if (!equipo || !componente) return [];
+    return [{
+      id: c.id, equipment_id: c.equipment_id, equipo,
+      desde: c.desde, componente,
+    }];
+  });
+
+  if (ciclos.length === 0) return [];
+
+  // Lo cerrado en esos equipos desde la fecha más vieja de todos los ciclos.
+  // El filtro fino —cada ciclo contra su propio `desde`— lo hace la función
+  // pura; acá sólo se acota el bulto que viaja.
+  const masVieja = ciclos.map((c) => c.desde!).sort()[0];
+  const { data: cerradas } = await supabase
+    .from("ordenes_trabajo")
+    .select("ot_number, equipment_id, descripcion, fecha_cierre, ciclo_id")
+    .in("equipment_id", ciclos.map((c) => c.equipment_id))
+    .gt("fecha_cierre", masVieja);
+
+  return sospechasDeCambio(ciclos, cerradas ?? []);
 }
 
 /**
@@ -136,52 +247,106 @@ async function avisosDeLosModulos(
 export async function avisosDeTodoElSistema(
   supabase: SupabaseClient
 ): Promise<Notificacion[]> {
-  return avisosDeLosModulos(supabase, [...MODULOS_ORDEN]);
+  // Sin `usuarioId`: la Agenda de una persona no entra en una foto que es de
+  // todos. Con la salud sí: ésa es del sistema y la foto la recuerda como a
+  // cualquier otra, de modo que el resumen avisa el día que un recurso cae.
+  return avisosDeLosModulos(supabase, [...MODULOS_ORDEN], { saludDelSistema: true });
 }
 
 /**
- * Qué listas de responsables integra quien mira.
+ * Qué puede atender quien mira: las listas de responsables que integra y los
+ * niveles que le habilitan una acción.
  *
- * Hoy hay una sola porque hoy hay un solo aviso con lista. **Falta el de las
+ * Hay una lista porque hoy hay un solo aviso con lista. **Falta el de las
  * órdenes de servicio**: `os_aprobadores` existe y el aviso al instante ya la
  * usa, pero la campana no tiene un aviso de OS esperando aprobación. El día que
  * se agregue, va acá con su `apruebaOS` — no se deja preparado porque sería una
  * consulta por persona y por día que hoy no la usa nadie.
+ *
+ * `evaluaSyh` no sale de una lista sino de un **nivel**: evaluar y cerrar una
+ * condición insegura lo puede hacer el `admin` de Seguridad e Higiene. Sale sin
+ * consulta, porque los grants ya vienen en `QuienMira`.
+ *
+ * Y `administraElSistema` es el rol pelado: lo piden las fotos sin respaldar y
+ * todos los avisos de salud, que se arreglan tocando Vercel y las credenciales.
  */
 export interface QuePuedeAtender {
   apruebaCompras: boolean;
+  evaluaSyh: boolean;
+  administraElSistema: boolean;
 }
 
-/** Los avisos que tienen una lista de responsables, y cuál. */
+/** Los avisos que piden algo que no todos pueden hacer, y qué lo habilita. */
 const DE_UNA_LISTA: Record<string, keyof QuePuedeAtender> = {
   "compras-por-aprobar": "apruebaCompras",
+  "syh-vencidas": "evaluaSyh",
+  "syh-sin-completar": "evaluaSyh",
+  /*
+   * **NO ES `evaluaSyh`, Y ÉSA ES LA CORRECCIÓN.** El aviso dice que hay fotos
+   * sin copia en Drive, y eso **no lo arregla un admin del módulo**: lo
+   * arregla quien crea la carpeta en una unidad compartida y pone
+   * `GOOGLE_DRIVE_SYH_FOTOS_FOLDER_ID` en Vercel, que es `admin_sistema`.
+   * Mandado al admin del módulo era el patrón de `compras-por-aprobar` que
+   * este repo ya midió —6 personas, 3 sin poder aprobar— y que termina en que
+   * alguien apaga las notificaciones. Peor todavía al estrenar el módulo: si
+   * la carpeta no existe, el push empieza a sonar al cuarto día y no para.
+   *
+   * El `admin_sistema` tiene `admin` en todos los módulos, así que sigue
+   * recibiéndolo; lo que se saca es a los demás.
+   */
+  "syh-fotos-sin-respaldar": "administraElSistema",
+  // `agenda-divergencias` **no está acá**: es de cada uno y ya llega sólo a
+  // quien le toca, por su propio conteo.
 };
+
+/**
+ * Lo mismo que `DE_UNA_LISTA`, pero **por prefijo**, porque esos ids no se
+ * pueden teclear: hay uno por recurso del registro de salud
+ * (`salud-${modulo}/${recurso}`) y la lista crece sola cuando alguien declara
+ * uno nuevo.
+ *
+ * El porqué es el de `syh-fotos-sin-respaldar`: que una sincronización falle, o
+ * que el cron deje de correr, **lo arregla quien toca las credenciales y las
+ * variables de Vercel**, que es `admin_sistema`. Mandárselo a quien sólo usa el
+ * módulo sería un push diario sobre algo que no puede hacer nada — el patrón de
+ * `compras-por-aprobar` que este repo ya midió (6 personas, 3 sin poder
+ * aprobar) y que termina en que alguien apaga las notificaciones.
+ */
+const POR_PREFIJO: { prefijo: string; puede: keyof QuePuedeAtender }[] = [
+  { prefijo: "salud-", puede: "administraElSistema" },
+];
 
 /**
  * Saca los avisos que esta persona no puede atender.
  *
- * **Esto no es repartir por permiso.** Lo que mira es una **lista de
- * responsables** que ya existe —`compras_aprobadores`, `os_aprobadores`—, que
- * es la misma regla que usa el aviso al instante en
- * `lib/core/avisoAlInstante.ts`. Aprobar un gasto no lo habilita el nivel del
+ * Mira dos reglas: `DE_UNA_LISTA`, tecleada por id exacto, y `POR_PREFIJO`,
+ * para las familias de avisos cuyos ids son dinámicos y no se pueden teclear.
+ *
+ * **Esto no es repartir por rol.** Lo que se mira es quién puede **hacer** lo
+ * que el aviso pide, y eso es de dos clases: una **lista de responsables** que
+ * ya existe —`compras_aprobadores`, `os_aprobadores`, la misma regla que usa el
+ * aviso al instante en `lib/core/avisoAlInstante.ts`— o el **nivel** que
+ * habilita la acción —acá, `admin` en Seguridad e Higiene, que es quien evalúa
+ * y cierra las condiciones—. Aprobar un gasto no lo habilita el nivel del
  * módulo ni ser admin del sistema: lo habilita estar en la lista, y eso ya lo
  * explica `puedeAprobarCompras` en `lib/compras/auth.ts`.
  *
  * Por qué hizo falta: medido el 18/10/2026, «Requerimientos esperando
- * aprobación» le llegaba a **6 personas y 3 no podían aprobar nada**. Pedirle a
- * alguien que haga algo que no puede hacer enseña que un aviso tuyo puede no
- * ser tuyo, y esa lección se paga en todos los demás avisos.
+ * aprobación» le llegaba a **6 personas y 3 no podían aprobar nada**. Un push
+ * diario sobre trabajo que uno no tiene permiso de hacer enseña que un aviso
+ * tuyo puede no ser tuyo, y esa lección se paga en todos los demás avisos. Con
+ * los de Seguridad e Higiene es la misma razón: quien sólo carga condiciones
+ * desde el teléfono no puede evaluarlas ni cerrarlas.
  *
  * **Los administradores siguen recibiendo todo lo demás**, decidido a pedido el
- * 18/10/2026. Acá no se filtra por rol ni por nivel: sólo los avisos que están
- * en `DE_UNA_LISTA`, y hoy ésos son los dos de aprobación.
+ * 18/10/2026: sólo se filtran los avisos que están en `DE_UNA_LISTA`.
  */
 export function sinLoQueNoPuedeAtender(
   avisos: Notificacion[],
   puede: QuePuedeAtender
 ): Notificacion[] {
   return avisos.filter((a) => {
-    const lista = DE_UNA_LISTA[a.id];
+    const lista = DE_UNA_LISTA[a.id] ?? POR_PREFIJO.find((p) => a.id.startsWith(p.prefijo))?.puede;
     return lista === undefined || puede[lista];
   });
 }
@@ -195,7 +360,10 @@ export async function avisosDeUsuario(
   quien: QuienMira
 ): Promise<Notificacion[]> {
   const [avisos, descartes, apruebaCompras] = await Promise.all([
-    avisosDeLosModulos(supabase, modulosVisibles(quien.rol, quien.grants)),
+    avisosDeLosModulos(supabase, modulosVisibles(quien.rol, quien.grants), {
+      usuarioId: quien.id,
+      saludDelSistema: quien.rol === "admin_sistema",
+    }),
     supabase
       .from("notificaciones_descartes")
       .select("notificacion_id, cantidad_vista")
@@ -204,5 +372,11 @@ export async function avisosDeUsuario(
     puedeAprobarCompras(supabase, quien.id),
   ]);
 
-  return sinLoQueNoPuedeAtender(filtrarDescartadas(avisos, descartes), { apruebaCompras });
+  const evaluaSyh = nivelEnModulo(quien.rol, quien.grants, "seguridad_higiene") === "admin";
+
+  return sinLoQueNoPuedeAtender(filtrarDescartadas(avisos, descartes), {
+    apruebaCompras,
+    evaluaSyh,
+    administraElSistema: quien.rol === "admin_sistema",
+  });
 }

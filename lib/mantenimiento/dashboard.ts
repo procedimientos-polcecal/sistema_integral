@@ -63,13 +63,76 @@ export function ultimosMeses(hoy: Date, cuantos: number): Mes[] {
 interface OTPendiente {
   sector_id: string;
   requiere_parada_sector?: boolean | null;
+  ot_number?: number | null;
+  estado?: string | null;
+  descripcion?: string | null;
+  equipo_raw?: string | null;
 }
 
-/** Los sectores con una OT pendiente que obliga a pararlos. */
-export function sectoresAParar(ordenes: OTPendiente[]): Set<string> {
-  const sectores = new Set<string>();
-  for (const o of ordenes) if (o.requiere_parada_sector) sectores.add(o.sector_id);
-  return sectores;
+/** Una OT pendiente que obliga a parar el sector, con lo justo para nombrarla. */
+export interface OtQueExigeParar {
+  ot_number: number;
+  estado: string;
+  /** Qué hay que hacer. Puede venir vacía: la planilla no la obliga. */
+  descripcion: string | null;
+  /** El respaldo cuando no hay descripción, que es como se las nombra en planta. */
+  equipo_raw: string | null;
+}
+
+/**
+ * Primero la que ya se pasó de fecha: entre dos pedidos de parada, el que
+ * llegó tarde es el que decide cuándo se frena la planta.
+ */
+const PESO_DEL_ESTADO: Record<string, number> = {
+  ATRASADO: 0,
+  EN_PROCESO: 1,
+  POR_HACER: 2,
+};
+
+/**
+ * Las OT pendientes que obligan a parar cada sector, agrupadas por sector.
+ *
+ * **Devuelve la lista y no un conteo** porque "parar Hidratación" es una
+ * decisión que se toma mirando qué trabajo lo exige: una sola OT de media hora
+ * no para una planta, y tres acumuladas sí. Un número suelto manda a quien lo
+ * ve a buscar las órdenes a mano en el listado, que es lo que esta pantalla
+ * tendría que ahorrarle.
+ *
+ * Un sector sin ninguna no aparece: las claves de lo que devuelve son los
+ * sectores a parar, así que de acá sale también el conteo del indicador.
+ *
+ * Quedan afuera las `REALIZADO` y las `CANCELADA`, que es lo que decide quien
+ * consulta: la lista llega ya filtrada por estado —con una lista blanca de los
+ * abiertos, así que un estado nuevo queda afuera solo hasta que alguien lo
+ * sume a mano, que es el lado seguro del error—.
+ */
+export function paradasExigidas(
+  ordenes: OTPendiente[]
+): Record<string, OtQueExigeParar[]> {
+  const porSector: Record<string, OtQueExigeParar[]> = {};
+
+  for (const o of ordenes) {
+    if (!o.requiere_parada_sector) continue;
+    (porSector[o.sector_id] ??= []).push({
+      ot_number: o.ot_number ?? 0,
+      estado: o.estado ?? "",
+      descripcion: o.descripcion ?? null,
+      equipo_raw: o.equipo_raw ?? null,
+    });
+  }
+
+  // El número es secuencial, así que el más bajo es el que lleva más tiempo
+  // esperando. Ordenar acá y no en la pantalla: la que se muestra cuando no
+  // entran todas tiene que ser siempre la misma.
+  for (const lista of Object.values(porSector)) {
+    lista.sort(
+      (a, b) =>
+        (PESO_DEL_ESTADO[a.estado] ?? 9) - (PESO_DEL_ESTADO[b.estado] ?? 9) ||
+        a.ot_number - b.ot_number
+    );
+  }
+
+  return porSector;
 }
 
 export interface VentanaDeReparacion {

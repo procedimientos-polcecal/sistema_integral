@@ -158,6 +158,61 @@ export const REGISTRO = {
       "es que lo vacío no viaja—. El porqué largo y lo medido están en el " +
       "encabezado de la ruta.",
   },
+  "app/api/mantenimiento/ordenes/[id]/postergar/route.ts": {
+    estrategia: "aborta",
+    porque:
+      "Escribe la fecha de ejecución en «Altas del sistema» ANTES de tocar la base, " +
+      "y si la planilla no contesta no mueve nada: devuelve 502 con lo que dijo " +
+      "Google sin traducir. Por eso no necesita cola — no puede quedar una fecha " +
+      "nueva acá y la vieja allá, que es el orden inverso del que la haría falta. " +
+      "Lo que sí anota es `fecha_ejecucion_pendiente`, pero eso no es una cola de " +
+      "exportación: es lo que evita que la importación pise la fecha durante las 3 " +
+      "a 53 horas que tarda el derrame del master en reflejarla.",
+  },
+  "app/api/mantenimiento/planificacion/[id]/calendario/route.ts": {
+    estrategia: "aborta",
+    porque:
+      "Escribe en la planilla sólo a través del `POST` de postergar (que es `aborta`: " +
+      "la planilla primero, y si no contesta no se mueve nada) y, si esa llamada " +
+      "falla, no manda el evento ni toca nada más: el renglón del ítem dice lo que " +
+      "contestó postergar sin traducir. No duplica la escritura: la obligación de " +
+      "anotar `fecha_ejecucion_pendiente` se quedó en postergar, que la cumple.",
+  },
+  "lib/mantenimiento/generarPeriodicas.ts": {
+    estrategia: "delega",
+    porque:
+      "Compone `altaEnLaPlanilla` para crear la OT del mantenimiento periódico. No " +
+      "escribe por su cuenta: la fila la escribe el alta, y si falla no se crea nada " +
+      "en ningún lado ni se consume un número. Lo que genera después lo protege del " +
+      "borrado de espejo con `app_created` y `created_at_app`.",
+  },
+  "lib/mantenimiento/generarEncadenadas.ts": {
+    estrategia: "cola",
+    porque:
+      "Compone `altaEnLaPlanilla` para crear la OT siguiente de un ciclo encadenado, " +
+      "igual que las periódicas — si el alta falla no se crea nada ni se consume un " +
+      "número—, pero además escribe la columna M del master, que el alta no toca " +
+      "porque vive sólo allá. Esa segunda escritura **falla casi siempre** (la fila " +
+      "llega por IMPORTRANGE segundos después) y por eso anota `sheets_pendiente` " +
+      "con `elPendienteDelIntento`: esa marca encola el reintento y evita que la " +
+      "importación siguiente pise el estado con la celda vacía. Es el mismo agujero " +
+      "que tuvieron el PATCH el 26/10/2026 y las periódicas el 30/10.",
+  },
+  "app/api/mantenimiento/ciclos/[id]/reiniciar/route.ts": {
+    estrategia: "cola",
+    porque:
+      "Cancela la OT que el ciclo estaba esperando cuando la pieza se cambió fuera " +
+      "de turno, así que cambia un estado que se exporta. Escribe la M y la " +
+      "observación previa, y lo que no salga queda en `sheets_pendiente` por " +
+      "`elPendienteDelIntento`. Sin eso la sincronización siguiente leería la celda " +
+      "vieja y devolvería la orden a POR_HACER — una orden que manda a rotar una " +
+      "pieza nueva, que es justo lo que este botón existe para evitar. " +
+      "Escribía SUSPENDIDA hasta el 17/11/2026, y ahí la cola no alcanzaba: la " +
+      "palabra salía bien a la M pero `estadoDeTexto` había dejado de " +
+      "reconocerla, así que la vuelta la leía como POR_HACER aunque la " +
+      "exportación hubiera funcionado. Exportar no sirve si el otro lado no " +
+      "sabe leer lo que se escribió.",
+  },
   "lib/mantenimiento/planillaDelAviso.ts": {
     estrategia: "delega",
     porque:
@@ -276,6 +331,15 @@ export const REGISTRO = {
   "app/api/mantenimiento/partes-contratista/generar/route.ts": {
     estrategia: "cola",
     porque: "Las dos ramas —OT nueva y OT reutilizada— anotan el pendiente del registro.",
+  },
+  "app/api/mantenimiento/cuaderno/generar/route.ts": {
+    estrategia: "cola",
+    porque:
+      "Crear y sumar anotan `sheets_pendiente` con lo que el master no pudo recibir " +
+      "(estado, cierre, horas). El costo es un campo que se exporta y viaja dentro de " +
+      "`REPUESTO UTILIZADO`: al crear, en el alta; al sumar, se corrige en «Altas del " +
+      "sistema» ANTES de tocar la base, y si eso falla no se toca nada (planilla primero, " +
+      "no queda nada que encolar). El master no sirve para esa columna: es derrame.",
   },
   "lib/mantenimiento/sincronizar.ts": {
     estrategia: "cola",
@@ -428,6 +492,29 @@ function loQueImporta(texto) {
   return porModulo;
 }
 
+/** Los verbos que una ruta de Next exporta como handler. */
+const HANDLERS = ["POST", "PATCH", "PUT", "DELETE"];
+
+/**
+ * Qué handlers de ruta importa un archivo, y de qué módulo: módulo → nombres
+ * **locales** (el alias, si lo hay). `import { POST as postergar }` llama a
+ * `postergar(...)`, no a `POST(...)`.
+ */
+function handlersQueImporta(texto) {
+  const porModulo = new Map();
+  const re = /import\s*(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
+  for (const m of texto.matchAll(re)) {
+    const modulo = m[2].replace(/^@\//, "").replace(/\.tsx?$/, "");
+    const locales = [];
+    for (const n of m[1].split(",")) {
+      const [original, alias] = n.trim().replace(/^type\s+/, "").split(/\s+as\s+/).map((x) => x.trim());
+      if (HANDLERS.includes(original)) locales.push(alias || original);
+    }
+    if (locales.length > 0) porModulo.set(modulo, [...(porModulo.get(modulo) ?? []), ...locales]);
+  }
+  return porModulo;
+}
+
 /**
  * Quién escribe en una planilla, contando la indirección.
  *
@@ -438,7 +525,17 @@ function loQueImporta(texto) {
  * ruta nueva que use `escribirEnLaFilaDeLaOT` y no anote nada era invisible
  * para el script — que es exactamente el bug que vino a buscar.
  *
- * La propagación es **sólo desde los `delega`**, a propósito. Desde un `cola`
+ * **Hay una segunda puerta, más angosta: un handler de ruta.** Una ruta que
+ * importa el `POST`, `PATCH`, `PUT` o `DELETE` de **otra ruta ya registrada** y
+ * lo llama, escribe en la planilla a través de ella —el envío del plan al
+ * calendario posterga llamando al `POST` de postergar, que es `aborta` y no
+ * `delega`—. Sin esto era invisible: no llama a ninguna primitiva y la
+ * propagación de abajo no sale de un `aborta`. **No se propaga desde cualquier
+ * módulo registrado**, sólo desde los handlers: es lo que evita convertir en
+ * escritor a todo el que importe cualquier cosa de un archivo que casualmente
+ * escribe.
+ *
+ * La propagación de los módulos es **sólo desde los `delega`**, a propósito. Desde un `cola`
  * no hace falta: ese módulo anota él mismo y por eso su llamador no se puede
  * olvidar. Y desde `otra-direccion` sería un desastre — `lib/core/sheets.ts`
  * exporta también `leerValores`, así que propagar desde ahí convertiría en
@@ -470,6 +567,12 @@ export function quienesEscriben(archivos, registro) {
         if (!deAhi) continue;
         const usadas = nombres.filter((n) => deAhi.includes(n));
         if (usadas.length > 0 && llamaA(a.texto, usadas)) escriben.add(a.ruta);
+      }
+
+      if (escriben.has(a.ruta)) continue;
+      for (const [modulo, locales] of handlersQueImporta(a.texto)) {
+        if (!registro[`${modulo}.ts`]) continue;
+        if (llamaA(a.texto, locales)) escriben.add(a.ruta);
       }
     }
 

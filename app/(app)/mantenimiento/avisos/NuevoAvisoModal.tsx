@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import { URGENCIAS } from "@/lib/mantenimiento/avisos";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
+import { CartelDelResultado } from "@/app/cargar/envio";
+import { mandarOEncolar, type Resultado } from "@/lib/core/mandarOEncolar";
 
 /**
  * Con qué campos abre el formulario.
@@ -18,6 +23,11 @@ export interface ValoresInicialesAviso {
   equipo?: string;
   descripcion?: string;
   urgencia?: string;
+}
+
+/** Cómo se escribe un equipo en `equipo_raw`: el mismo texto de los dos lados. */
+function nombreDelEquipo(equipo: { code: string | null; name: string }): string {
+  return `${equipo.code ?? ""} ${equipo.name}`.trim();
 }
 
 /**
@@ -53,17 +63,35 @@ export default function NuevoAvisoModal({
   const [sectores, setSectores] = useState<{ id: string; nombre: string; codigo: string | null }[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
+  /** Cómo salió el envío. El `error` de arriba es sólo para lo que se valida acá adentro. */
+  const [resultado, setResultado] = useState<Resultado | null>(null);
 
-  const [campos, setCampos] = useState({
-    equipo_raw: inicial?.equipo ?? "",
-    sector_raw: "",
-    sector_id: "",
-    descripcion: inicial?.descripcion ?? "",
-    urgencia: inicial?.urgencia ?? (URGENCIAS[1] as string),
-    quien_aviso: quienAviso ?? "",
-    area_id: areaInicial ?? "",
-    observaciones: "",
-  });
+  /*
+   * Los ocho campos del aviso, recordados mientras la app esté abierta.
+   *
+   * **La clave distingue el alta en blanco de la prellenada desde el
+   * asistente**, y por eso lleva el prellenado adentro: no hay registro de
+   * origen del que sacar un id, así que el id es lo prellenado mismo. Sin eso,
+   * lo escrito en un aviso en blanco le pisaría la descripción al que el
+   * asistente abre con la suya — que es exactamente «el borrador aparece sobre
+   * el registro que no es», sólo que acá el registro es el pedido.
+   */
+  const { valores: campos, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador(
+      "mantenimiento-nuevo-aviso",
+      inicial ? { tipo: "prellenado", id: JSON.stringify(inicial) } : null,
+    ),
+    {
+      equipo_raw: inicial?.equipo ?? "",
+      sector_raw: "",
+      sector_id: "",
+      descripcion: inicial?.descripcion ?? "",
+      urgencia: inicial?.urgencia ?? (URGENCIAS[1] as string),
+      quien_aviso: quienAviso ?? "",
+      area_id: areaInicial ?? "",
+      observaciones: "",
+    },
+  );
 
   // UNA sola foto. La columna de la planilla es una celda y `filaDeAviso()` la
   // lee como un solo valor: una segunda foto se perdería sin que nadie se
@@ -74,7 +102,7 @@ export default function NuevoAvisoModal({
   // link no se abre desde la planilla y quien subió la foto tiene que saberlo.
   const [avisoDeLaFoto, setAvisoDeLaFoto] = useState("");
 
-  const set = (clave: string, valor: string) => setCampos((c) => ({ ...c, [clave]: valor }));
+  const set = (clave: keyof typeof campos, valor: string) => cambiar({ [clave]: valor });
 
   useEffect(() => {
     // Las mismas listas que usa el resto del módulo: elegir la máquina de un
@@ -90,12 +118,11 @@ export default function NuevoAvisoModal({
     const equipo = equipos.find((e) => e.id === id);
     if (!equipo) { set("equipo_raw", ""); return; }
 
-    setCampos((c) => ({
-      ...c,
-      equipo_raw: `${equipo.code ?? ""} ${equipo.name}`.trim(),
-      sector_id: equipo.sector_id ?? c.sector_id,
-      sector_raw: sectores.find((s) => s.id === equipo.sector_id)?.nombre ?? c.sector_raw,
-    }));
+    cambiar({
+      equipo_raw: nombreDelEquipo(equipo),
+      sector_id: equipo.sector_id ?? campos.sector_id,
+      sector_raw: sectores.find((s) => s.id === equipo.sector_id)?.nombre ?? campos.sector_raw,
+    });
   }
 
   async function subirFoto(archivo: File) {
@@ -133,6 +160,17 @@ export default function NuevoAvisoModal({
     setAvisoDeLaFoto("");
   }
 
+  /**
+   * Manda el aviso y, si no hay con qué, lo deja en la cola del teléfono.
+   *
+   * **ANTES ACÁ HABÍA UN `fetch` SUELTO Y SIN `try`.** Sin señal el `await`
+   * tiraba, el error se escapaba de esta función y el modal quedaba colgado
+   * con el spinner puesto y lo escrito adentro: no mostraba mal el error, no
+   * mostraba ninguno. Desde el 02/11/2026 eso lo resuelve `mandarOEncolar`,
+   * que es el mismo camino que usa la pantalla sin señal — y por eso no se
+   * decide nada acá: si el envío se cayó por conexión, el aviso queda
+   * esperando y sale solo cuando vuelva.
+   */
   async function crear() {
     if (!campos.descripcion.trim()) { setError("Contá qué pasa."); return; }
     // Sin elegir no se manda: la ruta lo resolvería sola desde las áreas de la
@@ -140,36 +178,37 @@ export default function NuevoAvisoModal({
     if (areas.length > 0 && !campos.area_id) { setError("Elegí el área."); return; }
     setGuardando(true);
     setError("");
+    setResultado(null);
 
-    const res = await fetch("/api/mantenimiento/avisos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...campos,
-        sector_id: campos.sector_id || null,
-        area_id: campos.area_id || null,
-        reference_photos: foto ? [foto.link] : [],
-      }),
+    const salida = await mandarOEncolar("aviso", {
+      ...campos,
+      sector_id: campos.sector_id || null,
+      area_id: campos.area_id || null,
+      reference_photos: foto ? [foto.link] : [],
     });
-    const body = await res.json().catch(() => ({}));
     setGuardando(false);
 
-    if (!res.ok) { setError(body.error ?? "No se pudo cargar el aviso."); return; }
-    onCreado(body.oa_number);
+    // Lo que entró cierra el modal, como siempre. Lo que quedó esperando y lo
+    // que se rechazó se cuentan con el mismo cartel que la pantalla sin señal,
+    // y no con un texto propio: es la misma situación y ya está redactada ahí,
+    // incluido el caso en que la fila igual quedó escrita.
+    // Lo que entró ya no hay que recordarlo. Lo que quedó esperando o se
+    // rechazó sí: el modal sigue abierto con el cartel y lo escrito tiene que
+    // seguir ahí.
+    if (salida.estado === "mandada") { tirar(); onCreado(salida.numero); return; }
+    setResultado(salida);
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div
-        className="max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div>
-          <h2 className="text-base font-bold text-slate-900">Nuevo aviso</h2>
-          <p className="mt-0.5 text-xs text-slate-400">
-            El número se lo pone el sistema, siguiendo el último de la planilla.
-          </p>
-        </div>
+    // El fondo, la X y Escape salen conservando: lo cargado queda y aparece
+    // igual al volver a abrir. Sólo «Cancelar» tira.
+    <Modal titulo="Nuevo aviso" alSalir={onCerrar} tocado={tocado}>
+      <div className="space-y-4">
+        <p className="-mt-2 text-xs text-slate-400">
+          El número se lo pone el sistema, siguiendo el último de la planilla.
+        </p>
+
+        <CartelDelResultado tipo="aviso" resultado={resultado} />
 
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>
@@ -189,7 +228,11 @@ export default function NuevoAvisoModal({
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block space-y-1">
             <span className="block text-xs font-medium text-slate-600">Equipo</span>
+            {/* Controlado por `equipo_raw`, que es lo que se guarda: antes era
+                un desplegable sin `value`, y con borrador eso dejaría el campo
+                con un equipo y la lista diciendo «Sin equipo». */}
             <Select
+              value={equipos.find((e) => nombreDelEquipo(e) === campos.equipo_raw)?.id ?? ""}
               onChange={(e) => elegirEquipo(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
@@ -328,7 +371,7 @@ export default function NuevoAvisoModal({
           Se escribe primero en la planilla de avisos, que es la base, y después acá.
         </p>
 
-        <div className="flex gap-2 pt-1">
+        <PieDeModal className="flex gap-2">
           <button
             onClick={crear}
             disabled={guardando || subiendo}
@@ -336,14 +379,15 @@ export default function NuevoAvisoModal({
           >
             {guardando ? "Cargando…" : "Cargar el aviso"}
           </button>
+          {/* El único que tira. */}
           <button
-            onClick={onCerrar}
+            onClick={() => { tirar(); onCerrar(); }}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cancelar
           </button>
-        </div>
+        </PieDeModal>
       </div>
-    </div>
+    </Modal>
   );
 }

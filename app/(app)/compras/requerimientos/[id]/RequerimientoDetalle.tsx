@@ -21,6 +21,7 @@ import type { EntradaAlPanol } from "@/lib/inventario/types";
 import { justificacionQueExplica } from "@/lib/core/justificacion";
 import { linkDeLaComparativa } from "@/lib/compras/vincular";
 import Select from "@/components/Select";
+import HiloDeMensajes from "@/components/HiloDeMensajes";
 import MontoAlto from "./MontoAlto";
 import type { HistoricoDelArticulo } from "@/lib/compras/historicoDelArticulo";
 import MarcaMontoAlto from "../../MarcaMontoAlto";
@@ -67,6 +68,11 @@ export default function RequerimientoDetalle({
   const [comparativaUrl, setComparativaUrl] = useState(r.comparativa_url ?? "");
   const [ocNumero, setOcNumero] = useState(r.oc_numero ?? "");
   const [asignadoA, setAsignadoA] = useState(r.compra_asignada_a ?? "");
+  // Se carga al registrar el pedido. Acá está para poder corregirla: un
+  // proveedor que avisa que se atrasa no tiene por qué dejar en pantalla una
+  // fecha que ya no va a cumplir, y éste es el único lugar donde se edita
+  // desde que salió del formulario de recepción.
+  const [fechaEstimada, setFechaEstimada] = useState(r.fecha_estimada_recepcion ?? "");
 
   const [motivoRechazo, setMotivoRechazo] = useState("");
   const [mostrarRechazo, setMostrarRechazo] = useState(false);
@@ -264,6 +270,14 @@ export default function RequerimientoDetalle({
                     persona puede aprobar la compra.
                   </p>
                 </Campo>
+                <Campo label="Fecha estimada de recepción">
+                  <input type="date"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    value={fechaEstimada} onChange={(e) => setFechaEstimada(e.target.value)} />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Es lo que ve quien lo pidió. Si el proveedor se atrasa, se corrige acá.
+                  </p>
+                </Campo>
                 <Campo label="Enlace a la comparativa">
                   <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                     value={comparativaUrl} onChange={(e) => setComparativaUrl(e.target.value)} placeholder="https://…" />
@@ -280,6 +294,7 @@ export default function RequerimientoDetalle({
                     comparativa_url: comparativaUrl.trim() || null,
                     oc_numero: ocNumero.trim() || null,
                     compra_asignada_a: asignadoA || null,
+                    fecha_estimada_recepcion: fechaEstimada || null,
                   })
                 }
                 disabled={guardando}
@@ -320,6 +335,28 @@ export default function RequerimientoDetalle({
             puedeEditar={puedeEditar}
             esAsignado={esAsignado}
           />
+
+          {/* La conversación sobre este pedido. Va en su propia tarjeta y no
+              adentro de «Historial»: el historial lo escribe el sistema —quién
+              aprobó, quién pasó a pedido— y esto lo escriben las personas, y
+              mezclarlos haría parecer un registro lo que es una charla.
+
+              Sin `overflow-hidden` en ningún contenedor de arriba, a propósito:
+              un requerimiento lo ven los catorce usuarios, así que la lista de
+              a quién mencionar tiene más de diez opciones y el desplegable abre
+              un panel flotante (`absolute`). Un ancestro que recorte lo deja con
+              opciones que el mouse no alcanza. */}
+          <section className="rounded-xl border border-slate-200 bg-white p-5">
+            <HiloDeMensajes
+              tipo="requerimiento"
+              id={r.id}
+              aclaracion={
+                "Es una conversación con otras personas: no cambia el estado del pedido, no queda en " +
+                "el historial de este pedido y no llega a la planilla de Compras. Un requerimiento lo ve " +
+                "toda persona con acceso al sistema, y este hilo también."
+              }
+            />
+          </section>
         </div>
 
         {/* Columna lateral */}

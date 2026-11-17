@@ -8,7 +8,7 @@
 #   docker compose build
 #
 # `node:22-slim` y no `alpine`: alpine trae un ICU recortado y acá se depende
-# de la zona horaria para saber cuándo son las 09:30 de Argentina. Son 60 MB
+# de la zona horaria para saber cuándo son las 22:00 de Argentina. Son 60 MB
 # más y evitan una clase entera de sorpresas.
 FROM node:22-slim
 
@@ -30,4 +30,4 @@ USER node
 # Sin configuración no arranca, y el mensaje lo dice. La config y la credencial
 # se montan desde afuera: no van adentro de la imagen, que se comparte y se
 # versiona.
-CMD ["node", "subir-zips.mjs", "/config/subir-zips.config.json", "--diario", "09:30"]
+CMD ["node", "subir-zips.mjs", "/config/subir-zips.config.json", "--diario", "22:00"]

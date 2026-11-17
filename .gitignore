@@ -33,3 +33,7 @@ mantenimientopp-*.json
 # aborta si el worker es de otra, y el wasm lo carga un JS que espera
 # exactamente esos símbolos.
 public/pdfjs/
+.gstack/
+
+# Espacio de trabajo de los planes de superpowers: ledger y paquetes de revision.
+.superpowers/

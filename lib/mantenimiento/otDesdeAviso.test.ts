@@ -24,7 +24,12 @@ const AVISO: AvisoParaLaOT = {
 
 const DE_ENTRADA = { quien: "INTERNO", fecha_ejecucion: "2026-10-23" };
 const propuesto = () => loQuePropone(AVISO, DE_ENTRADA);
-const completo = () => ({ ...propuesto(), especialidad: "MECÁNICO" });
+// La especialidad y la fecha de fin son las dos que el aviso no puede
+// contestar de ninguna manera: una no tiene de donde salir, y la otra es una
+// estimacion de quien va a hacer el trabajo.
+const completo = () => ({
+  ...propuesto(), especialidad: "MECÁNICO", fecha_fin: "2026-10-24",
+});
 
 describe("con qué arranca el formulario", () => {
   it("el aviso llena lo que sabe", () => {
@@ -77,6 +82,23 @@ describe("lo que se escribe es lo que se guarda", () => {
       descripcion: "Ajustar transmisión del horno 4: salta la cadena",
     });
     expect(c.descripcion).toBe("Ajustar transmisión del horno 4: salta la cadena");
+  });
+
+  /** Es la estimacion; la real es la de cierre, que aca va siempre vacia. */
+  it("la fecha de fin viaja en el cuerpo", () => {
+    const c = cuerpoDeLaOT(AVISO, { ...completo(), fecha_fin: "2026-10-25" });
+    expect(c.fecha_fin).toBe("2026-10-25");
+  });
+
+  /**
+   * Obligatoria desde el 04/11/2026, pero armar el cuerpo no es validarlo: una
+   * carga sin senal encolada antes de que el campo existiera vuelve SIN esa
+   * clave, y tiene que poder armarse igual para que el 400 lo dé la regla y
+   * nombre el campo, en vez de reventar antes con un `undefined`.
+   */
+  it("sin la clave viaja vacia y no rompe nada", () => {
+    const { fecha_fin: _, ...sinLaClave } = completo();
+    expect(cuerpoDeLaOT(AVISO, sinLaClave as never).fecha_fin).toBe("");
   });
 
   it("tambien el tipo, la prioridad, el sector y el equipo", () => {
@@ -138,7 +160,7 @@ describe("lo que hay que preguntar", () => {
   it("son los que no vienen de ningun lado", () => {
     expect(loQueHayQuePreguntar(AVISO)).toContain("la especialidad");
     expect(loQueHayQuePreguntar(AVISO)).toContain("quién lo realiza");
-    expect(loQueHayQuePreguntar(AVISO)).toContain("la fecha de ejecución");
+    expect(loQueHayQuePreguntar(AVISO)).toContain("la fecha de inicio");
   });
 
   /**
@@ -159,7 +181,7 @@ describe("lo que hay que preguntar", () => {
 
   it("contestando de a una, la lista se achica", () => {
     expect(loQueFaltaDelAviso(AVISO, { ...completo(), fecha_ejecucion: "" }))
-      .toEqual(["la fecha de ejecución"]);
+      .toEqual(["la fecha de inicio"]);
     expect(loQueFaltaDelAviso(AVISO, { ...completo(), descripcion: "", especialidad: "" }))
       .toEqual(["la descripción", "la especialidad"]);
   });
@@ -192,7 +214,7 @@ describe("lo que el aviso no trae", () => {
     const sinEquipo = { ...AVISO, equipment_id: null, equipo_raw: null, equipo_code: null };
     const elegido = {
       ...loQuePropone(sinEquipo, DE_ENTRADA),
-      especialidad: "MECÁNICO",
+      especialidad: "MECÁNICO", fecha_fin: "2026-10-24",
       equipment_id: "eq-27", equipo_raw: "PO-B1-27 – Cadena", equipo_code: "PO-B1-27",
     };
     expect(loQueFaltaDelAviso(sinEquipo, elegido)).toEqual([]);

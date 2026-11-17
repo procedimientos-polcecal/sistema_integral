@@ -41,6 +41,8 @@
  * **y se calla** sería peor que no tenerlo.
  */
 
+import { textoDelPendienteDePlanilla } from "@/public/cola/colaOffline.js";
+
 /**
  * Cuánto esperar antes de cada intento, en milisegundos.
  *
@@ -165,17 +167,12 @@ export function avisoDelPendiente(
   error: string | null | undefined,
   reintentando: boolean
 ): string | null {
-  if (!error) return null;
-
-  if (reintentando) {
-    return (
-      "De la columna K en adelante —el cierre, el estado, las horas y los operarios— " +
-      "la planilla las recibe en unos minutos: su fila del master todavía no existe y " +
-      "el sistema reintenta solo."
-    );
-  }
-
-  return `El estado y las horas todavía no llegaron a la planilla (${error}).`;
+  // **EL TEXTO NO VIVE ACÁ DESDE EL 02/11/2026.** Lo dicen dos caminos —esta
+  // pantalla y la cola sin señal, que lo arma en `loQueQuedoPendiente`— y
+  // decían cosas distintas sobre lo mismo: el de allá prometía «la próxima
+  // sincronización», que en la práctica son entre 3 y 5 horas. Quien lo lee
+  // decide si va a mirar la planilla, así que la diferencia no era de estilo.
+  return textoDelPendienteDePlanilla(error ?? null, reintentando);
 }
 
 /** Cuánto espera una misma instancia antes de volver a drenar la cola. */
@@ -200,4 +197,42 @@ export function hacePocoQueSeDreno(
 ): boolean {
   if (ultimo === null) return false;
   return ahora - ultimo < minimoMs;
+}
+
+/**
+ * Lo que una corrida larga reserva para cada pasada del drenaje.
+ *
+ * Una pasada lee la columna A del master **una vez por orden en la cola** y
+ * escribe las suyas; con treinta encoladas son del orden de medio minuto.
+ * Pasarse no rompe nada —la plataforma corta la función, la cola queda como
+ * estaba y la próxima pasada la termina—, pero quedarse corto sí desperdicia el
+ * intento, así que el margen es generoso a propósito.
+ */
+export const MARGEN_POR_PASADA_MS = 20_000;
+
+/**
+ * Cuáles de las esperas entran en el tiempo que le queda a la función.
+ *
+ * El alta de una sola OT tiene los 300 s enteros para su reintento. La
+ * generación del cuaderno **no**: ya gastó parte del techo creando órdenes, y
+ * el drenaje corre después, en el mismo `maxDuration`. Esto recorta la lista a
+ * lo que de verdad entra en vez de arrancar una espera de dos minutos cuando
+ * quedan treinta segundos.
+ *
+ * Devolver una lista vacía es una respuesta válida y quiere decir «no hay
+ * tiempo, que lo termine la pantalla de Órdenes o la sincronización».
+ */
+export function esperasQueEntran(
+  restanteMs: number,
+  esperas: readonly number[] = ESPERAS_DEL_REINTENTO,
+  margenPorPasada: number = MARGEN_POR_PASADA_MS
+): number[] {
+  const entran: number[] = [];
+  let usado = 0;
+  for (const espera of esperas) {
+    if (usado + espera + margenPorPasada > restanteMs) break;
+    entran.push(espera);
+    usado += espera + margenPorPasada;
+  }
+  return entran;
 }

@@ -67,6 +67,29 @@ export function extrasSinValidar(dias: DiaCalculado[]): {
   };
 }
 
+/**
+ * Las horas de franco compensatorio que entran en el sueldo: **sólo las de los
+ * francos marcados TOMADO**.
+ *
+ * Hasta el 02/11/2026 sumaba todos los francos cuyo `fecha_generado` caía en el
+ * período, sin mirar el estado, así que el franco pesaba en el sueldo el mes en
+ * que se ganaba aunque la persona no lo hubiera descansado todavía. Se cambió a
+ * pedido: se paga cuando se toma.
+ *
+ * LA CONSECUENCIA QUE NO SE DEDUCE SOLA, y por eso está escrita: el período se
+ * filtra por `fecha_generado` y no por cuándo se marcó. Un franco ganado en
+ * octubre y tomado en noviembre **no aparece en la planilla de noviembre**;
+ * aparece en la de octubre, recién cuando esa planilla se vuelva a emitir. Si
+ * octubre ya se liquidó y cerró, esas horas no las levanta nadie solo.
+ *
+ * Es una función aparte y no un `.eq("estado", "TOMADO")` en la consulta
+ * porque es una regla de liquidación, no un detalle de la lectura: acá se
+ * puede probar y se puede leer.
+ */
+export function horasDeFrancoAPagar(francos: { horas: number | string; estado: string }[]): number {
+  return francos.filter((f) => f.estado === "TOMADO").reduce((a, f) => a + Number(f.horas), 0);
+}
+
 export function dia(fecha: string): Date {
   return new Date(`${fecha.slice(0, 10)}T00:00:00Z`);
 }
@@ -176,8 +199,8 @@ export async function calcularPlanillaGeneral(
           .order("id"),
       "calculos diarios de la planilla"
     ),
-    traerPaginado<{ empleado_id: string; horas: number }>(
-      () => supabase.from("francos").select("empleado_id, horas").gte("fecha_generado", desde).lte("fecha_generado", hasta).order("id"),
+    traerPaginado<{ empleado_id: string; horas: number; estado: string }>(
+      () => supabase.from("francos").select("empleado_id, horas, estado").gte("fecha_generado", desde).lte("fecha_generado", hasta).order("id"),
       "francos de la planilla"
     ),
     traerPaginado<{ empleado_id: string; fecha_desde: string; fecha_hasta: string }>(
@@ -225,7 +248,7 @@ export async function calcularPlanillaGeneral(
     const horasExtra50 = diasValidados.reduce((a, d) => a + Number(d.horas_extra_50), 0);
     const horasExtra100 = diasValidados.reduce((a, d) => a + Number(d.horas_extra_100), 0);
     const pendientes = extrasSinValidar(dias);
-    const horasFranco = francos.reduce((a, f) => a + Number(f.horas), 0);
+    const horasFranco = horasDeFrancoAPagar(francos);
 
     const horasTeoricas = Number(empleado.horas_teoricas_diarias);
     const diasVacaciones = vacaciones.reduce(

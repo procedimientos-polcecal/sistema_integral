@@ -17,10 +17,37 @@
  *
  * ## Devuelve qué pasó en vez de lanzar
  *
- * Mismo molde que `lib/core/webpush.ts`, que es el hermano de esto. Quien
- * llama son las dos rutas de alta, en el camino de rechazar una carga: lo que
- * la ruta le debe a la persona es la respuesta sobre su carga, y un problema
- * del correo no puede cambiarla.
+ * Devuelve `{ estado, detalle? }`. El `estado` es lo que decide quien llama; el
+ * `detalle` es **lo que contestó el Apps Script, sin traducir ni resumir**, y
+ * existe porque un fallo que sólo dice «fallo» no distingue un dominio
+ * rechazado de un secreto mal puesto de un cupo agotado de un script caído:
+ * quien lo guarda (la mensajería lo anota en la mención) necesita el texto
+ * real. Lo mismo va a los registros del servidor con `console.error`.
+ *
+ * Mismo molde que `lib/core/webpush.ts`, que es el hermano de esto.
+ *
+ * ## QUIÉN LLAMA, Y POR QUÉ NO SON TODOS IGUALES
+ *
+ * Dos familias, y la segunda llegó después (11/11/2026):
+ *
+ * 1. **`lib/mantenimiento/avisarDeLaCarga.ts`**, en el camino de rechazar una
+ *    carga. Lo que la ruta le debe a la persona es la respuesta sobre su carga,
+ *    y un problema del correo no puede cambiarla. Ahí **no hay nadie mirando**:
+ *    el correo sólo se intenta para una carga que mandó el teléfono con la app
+ *    cerrada, así que la respuesta se la lleva el service worker.
+ * 2. **`app/api/mensajes/route.ts`**, el aviso de una mención. Ahí sí hay
+ *    alguien mirando —acaba de apretar «Enviar»— y el `detalle` **no se tira**:
+ *    se guarda en `mensajes_menciones.aviso_fallo` y la pantalla lo muestra al
+ *    releer el hilo. Es la razón por la que `detalle` existe.
+ * 3. **`app/api/cron/rrhh-novedades/route.ts`** (16/11/2026), el resumen de
+ *    novedades del cierre del día. Es de la familia 1 —no hay nadie mirando a
+ *    las 15:50— pero con una diferencia que el encabezado viejo no preveía y
+ *    que por eso se anota: **manda doce correos en una corrida**, uno por
+ *    destinatario, porque el Apps Script acepta una sola dirección y valida su
+ *    dominio partiendo por `@`. Así que el `console.error` no alcanza solo: la
+ *    ruta devuelve el detalle de cada envío en su JSON, que es lo que queda
+ *    para mirar en el registro de la corrida cuando uno falla y los otros no.
+ *    Y es el primero que usa una casilla que no es la del sistema.
  *
  * ## POR QUÉ UN `console.error` ALCANZA ACÁ
  *
@@ -29,10 +56,14 @@
  * a preguntar. Esa regla existe porque una escritura que no llega a la planilla
  * crea una divergencia que no avisa. Acá no hay divergencia: la carga sigue
  * parada, visible en `/cargar` y contada por la barra del layout. Un correo que
- * no sale degrada al estado anterior a esto, nada más. Y decírselo a alguien en
- * la respuesta sería inútil, porque por diseño **no hay nadie mirando** cuando
- * esto pasa: el correo sólo se intenta para una carga que mandó el teléfono con
- * la app cerrada, así que la respuesta se la lleva el service worker.
+ * no sale degrada al estado anterior a esto, nada más.
+ *
+ * **Pero eso vale para la familia 1 y no para las dos.** El `console.error` es
+ * todo lo que queda cuando la carga rechazada no avisa, y para la mensajería es
+ * sólo el registro del servidor: lo que de verdad le dice a la persona que el
+ * aviso no salió es el `aviso_fallo` que guarda esa ruta. Si aparece un tercer
+ * llamador, la pregunta a contestar es a cuál de las dos familias pertenece —si
+ * hay alguien a quien decirle—, y no si el `console.error` alcanza.
  */
 
 /**
@@ -50,6 +81,37 @@
 const TOPE_DE_ESPERA_MS = 5_000;
 
 /**
+ * DE QUÉ CASILLA SALE EL CORREO, Y POR QUÉ ES UNA ELECCIÓN Y NO UN PARÁMETRO
+ *
+ * Una aplicación web de Apps Script **se ejecuta como su dueño**, así que el
+ * remitente no se elige desde el pedido: lo decide qué cuenta publicó el
+ * script. Por eso mandar desde otra casilla no es pasar un `from` —el script
+ * ni lo mira, a propósito, para que una URL filtrada no pueda falsear el
+ * remitente— sino **publicar un segundo script desde esa otra cuenta**.
+ *
+ * - `"sistema"` es la casilla de quien administra el SdG. Es la de siempre y
+ *   la que usan el rechazo de una carga y el aviso de una mención.
+ * - `"rrhh"` es `gestiondepersonas@polcecal.com`, y la pidió el usuario el
+ *   16/11/2026 para el resumen de novedades del cierre del día: lo manda RR.HH.
+ *   y las respuestas tienen que volver a RR.HH., no a una persona de sistemas.
+ *
+ * **Una casilla sin configurar NO cae a la otra.** Es deliberado y es la
+ * decisión que más importa de este archivo: el remitente es parte del mensaje
+ * —dice quién lo manda y a dónde contestar—, así que mandar desde la casilla
+ * equivocada es peor que no mandar. Quien pide `"rrhh"` y no la tiene
+ * publicada recibe `sin-configurar` y decide qué hacer.
+ */
+export type Casilla = "sistema" | "rrhh";
+
+/** Las dos variables de cada casilla. Van juntas o no van. */
+function variablesDe(casilla: Casilla): { url?: string; secreto?: string } {
+  if (casilla === "rrhh") {
+    return { url: process.env.SDG_CORREO_RRHH_URL, secreto: process.env.SDG_CORREO_RRHH_SECRET };
+  }
+  return { url: process.env.SDG_CORREO_URL, secreto: process.env.SDG_CORREO_SECRET };
+}
+
+/**
  * Si el correo está configurado, para preguntarlo **antes** de juntar los
  * datos del mensaje.
  *
@@ -57,11 +119,22 @@ const TOPE_DE_ESPERA_MS = 5_000;
  * tiempo, y en ese rato cada carga rechazada haría una consulta a `usuarios`
  * para después tirar el resultado. Las dos variables van juntas o no van.
  */
-export function estaConfigurado(): boolean {
-  return Boolean(process.env.SDG_CORREO_URL && process.env.SDG_CORREO_SECRET);
+export function estaConfigurado(casilla: Casilla = "sistema"): boolean {
+  const { url, secreto } = variablesDe(casilla);
+  return Boolean(url && secreto);
 }
 
 export type ResultadoDelCorreo = "enviado" | "sin-configurar" | "fallo";
+
+export interface RespuestaDelCorreo {
+  estado: ResultadoDelCorreo;
+  /**
+   * Sólo con `estado: "fallo"`: lo que dijo el servicio, tal cual (el cuerpo
+   * que contestó el Apps Script, recortado a 500 caracteres, o el mensaje de
+   * la excepción si ni siquiera contestó).
+   */
+  detalle?: string;
+}
 
 export interface Mensaje {
   /** A quién. El Apps Script sólo acepta direcciones de los dominios de la empresa. */
@@ -70,14 +143,16 @@ export interface Mensaje {
   cuerpo: string;
 }
 
-export async function enviarCorreo(mensaje: Mensaje): Promise<ResultadoDelCorreo> {
-  const url = process.env.SDG_CORREO_URL;
-  const secreto = process.env.SDG_CORREO_SECRET;
+export async function enviarCorreo(
+  mensaje: Mensaje,
+  casilla: Casilla = "sistema"
+): Promise<RespuestaDelCorreo> {
+  const { url, secreto } = variablesDe(casilla);
 
   // Sin configurar **no se intenta y no se loguea**. Entre el deploy de esto y
   // el día que alguien publique el script va a pasar tiempo, y un error por
   // cada carga rechazada sería ruido diario sobre algo que nadie pidió todavía.
-  if (!url || !secreto) return "sin-configurar";
+  if (!url || !secreto) return { estado: "sin-configurar" };
 
   try {
     const respuesta = await fetch(url, {
@@ -100,15 +175,18 @@ export async function enviarCorreo(mensaje: Mensaje): Promise<ResultadoDelCorreo
       // de inicio de sesión si la implementación quedó restringida.
     }
 
-    if (resuelto?.ok === true) return "enviado";
+    if (resuelto?.ok === true) return { estado: "enviado" };
 
     // Lo que contestó, sin traducir: es lo único que después va a permitir
     // distinguir un secreto mal puesto de un dominio no permitido de un cupo
     // agotado.
-    console.error("correo: lo rechazó el Apps Script", respuesta.status, dijo.slice(0, 500));
-    return "fallo";
+    const loQueDijo = dijo.slice(0, 500);
+    console.error(`correo[${casilla}]: lo rechazó el Apps Script`, respuesta.status, loQueDijo);
+    // Con el cuerpo vacío no hay nada que copiar: queda al menos el status.
+    return { estado: "fallo", detalle: loQueDijo || `HTTP ${respuesta.status}, sin cuerpo` };
   } catch (e) {
-    console.error("correo: no se pudo llamar al Apps Script", (e as Error)?.message ?? e);
-    return "fallo";
+    const detalle = String((e as Error)?.message ?? e);
+    console.error(`correo[${casilla}]: no se pudo llamar al Apps Script`, detalle);
+    return { estado: "fallo", detalle };
   }
 }

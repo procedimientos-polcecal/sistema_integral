@@ -4,10 +4,18 @@ Un ERP que unifica en una sola app lo que eran tres, sobre un núcleo de datos
 compartido. **Next.js 16 + Supabase, desplegado en Vercel.** En producción:
 https://www.polcecalpolysan.app
 
-Diez módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
+Trece módulos: **RRHH** (con **Remises** como submódulo), **Mantenimiento**,
 **Compras**, **Inventario**, **Producción**, **Despacho**, **Facturación**,
-**Cantera** y **Calidad**. Cada uno vive en `app/(app)/<modulo>`, `lib/<modulo>`
-y `app/api/<modulo>`.
+**Cantera**, **Calidad**, **Taller Vial**, **Trituración**, **Seguridad e
+Higiene** y **Ventas**. Cada uno vive en `app/(app)/<modulo>`, `lib/<modulo>` y
+`app/api/<modulo>`.
+
+El número y la lista salen de `MODULOS_ORDEN` en
+[lib/core/access.ts](lib/core/access.ts), que tiene catorce entradas contando
+`remises`: ahí está la cuenta de verdad, y de ahí se corrige ésta. Ya se
+separaron tres veces —decía «Diez» y listaba nueve, después «Once» y listaba
+diez sin Taller Vial ni Trituración, y después «Doce» sin Ventas—, así que si el
+número y los nombres no coinciden, el que manda es el archivo.
 
 **Producción y Calidad son dos cosas distintas y se confunden fácil**, porque las
 carga la misma gente: Producción es el parte de fábrica por turno, y Calidad es
@@ -34,19 +42,28 @@ código.
 
 | | |
 |---|---|
-| Compras | [docs/COMPRAS-ESTADO.md](docs/COMPRAS-ESTADO.md) · [COMPRAS.md](docs/COMPRAS.md) · [COMPRAS-SINCRONIZACION.md](docs/COMPRAS-SINCRONIZACION.md) |
-| Mantenimiento | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md) — GUT (21/10): la sección `## La matriz GUT` de ese documento y el [spec](docs/superpowers/specs/2026-10-21-mantenimiento-gut-design.md). Tres cosas que no se deducen del código: `gut_orden` es una columna generada y **no es el puntaje** (lleva el 27 de "sin puntaje" y el +1000 de las abiertas: imprimirla muestra 1027); el 27 está escrito en dos lugares, el `coalesce` de la migración y `lib/mantenimiento/gut.ts`, con un test que los ata; y el GUT **no se exporta a ninguna planilla** — MTBF: [spec](docs/superpowers/specs/2026-10-16-mantenimiento-mtbf-design.md) · [plan](docs/superpowers/plans/2026-10-16-mantenimiento-mtbf.md) — partes de contratista: [spec](docs/superpowers/specs/2026-10-20-mantenimiento-partes-de-contratista-design.md) |
-| Mantenimiento — programación del taller | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## La programación semanal del taller` · [spec](docs/superpowers/specs/2026-10-22-mantenimiento-disponibilidad-y-turnos-design.md) · [plan](docs/superpowers/plans/2026-10-23-mantenimiento-programacion-del-taller.md). Dos cosas que no se deducen del código: el cuadro entero se repite a las **6** semanas y no a las 2 ni a las 3 —son dos ciclos, de período 2 y de período 3—, y `francos` queda **afuera del cruce a propósito**, porque `fecha_tomado` es el día en que alguien apretó el botón y no el día de descanso (56 francos tomados caen en tres fechas: cruzarlos pintaría 35 huecos un lunes) |
+| Compras | [docs/COMPRAS-ESTADO.md](docs/COMPRAS-ESTADO.md) · [COMPRAS.md](docs/COMPRAS.md) · [COMPRAS-SINCRONIZACION.md](docs/COMPRAS-SINCRONIZACION.md) — semáforo y reclamo (12/11): la sección `## El semáforo de pedidos y el reclamo` de COMPRAS.md · [spec](docs/superpowers/specs/2026-11-12-compras-semaforo-y-reclamo-design.md) · [plan](docs/superpowers/plans/2026-11-12-compras-semaforo-y-reclamo.md). Tres cosas que no se deducen del código: **`EN_ESPERA` queda afuera del conjunto reclamable** —9 de los 10 pedidos más viejos estaban ahí, frenados a propósito, y sin excluirlos el primer reclamo se contesta con «ése está en espera»—; **el destinatario sale del grant explícito de `usuario_modulos` y nunca de `nivelEnModulo()`**, que le da `admin` a todo `admin_sistema` y metería a quien tiene `lectura` explícita; y **el orden por defecto no cambia, pero al filtrar por color sí** —los 11 rojos de Mantenimiento caían en las páginas 5 a 15 y la página 1 no tenía un solo punto de color— |
+| Mantenimiento | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md) — GUT (21/10): la sección `## La matriz GUT` de ese documento y el [spec](docs/superpowers/specs/2026-10-21-mantenimiento-gut-design.md). Tres cosas que no se deducen del código: `gut_orden` es una columna generada y **no es el puntaje** (lleva el 27 de "sin puntaje" y el +1000 de las abiertas: imprimirla muestra 1027); el 27 está escrito en dos lugares, el `coalesce` de la migración y `lib/mantenimiento/gut.ts`, con un test que los ata; y el GUT **no se exporta a ninguna planilla** — MTBF: [spec](docs/superpowers/specs/2026-10-16-mantenimiento-mtbf-design.md) · [plan](docs/superpowers/plans/2026-10-16-mantenimiento-mtbf.md) — partes de contratista: [spec](docs/superpowers/specs/2026-10-20-mantenimiento-partes-de-contratista-design.md). Del 04/11/2026, lo mismo que el cuaderno de PIPARO y por el mismo pedido: **la descripción dice sólo la actividad** —contratista, quincena, horas y partes salían del texto porque tienen columna (N, K, O) o viven en el sistema— y la generación **drena su propia cola** para que esas columnas no lleguen vacías. Dos cosas medidas que evitan rehacer el análisis: **no hace falta denominador común** porque el grupo se arma por la actividad normalizada (0 de 19 OT tienen dos formas de escribirla), y **no hay costo que mandar a REPUESTO UTILIZADO** —no hay columna de costo, `materiales` está vacío en los 21 partes y `horas_50`/`horas_100` en cero—. Lo que se pierde, a propósito: los lugares con su número de parte salen de la planilla (siguen en `mant_partes_contratista_renglones`), y 13 de 19 órdenes quedan diciendo sólo «Limpieza», separadas por el sector —que es como ya se cargaban a mano— · el cierre anterior al inicio (12/11): la sección `## El cierre anterior al inicio` de ese documento · [spec](docs/superpowers/specs/2026-11-12-mantenimiento-cierre-anterior-al-inicio-design.md) · [plan](docs/superpowers/plans/2026-11-12-mantenimiento-cierre-anterior-al-inicio.md). **Lo primero, para quien despliegue: la columna `ordenes_trabajo.cierre_justificacion` no existe en producción hasta que alguien corra a mano la migración `20261112095357_…`; sin ella muere toda alta de OT y, peor, el `select` de `exportarLoPendiente` falla sin que su llamador mire el `error`, así que la sincronización pisa con la planilla lo que el sistema acaba de registrar.** Desde el 12/11/2026 una OT **se puede** cerrar con fecha anterior a su inicio **con justificación obligatoria** —la valida `justificacionQueExplica()`, la de Compras—, lo que **dio vuelta la regla del 05/11/2026 y sólo la mitad**: sin fecha de inicio sigue sin poder cerrarse, con texto o sin él. Medido el 12/11/2026: **66 de las 2.176 OT con las dos fechas** ya están así —44 PROGRAMADO contra 22 CORRECTIVO, adelanto típico de 2 días— y **sólo 3 de las 66 entraron por la app**, así que lo que viene de la planilla va a seguir cerrándose antes sin explicar nada. Y la trampa: **el `select` de `exportarLoPendiente` es una lista de columnas escrita a mano**, y olvidarse `cierre_justificacion` ahí hace que la del alta no llegue nunca a la planilla sin fallar ni avisar. **El spec arranca de una premisa falsa** —dice que nada lo frena, siete días después de que la regla del 05/11 empezara a frenarlo todo—: leerlo sin eso en mente es rehacer el error |
+| Mantenimiento — OT encadenadas | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## Las OT encadenadas` · [spec](docs/superpowers/specs/2026-11-12-mantenimiento-ot-encadenadas-design.md) · [plan](docs/superpowers/plans/2026-11-12-mantenimiento-ot-encadenadas.md). Una OT que al cerrarse genera la siguiente: cambio de martillos → rotación × 3 → cambio, en cuatro molinos y rompedoras. Tres cosas que no se deducen del código: **el estado son dos campos y un corte** —`desde` y `vuelta_desde`, y sólo cuentan las OT creadas en `desde` o después—, y sin ese corte reiniciar un ciclo vuelve a crear la orden recién cancelada sobre piezas nuevas, que es el anti-objetivo producido por el mecanismo que existía para evitarlo; **lo mueven tres puntas y nada más** (la madre al cerrarse, el botón de reinicio, la carga inicial), así que sin eso el ciclo se detiene para siempre después del primer cambio; y **la cara es la vuelta más uno**, que no es una convención elegida sino lo que dicen 63 de las 248 OT medidas —aparecen la 2ª, la 3ª y la 4ª, nunca la 1ª y nunca una 5ª—. El ciclo **apunta a `mant_tareas_preventivas`** en vez de copiar los nombres: el día que ese catálogo genere planes, una tarea que un ciclo maneja no se genera dos veces. Y los cuatro nacen **sin punto de arranque**: desde el 13/11/2026 **arrancan solos con el primer «Cambio de martillos» que se cierre a partir del día en que se configuraron**, que es la única parte del mecanismo donde el texto de una descripción decide algo —la versión anterior pedía cuatro fechas tipeadas, y un ciclo sin arrancar no genera órdenes, así que nada se atrasa y `mant-atrasadas` no puede avisarlo: se habría desplegado dormido—. **Mira hacia adelante y nunca hacia atrás**: arrancando del último cambio histórico, los cuatro nacían con su primera rotación atrasada 7, 21, 21 y 3 días, y Filler 2 —que está en 4ª cara— pediría rotar a la 2ª. Se ve sin esperar con `npx tsx scripts/que-haria-el-ciclo.mts` |
+| Mantenimiento — cancelar una OT | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## Cancelar una OT` · [spec](docs/superpowers/specs/2026-11-13-mantenimiento-cancelar-una-ot-design.md) · [plan](docs/superpowers/plans/2026-11-13-mantenimiento-cancelar-una-ot.md). El estado de la orden que **no se va a hacer nunca**, con justificación obligatoria. **Lo primero, para quien despliegue: hasta que alguien corra a mano la migración `20261116082742_…`, una cancelada conserva su +1000 en `gut_orden` y sube en el listado de OT en vez de correrse al final** —y eso es el listado entero de `/mantenimiento/ordenes` y el Asistente, no un tablero GUT aparte, porque esa columna es el orden por defecto—. Cinco cosas que no se deducen del código: **`CANCELADA` reemplazó a `SUSPENDIDA`** en vez de sumarse, porque ese estado tenía **0 filas de 2.453** y dos palabras para «cerrada sin hacerse» es como se pudre un vocabulario; **la justificación no es una columna sino una nota** de `ordenes_trabajo_notas`, que ya exporta a la columna X —por eso no hizo falta migración para el motivo, y por eso una cancelada puede volver a justificarse—; **el motivo entra antes que el estado** por las dos puntas que cancelan (el PATCH de órdenes y el botón de reiniciar un ciclo), que es la regla de la auditoría de lo irreversible; **una cancelada no puede tener `fecha_cierre`** y el camino vivo que lo rompía era «Registrar el trabajo» con resultado **Parcial**, que deja la orden `EN_PROCESO` **con** fecha —la fecha que decide es `elCierreQueQueda()` de `cierreDeOT.ts`, la misma que miran las tres reglas del cierre, y no la del cuerpo—; y **la puerta de la planilla no se cierra, se detecta**: la columna M la edita gente a mano, así que una «Cancelada» sin motivo la informa `laCancelacionNoTieneMotivo` como divergencia del contraste, y si la consulta de notas falla el detector calla y lo dice en `canceladas_sin_revisar`. Del merge con `main` (17/11/2026), la trampa que ningún test podía ver: **el botón «reiniciar el ciclo» escribía `SUSPENDIDA`**, o sea la palabra que esta rama borró del vocabulario — iba cruda a la columna M, `estadoDeTexto` ya no la reconocía y la sincronización siguiente la devolvía como `POR_HACER`, **reviviendo la orden que el reinicio acababa de aparcar**. Hoy escribe `CANCELADA`. Lo gemelo en `cicloDeOT.ts`: la rama que miraba `SUSPENDIDA` quedó muerta y una cancelada caía en «esperar», congelando el ciclo para siempre |
+| Mantenimiento — programación del taller | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## La programación semanal del taller` · [spec](docs/superpowers/specs/2026-10-22-mantenimiento-disponibilidad-y-turnos-design.md) · [plan](docs/superpowers/plans/2026-10-23-mantenimiento-programacion-del-taller.md). Dos cosas que no se deducen del código: el cuadro entero se repite a las **6** semanas y no a las 2 ni a las 3 —son dos ciclos, de período 2 y de período 3—, y `francos` **entra al cruce por `fecha_descanso` y nunca por `fecha_tomado`**. Son dos cosas distintas y confundirlas fue el bug: `fecha_tomado` es el día en que alguien apretó el botón —los 56 francos tomados de antes del 26/10/2026 caen en tres fechas, y cruzar ésa pintaría 35 huecos un lunes—, mientras que `fecha_descanso` es el día que la persona no viene, que se carga al marcarlo y suele estar adelante. Los 56 viejos quedaron con `fecha_descanso` en null y **no abren hueco**: el sistema no sabe cuándo descansaron y decirlo es mejor que inventarlo. **Dos fotos del mismo dato, y la vieja contaba otra cosa:** el 26/10/2026 eran 56 de 217 —los *tomados*, no el total—; el 04/11/2026 son 259 francos: **200 `PENDIENTE`**, que todavía no tienen día y es lo correcto (`estaDeFranco` pide `TOMADO` y la fecha exacta), y **59 `TOMADO`**, de los cuales **56 son los viejos sin fecha**, **1 se tomó el 02/11 con su día** y **2 se tomaron el 02/11 sin día**. Se sabe, entonces, sólo que **dos francos tomados el 02/11 quedaron sin día** (medido el 04/11/2026); **qué camino los escribió no se sabe**, y que lo distinga haberse creado y tomado el mismo día es **una conjetura de dos casos, sin confirmar**; no se arregló (el detalle está en la sección de la programación del taller de ese documento) |
+| Mantenimiento — el cuaderno de Piparo | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## El cuaderno de Piparo` · [spec](docs/superpowers/specs/2026-10-30-mantenimiento-cuaderno-de-piparo-design.md) · [plan](docs/superpowers/plans/2026-11-01-mantenimiento-cuaderno-de-piparo.md). Lo que no se deduce del código: **el modo de carga lo decide `proveedores.modo_de_carga`** y no el nombre ni un id —PIPARO en `cuaderno`, CANDIA en `parte_diario`—; **el costo vive en dos lugares que nadie ata** —`ordenes_trabajo.costo` y el texto de `REPUESTO UTILIZADO` en la planilla, donde 58 de las 380 OT de PIPARO ya traían el monto a mano— y **`costoEquipo.ts` no lo suma**, porque saltea toda OT con contratista; **septiembre de 2026 ya está cargado a mano** (29 OT, 28 el 01/09) y generarlo las duplica, así que hay un freno que se niega con un 409 y se levanta con `confirmar_duplicados`: **la primera prueba real no puede ser septiembre**; la columna I del master es derrame y no guarda lo que se le escribe, por eso al sumar horas a una OT existente se corrige en «Altas del sistema» (`corregirLaAlta`); `en_llave` **no es una columna**, y por eso una llave que nadie junta no se frena: el renglón que trae las 46 h sale solo como una OT de 46 h y los otros dos quedan pendientes; y **primero se juntan los renglones y después se confirma el sector**, porque confirmar saca al renglón de la propuesta de acumulación. Medido contra las diez fotos reales el 02/11/2026: el tier gratuito del AI Gateway **no incluye Sonnet 5** (403), así que se midió con `google/gemini-2.5-flash` y **eso no dice cómo lee el modelo que manda**; una página tardó 201 y 214 s en las dos corridas —el tope de la ruta es 240—, y un «= 18 Hs» salió como 1.845 horas sin ninguna marca —por eso `normalizarRenglones` marca dudoso todo renglón de más de 200 h, que es lo que ya no se pasa de largo. `AI_GATEWAY_API_KEY` tiene que estar en Vercel y `CUADERNO_MODELO` es opcional. **Un mes también puede entrar por un `.xlsx`** (03/11/2026), como alternativa a las fotos y no como otro modo: lo que dice de dónde vino no es una columna sino la extensión de la ruta (`esRutaDeExcel`). Procesa cinco columnas —**Tarea · Fecha Desde · Fecha Hasta · Hs · Precio ($)**, obligatorias sólo Tarea y Hs— y las busca **por el nombre del encabezado y no por la letra**, porque el mismo contenido ya se mudó de `K:O` a `A:E` en un día. **Una fila es una OT**: no hay nada que agrupar. El control es la fila de TOTALES contra la suma de las filas; si no da, los renglones entran igual y se dice la diferencia. `fecha_hasta` en null quiere decir «duró un día», no que falte. `lib/core/excel.ts` **no sirve** para leerlo porque aplana las celdas y pierde la diferencia entre un cero, una fórmula sin recalcular y un `#REF!`. Y dos cosas del 03/11/2026 que vinieron de ahí: **juntar no es el camino para generar una sola OT** —con el Excel 46 de 63 renglones salen solos, sin ningún grupo, y el único botón generaba los 46 de una—, así que la generación acepta `claves` y la barra de la selección tiene su propio botón; el filtro cae sobre **los grupos y no sobre los renglones**, o sea que elegir un renglón juntado saca su grupo entero y el cartel lo dice. Y **un renglón se puede sacar de la carga** (`cuaderno/renglones/[id]`, un `DELETE` aparte del que desagrupa), para la tarea que ya tiene su OT cargada a mano: borrar la fila **se audita con `borrar`**, y es el primer `borrar` que escribe una persona. Y del 03/11/2026, lo que hay que saber antes de tocar el texto de una OT: **la descripción dice sólo la tarea** —el contratista, la fecha de cierre y las horas tienen columna propia en el master (N, K, O) y desde una celda de prosa no se filtra ni se suma—, el costo sigue yendo en `REPUESTO UTILIZADO`, y **un grupo sale por su denominador común** (`cuadernoDescripcion.ts`): de los cinco grupos juntados de verdad, **cero tenían las tareas idénticas**, así que el plural cuenta como la misma palabra —pero «Nº1» y «Nº2» no se parecen nunca— y con menos de dos palabras en común se listan las tareas en vez de inventar un resumen. El problema de verdad ahí no era el texto sino que **esas columnas llegaban vacías**: el master recibe la fila por `IMPORTRANGE` y la generación lo intentaba a medio segundo de crear la orden. Medido el mismo día: 48 de 48 OT del cuaderno con K/M/N/O vacías contra **12 de 12 de `/api/mantenimiento/ordenes`, que sí reintenta, resueltas a los 21 s**. Ahora la generación drena con `after()`, **una pasada para toda la corrida** y con las esperas recortadas a lo que queda de `maxDuration` (`esperasQueEntran`) |
 | RRHH | [docs/RRHH-ACTUALIZACION.md](docs/RRHH-ACTUALIZACION.md) · marcaciones desde Lenox: [spec](docs/superpowers/specs/2026-10-07-rrhh-marcaciones-desde-lenox-design.md) · [plan](docs/superpowers/plans/2026-10-07-rrhh-marcaciones-desde-lenox.md) |
+| Disponibilidad y ausentismo | **Transversal, no es un módulo**: vive en `app/(app)/disponibilidad`, `app/api/disponibilidad` y `lib/rrhh/ausentismo`, y la ve cualquiera con sesión. La sección `## Disponibilidad y ausentismo` de [docs/RRHH-ACTUALIZACION.md](docs/RRHH-ACTUALIZACION.md) · [spec](docs/superpowers/specs/2026-10-29-disponibilidad-y-ausentismo-design.md) · [plan](docs/superpowers/plans/2026-10-29-disponibilidad-y-ausentismo.md). Cuatro cosas que no se deducen del código: **el motivo no sale nunca del lado abierto** —`ausencias` se lee con el cliente admin, así que RLS no corre y el único permiso es el de la ruta; el `tipo` entra sólo para descartar la `TARDANZA` y se tira antes del JSON—, y por eso **la proyección se arma campo por campo y los tests preguntan sobre el JSON serializado**, que es lo único que llega del otro lado; **«agregado» no es anónimo cuando el grupo es chico** —un sector tiene UNA persona y, cruzando los dos endpoints abiertos, 42 de 78 celdas con motivo quedaban atribuidas a alguien, también en sectores de 9 y de 13, así que se sacó el desglose por motivo y quien no pasa el control ve sólo el total—; **los inactivos entran enteros** porque quien se fue en agosto igual faltó en marzo, y filtrarlos vuelve huérfanas sus ausencias sin avisar; y **la `TARDANZA` cuenta distinto según quién pregunta** a propósito —no abre hueco en disponibilidad, sí suma un día en el mensual—, lo que deja un canal residual conocido que hoy no filtra nada porque hay 0 tardanzas cargadas. Se comprueba con `npx tsx scripts/probar-rutas-de-disponibilidad.mts` |
+| Agenda | **Transversal, no es un módulo** —no está en `MODULOS_ORDEN` y la ven los catorce—: vive en `app/(app)/agenda`, `lib/agenda`, `app/api/agenda` y `app/api/cron/agenda`. [docs/AGENDA.md](docs/AGENDA.md) · [spec](docs/superpowers/specs/2026-10-30-agenda-y-google-calendar-design.md) · [plan](docs/superpowers/plans/2026-11-02-agenda-y-google-calendar.md) · las OT que entran solas (04/11/2026): la sección `## Las OT que entran solas al calendario` de ese documento · [spec](docs/superpowers/specs/2026-11-04-agenda-ot-automatica-design.md) · [plan](docs/superpowers/plans/2026-11-04-agenda-ot-automatica.md) · **la vista de calendario** (04/11/2026: semana, día y lista —**no hay vista de mes**—, con una banda de alertas y un detalle en modal): la sección `## La vista de calendario` de ese documento · [spec](docs/superpowers/specs/2026-11-04-agenda-vista-de-calendario-design.md) · [plan](docs/superpowers/plans/2026-11-04-agenda-vista-de-calendario.md); lo que no se deduce del código: **en un teléfono la semana dibuja un solo día** —el ancho no llega al servidor, así que se dibujan las dos grillas y CSS esconde una—, **lo que se acomoda en columnas son pedazos de un día y no eventos** (un evento que cruza la medianoche se parte), y **la banda nombra también los pendientes**, lo que obliga a traerlos siempre sea de cuando sea. **Lo primero, para quien despliegue: la sección «Lo que sólo se puede comprobar en la primera corrida real» de ese documento** —la migración **ya está aplicada** (al 04/11/2026 hay dos eventos en producción) y la pantalla se abrió en un navegador **sólo con eventos de ejemplo y sin sesión**: `/agenda` con una sesión real y la base de verdad no la abrió nadie—, y de las OT automáticas, que **`20261104161017_ot_fecha_fin.sql` va antes del código** (si no, el alta de una OT falla en el insert *después* de escribir la planilla) y que **la columna de gente disponible no dice nada hasta que se cargue el padrón** (`mant_personal_taller` vacía) y que **subcuenta ausencias**: de los francos sin `fecha_descanso`, 200 son pendientes (correcto), 56 son viejos que ya pasaron y 2 se tomaron el 02/11 sin día, no se sabe por qué, no se leyó el flujo de francos, y no se tocó desde la Agenda. Tres cosas que no se deducen del código: **el SdG manda y Google es el espejo, pero avisa en vez de pisar** (a diferencia de Producción con su planilla), y **divergencia son sólo borrado y movido**: los RSVP quedan afuera porque con cinco invitados por OT serían el cambio más frecuente y eso termina con la gente apagando las notificaciones; **un evento borrado en Google vuelve con 200 y `status: "cancelled"` y no con 404**, y un `PATCH` sobre uno borrado contesta 200 y lo deja borrado —resucitarlo pide `PUT` con `status: "confirmed"`—, y **en un `PATCH` omitir `attendees` es «no los toques» y en un `PUT` es «no hay»**, la asimetría que casi borra los cinco invitados de una OT; y **`aviso` no es `google_pendiente`**: uno es «algo que mirar» y el otro «falta escribir», y mandar un borrado fallido a la segunda hacía que el cron recreara un evento que se quiso borrar. Además, un evento con `ot_id` no se edita desde la Agenda y un evento divergido deja de moverse solo hasta que el dueño destrabe. **Del 04/11/2026, cuatro más que valen para quien toque las OT automáticas:** **el evento nace sólo si la fecha no pasó, y no es una restricción arbitraria** —de 780 órdenes en 90 días, 574 (73,6 %) tienen la ejecución anterior al alta, y de las 151 cargadas en el SdG 121 ya la tenían pasada al cargarlas: sin el freno, nueve de cada diez eventos serían del pasado y cada uno invitaría a cinco personas a algo terminado—; **el apilado agrupa por especialidad (misma gente) y se topea a las 20:00**, porque sin tope la undécima llega a las 24:30, `instanteDe` la rechaza y la orden queda sin evento y sin aviso, y **`yaTomados` se sacó a propósito**: el bucle no corre en una transacción, la segunda orden ya ve a la primera y adelantarla la contaba dos veces (08:00 y 11:00 en vez de 08:00 y 09:30); **«gente disponible» cuenta por día y no por turno**, porque los grupos A y B no pasan nunca por 8–16 y por turno daría cero mecánicos —1.764 de 2.410 órdenes— para siempre; y **el `aviso` de un evento de OT tiene tres escritores, cada uno limpia sólo lo suyo y el del borrado fallido gana siempre**, porque es el único registro de un evento que quedó vivo en cinco calendarios. También: **`fecha_fin` vacía es «duró un día»**, sin backfill, y **`RAZON_DEL_PLAN` es un código de sistema que no va como fila en `mant_razones_de_postergacion`**, porque Configuración la ofrecería como opción manual. **Y del 13/11/2026: el evento de una OT se escribe con `sendUpdates=none` y el que crea una persona con `all`** —lo decide `avisaALosInvitados()` por si la fila tiene `ot_id`—, porque en ocho días 30 eventos de OT habían mandado **120 invitaciones**, 30 a cada una de `gerencia@`, `produccion@` y `nicolaslenzetti@`. **No se sacó ningún invitado ni se dejó de crear el evento**: sigue apareciendo en los cinco calendarios, sólo que llega sin avisar — y lo que esto **no** apaga es el recordatorio propio del calendario el día del evento. El parámetro de las cuatro funciones de escritura de `lib/core/calendar.ts` es **obligatorio y sin valor por omisión** justamente para que el próximo camino de escritura no herede una de las dos sin elegirla, que es como habían quedado las cuatro en `all` |
+| Mensajería interna | **Transversal, no es un módulo** —no está en `MODULOS_ORDEN`—: vive en `app/api/mensajes`, `lib/mensajes`, `components/HiloDeMensajes.tsx` y la bandeja `app/(app)/mis-menciones`, y se monta con una línea en la pantalla de una OT, un requerimiento de compra o una condición insegura. [spec](docs/superpowers/specs/2026-11-11-mensajeria-interna-design.md) · la sección `### mensajes: tres rutas, cinco handlers, ningún módulo` de [docs/API.md](docs/API.md) · para la OT, la sección `### Y abajo hay otra caja de texto que no es esto` de [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md). Cinco cosas que no se deducen del código: **un hilo es el par `(entidad_tipo, entidad_id)` y no una tabla** —`entidad_id` no tiene foreign key, como el de `auditoria`, así que un registro borrado deja el hilo huérfano **a propósito**: el hilo se abre igual y dice «el registro ya no está», porque lo que se habló sobre algo no deja de haber pasado cuando ese algo se borra—; **el que avisa en el momento es el correo y no el push, a propósito y al revés que el resto del sistema** —medido antes de empezar: el push llega a **1 de 14** personas y el correo a **14 de 14**, que lo tienen cargado las catorce; **no es un quinto emisor instantáneo y no pasa por `avisarAQuienDecide()`**, que es la mitad que no cambió—; **y desde el 12/11/2026 una mención sin leer es además un aviso de la campana** (`mensajes-menciones-sin-leer` en `lib/home/avisos.ts`, contado por `contarMencionesSinLeer()`, que es la misma definición que la bandeja): lo pidió el usuario después de ver la mensajería andando, sabiendo que acá **la campana y el push del resumen salen de la misma función**, así que también sale por push. Su id está en **`ES_POR_PERSONA`** porque el número depende de quién mira y la foto diaria (`avisos_fotos`) es una sola para todo el sistema, y eso tiene una consecuencia que hay que saber: **sale en la campana enseguida y en el push de los lunes —que lleva totales— pero no en el diario**, que cuenta movimiento contra la foto. Hacerlo diario pediría una foto por persona. El aviso en el momento lo sigue dando el correo; **el hilo arranca plegado en una barra desde el 12/11/2026, y abrirlo —no cargarlo— es lo que marca las menciones propias como leídas**, así que el botón «Marcar como leído» de la bandeja pasó de ser el respaldo a ser el camino principal: sólo llegan con la conversación abierta las dos pantallas que le pasan `abiertoAlMontar` a `HiloDeMensajes` —el diálogo de «Mis pedidos» y la ficha de una condición abierta por el `?condicion=` del correo—, y que lo pasen es un contrato que nada comprueba; **`ENTIDADES[tipo].puedeVerlo` tiene que espejar la policy de SELECT de la tabla destino**, que es un contrato entre dos archivos que nada comprueba —si la tabla afloja y esto no, el hilo queda más cerrado que el registro; al revés es un agujero, porque el correo lleva el texto del mensaje adentro—, y la policy de `mensajes` lleva su propio `case entidad_tipo` que hay que mantener en línea con él (hoy el `else true` es el requerimiento, y es la regla de la 018 y no un hueco); y **las dos cadenas de `select()` que traen el autor llevan el FK explícito**, `autor:usuarios!mensajes_creado_por_fkey(...)`, porque `mensajes_menciones` crea un segundo camino de `mensajes` a `usuarios` y sin eso PostgREST contesta **300 PGRST201**. Esto último es lo único de la lista que **ningún test de este repo puede atrapar** —las rutas no tienen tests y el embebido lo resuelve PostgREST del otro lado del cable—, y ya pasó entero: el POST no embebe `usuarios`, así que alguien escribía, mencionaba, **el correo salía**, y después el hilo no se podía leer ni por el autor ni por el mencionado |
 | Inventario | los tres specs de `docs/superpowers/specs/2026-09-02-inventario-*` |
-| Producción | [docs/PRODUCCION.md](docs/PRODUCCION.md) · [spec](docs/superpowers/specs/2026-09-07-produccion-design.md) |
+| Producción | [docs/PRODUCCION.md](docs/PRODUCCION.md) · [spec](docs/superpowers/specs/2026-09-07-produccion-design.md) — molinos desde el robot (29/10): la sección `## Los molinos` de ese documento · [spec](docs/superpowers/specs/2026-10-21-produccion-molinos-desde-el-robot-design.md) · [plan](docs/superpowers/plans/2026-10-29-produccion-molinos-desde-el-robot.md). Tres cosas que no se deducen del código: **"turno" ahí son los cuatro cortes del contador del robot** (20→00, 00→04, 04→12, 12→20) y no los dos del parte de fábrica —los mismos números de reloj, otra medición: piedra que entra al molino contra producto terminado, y no se suman—; **un día sin filas es planta cerrada, pero un turno en cero dentro de un día con filas es una parada a explicar** (Filler 1 dice lo primero con la ausencia y Filler 2 con ceros); y **la racha de turnos faltantes se corta en el día no operativo y no lo atraviesa** —atravesarlo baja la utilización de Filler 1 de 85,3 % a 82,0 %—. Y la etiqueta `MATERIAL` del robot no se guarda: está mal en el 11,3 % de las toneladas |
 | Despacho | [docs/DESPACHO.md](docs/DESPACHO.md) · [spec](docs/superpowers/specs/2026-09-08-despacho-ordenes-de-carga-design.md) |
-| Calidad | envases: [docs/CALIDAD-ENVASES.md](docs/CALIDAD-ENVASES.md) · [spec](docs/superpowers/specs/2026-09-15-produccion-envases-design.md) · [plan](docs/superpowers/plans/2026-09-15-produccion-envases.md) — carbonilla: [docs/CALIDAD.md](docs/CALIDAD.md) · [spec](docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) · [plan](docs/superpowers/plans/2026-09-16-calidad-stock-de-carbonilla.md) · la planilla manda (13/10): [spec](docs/superpowers/specs/2026-10-13-calidad-la-planilla-manda-design.md) · [plan](docs/superpowers/plans/2026-10-13-calidad-la-planilla-manda.md) — ensayos: [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md) · [spec](docs/superpowers/specs/2026-10-06-calidad-ensayos-design.md) · [plan](docs/superpowers/plans/2026-10-06-calidad-ensayos.md) |
+| Calidad | envases: [docs/CALIDAD-ENVASES.md](docs/CALIDAD-ENVASES.md) · [spec](docs/superpowers/specs/2026-09-15-produccion-envases-design.md) · [plan](docs/superpowers/plans/2026-09-15-produccion-envases.md) — carbonilla: [docs/CALIDAD.md](docs/CALIDAD.md) · [spec](docs/superpowers/specs/2026-09-16-calidad-stock-de-carbonilla-design.md) · [plan](docs/superpowers/plans/2026-09-16-calidad-stock-de-carbonilla.md) · la planilla manda (13/10): [spec](docs/superpowers/specs/2026-10-13-calidad-la-planilla-manda-design.md) · [plan](docs/superpowers/plans/2026-10-13-calidad-la-planilla-manda.md) — ensayos: [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md) · [spec](docs/superpowers/specs/2026-10-06-calidad-ensayos-design.md) · [plan](docs/superpowers/plans/2026-10-06-calidad-ensayos.md) — histórico: [docs/CALIDAD-HISTORICO.md](docs/CALIDAD-HISTORICO.md) · [spec](docs/superpowers/specs/2026-10-29-calidad-historico-de-determinaciones-design.md) · [plan](docs/superpowers/plans/2026-10-29-calidad-historico-de-determinaciones.md). Lo que no se deduce del código: **el valor no está transformado** —`escala` es la lectura del sistema y no una propiedad del número—, y la aritmética que parece validarla alcanza a 27 de 362 filas — la curva de una muestra (05/11): la sección `## La curva de una muestra, y lo que no dice` de [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md) · [spec](docs/superpowers/specs/2026-11-05-calidad-curva-granulometrica-design.md) · [plan](docs/superpowers/plans/2026-11-05-calidad-curva-granulometrica.md). Dos riesgos asumidos que no se deducen del código: **apagar un tamiz no hace lo mismo en los dos gráficos** —en retenido saca el valor, en acumulado esconde el punto pero lo deja sumado en todos los de su derecha, y recalcular daría un número que nadie midió— y **el eje son las mallas que midió la muestra, sin aviso de las que el producto declara y faltan** (19 de 79 muestras midieron un juego distinto; la #325 está medida en 13 y declarada por ningún producto), al revés de `acumuladosDelListado()`. Tampoco dibuja los límites: hay 2 cargados en todo el sistema. **El pasante y el Excel de la curva (11/11)**: [spec](docs/superpowers/specs/2026-11-11-calidad-curva-pasante-y-excel-design.md) · [plan](docs/superpowers/plans/2026-11-11-calidad-curva-pasante-y-excel.md), y la sección `### El pasante y el Excel de la curva` del documento de Ensayos. Dos riesgos asumidos, además de los dos de arriba: **el Excel lleva una foto y no un gráfico vivo** —`exceljs` no tiene API de gráficos— y se abre con Excel de escritorio, porque **Sheets puede descartar las imágenes flotantes al importar**: el día que se use ahí, comprobarlo antes de prometer que el gráfico llega; y **el servidor no puede saber si el PNG es el de esa muestra** —los números salen de la base, lo falseable es sólo el dibujo—. Dos más que no se deducen: el pasante es `100 − acumulado` y **puede dar negativo sin recortarse**, y recharts no dibuja sin DOM (el servidor devuelve un `div` vacío de 127 caracteres), por eso el PNG se saca en el navegador con `html2canvas`, **con el fondo en `style` y no en clases** o sale transparente y en Excel se ve negro |
 | Facturación | [docs/FACTURACION.md](docs/FACTURACION.md) · [spec](docs/superpowers/specs/2026-09-04-facturacion-proveedores-odoo-design.md) |
+| Seguridad e Higiene | [spec](docs/superpowers/specs/2026-10-29-seguridad-e-higiene-design.md) · [plan](docs/superpowers/plans/2026-10-29-seguridad-e-higiene.md) — vive en `app/(app)/seguridad-higiene`, `lib/seguridadHigiene` y `app/api/seguridad-higiene` |
+| Ventas — CRM | [docs/VENTAS-CRM.md](docs/VENTAS-CRM.md) · [spec](docs/superpowers/specs/2026-11-12-ventas-crm-design.md) — vive en `app/(app)/ventas`, `lib/ventas` y `app/api/ventas`. **Lo primero, para quien lo retome: las dos migraciones no están aplicadas y ninguna pantalla se abrió en un navegador** (la sección «Lo que falta antes de usarlo» de ese documento). Cinco cosas que no se deducen del código: **el cliente no es el `res.partner` de Odoo y no se importa** —el CRM tiene además los prospectos, que no están allá; el enlace vive en `ventas_clientes_odoo`, lo hace una persona y por eso la ficha **todavía no muestra las cargas de Despacho**, que sólo se podrían cruzar contra `cliente_raw`, texto libre del remito—; **la probabilidad, «si está abierta» y «hace cuánto que no se toca a un cliente» no son columnas** y guardarlas permitiría una oportunidad «Ganada» con probabilidad 30, pero **`estado` sí lo es** porque prospecto/activo/inactivo es un juicio de quien vende y no un derivado; **los cortes del semáforo (30 y 60 días) y las probabilidades (10/25/50/75) son supuestos sin medir** —no hay histórico todavía—, y por eso el embudo muestra siempre el monto sin ponderar al lado y **el módulo no manda ningún aviso ni push**; **el monto no se convierte nunca** y el embudo suma por moneda; y **de una oportunidad cerrada no se vuelve**, porque `cerrada_el` ya alimentó el informe del mes. **Borrar un cliente se audita** con el verbo `borrar` y el registro va antes del borrado: se lleva en cascada sus contactos, sus oportunidades y todo su historial, y a diferencia del cuaderno de un contratista **acá no hay archivo de origen en ningún bucket** |
 | Asistente | [docs/ASISTENTE.md](docs/ASISTENTE.md) · [spec](docs/superpowers/specs/2026-09-16-asistente-design.md) |
 | Odoo | [docs/ODOO-INTEGRACION.md](docs/ODOO-INTEGRACION.md) |
 | Login y correos | [docs/AUTENTICACION.md](docs/AUTENTICACION.md) |
 | Respaldo | [docs/RESPALDO.md](docs/RESPALDO.md) |
+| Las APIs | [docs/API.md](docs/API.md) — qué función cumple cada una, cómo está conectada y cómo funciona. El inventario de las 285 rutas lo genera `npm run mapa-de-apis` en [docs/API-MAPA.generado.md](docs/API-MAPA.generado.md) y **no se edita a mano**. Tres cosas de ahí que no se deducen leyendo una ruta: **56 rutas no validan nada en su archivo y no hace falta**, porque las protege el proxy —saberlo pide cruzar su url con la lista de exentos de `lib/supabase/middleware.ts`, y el generador la lee de ahí en vez de copiarla—; **hay un solo reloj para los crons desde el 05/11/2026** (`vercel.json`): antes eran dos y **seis endpoints los disparaban los dos a la vez**, así que `vercel.json` daba una respuesta incompleta. En Actions quedan sólo los dos respaldos, a propósito — ver `## Los crons corren desde Vercel` más abajo; y **108 de 285 usan el cliente admin**, o sea que RLS no corre y el permiso lo pone la ruta, que cambia dónde hay que mirar |
 | Variables de entorno | [docs/VARIABLES-VERCEL.md](docs/VARIABLES-VERCEL.md) |
 | Migraciones | [supabase/migrations/README.md](supabase/migrations/README.md) |
 
@@ -116,22 +133,41 @@ Antes de escribir una, leer las ocho trampas del
   `remises_empleados_datos.direccion`.
 - **Lo que no se deshace se audita.** Desde el 05/10/2026 hay una tabla
   `auditoria` en el núcleo y una función `auditar()` en
-  [lib/core/auditoria.ts](lib/core/auditoria.ts). Medido el 26/10/2026 con
-  `grep`: la llaman **nueve rutas y un ayudante compartido** (eran ocho hasta el
-  26/10/2026). Las nueve: postear un asiento en Odoo, mover los permisos de
-  un usuario, cerrar una liquidación, ajustar stock, aprobar o denegar una
-  compra, —desde la programación del taller— corregir o borrar una
-  ausencia **por las dos puntas** (`rrhh/ausencias/[id]` y
+  [lib/core/auditoria.ts](lib/core/auditoria.ts). Medido el 13/11/2026 con
+  `grep` **contra este árbol**: la llaman **catorce rutas y un ayudante
+  compartido** (eran nueve el 26/10/2026 y ocho antes; este renglón había
+  quedado en «nueve» mientras el árbol llegaba a catorce, que es justo lo que
+  vuelve insegura una cuenta escrita a mano). Las catorce: postear un asiento en
+  Odoo, mover los permisos de un usuario, cerrar una liquidación, ajustar stock,
+  aprobar o denegar una compra, —desde la programación del taller— corregir o
+  borrar una ausencia **por las dos puntas** (`rrhh/ausencias/[id]` y
   `mantenimiento/ausencias`) y cargar una semana de referencia
-  (`mantenimiento/programacion/referencia`), y **cerrar una recepción de
+  (`mantenimiento/programacion/referencia`), **cerrar una recepción de
   Despacho** (`despacho/recepciones/[id]`), que confirma la orden de compra y
-  **valida el remito en Odoo** — mueve stock de verdad y no se deshace. Esa
-  última faltaba: estaba al mismo nivel que postear un asiento y era la única
-  escritura irreversible a Odoo sin rastro de quién la hizo. Usa el verbo
-  `cerrar`, el mismo de la liquidación, para no necesitar una migración. El ayudante es
+  **valida el remito en Odoo** — mueve stock de verdad y no se deshace; esa
+  faltaba, estaba al mismo nivel que postear un asiento y era la única
+  escritura irreversible a Odoo sin rastro de quién la hizo, y usa el verbo
+  `cerrar`, el mismo de la liquidación, para no necesitar una migración. Y las
+  cinco que se sumaron después: sacar un renglón del cuaderno de un contratista
+  (`mantenimiento/cuaderno/renglones/[id]`), postergar una OT —que es `corregir`
+  su fecha de ejecución, con la justificación como motivo
+  (`mantenimiento/ordenes/[id]/postergar`)—, borrar una fila del padrón del
+  taller (`mantenimiento/personal`), corregir una condición insegura ya evaluada
+  o reabrirla (`seguridad-higiene/condiciones/[id]`) y **borrar un cliente del
+  CRM** (`ventas/clientes/[id]`, del 12/11/2026), que se lleva en cascada sus
+  contactos, sus oportunidades y todo su historial de conversaciones — y a
+  diferencia del renglón del cuaderno, acá **no hay archivo de origen en ningún
+  bucket**, así que la fila de `auditoria` es lo único que queda: por eso lleva
+  la razón social, el CUIT y cuántas filas colgaban. El ayudante es
   [lib/core/borradoDeEspejo.ts](lib/core/borradoDeEspejo.ts): ahí se
-  registra el `borrar` de las sincronizaciones que espejan una planilla, así
-  que ese verbo lo escribe un proceso y no una persona. Los verbos son
+  registra el `borrar` de las sincronizaciones que espejan una planilla. Ese
+  verbo lo escribía **sólo un proceso** hasta el 03/11/2026, cuando apareció el
+  primero que escribe una persona: sacar un renglón del cuaderno de un
+  contratista (`mantenimiento/cuaderno/renglones/[id]`), que existe porque la
+  planilla trae tareas cuya OT ya está cargada a mano. Ahí el archivo de origen
+  sigue en el bucket, así que **qué decía** se contesta sin la tabla; lo que
+  sólo contesta ella es **quién lo sacó**, y esas filas son con lo que se le
+  paga al contratista. Los verbos son
   **nueve** (`ACCIONES` en `auditoria.ts`): `postear`, `aprobar`, `denegar`,
   `cerrar`, `ajustar`, `conceder_acceso`, `quitar_acceso`, `borrar` y
   `corregir`. Este último es el único que no es un acto en una dirección sino
@@ -180,6 +216,107 @@ Antes de escribir una, leer las ocho trampas del
 - **En un Server Component `cookies().set()` no hace nada.** El canje del
   `?code=` de los correos va en un Route Handler.
 
+## Hay un segundo despliegue escribiendo en esta base
+
+**Dos despliegues de este repo escriben en la base de producción.** El de verdad
+es el proyecto `sistema-integral` de la cuenta `sistemapolcecalpolysan`, que
+sirve `www.polcecalpolysan.app`. El otro es `sistemaintegral`, en la cuenta
+**`soportemantenimiento-4821s-projects`**; el usuario confirmó el 05/11/2026 que
+es suyo o de un colaborador, así que no es una filtración. Tiene las credenciales
+de Supabase y **no las de Google**: medido ese día, **53 corridas y 51 fallidas**
+desde el 24/10/2026 08:21:52.
+
+Ese segundo exacto es el que el encabezado de la migración
+`20261023104622_sincronizaciones_dicen_de_que_entorno_vinieron.sql` marcó como
+«quién llama no se pudo determinar». **Ya está identificado**, y vale anotar por
+qué no se encontró entonces: la búsqueda recorrió los cinco proyectos de Vercel
+**del equipo**, y éste está en otra cuenta.
+
+Tres consecuencias, y la tercera es la que importa para lo que se construya
+encima:
+
+- **Una fila de `sincronizaciones` puede no ser de producción**, así que medir
+  contra esa tabla sin mirar `host` da mal. El host bueno termina en
+  `-sistemapolcecalpolysan.vercel.app`.
+- **El desempate por `entorno` no desempata.** Aquella migración hizo que la
+  vista `ultima_sincronizacion` prefiera `entorno = 'production'`, pero el otro
+  despliegue es la producción de su propio proyecto y también lo dice: quedan
+  empatados y gana el más reciente, que suele ser el suyo porque corre media hora
+  después. El 05/11/2026 el barrido de la Agenda anduvo a las 05:00:11 y falló a
+  las 05:30:55 en el otro, y la pantalla mostró el fallo; a
+  `calidad/carbonilla-planilla` le venía pasando **doce días seguidos**. Lo
+  arregla `20261105092248_sincronizaciones_dicen_si_vienen_del_despliegue_canonico.sql`,
+  con una columna `canonico` que la fila calcula con `esLaCorridaCanonica()` de
+  [lib/core/sincronizaciones.ts](lib/core/sincronizaciones.ts): que
+  `VERCEL_PROJECT_PRODUCTION_URL` —que Vercel define **por proyecto**— coincida
+  con el dominio de `NEXT_PUBLIC_APP_URL`, que una copia hereda con el resto de
+  las variables. **`host` no sirve** para esto: es `VERCEL_URL` y cambia con cada
+  despliegue —31 hosts distintos del canónico en las últimas 1000 filas—, así que
+  no hay valor fijo contra el cual compararlo.
+- **No hay ningún candado contra dos corridas simultáneas en todo el sistema.**
+  Verificado el 05/11/2026: ni `pg_advisory_lock` ni `for update skip locked` en
+  ninguna parte. Hoy lo único que separa a los dos despliegues es que al otro le
+  faltan las credenciales de Google. **El día que las tenga, los dos escribirían
+  las mismas planillas y los mismos calendarios sin coordinarse**, que es el
+  fallo del 13/10/2026 —«la primera fila libre» calculada sobre una planilla que
+  estaba recalculando— multiplicado por dos escritores que no se ven. La
+  migración arregla **la pantalla, no la concurrencia**: la defensa de verdad es
+  apagar ese despliegue, y eso se hace desde esa cuenta de Vercel.
+
+## Los crons corren desde Vercel
+
+**Un solo reloj, y es `vercel.json`.** Hasta el 05/11/2026 eran dos —Vercel y
+GitHub Actions— y seis endpoints los disparaban los dos a la vez.
+
+**El motivo que justificaba esa arquitectura era falso, y estaba escrito en
+siete archivos:** que el plan Hobby de Vercel sólo admite crons diarios y que
+pasarse no degrada el cron sino que **hace fallar el deploy entero**. Las dos
+mitades de esa frase son ciertas de Hobby; lo que dejó de ser cierto es el
+plan. Se descubrió midiendo, y la medición es la que conviene repetir si
+alguien vuelve a dudar: `vercel.json` tenía trece crons y cinco de ellos
+disparaban **todos los días a la hora exacta** durante una semana. Hobby admite
+dos. No podía ser Hobby.
+
+**Y la vuelta no era cosmética: un cron de GitHub Actions no cumple lo que
+declara.** Los de este repo decían cada 15 o 20 minutos y corrían **cada 4 a 8
+horas** — medido el 05/11/2026 sobre `gh run list`. Mientras el motivo escrito
+fue el plan, nadie miró el reloj.
+
+Hoy, en `vercel.json`:
+
+- **Diez sincronizaciones cada 10 minutos**, escalonadas un minuto cada una
+  (agenda en el 0, mantenimiento en el 1, y así hasta `taller-vial-partes` en
+  el 9). **El escalonado no es prolijidad**: las diez usan la misma cuenta de
+  servicio de Google y el límite de lectura de Sheets es de **60 pedidos por
+  minuto y por usuario**, así que dispararlas en el mismo minuto las hace
+  chocar entre ellas. Diez minutos dan diez ranuras y se usan las diez: una
+  sincronización más obliga a compartir minuto con otra.
+- **Cinco siguen siendo diarias, y no se aceleran nunca.** `avisos-diarios` y
+  `remises-notificaciones` **mandan un push por persona**: cada 10 minutos
+  serían 144 notificaciones diarias a cada uno, que es lo contrario de lo que
+  un resumen diario existe para hacer. `rrhh-lenox-sync` trae las marcaciones
+  una vez por día y Lenox tiene un límite de llamadas **que ante un 429 no se
+  reintenta**. `syh-respaldo-de-fotos` es un respaldo de 40 fotos con tres
+  viajes cada una.
+  Y **`produccion-molinos-sync` a las 10:00 UTC, que es un horario elegido y no
+  un resto**: el PC Robot sube su zip a las 22 y la importación se puso a las 7
+  de Argentina para caer después (commit `7948dccd`, del 11/11/2026). Acelerarlo
+  serían 144 listados de Drive por día para un archivo que cambia una vez, y de
+  paso pisaría ese ajuste. Esta rama lo tenía cada 10 minutos y se revirtió a
+  propósito al traer `main`.
+- `rrhh-recalculo` cada 6 horas, la cadencia que ya declaraba en Actions —pero
+  acá se cumple—.
+
+**En Actions quedan sólo los dos respaldos** (`backup.yml` y
+`respaldo-sheets.yml`), por la única razón que sí vale para un respaldo:
+**corren aunque el deploy de Vercel esté roto**. Un respaldo que depende de que
+la aplicación despliegue bien deja de existir justo el día que hace falta.
+
+Los otros workflows **conservan su `workflow_dispatch`** y perdieron sólo el
+`schedule`: siguen sirviendo para disparar una sincronización a mano desde la
+pestaña Actions. Si alguno recupera un `schedule`, ese endpoint vuelve a tener
+dos relojes y nada lo avisa.
+
 ## Las planillas de Google
 
 **Compras, Mantenimiento e Inventario** espejan planillas de Sheets, y en
@@ -221,6 +358,130 @@ planilla; el número de fila no servía porque se insertan filas en el medio. Y 
 **Ensayos** (`/calidad/ensayos`, las muestras del laboratorio) **no hay planilla
 ninguna**: el SdG es el único lugar, así que ahí no existen `sheets_fila` ni
 `sheets_pendiente` — ver [docs/CALIDAD-ENSAYOS.md](docs/CALIDAD-ENSAYOS.md).
+
+**Seguridad e Higiene tampoco tiene planilla**, como Ensayos: reemplaza un Excel
+(`21-10-26.xlsm`) que circulaba por mail, cuyas 44 condiciones entraron una sola
+vez con `scripts/importar-condiciones-del-excel.mts` el 30/10/2026 y que no se
+vuelve a leer. Dos cosas de esa importación que no se deducen del código:
+`numero` es `generated by default` y conserva el N° de la planilla, y un insert
+con número explícito **no adelanta la secuencia** —el script lo resolvió
+consumiendo números hasta pasar el 44, por eso la primera condición nueva es la
+46 y no la 45—; y las 44 entraron **sin foto**, porque eran vínculos al disco de
+quien armó el Excel. El enlace de sector y de persona es por igualdad de nombre
+y deja en null lo dudoso: de las 44, 37 entraron sin sector. Lo que sigue
+separa lo que se sabe de lo que es conjetura, porque esa distinción es lo que
+hace útil esta nota:
+
+- **Se sabe**: «Planta 02» es ambiguo y por eso no se enlaza. Fue el nombre
+  viejo de «Planta 0-2 mm» hasta el 19/10/2026 (`scripts/sectores-de-la-ot.mts`),
+  existe además un sector `Producción - Planta 02`, y el mismo texto podría
+  leerse como trituración 2. Un alias por nombre viejo habría sido enlazar al
+  que se le parece.
+- **Conjetura, sin confirmar**: las 5 filas con «Planta 02» (N° 2, 8, 9, 10, 11)
+  hablan de sinfines y zaranda, y `docs/MANTENIMIENTO-REPUESTOS-DESDE-DESCRIPCIONES.md`
+  ubica «Sin fin 1» y «Zaranda vibratoria» en «Planta 02» = `PY-C1`, la planta
+  0-2 mm. **Tienden a ser 0-2 mm**, no trituración. **Acción: dejarlas en null
+  hasta que alguien de planta lo confirme**; no se asignan por la conjetura.
+- **Conjetura, sin confirmar**: «Planta 2» (8 filas, N° 30 a 37) y «Planta 3»
+  (7 filas, N° 38 a 44) parecen las plantas de trituración 2 y 3. Las filas
+  hablan de mandíbula, trituración primaria y cintas; `lib/trituracion/` tiene
+  «Planta 2» como nombre en un fixture de test (`informeExcel.test.ts`) y
+  «Planta 3» en un comentario (`informeMensual.ts`), que es menos que un uso; y
+  `scripts/sectores-de-la-ot.mts` mapea «Trituración 2/3» a «Planta de
+  trituración 2/3», que refuerza la lectura sin probarla.
+- **Dónde confirmarlo**: contra el `21-10-26.xlsm` original (lo que circulaba
+  por mail, es la única fuente que hay) con quien lo armó o alguien de planta.
+  Una vez confirmado, el `WHERE` **nombra las claves del grupo y nunca el
+  prefijo**: `like 'excel-21-10-26-%'` alcanza a las 44 y le escribiría un solo
+  sector a todas, pisando las 7 que ya están bien enlazadas. Las claves llevan
+  el N° **sin ceros** (`excel-21-10-26-30`, no `…-030`), y `and sector_id is
+  null` hace que una fila ya enlazada no entre aunque se nombre por error:
+
+  ```sql
+  update public.syh_condiciones c
+     set sector_id = s.id
+    from public.sectores s
+   where s.nombre = 'Planta de trituración 2'
+     and s.activo
+     and c.sector_id is null
+     and c.clave in ('excel-21-10-26-30', 'excel-21-10-26-31', 'excel-21-10-26-32',
+                     'excel-21-10-26-33', 'excel-21-10-26-34', 'excel-21-10-26-35',
+                     'excel-21-10-26-36', 'excel-21-10-26-37')
+  returning c.numero, s.nombre;
+  ```
+
+  y lo mismo para «Planta de trituración 3» con las claves 38 a 44. Cada uno
+  actualiza 8 y 7 filas, y el `returning` las imprime: si no son ésas, algo no
+  coincide. Las 7 ya enlazadas (N° 5, 7, 15, 26, 27, 28, 29) no entran en
+  ninguna de las dos.
+
+  **La forma importa y no es cosmética.** Con el `set sector_id = (select id …)`
+  que esto decía antes, un nombre mal escrito —«trituracion» sin tilde, que es
+  el error más probable tipeando a mano— devuelve NULL, el editor dice
+  **«UPDATE 8»** y deja `sector_id` en null sobre filas que ya eran null: es
+  **indistinguible de un éxito**, y la salvaguarda de «si el editor dice otro
+  número, algo no coincide» era falsa justo ahí. Con el `from`, un nombre que
+  no existe no produce fila para cruzar y sale **«UPDATE 0»**.
+
+  Lo que esta forma sí pierde, dicho: si hubiera **dos sectores activos con el
+  mismo nombre**, el `from` cruza contra los dos y escribe uno cualquiera en
+  vez de fallar —el subselect escalar reventaba—. Hoy no pasa; antes de
+  correrlo conviene mirarlo:
+  `select id, nombre from public.sectores where nombre = '…' and activo;`
+
+**El texto de lugar que traía la planilla está en `observaciones`.** Son estos
+14, y están escritos acá porque sólo sobrevivían en el `.xlsm` de `Downloads` y
+en un reporte gitignoreado — y porque para 22 de las 37 sin sector no hay
+ninguna otra guía: quien complete el sector desde la ficha tendría sólo la
+descripción. Es el mismo argumento que preservó «Detectó: Pedro Arias».
+
+| Texto de la planilla | N° |
+|---|---|
+| Taller equipos moviles | 1 |
+| Planta 02 | 2, 8, 9, 10, 11 |
+| Molino de cal | 3 |
+| Molienda | 4, 6, 12 |
+| Carga de bolsones | 13 |
+| Depositode aceites *(sic)* | 14 |
+| Deposito abierto | 16 |
+| Pileta decantadora | 17 |
+| Cal | 18 |
+| Descarga de horno | 19, 20, 21, 22 |
+| Camino descarga de hornos | 23, 24 |
+| Deposito de cilindros | 25 |
+| Planta 2 | 30 a 37 |
+| Planta 3 | 38 a 44 |
+
+(Los otros cuatro textos son los de las 7 que sí se enlazaron: «Filler 1» en
+5, 15, 28 y 29; «Filler 2» en 7; «Taller» en 26 y 27.)
+
+El 31/10/2026 se copió a `observaciones` de las 37, como un renglón más al
+final: `Lugar según la planilla: «Planta 2».` Es DML y se aplicó por PostgREST.
+**Para deshacerlo**, esa línea es la última y empieza siempre igual:
+
+```sql
+update public.syh_condiciones
+   set observaciones = nullif(regexp_replace(observaciones,
+         '\n?Lugar según la planilla: «[^»]*»\.$', ''), '')
+ where clave like 'excel-21-10-26-%'
+   and observaciones like '%Lugar según la planilla%'
+returning numero, observaciones;
+```
+
+**Las cinco fechas dudosas, con su evidencia.** Hasta ahora estaban listadas
+sin decir qué le pasa a cada una, y la única señal que quedaba en los datos
+—que tres son futuras— **se borra sola el 13/11/2026**. Las fotos del Excel
+llevan la fecha en el nombre (`IMG_AAAAMMDD_…`) y eso es lo que hay:
+
+| N° | Dice | La foto | Qué parece |
+|---|---|---|---|
+| 42, 43, 44 | 2026-11-13 | `IMG_20261013_…` | **Un 11 por un 10**: son de «Planta 3», y las otras cuatro de ese bloque (38 a 41) dicen 2026-10-13, que es lo que dicen sus fotos. Es lo más firme de las cinco |
+| 7 | 2026-01-10 | `2.jpg`, sin fecha | La única de enero entre 43 de octubre. Parece **01/10 leído al revés** (m/d en vez de d/m), la misma trampa que dio vuelta 885 fechas en Compras |
+| 6 | 2026-10-10 | `IMG_20261006_…` | **Lo más flojo de los cinco y por eso se dice aparte**: la foto es del 06/10 y la fila dice 10/10. No prueba nada por sí solo — el N° 5 tiene dos fotos, del 06/10 y del 13/10, y su fila dice 10/10, así que en esta planilla la foto no es del día de la detección |
+
+Nada de esto se corrigió: son conjeturas sobre el dato de otro. **Acción:
+confirmarlo con quien armó el `21-10-26.xlsm`** y corregir desde la ficha. Los
+37 sin sector son la otra decisión de datos que queda pendiente del usuario.
 
 Cinco reglas que costaron caro, y que valen para las cuatro:
 
@@ -398,6 +659,164 @@ antes y después:
 `.card` no declara ni `width` ni `max-width`: lo que choca es la **misma**
 propiedad, no cualquier utilidad de tamaño.
 
+**Y no es sólo el ancho de `.input`: es toda propiedad que una de esas clases
+declare.** La regla es la capa, así que vale para cada declaración de cada
+clase sin capa, y las otras dos muerden igual de callado:
+
+| Clase | Declara | Lo que no se aplica al lado |
+|---|---|---|
+| `.card` | `border` (el atajo, o sea también el color) | `border-red-300`, `border-amber-300`, `border-l-*` |
+| `.card` | `box-shadow` | `ring-*`, `shadow-*` |
+| `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost` | `color` y `font-size` | `text-red-700`, `text-xs`, `text-sm` |
+| `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost` | `cursor` | `disabled:cursor-not-allowed`, `cursor-*` |
+
+**Los cuatro `.btn-*` están en la lista a propósito, y `.btn-ghost` entró
+último.** Una tabla incompleta es lo que hace que el próximo lector la dé por
+segura: si falta una clase, el que la use va a creer que la suya sí deja pasar
+las utilidades. Antes de agregar un `.btn-*` nuevo a `globals.css`, va también
+acá con lo que declare.
+
+Medido el 31/10/2026 en Seguridad e Higiene: los dos botones del resumen de
+condiciones declaraban su borde de alerta y lo pintaban gris, «Sacar» —lo
+único irreversible de esa pantalla— pedía `text-red-700` y se veía gris, y
+cinco `text-xs` medían 14 px. **Ninguna de las tres cosas rompe nada y ésa es
+la trampa**: la pantalla se ve bien, sólo que no dice lo que el código dice que
+dice.
+
+Qué hacer según el caso: un color de estado va por `style` —es lo que ya hacen
+los badges de Mantenimiento—; para un botón rojo existe `.btn-danger`; y una
+utilidad que no puede ganar **se saca**, porque una clase que no hace nada y
+promete que sí es peor que no tenerla.
+
+**Hay una variante que la tabla no puede expresar, porque no es una utilidad
+que pierde sino una regla que falta.** Hasta el 04/11/2026 `globals.css`
+declaraba un solo `:disabled`, el de `.btn-primary`, así que un
+`.btn-secondary`, `.btn-danger` o `.btn-ghost` deshabilitado conservaba su
+aspecto entero; y como ninguno de los cuatro `:hover` llevaba guarda
+`:not(:disabled)`, además **cambiaba de fondo al pasarle el mouse por
+encima**: señalaba «funciono» mientras no hacía nada. Medido ese día
+recorriendo las etiquetas JSX de `app` y `components`: **26 botones
+deshabilitados en 14 archivos y 9 módulos**, de los cuales sólo 4 traían un
+`disabled:opacity-50` escrito a mano. Los cuatro `:disabled` y las cuatro
+guardas están ahora en `globals.css`, así que **un botón nuevo lo hereda y no
+hay que acordarse**, y `lib/core/botonesDeshabilitados.test.ts` lo fija leyendo
+el archivo —como `sw.test.ts` lee `public/sw.js`—: saca las clases del propio
+CSS, así que un `.btn-*` nuevo entra solo al control y no hay una lista que se
+quede corta.
+
+Lo que hay que saber si se toca: `opacity` **sí** se puede poner al lado de un
+`.btn-*` —ninguna de las cuatro la declara, y por eso aquellos cuatro parches
+a mano funcionaban—, pero `disabled:cursor-not-allowed` **no**, que es la fila
+nueva de la tabla. Un estado deshabilitado que necesite algo más que opacidad
+va dentro de la regla de `globals.css`, no en una utilidad al lado.
+
+## Y un modal se escribe `<Modal>`, no `fixed inset-0`
+
+La cuarta de la misma familia, y falla igual de callado: **escribir la capa a
+mano no rompe nada.** Compila, se ve bien, cierra cuando se toca afuera — y esa
+pantalla vuelve a perder lo que alguien había cargado, que es el bug del que
+salió todo esto: alguien estaba registrando una OT, tocó fuera del formulario sin
+querer y perdió diecisiete campos.
+
+La capa buena es la de [components/Modal.tsx](components/Modal.tsx), y hace
+cumplir una sola regla: **«Cancelar» tira; todo lo demás sale conservando.** El
+fondo, la X y Escape significan «salir», y salir nunca destruye nada; el único
+que descarta es el botón negativo del formulario. Se pidió exactamente así, y por
+eso `Modal` **no dibuja pie ni botones**: el botón negativo lo pone cada
+formulario, que es el único que llama a `tirar()`. Si hay algo a medio cargar,
+salir pregunta antes, y **el cartel no dice que se pierde nada**, porque no se
+pierde: dice que hay algo a medio cargar y ofrece quedarse. Un cartel que miente
+enseña a apretar sin leer el próximo, el que sí importaba.
+
+Hoy lo usan **19 formularios**, que son las mismas 19 llamadas a `useBorrador` y
+los mismos 19 `tocado={…}`, y hay **cinco excepciones declaradas**: capas a
+pantalla completa donde no hay nada escrito que perder — el cajón de navegación
+del teléfono (`Sidebar`), el panel del Asistente, la foto «Ampliada» de
+`CuadernoClient`, el propio `ConfirmProvider` e `InfoTip`. **Las dos últimas
+aparecieron sólo porque el chequeo busca también la otra escritura**
+—`position: "fixed", inset: 0` en un `style`—, que el `fixed inset-0` de las
+clases no ve.
+
+Lo detecta `node scripts/revisar-modales.mjs`, que hoy da **ROMPE 0 · MIRAR 0**
+sobre 409 archivos y **no está en el CI**, por lo mismo que `revisar-responsive`
+y `revisar-exportaciones`: hasta que la lista de excepciones aguante unas
+semanas, un CI rojo por falsos positivos no lo mira nadie. El argumento entero
+para que exista está medido: **entre el 11/11 y el 13/11/2026 los modales pasaron
+de 45 a 48, tres de ellos escritos a mano. Dos días.** Sin algo que lo note, la
+inconsistencia que se acaba de ordenar vuelve sola. **Esa es la cuenta
+histórica; la de hoy es otra**: al 16/11/2026 el árbol tiene **56** `<Modal>`
+(56 `alSalir=`), y si este número y el árbol discrepan, manda el árbol.
+
+Lo que no se deduce del código:
+
+- **El borrador vive lo que vive la app, y no más.** Es un `Map` a nivel de
+  módulo ([lib/core/borradorDeFormulario.ts](lib/core/borradorDeFormulario.ts)) y
+  no `localStorage` ni `sessionStorage`: se preguntó, y se pidió que **no
+  sobreviva a cerrar la app**, porque lo que se guarda en el teléfono sobrevive a
+  todo y reaparecería días después sobre un trabajo que ya no es ése. Lo que se
+  pierde, aceptado a propósito: **recargar la página también lo borra.** El caso
+  a resolver era el formulario que se cierra por un toque de más, no el navegador
+  que se va.
+- **La clave lleva de dónde salió el formulario, y no sólo qué registro edita**
+  (`claveDelBorrador`). Un alta en blanco y una prellenada desde un aviso son dos
+  formularios distintos aunque se llamen igual, así que no se pisan; dos altas
+  desde el mismo aviso sí comparten clave, porque es el mismo trabajo retomado.
+  Lo que eso evita: se abre la OT 2905, se escribe, se cierra, se abre la 2907 —
+  **perder lo escrito se nota en el acto; que reaparezca sobre el registro
+  equivocado no se nota nunca.**
+- **El borrador guarda sólo lo que se tocó** (`soloLoTocado`), y al retomarlo lo
+  apoya sobre el registro **tal como está ahora** (`conElBorrador`). El motivo es
+  el `PATCH` único de la OT: `RegistrarOTModal` manda juntos las horas, el
+  contratista, los tres operarios y la falla, así que un borrador con el objeto
+  entero reescribiría encima lo que otro corrigió mientras tanto. Y desde el
+  16/10/2026 la app vive instalada en los teléfonos, así que «mientras la app
+  esté abierta» puede ser días.
+- **Una sola vara, no dos.** Una pantalla que se guarda su propia copia congelada
+  del inicial al lado de la del hook revierte a la vieja después de guardar:
+  `asentar()` mueve la vara del hook y no la copia, así que «Descartar» devuelve
+  la foto de **antes** de guardar y el siguiente «Guardar» la manda encima de lo
+  recién guardado. Costó un defecto real en el detalle de una orden de servicio.
+  Quien descarta es `tirar()`, que ya vuelve a la vara buena. La única excepción
+  está anotada donde vive: `HojaDePersona`, con paneles que se descartan por
+  separado, donde `tirar()` se llevaría también lo que se está escribiendo en el
+  otro — y lo que la mantiene sana es que en ese archivo **nadie llame a
+  `asentar()`**.
+- **Un guardado tiene tres finales y la pantalla elige uno.** `tirar()` vuelve a
+  «cómo nació», y es el del guardado que **cierra** el formulario, porque al
+  reabrirlo se monta de nuevo contra el registro ya actualizado. `asentar()` hace
+  que lo que está en pantalla **pase a ser** cómo nació: no cambia nada de lo que
+  se ve, y es el del guardado que **deja el formulario abierto**. El tercero es
+  ninguno de los dos: `RegistrarOTModal` hace un `POST` y después un `PATCH`, y
+  si el segundo falla el modal queda abierto con el error y lo cargado tiene que
+  seguir ahí. Elegir mal no se ve como un error, y es la otra puerta del defecto
+  de arriba.
+- **El `ConfirmProvider` se monta una sola vez, en `app/(app)/layout.tsx`.** La
+  lista por módulo se quedaba corta sola: el 11/11/2026 eran dos módulos con un
+  modal y sin proveedor, y el 13/11 eran tres, porque apareció `mis-pedidos`
+  entre una fecha y la otra. Importa porque `useConfirm()` **rompe a propósito**
+  sin proveedor —devolver `false` se leería como «el usuario canceló»—, y esa
+  mentira dejó muerto el botón «Pedir» de `/inventario/stock` nueve días sin que
+  el build ni los tests lo notaran (el commit que lo arregló es `f58034d7`, y
+  ahí está medido: fallaba en los 62 artículos con un RI abierto y andaba en los
+  otros 1.113, que es por lo que nadie lo vio). `app/cargar/CargarClient.tsx` monta el suyo
+  porque vive fuera del grupo `(app)`.
+
+**Tres pantallas quedaron sin borrador a propósito** —el tablero de
+Mantenimiento, `ejecuciones` y `mantenimientos`—, y cada una lo dice al lado de
+su `<Modal>`, que es donde alguien lo va a buscar. El motivo es la forma de esas
+pantallas y no una preferencia: el estado del formulario vive en el componente de
+la página, que no se desmonta; **cada camino que lo abre lo reescribe entero**
+—vacío en unos, con los valores del registro que se va a editar en otros—, así
+que lo tipeado antes no sobrevive de todas formas; y la clave tendría que llevar
+el registro que se está editando, que recién se sabe al abrirlo. Una clave fija haría **lo peor de los dos mundos**: lo
+escrito para un registro reapareciendo sobre otro, que es justo lo que la clave
+existe para impedir. Migrarlas es sacar el cuerpo del modal a su propio
+componente, que se monte por registro — y es la misma razón por la que el hook va
+en el componente que **se monta y se desmonta con el formulario** y no en la
+pantalla que lo contiene: en `EquipoDetalle`, vivir arriba dejaba el modal
+reabriendo con el estado **anterior** preseleccionado, y un clic revertía el
+equipo.
+
 ## Un aviso nuevo sale por dos lados, y hay un tercero que se gana aparte
 
 Desde el 18/10/2026 el SdG manda **un resumen diario por push**: una
@@ -445,6 +864,165 @@ sólo para que descartarlo no lo traiga de vuelta mañana. Por eso el resumen lo
 imprime sin número — si no diría «9 · Trituración: hace 36 días que no se
 carga». Está fijado con un test en `lib/home/resumenDeAvisos.test.ts`.
 
+**La salud de las sincronizaciones también sale por estos dos lados**, y se
+declara a mano. Desde el 05/11/2026 `avisosDeSalud` (en `lib/home/avisos.ts`)
+emite **un aviso por recurso caído** de `ultima_sincronizacion`, sólo para
+`admin_sistema`. **El aviso siempre lleva a `/administracion/salud`; el push,
+sólo cuando va solo.** Con dos o más avisos, `resumirParaPush` y
+`resumirElMovimiento` mandan `url: "/"`: es el diseño del resumen diario y vale
+para todos los avisos, no una excepción de éste, así que un resumen con la salud
+y otro aviso abre el inicio y desde ahí hay que llegar a la pantalla por la
+campana. Lo que hay que saber antes de tocarlo, porque nada de esto se deduce
+del código:
+
+- **La tolerancia de cada recurso se declara en `REGISTRO`**
+  ([lib/core/saludDeLasSincronizaciones.ts](lib/core/saludDeLasSincronizaciones.ts)),
+  con la medición que la justifica al lado, y **no se deriva ni del cron
+  declarado ni de la historia del recurso**: los crons de Actions declaran una
+  frecuencia y corren otra (`mantenimiento/ordenes` declara cada 15 minutos y
+  corre cada ~3,5 h), y una tolerancia sacada de la propia historia
+  normalizaría la escasez. Un recurso que aparece en la vista sin estar
+  declarado **no queda mudo: sale como el aviso `salud-sin-declarar`**
+  (`recursosSinDeclarar`), así que **agregar una sincronización nueva obliga a
+  declararla**. Es la misma defensa que `revisar-exportaciones`: no decide si
+  algo está bien, hace que nadie agregue uno sin haber dicho qué espera de él.
+- **Exceptuar no es no mirar: las tres familias.** Una entrada con
+  `toleranciaHoras: null` tiene que decir en cuál cae y por qué, porque cada
+  una es un caso donde «una corrida vieja o fallida es un problema» da una
+  alarma falsa: `solo-escribe-si-hay-algo` (`agenda/aviso_de_google`: su fila
+  sólo existe cuando hubo algo que decir, así que su edad no mide nada y un
+  fallo quedaría clavado hasta el próximo aviso), `se-ve-en-otro-lado`
+  (`agenda/pendientes`: un fallo ahí ya se ve en el evento) y
+  **`apagado-a-proposito`**, que además **lleva quién lo levanta**
+  (`quienLoLevanta`). Esa última es la que importa: sin ella lo primero que
+  hace el sistema es **reintroducir el rojo permanente** que el comentario de
+  `.github/workflows/calidad-envases-bajada.yml` ya había evitado al apagar su
+  cron —«un fallo esperado que se ve igual que uno real entrena a no mirar
+  ninguno»—, porque `calidad/envases_bajada` no corre por decisión y de
+  otro modo quedaría en rojo para siempre. **Volver a encenderlo pide descomentar
+  el `schedule:` de ese workflow, y no alcanza con eso**; la entrada del registro
+  lo dice completo: antes hay que correr `scripts/simular-bajada-envases.mts` y
+  que dé **cero diferencias reales**, porque con el SdG atrasado la bajada
+  borra de la planilla lo que
+  cargó la gente y el SdG no vio —el ensayo del 19/10 destapó 18 movimientos— y
+  nadie lo relacionaría con esto; después `EL_SISTEMA_MANDA_EL_KARDEX` en `true`
+  y volver a proteger la pestaña (el «CÓMO SE VUELVE A CORTAR» de
+  `lib/calidad/envases/sincronizar.ts`). **Y al reencenderlo, la entrada deja de
+  ser excepción y pasa a llevar `toleranciaHoras`**: si no, el recurso vuelve a
+  correr y queda sin vigilar.
+- **`agenda-pasos-caidos` y `agenda-salud-sin-comprobar` se retiraron** el
+  05/11/2026: hacían para dos pasos lo que esto hace para todos, y dos avisos
+  de salud con umbrales distintos diciendo cosas parecidas es lo que salir de
+  una sola función evita. Sus ids quedan huérfanos en `notificaciones_descartes`,
+  **lo cual es inofensivo** —nunca más coinciden con nada— y **no se reusan**:
+  hacerlo le entregaría a quien los descartó un aviso ya silenciado que nunca
+  vio. Lo que **no** se retiró es `lineasDeSalud`, que sigue dibujando el
+  detalle de la Agenda en `/agenda`, ni las dos exclusiones razonadas de
+  `PASOS_CON_GOOGLE`.
+- **`cuantoLlevaMal` mide cosas distintas según el estado, y es a propósito.**
+  Es la `cantidad` del aviso y existe para una sola cosa: **crecer mientras el
+  problema siga**, porque `filtrarDescartadas` pide `cantidad > cantidad_vista`.
+  En una `vieja` son las tolerancias enteras de silencio
+  (`cuantasTolerancias`). **En una `nunca` no crece: es el piso fijo de 1**, porque
+  sin ninguna corrida no hay desde cuándo contar, y ahí vale lo mismo que se dice
+  más abajo del fallo con 1 fijo: **un descarte lo calla mientras su cantidad no
+  pase de 1**. Y el descarte es **del recurso y no del episodio** —el id es
+  `salud-${clave}`, no depende del estado y nada lo limpia al recuperarse—, así
+  que si después ese recurso falla una vez o queda `vieja`, su cantidad arranca
+  otra vez en 1 y sigue mudo. Hoy es inalcanzable —la revisión del 11/11/2026
+  midió que el único recurso declarado sin filas, `envases_bajada`, está
+  exceptuado—, pero no es
+  hipotético: un recurso recién declarado, o `canales` y `barrido` el primer día
+  de un despliegue (ver `docs/AGENDA.md`), salen «nunca corrió» hasta que corren.
+  En un `fallo` son las **corridas fallidas seguidas**
+  (`rachaDeFallos`, leída de `sincronizaciones`), y **no se puede medir con el
+  tiempo**: un cron que falla pero sigue corriendo reescribe su fila cada vez,
+  el silencio nunca pasa de unas horas y la cuenta quedaría en 1 para siempre.
+  Medido el 05/11/2026, `calidad/carbonilla-odoo` —el único fallo real de ese
+  día— falla todos los días a las 08:00, contra una tolerancia de 36 h. Con 1
+  fijo, **un solo descarte dejaría un recurso roto y mudo para siempre**:
+  campana, push y el recordatorio de los lunes. Por la misma razón ese número
+  **no se imprime en ninguna superficie, y desde el 11/11/2026 tampoco en la
+  campana**: lo decide `suNumeroSeMuestra`
+  ([lib/home/notificaciones.ts](lib/home/notificaciones.ts)), que calla los
+  relojes y las familias `ritmo-` y `salud-`, y es el mismo criterio que usa el
+  push. Antes el prefijo se miraba sólo del lado del push, así que la campana
+  dibujaba la racha como insignia y la sumaba al total del ícono: con dos
+  recursos caídos el 11/11/2026 eso daba **+17** (8 + 9), diecisiete de nada.
+  Con un aviso por paso de la Agenda ese aporte estaba acotado a 2; con uno por
+  recurso dejó de estarlo. Hoy cada aviso así cuenta **1** —no 0, que apagaría
+  la insignia—, de modo que el número de la campana vuelve a ser cuántas cosas
+  hay para mirar.
+- **`ultima_sincronizacion` es una unión, y `compras/planilla` no sale de
+  `sincronizaciones`**: la sintetiza `compras_sincronizaciones` (migración
+  `20261023104622`), donde «anduvo» es `error is null` porque no hay columna
+  `ok`. Buscarla en la tabla común —que tiene 0 filas de ese recurso, medido— no
+  daba error ni daba cero: **daba una racha de 1 para siempre**, por el camino de
+  éxito y sin una línea en el log, indistinguible de un recurso que acaba de
+  fallar. Compras es el espejo de más tráfico del sistema. La excepción está
+  declarada en `DE_OTRA_TABLA`, y «ninguna fila» ahora devuelve `null` y se va
+  por el camino que **sí** loguea, para que la próxima unión que alguien agregue
+  a la vista sin declararla **grite** en vez de pasar por sana. Si agregás una,
+  la entrada va ahí.
+- **`salud-sin-comprobar` no tiene estado del que sacar una racha**, porque lo
+  que falló es la lectura: su `cantidad` es **el día** (días desde la época, en
+  fecha de Argentina), de modo que el descarte dura una jornada. Es el único
+  aviso cuyo número es un reloj, y por eso vive en `CRECE_CON_EL_DIA`
+  ([lib/home/notificaciones.ts](lib/home/notificaciones.ts)), con dos
+  consecuencias que hay que mantener juntas: **queda afuera del movimiento
+  diario** —sin eso se anunciaría todas las mañanas, que es justo lo que dejó a
+  las dos personas que probaron las notificaciones en serio con los 13 avisos
+  descartados— y **cuenta 1 en el total de la campana, ni su número ni 0**
+  (`totalDeLaCampana`): con 0 la campana no dibuja insignia y el aviso de que
+  **el vigilante quedó ciego** sería invisible salvo que alguien abriera el
+  panel. Por eso la lista no vive en `lib/home/avisos.ts`: la necesitan las tres
+  superficies y la campana, que es un componente de cliente, no puede
+  importarlo.
+- **En el push la salud va primero, y en la campana no.** `avisosDeUsuario` los
+  agrega al final —son de `admin_sistema` y no tienen por qué desplazar a los
+  de los módulos, que son de todos—, pero el push **nombra tres y resume el
+  resto**, así que ahí «al final» quiere decir «en el "y N más"». El resumen
+  diario lleva movimiento y la lista queda corta, pero **el de los lunes lleva
+  totales**: la de un administrador pasa de diez avisos y la salud caía fuera
+  de los tres nombrados **todas las semanas, por construcción**. Y los lunes
+  son la red: un recurso caído hace semanas ya no mueve nada, así que si el
+  lunes tampoco lo nombra, no lo nombra nadie. Lo hace `saludPrimero`, dentro
+  de [lib/home/resumenDeAvisos.ts](lib/home/resumenDeAvisos.ts) y **sólo ahí**
+  — tocarlo en `avisosDeUsuario` le cambiaría también el orden a la campana.
+- **Una trampa documentada y no detectada: RLS.** `sinComprobar` cubre que la
+  lectura falle, **no que una policy la deje vacía**: una policy que tapa la
+  vista no da error, devuelve `data` vacía, y eso entra por el camino bueno como
+  una lista de «nunca corrió» falsos. Hoy no muerde porque
+  `sincronizaciones_select` es `to authenticated using (true)` (migración 037) y
+  la vista es `security_invoker`. **Si alguna vez se angosta esa policy**, la
+  campana y `/administracion/salud` —que leen con la sesión— mienten juntas; el
+  cron del resumen no, porque lee con el cliente admin.
+
+**Todo esto depende de la migración `20261105092248`** (la columna `canonico`,
+ver «Hay un segundo despliegue escribiendo en esta base»), **que ya está
+aplicada** (medido el 11/11/2026). Sin ella, cuando las dos corridas dicen
+`production` la vista desempata por la más reciente, que suele ser la del otro
+despliegue: el aviso sonaría por un recurso que en producción anda bien —o,
+peor, un fallo real quedaría tapado porque el otro lo mostró sano—.
+
+**Y `rachaDeFallos` también filtra por `canonico`**, desde el 11/11/2026: antes
+no lo hacía, con el argumento de que el error sólo podía ser «de más y no de
+menos» porque al otro despliegue le faltan las credenciales de Google y
+siempre falla. **Era falso.** Ese despliegue escribe `ok = true` en
+`agenda/canales` y `agenda/pendientes` todos los días a las 05:30, media hora
+después del canónico; así que el día que fallara la corrida buena de `canales`,
+la fila ajena pasaba a ser «la última que anduvo», no quedaba ninguna fallida
+después y la racha se clavaba en **1 para siempre** — un descarte y ese canal
+no vuelve a sonar nunca, que es justo lo que la racha vino a evitar. Y ya
+mentía al revés: `produccion/molinos` daba **9** contando las ajenas y **4**
+filtrando, y ese número sale impreso en el push. El filtro es
+`not canonico is false` y **no `canonico = true`**, porque las 3.907 filas
+anteriores a la migración la tienen en `null` y exigir `true` tiraría la
+historia entera: es la misma regla de «preferir y no filtrar» de esa migración.
+`contarEnCompras` sigue sin filtrar porque `compras_sincronizaciones` **no
+tiene la columna**, así que de ese lado no hay con qué distinguir un despliegue
+del otro.
+
 El diseño y lo que se verificó están en
 [el spec de la app instalable](docs/superpowers/specs/2026-10-16-app-instalable-design.md),
 que lleva las cuatro fases: instalar y verse bien (hecha), avisar (hecha), leer
@@ -465,6 +1043,19 @@ condiciones que el encabezado de ese archivo deja escritas:
 3. **acaba de pasar** — un estado que lleva tres días igual no es noticia a
    ninguna hora, y para eso está el resumen.
 
+**Hay una cuarta forma de interrumpir, y cumple sólo dos de las tres.** Desde el
+03/11/2026 la Agenda manda un push cuando Google avisa que alguien movió o
+borró un evento (`lib/agenda/avisoDeDivergencia.ts`): cumple la 1 —el dueño y los
+invitados— y la 3, pero **no la 2**, porque nada se frena hasta que alguien
+decida. **No pasa por `avisarAQuienDecide()`**, y se mandó porque se pidió
+instantáneo: es un precedente y **no un permiso**. «Ya hay uno que cumple sólo
+dos» no vuelve válido al siguiente, y por eso el encabezado de
+`lib/core/avisoAlInstante.ts` lo nombra al lado del portón. Lo que lo hace
+sostenible son las dos reglas de abajo que sí heredó —una notificación por
+invocación y la ventana 7:00–21:00 sin encolar— y que **divergencia sean sólo
+borrado y movido**; el detalle está en [docs/AGENDA.md](docs/AGENDA.md). Si
+agregás un emisor instantáneo, sea por ese archivo o por afuera, anotalo allá.
+
 Tres cosas más que no se deducen del código, y que son las que evitan que esto
 termine en que alguien apague las notificaciones:
 
@@ -475,8 +1066,22 @@ termine en que alguien apague las notificaciones:
   planilla.
 - **Ventana 7:00–21:00 de Argentina, y fuera de ella no se encola nada.** El
   resumen de las 8:30 ya cuenta los `PENDIENTE` sin mirar cuándo entraron, así
-  que el repesque existe sin código. Ojo: el cron de Compras corre 09:00 UTC,
-  que son las 6 de la mañana de acá, y queda afuera a propósito.
+  que el repesque existe sin código. Hasta el 05/11/2026 decía acá que el cron
+  de Compras corre 09:00 UTC —las 6 de la mañana— y queda afuera a propósito:
+  **eso dejó de ser cierto**, porque ahora corre cada 10 minutos y pasa por
+  toda la ventana.
+- **Y de ahí sale la trampa que ese cambio dejó armada, que hay que mirar.**
+  «Una notificación por corrida» es un tope que **vale lo que valga la
+  separación entre corridas**. Con el cron diario y los de Actions —que
+  declaraban 15 minutos y corrían cada 4 a 8 horas— eran una o dos
+  notificaciones por día pasara lo que pasara. Con corridas cada 10 minutos el
+  tope casi no topea: dieciséis requerimientos que entran a lo largo de la
+  mañana ya no son un push, son hasta dieciséis. Es exactamente el pico que el
+  resumen diario existe para evitar, por la puerta de al lado. **No está
+  medido todavía** —se decidió el 05/11/2026 a pedido, acelerando todos los
+  módulos, y lo que hay que vigilar es si a los aprobadores de Compras les
+  empieza a sonar el teléfono—. Si molesta, lo que se baja es la frecuencia de
+  `compras-sync` en `vercel.json`, no el tope.
 - **El enganche va en la sincronización y no en la ruta de alta.** De los
   últimos 400 requerimientos, 397 entraron por la planilla y 3 por la app: el
   momento en que el SdG se entera de un pedido es el momento en que
@@ -489,8 +1094,9 @@ la lista de los candidatos que **no** pasan el filtro y por qué — que es lo q
 permite decirle que no al próximo módulo que lo pida.
 
 **El payload de un push es plano: `{title, body, url}`.** Es el `Aviso` de
-[lib/core/webpush.ts](lib/core/webpush.ts) y lo mandan los tres emisores que
-hay —el resumen diario, el aviso al instante y el de Remises—. La `url` va en
+[lib/core/webpush.ts](lib/core/webpush.ts) y lo mandan los **cuatro** emisores que
+hay —el resumen diario, el aviso al instante, el de Remises y, desde el
+03/11/2026, el de la divergencia de la Agenda—. La `url` va en
 el primer nivel, no adentro de un `data`.
 
 Esto parece un detalle y costó un mes de notificaciones que no llevaban a
@@ -643,7 +1249,12 @@ motivo que el lint: los 5 calendarios del mes son falsos positivos conocidos y u
 CI que está siempre rojo no lo mira nadie. Están en una lista de excepciones del
 propio script, con el porqué; cuando esa lista esté estable se agrega el paso.
 Mientras tanto sale 1 si hay algún ROMPE, y hoy da **ROMPE 0 · APRETADO 0 ·
-MIRAR 0**: cualquier cosa que aparezca es de lo que uno acaba de escribir.
+MIRAR 1**. **El piso dejó de ser cero, y por eso se dice de dónde sale ese 1**:
+es la `<table>` sin contenedor con scroll de
+`app/(app)/calidad/ensayos/reporte/ReporteClient.tsx`, que ya estaba en `main`.
+Mientras siga ahí, lo que hay que mirar es si aparece **algo más** que ésa — un
+renglón que prometa que cualquier hallazgo es tuyo deja de servir el día que el
+piso no es cero y nadie lo anota.
 
 - **`next build` con `npm run dev` levantado deja la app en 500.** Parar el dev
   server antes.
@@ -712,3 +1323,13 @@ y qué riesgo queda asumido. Es la misma vara que los comentarios del código y 
 razón por la que este repo se puede retomar meses después.
 
 Se trabaja sobre `main` y se pushea al terminar cada tarea.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

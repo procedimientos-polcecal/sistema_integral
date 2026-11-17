@@ -30,7 +30,7 @@ export async function updateSession(request: NextRequest) {
 
   // Endpoints que llama una máquina, no una persona: no hay cookie de sesión,
   // y cada uno valida su propio secreto (CRON_SECRET / SHEETS_WEBHOOK_SECRET /
-  // FACTURACION_CORREO_SECRET). Sin esta excepción, el middleware les devuelve
+  // FACTURACION_CORREO_SECRET / el token del canal de Google). Sin esta excepción, el middleware les devuelve
   // un 307 al login y el cron de Vercel y los Apps Script nunca llegan a
   // ejecutarse.
   //
@@ -48,7 +48,10 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/api/cron/") ||
     path === "/api/compras/sheets/webhook" ||
     path === "/api/mantenimiento/sheets/webhook" ||
-    path === "/api/facturacion/correo/webhook";
+    path === "/api/facturacion/correo/webhook" ||
+    // Google Calendar avisa acá cuando alguien toca un evento. Valida su propio
+    // secreto: el X-Goog-Channel-Token de `agenda_canales`.
+    path === "/api/agenda/google";
 
   const isPublicPath =
     path === "/login" ||

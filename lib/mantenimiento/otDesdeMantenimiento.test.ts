@@ -3,6 +3,7 @@ import {
   cuerpoDeLaOT, loQueFaltaDelMantenimiento, loQueHayQuePreguntar, loQueNoSeArreglaAca,
   especialidadDeTipo, etiquetaDeTipo, nombreDelAsignado, respuestasIniciales,
   RESPUESTAS_VACIAS, TIPOS_DE_MANTENIMIENTO,
+  loQueFaltaParaGenerar, especialidadDelProgramado,
   type MantenimientoParaLaOT,
 } from "./otDesdeMantenimiento";
 import { ESPECIALIDADES } from "./ordenes";
@@ -210,6 +211,20 @@ describe("lo que el mantenimiento ya contesta", () => {
   });
 });
 
+describe("la fecha de fin del cuerpo", () => {
+  /** Estimada y opcional: el mantenimiento sabe cuando arranca, no cuanto dura. */
+  it("viaja la que se cargo", () => {
+    const c = cuerpoDeLaOT(MANTENIMIENTO, {
+      ...respuestasIniciales(MANTENIMIENTO), fecha_fin: "2026-11-20",
+    });
+    expect(c.fecha_fin).toBe("2026-11-20");
+  });
+
+  it("sin cargarla viaja vacia", () => {
+    expect(cuerpoDeLaOT(MANTENIMIENTO, respuestasIniciales(MANTENIMIENTO)).fecha_fin).toBe("");
+  });
+});
+
 describe("lo que hay que preguntar", () => {
   /**
    * EL BUG DEL 21/10/2026, FIJADO. El único mantenimiento programado que existe
@@ -222,14 +237,32 @@ describe("lo que hay que preguntar", () => {
    * genera **sin que nadie complete nada**, porque el mantenimiento ya sabía
    * las tres cosas.
    */
-  it("el mantenimiento que hoy existe ya puede generar su OT", () => {
+  it("el mantenimiento que hoy existe ya contesta casi todo solo", () => {
     expect(loQueFaltaDelMantenimiento(MANTENIMIENTO, respuestasIniciales(MANTENIMIENTO)))
-      .toEqual([]);
+      .toEqual(["la fecha de fin estimada"]);
   });
 
-  it("son las tres que el mantenimiento contesta por su cuenta", () => {
-    expect(loQueHayQuePreguntar(MANTENIMIENTO))
-      .toEqual(["la especialidad", "quién lo realiza", "la fecha de ejecución"]);
+  /**
+   * Y ESTE ES EL PRECIO DE VOLVERLA OBLIGATORIA, dicho donde se ve: hasta el
+   * 04/11/2026 este boton generaba la OT SIN QUE NADIE COMPLETARA NADA, porque
+   * el mantenimiento ya sabia las tres cosas. Ahora pide una.
+   *
+   * No se puede contestar sola: un programado sabe cuando arranca —`next_date`—
+   * y cuantas horas estima, pero de ahi no sale una fecha de fin. Ponerle la de
+   * inicio seria inventar el dato.
+   */
+  it("la fecha de fin la pone una persona: el programado no la sabe", () => {
+    expect(respuestasIniciales(MANTENIMIENTO).fecha_fin).toBe("");
+    expect(loQueFaltaDelMantenimiento(MANTENIMIENTO, {
+      ...respuestasIniciales(MANTENIMIENTO), fecha_fin: "2026-11-10",
+    })).toEqual([]);
+  });
+
+  it("son las cuatro que el mantenimiento no contesta por su cuenta", () => {
+    expect(loQueHayQuePreguntar(MANTENIMIENTO)).toEqual([
+      "la especialidad", "quién lo realiza",
+      "la fecha de inicio", "la fecha de fin estimada",
+    ]);
   });
 
   /**
@@ -249,21 +282,23 @@ describe("lo que hay que preguntar", () => {
   it("un tipo sin especialidad cierta deja ese campo pendiente", () => {
     const m = { ...MANTENIMIENTO, maintenance_type: "Inspeccion" };
     expect(respuestasIniciales(m).especialidad).toBe("");
-    expect(loQueFaltaDelMantenimiento(m, respuestasIniciales(m))).toEqual(["la especialidad"]);
-    expect(loQueFaltaDelMantenimiento(m, { ...respuestasIniciales(m), especialidad: "MECÁNICO" }))
-      .toEqual([]);
+    expect(loQueFaltaDelMantenimiento(m, respuestasIniciales(m)))
+      .toEqual(["la especialidad", "la fecha de fin estimada"]);
+    expect(loQueFaltaDelMantenimiento(m, {
+      ...respuestasIniciales(m), especialidad: "MECÁNICO", fecha_fin: "2026-11-10",
+    })).toEqual([]);
   });
 
   /** Un mantenimiento sin próxima fecha no se puede atrasar nunca. */
   it("sin próxima fecha queda pendiente la de ejecución", () => {
     const m = { ...MANTENIMIENTO, next_date: null };
     expect(loQueFaltaDelMantenimiento(m, respuestasIniciales(m)))
-      .toEqual(["la fecha de ejecución"]);
+      .toEqual(["la fecha de inicio", "la fecha de fin estimada"]);
   });
 
   it("los espacios no cuentan como contestado", () => {
     expect(loQueFaltaDelMantenimiento(MANTENIMIENTO, {
-      ...respuestasIniciales(MANTENIMIENTO), especialidad: "   ",
+      ...respuestasIniciales(MANTENIMIENTO), especialidad: "   ", fecha_fin: "2026-11-10",
     })).toEqual(["la especialidad"]);
   });
 });
@@ -291,5 +326,50 @@ describe("lo que el formulario no puede arreglar", () => {
 
   it("el que hoy existe no tiene nada de eso", () => {
     expect(loQueNoSeArreglaAca(MANTENIMIENTO)).toEqual([]);
+  });
+});
+
+/**
+ * Lo que le falta a un programado para que lo genere **un proceso**.
+ *
+ * Es distinto de lo que le falta para que lo genere una persona: un cron no
+ * está mirando el formulario, así que lo que no venga puesto no se completa,
+ * se saltea. Y lo que puede faltar es la especialidad, porque
+ * `especialidadDeTipo` sólo resuelve dos de los siete tipos.
+ */
+describe("lo que le falta a un programado para generar solo", () => {
+  it("a uno de lubricación no le falta nada: el tipo resuelve la especialidad", () => {
+    expect(loQueFaltaParaGenerar(MANTENIMIENTO)).toEqual([]);
+  });
+
+  it("a una inspección le falta la especialidad, porque el tipo no la dice", () => {
+    expect(loQueFaltaParaGenerar({ ...MANTENIMIENTO, maintenance_type: "Inspeccion" }))
+      .toEqual(["la especialidad"]);
+  });
+
+  it("con la especialidad propia cargada, esa misma inspección ya puede", () => {
+    expect(loQueFaltaParaGenerar({
+      ...MANTENIMIENTO, maintenance_type: "Inspeccion", especialidad: "ELÉCTRICO",
+    })).toEqual([]);
+  });
+
+  /** La propia le gana al tipo: es la que alguien eligió a mano. */
+  it("la especialidad propia manda sobre la que deduce el tipo", () => {
+    expect(especialidadDelProgramado({ ...MANTENIMIENTO, especialidad: "CIVIL" })).toBe("CIVIL");
+    // Sin la propia cae en la del tipo: «Lubricacion» coincide por nombre con
+    // la especialidad LUBRICACIÓN, que es uno de los dos tipos que resuelven.
+    expect(especialidadDelProgramado(MANTENIMIENTO)).toBe("LUBRICACIÓN");
+  });
+
+  it("una especialidad en blanco no cuenta como cargada", () => {
+    expect(loQueFaltaParaGenerar({
+      ...MANTENIMIENTO, maintenance_type: "Otro", especialidad: "   ",
+    })).toEqual(["la especialidad"]);
+  });
+
+  it("sin equipo tampoco genera, y lo dice junto con lo otro", () => {
+    expect(loQueFaltaParaGenerar({
+      ...MANTENIMIENTO, maintenance_type: "Limpieza", equipment_id: null,
+    })).toEqual(["la especialidad", "el equipo"]);
   });
 });

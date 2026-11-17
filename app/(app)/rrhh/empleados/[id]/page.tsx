@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { esAdminRrhh } from "@/lib/rrhh/auth";
@@ -32,12 +33,17 @@ export default async function EmpleadoPage({ params }: { params: Promise<{ id: s
   // Se aplana aca para que la pantalla lo siga leyendo como antes.
   const empleadoConValorHora = { ...empleado, valor_hora_normal: valorHoraDe(empleado) };
 
+  // El Suspense es por el  de la ficha, que lee el rango de
+  // dias de la URL (es lo que deja que Asistencia traiga el mes que se estaba
+  // mirando). Sin el limite, Next se queja al construir.
   return (
-    <EmpleadoDetalle
-      empleado={empleadoConValorHora}
-      empresas={empresas ?? []}
-      sectores={sectores ?? []}
-      canEdit={canEdit}
-    />
+    <Suspense fallback={null}>
+      <EmpleadoDetalle
+        empleado={empleadoConValorHora}
+        empresas={empresas ?? []}
+        sectores={sectores ?? []}
+        canEdit={canEdit}
+      />
+    </Suspense>
   );
 }

@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { hoyEnArgentina } from "@/lib/core/fechas";
@@ -36,9 +39,19 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
   onClose: () => void;
   onCreada: (mensaje: string) => void;
 }) {
-  const [respuestas, setRespuestas] = useState<RespuestasDelMantenimiento>(
-    () => respuestasIniciales(mantenimiento)
-  );
+  /*
+   * Lo que hay que contestar para generar la orden, recordado por mantenimiento
+   * mientras la app esté abierta. Nace de lo que el mantenimiento ya dice, que
+   * es contra lo que se compara «tocado»: abrirlo y cerrarlo sin contestar nada
+   * no pregunta nada.
+   */
+  const { valores: respuestas, cambiar, tocado, tirar } =
+    useBorrador<RespuestasDelMantenimiento>(
+      claveDelBorrador("mantenimiento-generar-ot-de-mantenimiento", {
+        tipo: "mantenimiento", id: mantenimiento.id,
+      }),
+      respuestasIniciales(mantenimiento),
+    );
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
@@ -54,9 +67,6 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
     !!respuestas.fecha_ejecucion && respuestas.fecha_ejecucion < hoyEnArgentina();
   const asignado = nombreDelAsignado(mantenimiento);
 
-  const cambiar = (c: Partial<RespuestasDelMantenimiento>) =>
-    setRespuestas((p) => ({ ...p, ...c }));
-
   async function generar() {
     setGuardando(true); setError("");
     const res = await fetch("/api/mantenimiento/ordenes", {
@@ -71,6 +81,8 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
 
     if (!res.ok) { setError(body.error ?? "No se pudo generar la OT."); return; }
 
+    // Recién con la OT creada no hay nada que recordar.
+    tirar();
     onCreada(
       [
         `Se generó la OT #${body.ot_number}.`,
@@ -80,12 +92,10 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4">
-      <div className="mt-8 w-full max-w-lg rounded-lg bg-white p-5 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-900">
-          Generar la orden de trabajo
-        </h2>
-        <p className="mt-1 text-sm text-slate-500">
+    // El fondo, la X y Escape salen conservando: lo contestado queda y aparece
+    // igual al volver a abrir. Sólo «Cancelar» tira.
+    <Modal titulo="Generar la orden de trabajo" alSalir={onClose} tocado={tocado}>
+        <p className="text-sm text-slate-500">
           Del mantenimiento programado de {mantenimiento.equipos?.code ?? "—"}. Lo que el
           mantenimiento ya dice no se vuelve a preguntar.
         </p>
@@ -159,10 +169,10 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
               </label>
             )}
 
-            {preguntas.includes("la fecha de ejecución") && (
+            {preguntas.includes("la fecha de inicio") && (
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-slate-500">
-                  Fecha de ejecución
+                  Fecha de inicio
                 </span>
                 <input
                   type="date"
@@ -174,6 +184,30 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
                   {fechaVencida
                     ? "Es la próxima fecha del mantenimiento y ya pasó: la orden va a nacer atrasada."
                     : "Es para cuándo se compromete. Sin ella la orden no se atrasa nunca."}
+                </span>
+              </label>
+            )}
+
+            {/* Con su propia condición desde el 04/11/2026, cuando pasó a ser
+                obligatoria. Antes colgaba de la de inicio con el argumento de
+                que eran el par de una ventana y que, siendo opcional, nunca
+                entraba sola en `preguntas`. Eso dejó de ser cierto **y dejaba
+                el formulario sin salida**: el mantenimiento programado sabe su
+                `next_date`, así que la de inicio no se pregunta, y la de fin
+                —ahora exigida— no se habría dibujado nunca. */}
+            {preguntas.includes("la fecha de fin estimada") && (
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500">
+                  Fecha de fin (estimada)
+                </span>
+                <input
+                  type="date"
+                  value={respuestas.fecha_fin}
+                  onChange={(e) => cambiar({ fecha_fin: e.target.value })}
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                />
+                <span className="mt-1 block text-xs text-slate-400">
+                  Cuándo se calcula que termina. La real es la fecha de cierre.
                 </span>
               </label>
             )}
@@ -196,9 +230,10 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
           </p>
         )}
 
-        <div className="mt-5 flex justify-end gap-2">
+        <PieDeModal className="mt-5 flex justify-end gap-2">
+          {/* El único que tira. */}
           <button
-            onClick={onClose}
+            onClick={() => { tirar(); onClose(); }}
             className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-slate-100"
           >
             Cancelar
@@ -211,15 +246,15 @@ export default function GenerarOTDeMantenimiento({ mantenimiento, onClose, onCre
           >
             {guardando ? "Generando…" : "Generar la OT"}
           </button>
-        </div>
-      </div>
-    </div>
+        </PieDeModal>
+    </Modal>
   );
 }
 
 /** Los que este formulario sabe dibujar, con el nombre que les da la regla. */
 const CAMPOS_QUE_DIBUJA = [
-  "la especialidad", "quién lo realiza", "la fecha de ejecución",
+  "la especialidad", "quién lo realiza", "la fecha de inicio",
+  "la fecha de fin estimada",
   // Éstos los nombra la regla pero los contesta el mantenimiento; si faltan, se
   // avisa arriba con `loQueNoSeArreglaAca` en vez de dibujar un campo.
   "el sector", "el equipo", "la descripción", "el tipo de trabajo",

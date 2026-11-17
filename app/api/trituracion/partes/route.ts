@@ -4,6 +4,7 @@ import { puedeEditarTrituracion, tieneAccesoTrituracion } from "@/lib/trituracio
 import { traerPartes } from "@/lib/trituracion/consultas";
 import { espejarParte } from "@/lib/trituracion/espejo";
 import { esEstadoValido, esMaterialValido } from "@/lib/trituracion/vocabulario";
+import { leerCantidadesDelParte } from "@/lib/trituracion/cantidades";
 
 /**
  * El parte de una planta, por día y turno. Un `POST` con `(planta_id,
@@ -45,8 +46,7 @@ export async function POST(request: Request) {
   const body = await request.json();
   const {
     planta_id, fecha, orden, estado, motivo_no_operativo, material, origen, hora_inicio, hora_fin,
-    operario_id, operario_raw, horas_mantenimiento, horas_falta_piedra, horas_produccion, horas_otro,
-    motivo_otro, camiones_llegados, toneladas_procesadas, observaciones,
+    operario_id, operario_raw, motivo_otro, observaciones,
   } = body;
 
   if (!planta_id || !fecha) {
@@ -58,6 +58,16 @@ export async function POST(request: Request) {
   if (material && !esMaterialValido(material)) {
     return NextResponse.json({ error: `Material inválido: ${material}` }, { status: 400 });
   }
+
+  // Las horas y las toneladas, leídas con la MISMA función que la vista previa
+  // de la pantalla. Hasta el 05/11/2026 acá había un `Number(x) || 0` que
+  // convertía "1,5" en cero sin un error, y un `Number("1.440")` que entraba
+  // como 1,44.
+  const leidas = leerCantidadesDelParte(body as Record<string, unknown>);
+  if (!leidas.ok) {
+    return NextResponse.json({ error: leidas.errores.join(" ") }, { status: 400 });
+  }
+  const cantidades = leidas.valor;
 
   const { data: planta, error: errPlanta } = await supabase
     .from("trituracion_plantas")
@@ -97,14 +107,8 @@ export async function POST(request: Request) {
         hora_fin: hora_fin || null,
         operario_id: operario_id || null,
         operario_raw: operario_raw || null,
-        horas_mantenimiento: Number(horas_mantenimiento) || 0,
-        horas_falta_piedra: Number(horas_falta_piedra) || 0,
-        horas_produccion: Number(horas_produccion) || 0,
-        horas_otro: Number(horas_otro) || 0,
+        ...cantidades,
         motivo_otro: motivo_otro || null,
-        camiones_llegados: camiones_llegados === "" || camiones_llegados == null ? null : Number(camiones_llegados),
-        toneladas_procesadas:
-          toneladas_procesadas === "" || toneladas_procesadas == null ? null : Number(toneladas_procesadas),
         observaciones: observaciones || null,
         actualizado_por: user.id,
         actualizado_en: new Date().toISOString(),

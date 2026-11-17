@@ -9,6 +9,7 @@ import type { EmpresaDelGrupo, ProveedorDelPadron } from "@/lib/facturacion/alta
 import type { LecturaDeFactura } from "@/lib/facturacion/leerArchivo";
 import type { FacturaEnPantalla, OrigenDeFactura } from "@/lib/facturacion/types";
 import type { CandidatoDeOdoo } from "@/lib/odoo/sincronizarFacturas";
+import { sePuedeGuardarSola } from "@/lib/facturacion/sePuedeGuardarSola";
 import BandejaDelCorreo from "./BandejaDelCorreo";
 import LineasDeFactura from "./LineasDeFactura";
 import BorradorEnOdoo from "./BorradorEnOdoo";
@@ -147,11 +148,21 @@ export default function BuzonClient({
    * De ahí para adelante es el mismo camino que arrastrar un PDF, que es el
    * que está medido.
    */
-  async function agregar(archivos: FileList | File[] | null, correoId?: string) {
+  async function agregar(
+    archivos: FileList | File[] | null,
+    correoId?: string,
+    /*
+     * La bandeja manda un id por archivo cuando baja una tanda entera, y
+     * `guardarLasLimpias` cuando quiere que las que el QR resolvió se guarden
+     * sin que nadie las mire. Arrastrar un PDF sigue sin pasar ninguno de los
+     * dos: ese camino no cambió.
+     */
+    opciones?: { correoIdPorArchivo?: (string | undefined)[]; guardarLasLimpias?: boolean }
+  ) {
     if (!archivos || archivos.length === 0) return;
 
     const nuevas: Fila[] = Array.from(archivos).map((archivo, i) => ({
-      correoId,
+      correoId: opciones?.correoIdPorArchivo?.[i] ?? correoId,
       id: `${Date.now()}-${i}-${archivo.name}`,
       archivo,
       estado: "leyendo",
@@ -176,15 +187,43 @@ export default function BuzonClient({
           // receptor: el CUIT que es del grupo es el que recibe.
           cuitsDelGrupo: empresas.map((e) => e.cuit ?? "").filter(Boolean),
         });
+        const estado: EstadoDeFila = lectura.cabecera
+          ? lectura.origenDeLaCabecera === "texto"
+            ? "texto"
+            : "lista"
+          : "sin-datos";
+
         cambiar(fila.id, {
           lectura,
-          estado: lectura.cabecera
-            ? lectura.origenDeLaCabecera === "texto"
-              ? "texto"
-              : "lista"
-            : "sin-datos",
+          estado,
           mensaje: lectura.cabecera ? null : lectura.motivo,
         });
+
+        /*
+         * Y si vino de una tanda de la bandeja, **se guarda acá mismo** en vez
+         * de esperar a que alguien apriete su botón.
+         *
+         * Va factura por factura y no al final: así la cola se vacía a medida
+         * que avanza y lo que queda en pantalla son sólo las que hay que
+         * mirar. De a una y en orden, por lo mismo que `guardarTodas` — el
+         * índice único de la base es el que detecta un duplicado, y en
+         * paralelo dos copias del mismo archivo pasarían las dos.
+         */
+        if (opciones?.guardarLasLimpias) {
+          const empresa = lectura.cabecera?.cuitReceptor
+            ? porCuit.empresas.get(lectura.cabecera.cuitReceptor)
+            : undefined;
+
+          const veredicto = sePuedeGuardarSola({ lectura, empresaReconocida: !!empresa });
+
+          if (veredicto.sola) {
+            await guardar({ ...fila, lectura, estado }, false);
+          } else {
+            // El motivo a la vista: es lo que distingue una fila de la otra
+            // cuando quedan diez en la cola y hay que saber qué mirar.
+            cambiar(fila.id, { mensaje: veredicto.porque });
+          }
+        }
       } catch (e) {
         cambiar(fila.id, {
           estado: "sin-datos",
@@ -342,7 +381,7 @@ export default function BuzonClient({
         que hay para hacer, y arrastrar un archivo pasa a ser lo que se hace
         cuando la factura llegó en papel o por WhatsApp.
       */}
-      {puedeEditar && <BandejaDelCorreo onCargar={(archivos, correoId) => agregar(archivos, correoId)} />}
+      {puedeEditar && <BandejaDelCorreo onCargar={agregar} />}
 
       {puedeEditar && (
         <section className="card p-4">
@@ -459,6 +498,7 @@ export default function BuzonClient({
               <FilaDelBuzon
                 key={f.id}
                 factura={f}
+                proveedores={proveedores}
                 puedeEditar={puedeEditar}
                 puedeConfirmar={puedeConfirmar}
               />
@@ -692,10 +732,12 @@ function FilaDeCarga({
 /** Una factura ya cargada: qué es, y lo que queda por hacer con ella. */
 function FilaDelBuzon({
   factura,
+  proveedores,
   puedeEditar,
   puedeConfirmar,
 }: {
   factura: FacturaEnPantalla;
+  proveedores: ProveedorDelPadron[];
   puedeEditar: boolean;
   puedeConfirmar: boolean;
 }) {
@@ -707,6 +749,7 @@ function FilaDelBuzon({
   const [candidatos, setCandidatos] = useState<CandidatoDeOdoo[] | null>(null);
   const [verDetalle, setVerDetalle] = useState(false);
   const [verBorrador, setVerBorrador] = useState(false);
+  const [paraAprender, setParaAprender] = useState("");
 
   async function parchear(cambios: Record<string, unknown>) {
     setOcupado(true);
@@ -722,7 +765,18 @@ function FilaDelBuzon({
       setAviso(datos.error ?? "No se pudo guardar.");
       return;
     }
+
+    /*
+     * El CUIT se pudo no guardar aunque el PATCH haya ido bien —ya lo tiene
+     * otro proveedor, o el elegido tenía otro—, y eso tiene que llegar a quien
+     * apretó. Un botón que dice "guardale el CUIT" y no lo guarda sin decir
+     * nada es peor que no tener el botón.
+     */
+    if (datos.avisoDelCuit) setAviso(datos.avisoDelCuit);
+    else if (datos.cuitAprendido) setNota(`CUIT ${datos.cuitAprendido} guardado en el padrón.`);
+
     setNroRi("");
+    setParaAprender("");
     router.refresh();
   }
 
@@ -970,6 +1024,59 @@ function FilaDelBuzon({
 
         </div>
       </div>
+
+      {/*
+        * El CUIT que la factura trae y el padrón no tiene.
+        *
+        * Sale sólo cuando la factura no está enlazada a ningún proveedor del
+        * SdG y sí trae CUIT, que al 11/11/2026 son 3 de las 4 cargadas — y con
+        * 398 adjuntos esperando en el buzón, va a ser el caso normal.
+        *
+        * El padrón tiene 311 proveedores sin CUIT, y exportar Odoo y emparejar
+        * por nombre no los resuelve: de los 118 que tienen actividad, sólo 9
+        * coinciden. Lo que sí los resuelve es esto — el CUIT ya viene en cada
+        * factura, firmado por ARCA, y hasta ahora nadie lo escribía.
+        *
+        * **A quién corresponde lo elige una persona.** Acá no se propone un
+        * proveedor por parecido: la lista está entera y quien mira la factura
+        * decide. Lo único que hace el servidor es negarse si ese CUIT ya es de
+        * otro, que es la trampa de un padrón con la misma empresa dos veces.
+        */}
+      {puedeEditar && !factura.proveedor_id && factura.cuit_emisor && (
+        <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2">
+          <p className="text-xs text-slate-600">
+            El CUIT <strong>{factura.cuit_emisor}</strong>
+            {factura.odoo_partner_nombre && ` (${factura.odoo_partner_nombre} en Odoo)`} no está en
+            ningún proveedor del padrón. Si es uno de éstos, se lo guardo y la próxima se engancha
+            sola.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Select
+              value={paraAprender}
+              disabled={ocupado}
+              onChange={(e) => setParaAprender(e.target.value)}
+              className="max-w-72 rounded border border-slate-300 px-2 py-1 text-sm"
+            >
+              <option value="">— elegir el proveedor del padrón —</option>
+              {proveedores.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
+                  {p.cuit ? ` · ${p.cuit}` : ""}
+                </option>
+              ))}
+            </Select>
+            <button
+              disabled={ocupado || !paraAprender}
+              onClick={() =>
+                void parchear({ proveedor_id: paraAprender, aprenderElCuit: true })
+              }
+              className="rounded-lg border border-teal-300 bg-teal-50 px-2 py-1 text-xs text-teal-800 disabled:opacity-40 hover:bg-teal-100"
+            >
+              Es éste, guardale el CUIT
+            </button>
+          </div>
+        </div>
+      )}
 
       {factura.notas && <p className="mt-1 text-xs text-slate-500">{factura.notas}</p>}
       {factura.odoo_pendiente && (

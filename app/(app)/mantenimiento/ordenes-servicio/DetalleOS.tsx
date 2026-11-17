@@ -11,6 +11,9 @@ import type { OrdenServicio, CotizacionOS } from "@/lib/mantenimiento/types";
 import CotizacionForm from "./CotizacionForm";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import { Modal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 
 /**
  * Una orden de servicio abierta: cómo viene y qué se cotizó.
@@ -32,12 +35,44 @@ export default function DetalleOS({
   const [cargandoComparativa, setCargandoComparativa] = useState(true);
   const [cargandoNueva, setCargandoNueva] = useState(false);
 
-  const [estado, setEstado] = useState(orden.estado ?? "");
-  const [proveedor, setProveedor] = useState(orden.proveedor_elegido ?? "");
-  const [fechaPedido, setFechaPedido] = useState(orden.fecha_pedido ?? "");
-  const [fechaRealizacion, setFechaRealizacion] = useState(orden.fecha_realizacion ?? "");
-  const [observaciones, setObservaciones] = useState(orden.observaciones ?? "");
-  const [motivoRechazo, setMotivoRechazo] = useState(orden.motivo_rechazo ?? "");
+  /*
+   * EL SEGUIMIENTO: SEIS CAMPOS QUE VIAJAN JUNTOS EN UN SOLO `PATCH`
+   *
+   * Por eso van **planos** en el borrador y no como un objeto: se guarda sólo el
+   * que se tocó, y al volver a abrir se apoya sobre la OS **como está ahora**.
+   * Guardar los seis enteros haría que retomar un borrador de ayer le devolviera
+   * a los otros cinco el valor que tenían ayer, pisando lo que haya corregido
+   * otro — y la app vive instalada en los teléfonos, así que «mientras esté
+   * abierta» puede ser días.
+   *
+   * Esta pantalla **tenía un «Guardar» y ningún «Cancelar»**, y por eso se quedó
+   * sin `soloLectura`: para decidir acá. La decisión es que un bloque editable
+   * que puede quedar a medio escribir necesita quién lo descarte, así que al
+   * lado de «Guardar» hay ahora un «Descartar los cambios» que devuelve los seis
+   * campos a lo que dice la OS, y aparece sólo si hay algo cambiado. Sin él,
+   * salir ofrecería conservar y nada podría tirar.
+   *
+   * **Una sola vara, y por eso el inicial va escrito acá adentro.** Estos seis
+   * valores estaban antes en un `useState` congelado al lado del hook, y
+   * «Descartar» volvía a *ése*: como `asentar()` mueve la vara del hook y no la
+   * copia, después de guardar «PEDIDO» el botón devolvía los seis campos a la OS
+   * de **antes** de guardar, el formulario quedaba figurando tocado y el
+   * siguiente «Guardar» mandaba los valores viejos encima. Era el mismo defecto
+   * que `asentar()` vino a cerrar, entrando por la otra puerta. Con una sola
+   * vara no hay dos cosas que puedan separarse: quien descarta es `tirar()`.
+   */
+  const { valores, cambiar, tocado, tirar, asentar } = useBorrador(
+    claveDelBorrador("mantenimiento-seguimiento-os", { tipo: "os", id: orden.id }),
+    {
+      estado: orden.estado ?? "",
+      proveedor: orden.proveedor_elegido ?? "",
+      fechaPedido: orden.fecha_pedido ?? "",
+      fechaRealizacion: orden.fecha_realizacion ?? "",
+      observaciones: orden.observaciones ?? "",
+      motivoRechazo: orden.motivo_rechazo ?? "",
+    },
+  );
+  const { estado, proveedor, fechaPedido, fechaRealizacion, observaciones, motivoRechazo } = valores;
 
   // Denegar le cierra la puerta a quien pidió el trabajo, así que pide el
   // motivo. El servidor lo exige igual —la regla vive en
@@ -81,6 +116,15 @@ export default function DetalleOS({
     if (!res.ok) { setError(body.error ?? "No se pudo guardar."); return; }
     // La app ya guardó; la planilla es best-effort y su problema se muestra.
     if (body.planilla_error) setError(`Guardado, pero no se pudo escribir en la planilla: ${body.planilla_error}`);
+    // `asentar()` y **no `tirar()`**, que es la diferencia que acá revierte
+    // datos: este modal no se cierra al guardar y la OS que le llega por props
+    // es una foto que nadie resincroniza (`OrdenesServicioClient` la guarda en
+    // `abierta`, y `onCambio` es sólo un `router.refresh()`). Con `tirar()` la
+    // pantalla volvía a lo de antes de editar —«Sin estado» después de haber
+    // guardado «PEDIDO»— y un segundo «Guardar» mandaba los valores viejos
+    // encima. Asentar deja en pantalla lo que se guardó y el formulario sin
+    // tocar. Un fallo sale por el `return` de arriba, con lo escrito en su lugar.
+    asentar();
     onCambio();
   }
 
@@ -98,7 +142,9 @@ export default function DetalleOS({
     setGuardando(false);
 
     if (!res.ok) { setError(body.error ?? "No se pudo elegir."); return; }
-    if (!cot.eleccion) setProveedor(cot.proveedor);
+    // Elegir la cotización deja el proveedor puesto **sin guardar**, así que es
+    // un cambio del formulario como cualquier otro y cuenta como tocado.
+    if (!cot.eleccion) cambiar({ proveedor: cot.proveedor });
     traerComparativa();
     onCambio();
   }
@@ -122,28 +168,20 @@ export default function DetalleOS({
   const resumen = resumenDeCotizaciones(cotizaciones ?? []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 md:items-center" onClick={onCerrar}>
-      <div
-        className="max-h-[90vh] w-full max-w-3xl space-y-5 overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">
-              OS #{orden.os_number ?? "—"}
-              {orden.prioridad && (
-                <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                  {orden.prioridad}
-                </span>
-              )}
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-400">
-              {fecha(orden.fecha)} · {orden.area ?? "sin área"} ·{" "}
-              {orden.sectores?.nombre ?? orden.sector_raw ?? "sin sector"}
-            </p>
-          </div>
-          <button onClick={onCerrar} className="text-xl leading-none text-slate-400 hover:text-slate-600">×</button>
-        </div>
+    // El fondo, la X y Escape salen conservando: lo cambiado y todavía no
+    // guardado queda y aparece igual al volver a abrir esta OS. El que tira es
+    // el «Descartar los cambios» de abajo (ver el comentario del borrador).
+    <Modal titulo={`OS #${orden.os_number ?? "—"}`} alSalir={onCerrar} tocado={tocado} ancho="ancho">
+      <div className="space-y-5">
+        <p className="-mt-2 text-xs text-slate-400">
+          {orden.prioridad && (
+            <span className="mr-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+              {orden.prioridad}
+            </span>
+          )}
+          {fecha(orden.fecha)} · {orden.area ?? "sin área"} ·{" "}
+          {orden.sectores?.nombre ?? orden.sector_raw ?? "sin sector"}
+        </p>
 
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
@@ -168,8 +206,8 @@ export default function DetalleOS({
             <Campo etiqueta="Estado">
               <Select
                 value={estado}
-                onChange={(e) => setEstado(e.target.value)}
-                disabled={!puedeEditar}
+                onChange={(e) => cambiar({ estado: e.target.value })}
+                disabled={!puedeEditar || guardando}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
               >
                 <option value="">Sin estado</option>
@@ -183,8 +221,8 @@ export default function DetalleOS({
             <Campo etiqueta="Proveedor">
               <input
                 value={proveedor}
-                onChange={(e) => setProveedor(e.target.value)}
-                disabled={!puedeEditar}
+                onChange={(e) => cambiar({ proveedor: e.target.value })}
+                disabled={!puedeEditar || guardando}
                 placeholder="—"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
               />
@@ -193,8 +231,8 @@ export default function DetalleOS({
               <input
                 type="date"
                 value={fechaPedido?.slice(0, 10) ?? ""}
-                onChange={(e) => setFechaPedido(e.target.value)}
-                disabled={!puedeEditar}
+                onChange={(e) => cambiar({ fechaPedido: e.target.value })}
+                disabled={!puedeEditar || guardando}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
               />
             </Campo>
@@ -202,8 +240,8 @@ export default function DetalleOS({
               <input
                 type="date"
                 value={fechaRealizacion?.slice(0, 10) ?? ""}
-                onChange={(e) => setFechaRealizacion(e.target.value)}
-                disabled={!puedeEditar}
+                onChange={(e) => cambiar({ fechaRealizacion: e.target.value })}
+                disabled={!puedeEditar || guardando}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
               />
             </Campo>
@@ -212,8 +250,8 @@ export default function DetalleOS({
           <Campo etiqueta="Observaciones">
             <textarea
               value={observaciones}
-              onChange={(e) => setObservaciones(e.target.value)}
-              disabled={!puedeEditar}
+              onChange={(e) => cambiar({ observaciones: e.target.value })}
+              disabled={!puedeEditar || guardando}
               rows={2}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
             />
@@ -226,8 +264,8 @@ export default function DetalleOS({
             <Campo etiqueta="Por qué se deniega">
               <textarea
                 value={motivoRechazo}
-                onChange={(e) => setMotivoRechazo(e.target.value)}
-                disabled={!puedeEditar}
+                onChange={(e) => cambiar({ motivoRechazo: e.target.value })}
+                disabled={!puedeEditar || guardando}
                 rows={2}
                 autoFocus
                 placeholder="Ej.: lo hace el taller propio"
@@ -240,14 +278,29 @@ export default function DetalleOS({
           )}
 
           {puedeEditar && (
-            <button
-              onClick={guardarSeguimiento}
-              disabled={guardando || faltaElMotivo}
-              title={faltaElMotivo ? "Escribí por qué se deniega" : undefined}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-            >
-              {guardando ? "Guardando…" : "Guardar"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={guardarSeguimiento}
+                disabled={guardando || faltaElMotivo}
+                title={faltaElMotivo ? "Escribí por qué se deniega" : undefined}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                {guardando ? "Guardando…" : "Guardar"}
+              </button>
+              {/* El único que tira: devuelve los seis campos a la última vara
+                  —lo que decía la OS al abrir, o lo último que se guardó desde
+                  acá—. Aparece sólo con algo cambiado, porque un botón de
+                  descartar al lado de un formulario intacto no descarta nada. */}
+              {tocado && (
+                <button
+                  onClick={tirar}
+                  disabled={guardando}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Descartar los cambios
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -373,7 +426,7 @@ export default function DetalleOS({
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

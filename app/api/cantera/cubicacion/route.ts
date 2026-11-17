@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { puedeEditarCantera, tieneAccesoCantera } from "@/lib/cantera/auth";
 import { traerCubicaciones } from "@/lib/cantera/consultas";
+import { numeroDeCampo } from "@/lib/cantera/numero";
 
 /**
  * El cierre mensual de cubicación de un yacimiento: sólo la existencia final
@@ -39,15 +40,19 @@ export async function PATCH(request: Request) {
   if (typeof b?.mes !== "string" || !/^\d{4}-\d{2}$/.test(b.mes)) {
     return NextResponse.json({ error: "El mes va como YYYY-MM" }, { status: 400 });
   }
-  const existenciaFinal = Number(b?.existencia_final);
-  if (!isFinite(existenciaFinal) || existenciaFinal < 0) {
+  // La misma lectura que la pantalla, que es el punto. La ruta acepta las dos
+  // formas —hoy el cliente manda un número ya interpretado— porque nada obliga
+  // a pasar por el formulario.
+  const existenciaFinal = numeroDeCampo(b?.existencia_final);
+  if (existenciaFinal === null || existenciaFinal < 0) {
     return NextResponse.json({ error: "La existencia final tiene que ser un número" }, { status: 400 });
   }
 
   // Acopio por triturar: opcional, vacío es "sin medir" y no un cero.
   const crudoAcopio = b?.existencia_acopio;
-  const existenciaAcopio = crudoAcopio === undefined || crudoAcopio === null || crudoAcopio === "" ? null : Number(crudoAcopio);
-  if (existenciaAcopio !== null && (!isFinite(existenciaAcopio) || existenciaAcopio < 0)) {
+  const vacioAcopio = crudoAcopio === undefined || crudoAcopio === null || String(crudoAcopio).trim() === "";
+  const existenciaAcopio = vacioAcopio ? null : numeroDeCampo(crudoAcopio);
+  if (!vacioAcopio && (existenciaAcopio === null || existenciaAcopio < 0)) {
     return NextResponse.json({ error: "La existencia del acopio por triturar tiene que ser un número" }, { status: 400 });
   }
 

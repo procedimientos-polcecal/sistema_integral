@@ -160,6 +160,189 @@ lo único que manda correos es Supabase Auth, y sólo sus plantillas de acceso.
 Hace falta un proveedor (Resend, o el SMTP de la casilla corporativa) y esa
 decisión es del usuario.
 
+## La curva de una muestra, y lo que no dice (05/11/2026)
+
+`/calidad/ensayos/curva` responde la pregunta que ningún otro gráfico de
+Ensayos contesta: **qué forma tiene esta muestra**. Indicadores dibuja cómo
+cambia una determinación en el tiempo y obliga a elegir una malla por vez; acá
+los tamices son el eje X, de un solo vistazo, y hay tres gráficos de la misma
+muestra —retenido, acumulado y, desde el 11/11, pasante— que comparten una sola
+selección de tamices. El diseño está en
+[el spec](superpowers/specs/2026-11-05-calidad-curva-granulometrica-design.md) y
+el plan en
+[el plan](superpowers/plans/2026-11-05-calidad-curva-granulometrica.md); el
+pasante y la descarga en Excel, más abajo, tienen los suyos.
+
+Existe por un tamiz concreto: el de `#20` en 6,0 % de la muestra de `Calcio 0-2`
+del 27/10/2026, cuando las otras dieciocho del mes andan entre 20 y 35. Un
+tamiz puede no ser representativo en una muestra puntual, y quien la mira quiere
+sacarlo y ver qué dice el resto. Para eso los tamices se prenden y se apagan.
+
+**No hay migración ni nada que corra una persona**: la exclusión es cómo está
+mirando el gráfico quien lo tiene abierto, no se guarda, y el enlace que se
+comparte lleva el producto y la muestra pero no los tamices apagados.
+
+Esta pantalla **no compara**: es una muestra por vez, a propósito, para que los
+chips de abajo sean inequívocamente los de esa muestra.
+
+### Dos riesgos asumidos, y los dos son de lectura
+
+Ninguno de los dos es un bug ni se arregla con código sin cambiar lo que se
+decidió. Están acá porque son lo único de la pantalla que puede inducir a error
+y no se ven desde el código.
+
+**1. Apagar un tamiz no hace lo mismo en los dos gráficos.** Apagar filtra filas
+de lo que `granulometria()` ya calculó; **nunca recalcula un acumulado**.
+
+- En **retenido**, apagar `#20` saca su 6,0 % y ningún otro punto se mueve: el
+  dato sospechoso desaparece de verdad.
+- En **acumulado**, no. El 41,6 % de `#50` **ya tiene sumado** ese 6,0, y lo
+  mismo el 56 % de `#100` y el 66,4 % de `#200`. Apagar `#20` esconde su punto,
+  pero lo que no convencía **sigue adentro de los tres de la derecha**.
+
+Unir `#12` con `#50` es correcto —dice que el acumulado pasó de 0,9 a 41,6, que
+es lo que se habría medido sin tamizar en `#20`—, pero se lee fácil como si el
+tamiz sospechoso se hubiera ido de los dos gráficos. **Recalcular daría 35,6 %
+en `#50`: un número que nadie midió**, y por eso no se hace; es la misma regla
+que el resto del módulo, donde el valor no se transforma.
+
+Se evaluó marcar el hueco —el punto en gris, o la curva original en punteado
+detrás— y se decidió que no: el acumulado simplemente saltea el tamiz. La
+punteada habría vuelto evidente el riesgo, y quedó afuera sabiendo eso; no es
+un olvido. Lo único que hay es una línea de texto fija bajo el acumulado —esa línea la
+decidió quien redactó el diseño, no salió de la conversación—. Si
+alguna vez se contesta un reclamo con el acumulado de una muestra que tenía
+tamices apagados, ésta es la explicación.
+
+**2. El eje son las mallas que midió la muestra, y la pantalla no avisa cuando
+falta una que el producto declara.** Una muestra de Filler 1 que no midió `#20`
+dibuja cuatro puntos y cuatro chips y se ve perfecta, justamente porque le falta
+algo.
+
+Esto va **al revés** de `acumuladosDelListado()`, que muestra el hueco a
+propósito (ver *Cuántos tamices muestra el listado*): ahí una muestra de un fino
+sin la `#325` es una muestra incompleta, y se ve. Acá la curva muestra lo que se
+midió y no dice qué no se midió; quien use la pantalla para contestar algo tiene
+que saberlo.
+
+Se decidió así porque el eje declarado no se puede usar, y está medido: de **79
+muestras con granulometría, 19 midieron un juego distinto del que declara su
+producto**, en las dos direcciones —a unas les falta una malla declarada, otras
+midieron una de más—. La **`#325` está medida en 13 muestras y declarada por
+ningún producto**, así que un eje armado con las mallas declaradas no podría
+dibujarla nunca.
+
+### Dos cosas que aparecieron construyéndola
+
+- **`granulometria()` devuelve dos `problema` distintos y la pantalla los trata
+  distinto.** «Falta el peso de la muestra tamizada» viene **sin mallas**: no
+  hay chips que armar, y mostrar una fila vacía con tres gráficos en blanco no
+  diría por qué, así que se muestra sólo el texto. «Lo retenido supera el peso
+  de la muestra» viene **con mallas y con puntos**: se avisa en ámbar y **se
+  dibuja igual**, porque es una muestra que se puede mirar y que hay que
+  corregir —es la misma regla de las tres cosas que se muestran en vez de
+  recortarse—. Por eso el eje del acumulado no se corta en 100.
+- **No se dibujan los límites.** `limiteDe()` los resolvería casi gratis, pero
+  hay **2 límites cargados en todo el sistema** y uno solo es granulométrico
+  (`acumulado #200`, máximo 37, de un único producto): esa línea sería invisible
+  en 19 de los 20 productos. Si se cargan límites de verdad, agregarlos es una
+  tarea chica; la pantalla hoy no trae `traerLimites()`.
+
+### El pasante y el Excel de la curva (11/11/2026)
+
+Dos agregados a la misma pantalla: un tercer gráfico y un botón que baja un
+`.xlsx` con la tabla de la muestra y una foto de los tres gráficos, para pegar en
+un informe. El diseño está en
+[el spec](superpowers/specs/2026-11-11-calidad-curva-pasante-y-excel-design.md) y
+el plan en
+[el plan](superpowers/plans/2026-11-11-calidad-curva-pasante-y-excel.md). No hay
+migración. Lo que sigue es lo que el código no dice.
+
+**El pasante es el espejo exacto del acumulado, y por eso va en su propio panel.**
+`granulometria()` calcula el acumulado como `corrido / peso × 100`, así que el
+pasante es `100 − acumulado` punto por punto (se calcula en `curva.ts`, redondeado
+a dos decimales). Como línea más sobre el mismo gráfico serían la misma curva
+dada vuelta —donde una sube, la otra baja lo mismo—; en paneles separados son las
+dos lecturas habituales del ensayo. El redondeo no es cosmético: con `Calcio 0-2`
+del 27/10, `100 - 66.4` da `33.599999999999994` en JavaScript y no `33.6`.
+
+- **Puede dar negativo y no se recorta.** Con 50 g de peso sobre esa misma muestra
+  (66,4 g retenidos) el acumulado llega a 132,8 y el pasante a −32,8. Es la
+  muestra cuyos retenidos superan su propio peso, el caso que `granulometria()`
+  ya se niega a recortar porque verlo es la única forma de corregirlo; por eso el
+  eje Y del pasante lleva 0 como piso **mínimo** y no como valor fijo (si hay un
+  negativo, el eje baja), igual que el del acumulado lleva 100 de techo mínimo.
+- **El riesgo 1 de arriba vale también para el pasante, y para el archivo.**
+  Apagar `#20` no cambia el pasante de `#50` (58,4 %, que ya descuenta el 6,0 de
+  `#20`): el pasante tampoco se recalcula. Por eso la nota del acumulado **viaja
+  en la hoja del Excel** cuando hay algún tamiz apagado, y no sólo en la pantalla:
+  el archivo se va lejos de quien podía explicarlo.
+
+**El Excel lleva una foto y no un gráfico vivo, y se eligió sabiendo lo que
+cuesta.** La alternativa natural era un gráfico nativo atado a las celdas, y no
+existe: `exceljs` **no tiene API de gráficos** —medido sobre el 4.4 del repo, la
+palabra `chart` no aparece ni una vez en `index.d.ts`—, así que habría que
+escribir el XML a mano o cambiar de librería. Sí sabe insertar imágenes
+(`addImage`). Se eligió la imagen porque el archivo va a un informe ya escrito y
+no a seguir trabajando los números. **El precio es que la foto y la tabla se
+separan**: si alguien corrige un número de la tabla, el dibujo sigue mostrando el
+anterior y nada avisa.
+
+**Se abre con Excel de escritorio, y de eso depende todo el diseño.** Se
+preguntó y se contestó así. **Google Sheets puede descartar las imágenes
+flotantes al importar un `.xlsx`**, sin avisar, y entonces el archivo llegaría
+sin el gráfico, que es el único motivo por el que se hace de esta manera. No se
+verificó contra Sheets porque hoy no hace falta. **El día que alguien lo abra
+ahí, hay que comprobar que el gráfico llega antes de prometerlo.**
+
+**El servidor no puede saber si el PNG que recibe es el de esa muestra, y está
+asumido.** La ruta valida lo que puede —que empiece con la firma PNG leyendo los
+bytes, porque el `type` lo escribe quien manda el archivo, y que no pase de 1 MB
+por imagen— pero no que el dibujo corresponda a los números: alguien con acceso a
+Calidad puede mandar una imagen ajena y recibir un archivo con mediciones reales
+y un gráfico que no les corresponde. Se asume porque el margen es chico: quien
+tiene acceso a esos datos puede armar el mismo informe falso a mano en Excel en
+treinta segundos, y este archivo no es un documento firmado ni una fuente de
+autoridad, es una comodidad para no copiar números a mano. Lo que sí está
+cubierto: **los números de la tabla no vienen del navegador**, la ruta los lee de
+la base con `traerMuestra()`; del cliente llegan sólo los tamices apagados y las
+imágenes, así que lo único falseable es el dibujo.
+
+**La foto se saca en el navegador porque recharts no dibuja sin DOM.** Se probó
+la vía que ahorraría la subida entera —dibujar el gráfico en el servidor con
+`renderToStaticMarkup` y convertirlo con `sharp`— contra el recharts del repo
+(3.10): sale **un `<div class="recharts-wrapper">` vacío de 127 caracteres, sin
+una sola línea de SVG**, porque recharts dibuja en un efecto del lado del
+cliente. Además `sharp` está en `devDependencies`, así que tampoco estaría
+garantizado en producción. Lo que queda es rasterizar en el navegador con
+`html2canvas` y subir los PNG a una ruta aparte; armar el archivo entero en el
+navegador se descartó porque metería `exceljs`, cerca de un mega, en el bundle de
+una sola pantalla.
+
+**`html2canvas` no siempre levanta los fondos puestos con utilidades de
+Tailwind, y acá se paga caro.** Un PNG con el fondo transparente, metido en una
+celda de Excel, se ve negro o cuadriculado. Por eso el nodo que se fotografía
+lleva su fondo y el color del título **en `style`**, y el blanco además se le pasa
+a `html2canvas` como `backgroundColor`. La misma trampa ya estaba escrita en
+`reporte/ReporteClient.tsx`; que esté en los dos lados es a propósito. Nada la
+atrapa: las pantallas no tienen tests y el build pasa igual, así que sólo se ve
+bajando un archivo y abriéndolo.
+
+**Lo que la hoja decide, y que conviene no «arreglar» de buena fe:**
+
+- **No avisa de las mallas que el producto declara y la muestra no midió**, igual
+  que la pantalla (riesgo 2 de arriba). Se volvió a preguntar el 11/11, porque el
+  argumento que hace viajar la nota del acumulado —el dato se va lejos de la
+  pantalla que lo explicaba— vale igual acá, y pasa en 19 de 79 muestras. La
+  respuesta fue dejarlo como está.
+- **La fila del tamiz apagado va, marcada** —una columna que dice `Fuera` con
+  todas las letras, para poder filtrar—. Sacarla dejaría un Excel sin rastro de
+  que esa malla se midió, y dejarla sin marcar, un informe con una fila que el
+  dibujo no tiene.
+- **El problema de la muestra viaja y no bloquea la descarga.** «Lo retenido
+  supera el peso de la muestra» queda escrito en la hoja y el archivo se baja:
+  bloquearlo escondería justo la muestra que después genera un reclamo.
+
 ## La lista de productos no es el catálogo del núcleo
 
 `productos` tiene las cosas físicas que se despachan. Acá *Filler 1* y *Filler 2*
@@ -230,12 +413,14 @@ retomarlo.
 | Frente | `app/(app)/calidad/ensayos`, `lib/calidad/ensayos`, `app/api/calidad/ensayos` |
 | Las tres cuentas de una línea | `lib/calidad/ensayos/determinaciones.ts` |
 | Retenidos y acumulados | `lib/calidad/ensayos/granulometria.ts` |
+| La curva de una muestra, con los tamices apagados | `lib/calidad/ensayos/curva.ts` |
+| Las filas del Excel de la curva | `lib/calidad/ensayos/hojaDeLaCurva.ts`, y la ruta `app/api/calidad/ensayos/curva/export/route.ts` |
 | Límites y la muestra evaluada | `lib/calidad/ensayos/limites.ts` — `evaluarMuestra` |
 | Validación de lo que llega | `lib/calidad/ensayos/cuerpoDeLaMuestra.ts` |
 | El juego de tamices | `lib/calidad/ensayos/mallas.ts` |
 | Las lecturas | `lib/calidad/ensayos/consultas.ts`, todas con `traerTodo()` |
 | El formulario, compartido | `app/(app)/calidad/ensayos/FormularioDeMuestra.tsx` |
-| Pantallas | `/calidad/ensayos` (listado), `/nueva` (carga), `/[id]` (detalle), `/productos` y `/limites` (admin) |
+| Pantallas | `/calidad/ensayos` (listado), `/nueva` (carga), `/[id]` (detalle), `/curva` (curva granulométrica por muestra), `/indicadores`, `/reporte`, `/productos` y `/limites` (admin) |
 | Migración | `20261006110617_calidad_ensayos.sql` |
 
 Las cuatro determinaciones se calculan **con las mismas funciones puras en el

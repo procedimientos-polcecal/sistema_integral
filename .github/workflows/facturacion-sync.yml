@@ -1,11 +1,13 @@
 # Concilia el buzón de Facturación con Odoo, a pedido.
 #
-# **Sólo a mano: no tiene `schedule`.** Es la diferencia con los otros siete
-# workflows de sincronización, y es a propósito. Facturación ya corre todos los
-# días a las 9:30 desde `vercel.json`, que al plan Hobby le alcanza porque es
-# una frecuencia diaria; los otros necesitan cada quince minutos y por eso se
-# fueron a Actions. Si acá hubiera un `schedule`, la conciliación correría dos
-# veces y las dos escribirían las mismas filas.
+# **Sólo a mano: no tiene `schedule`**, y es a propósito. Facturación corre
+# desde `vercel.json` —cada 10 minutos desde el 05/11/2026, antes una vez por
+# día—. Si acá hubiera un `schedule`, la conciliación correría dos veces y las
+# dos escribirían las mismas filas.
+#
+# Éste era el único que ya estaba bien. Desde el 05/11/2026 los otros siete
+# workflows de sincronización son iguales: perdieron su `schedule` y el cron
+# volvió a vercel.json, que con el plan Pro no tiene el límite que decían.
 #
 # Lo que faltaba era poder dispararla **cuando hace falta**, sin esperar a la
 # mañana siguiente. Aparece seguido: se cambió a qué instancia de Odoo apunta

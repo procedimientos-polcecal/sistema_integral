@@ -54,6 +54,13 @@ export interface OrdenDelSistema {
   /** Lo que el alta no pudo exportar. Mientras tenga algo, diferir es normal. */
   sheets_pendiente?: string | null;
   /**
+   * La fecha de ejecución ya escrita en «Altas del sistema» que el derrame
+   * del master todavía no refleja. Mientras tenga valor, que los dos lados
+   * digan fechas distintas es lo normal y no un problema: el derrame tarda
+   * de 3 a 53 horas, medido el 21/10/2026.
+   */
+  fecha_ejecucion_pendiente?: string | null;
+  /**
    * Si la orden tiene al menos una nota. **No sale de `ordenes_trabajo`**: lo
    * llena la sincronización con una consulta aparte a `ordenes_trabajo_notas`.
    * Queda `undefined` cuando esa consulta no se hizo o falló, y eso significa
@@ -88,7 +95,7 @@ const CAMPOS: readonly [keyof OrdenDelSistema & keyof OrdenLeida, string][] = [
   ["tipo", "el tipo"],
   ["quien", "quién lo realiza"],
   ["descripcion", "la descripción"],
-  ["fecha_ejecucion", "la fecha de ejecución"],
+  ["fecha_ejecucion", "la fecha de inicio"],
   ["fecha_cierre", "la fecha de cierre"],
   ["estado", "el estado"],
   ["contratista", "el contratista"],
@@ -215,6 +222,12 @@ export function contrastar(
     // la contaría como problema cada vez.
     if (comparable(s.sheets_pendiente) !== "") { enLaCola.push(s.ot_number); continue; }
 
+    // Lo mismo para una fecha que ya salió y todavía no derramó. Va acá y no
+    // como una excepción del campo porque mientras esté en camino **toda** la
+    // fila está en tránsito: compararle el resto sería informar diferencias
+    // de una foto que se está moviendo.
+    if (comparable(s.fecha_ejecucion_pendiente) !== "") { enLaCola.push(s.ot_number); continue; }
+
     // Va antes de comparar campo por campo porque no es una comparación: los
     // dos lados dicen «por hacer» y aun así la planilla está mal. Se informa
     // con el nombre del problema y no con el del campo, para que quien lo lea
@@ -268,7 +281,7 @@ export function contrastar(
 /**
  * Las divergencias agrupadas por orden, que es como se leen.
  *
- * Una OT con la fecha de ejecución y la de cierre corridas es **un** problema
+ * Una OT con la fecha de inicio y la de cierre corridas es **un** problema
  * con dos síntomas, no dos problemas: imprimirlas de a una hace que tres
  * órdenes parezcan nueve.
  */

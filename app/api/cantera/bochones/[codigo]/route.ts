@@ -5,6 +5,7 @@ import { esAdminCantera, puedeEditarCantera, tieneAccesoCantera } from "@/lib/ca
 import { traerBochon, traerYacimientos } from "@/lib/cantera/consultas";
 import { desespejarBochon, espejarBochon, espejarBochonRenombrado } from "@/lib/cantera/espejo";
 import { reacomodarCorrelativos } from "@/lib/cantera/codigos";
+import { numeroDeCampo } from "@/lib/cantera/numero";
 
 /**
  * Ver y editar un bochón. Los campos de conciliación (`odoo_*`, `conforme*`)
@@ -15,11 +16,11 @@ import { reacomodarCorrelativos } from "@/lib/cantera/codigos";
  * avisa en `planilla_error`, igual que en voladuras.
  */
 
-function num(v: unknown): number | null {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  return isFinite(n) ? n : null;
-}
+/**
+ * La misma lectura que usa la pantalla. Hasta el 05/11/2026 acá había un
+ * `Number(v)` propio que daba NaN con "2,5" y guardaba el campo vacío.
+ */
+const num = numeroDeCampo;
 function fecha(v: unknown): string | null {
   return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
 }

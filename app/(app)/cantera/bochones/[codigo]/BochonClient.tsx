@@ -7,10 +7,13 @@ import { montoBochon } from "@/lib/cantera/costos";
 import type { Bochon, Yacimiento } from "@/lib/cantera/types";
 import { useConfirm } from "@/components/ConfirmProvider";
 import ConciliacionOdoo from "../../ConciliacionOdoo";
+import { numeroDeCampo } from "@/lib/cantera/numero";
 
 const ars = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
 const money = (v: number | null) => (v === null ? "—" : `$ ${ars.format(v)}`);
-const n = (v: string) => (v.trim() === "" ? null : Number(v));
+// La misma lectura que la ruta, que es el punto: `Number("2,5")` daba NaN y
+// el campo terminaba guardado vacío (ver `lib/cantera/numero.ts`).
+const n = (v: string) => numeroDeCampo(v);
 const INPUT_CLS = "mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50";
 
 function Campo({

@@ -3,17 +3,9 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { TILES, CENTRO_POR_DEFECTO } from "./tiles";
 
 const COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
-
-const CARTO_TILES = {
-  url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-  opts: {
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: "abcd",
-    maxZoom: 20,
-  },
-};
 
 export interface HojaParaMapa {
   id: string;
@@ -36,9 +28,9 @@ export default function RoutesMap({
 
   useEffect(() => {
     if (!elRef.current || mapRef.current) return;
-    const center: [number, number] = fabrica.lat != null ? [fabrica.lat, fabrica.lng!] : [-34.6037, -58.3816];
+    const center: [number, number] = fabrica.lat != null ? [fabrica.lat, fabrica.lng!] : CENTRO_POR_DEFECTO;
     const map = L.map(elRef.current).setView(center, 12);
-    L.tileLayer(CARTO_TILES.url, CARTO_TILES.opts).addTo(map);
+    L.tileLayer(TILES.url, TILES.opts).addTo(map);
     mapRef.current = map;
     return () => {
       map.remove();

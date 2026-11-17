@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { proximaFecha } from "@/lib/mantenimiento/vencimiento";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -56,7 +58,10 @@ export async function POST(request: Request) {
 
   // Avanza la próxima fecha si el mantenimiento se completó.
   if (body.execution_status === "completado" && schedule) {
-    const nextDate = body.next_date_override || calcNextDate(schedule);
+    // `proximaFecha` y no una cuenta propia: es la misma función que usa la
+    // generación automática. Dos copias de «cada cuánto se repite esto» es
+    // cómo un mantenimiento termina venciendo distinto según quién lo mire.
+    const nextDate = body.next_date_override || proximaFecha(schedule, hoyEnArgentina());
     if (nextDate) {
       await supabase
         .from("mantenimientos_programados")
@@ -68,20 +73,3 @@ export async function POST(request: Request) {
   return NextResponse.json({ data: execution });
 }
 
-function calcNextDate(schedule: any): string | null {
-  if (!schedule.next_date) return null;
-  const base = new Date(schedule.next_date + "T00:00:00");
-  const INTERVALS: Record<string, number> = {
-    DIARIO: 1, SEMANAL: 7, QUINCENAL: 15, MENSUAL: 30,
-    TRIMESTRAL: 90, SEMESTRAL: 180, ANUAL: 365,
-  };
-  if (schedule.schedule_type === "FECHA_FIJA") return null;
-  if (schedule.schedule_type === "PERSONALIZADO" && schedule.interval_days) {
-    base.setDate(base.getDate() + Number(schedule.interval_days));
-  } else {
-    const days = INTERVALS[schedule.schedule_type];
-    if (!days) return null;
-    base.setDate(base.getDate() + days);
-  }
-  return base.toISOString().split("T")[0];
-}

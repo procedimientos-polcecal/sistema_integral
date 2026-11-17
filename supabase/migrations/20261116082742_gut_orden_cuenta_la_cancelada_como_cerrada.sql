@@ -4,8 +4,13 @@
 -- Una OT cancelada es una orden que no se va a hacer nunca (el diseño y el plan
 -- están en docs/superpowers/specs y docs/superpowers/plans, «cancelar una OT»).
 -- Entra al vocabulario de los estados en reemplazo de SUSPENDIDA, y la columna
--- generada `gut_orden` —la clave con la que el tablero GUT ordena— tiene los
--- estados cerrados escritos adentro. Hay que cambiarlos ahí.
+-- generada `gut_orden` tiene los estados cerrados escritos adentro. Hay que
+-- cambiarlos ahí.
+--
+-- `gut_orden` **no es la clave de un tablero GUT aparte**: es el orden por
+-- defecto del listado entero de OT. Decirlo acá arriba y no sólo abajo importa
+-- porque es lo que separa «esto puede esperar» de «esto se ve en la pantalla
+-- que todos usan» — el detalle está en «mientras no se aplique».
 --
 -- ── POR QUÉ ESTA MIGRACIÓN Y NO UN `alter` ───────────────────────────────────
 --

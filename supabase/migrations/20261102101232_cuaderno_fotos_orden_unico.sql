@@ -1,0 +1,40 @@
+-- ============================================================
+-- SdG — Una sola foto por página del cuaderno
+--
+-- La ruta `app/api/mantenimiento/cuaderno/fotos/route.ts` ya depende de que
+-- `(cuaderno_id, orden)` sea único, y nada en la base lo hacía cumplir:
+--
+--   · El archivo se guarda en `<cuaderno>/<orden>.<ext>` con `upsert: true`,
+--     así que dos fotos de la misma página pisarían el mismo archivo y una de
+--     las dos filas quedaría apuntando a una imagen que ya no es la suya.
+--   · Para saber si una página es nueva o un reintento, la ruta lee la fila
+--     con `maybeSingle()`, que **rechaza** dos filas. Cuando eso falla la
+--     guarda de «esta página ya generó órdenes de trabajo» no corre y se
+--     inserta una segunda foto con un segundo juego de renglones.
+--
+-- Dos pestañas, o un reintento mientras la primera lectura sigue en vuelo,
+-- alcanzan para que pase. Con este índice, la segunda inserción falla en la
+-- base (23505) y la ruta lo cuenta como un error de «no se pudo registrar la
+-- foto», en vez de duplicar en silencio.
+--
+-- El índice es COMÚN y no parcial a propósito: uno parcial no sirve como
+-- destino de ON CONFLICT (ver el README de migraciones, una de las trampas que
+-- ya pasaron tres veces). Hoy ninguna ruta hace upsert sobre este par, pero el
+-- día que alguna lo haga no tendría que descubrirlo en producción.
+--
+-- ANTES DE CORRERLA: si ya hay dos fotos con el mismo (cuaderno_id, orden) el
+-- índice no se puede crear y dice `23505` sobre una fila cualquiera. Se miran
+-- con:
+--
+--   select cuaderno_id, orden, count(*)
+--   from public.mant_cuadernos_fotos
+--   group by 1, 2 having count(*) > 1;
+--
+-- Si devuelve filas, hay que decidir cuál es la buena a mano: es lo único que
+-- esta migración no puede decidir por nadie.
+--
+-- Se puede correr dos veces: `if not exists`.
+-- ============================================================
+
+create unique index if not exists mant_cuadernos_fotos_cuaderno_orden_uniq
+  on public.mant_cuadernos_fotos (cuaderno_id, orden);

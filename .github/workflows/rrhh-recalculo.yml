@@ -1,10 +1,12 @@
 # Deja al día los cálculos diarios de RRHH, cada 6 horas.
 #
-# El cron vive acá y no en vercel.json por lo mismo que Compras y Mantenimiento
-# —el plan Hobby de Vercel sólo admite crons diarios— y además porque en
-# vercel.json ya hay tres: el límite de Hobby es también de cantidad, y pasarlo
-# no degrada nada, hace fallar el deploy entero. Desde acá no puede romper el
-# deploy y la frecuencia es libre.
+# EL CRON VIVE EN vercel.json, NO ACÁ, desde el 05/11/2026, con las mismas seis
+# horas que declaraba acá. El motivo que estaba escrito —el plan Hobby limita
+# la frecuencia y la cantidad— ya no vale: el plan es Pro, que admite cuarenta
+# crons sin límite de frecuencia. Y un cron de Actions no cumple lo que
+# declara: los de este repo declaran cada 15 o 20 minutos y corren cada 4 a 8
+# horas, así que «cada 6 horas» desde acá era en realidad «cuando toque».
+# Ver mantenimiento-sync.yml.
 #
 # Qué cubre. Las pantallas de RRHH ya no recalculan antes de leer: sólo leen.
 # Lo que mantiene los números frescos es cada guardado (una fichada, una
@@ -22,8 +24,9 @@
 name: Recalcular RRHH
 
 on:
-  schedule:
-    - cron: "0 */6 * * *"
+  # SIN `schedule` DESDE EL 05/11/2026: el cron volvió a vercel.json, con la
+  # misma cadencia de seis horas que declaraba acá —pero allá se cumple—.
+  # Dejar el de acá lo dispararía dos veces, desde dos programadores distintos.
   # Para poder correrlo a mano desde la pestaña Actions: sirve después de tocar
   # turnos o la configuración de liquidación, que recalculan en segundo plano y
   # pueden quedar cortados si la función termina antes.

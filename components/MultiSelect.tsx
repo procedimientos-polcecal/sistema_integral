@@ -146,7 +146,7 @@ export default function MultiSelect({
         // Más ancho que el botón: en un teléfono la fila de filtros tiene dos
         // columnas de 160 px y ahí no se lee "AMB-EM — Autoelevador XCMG".
         <div
-          onKeyDown={(e) => { if (e.key === "Escape") cerrar(); }}
+          onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); cerrar(); } }}
           className={`absolute z-30 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white shadow-lg ${
             haciaLaIzquierda ? "right-0" : "left-0"
           }`}

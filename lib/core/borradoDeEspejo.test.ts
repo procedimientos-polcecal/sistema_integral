@@ -354,3 +354,90 @@ describe("borrarLoQueLaPlanillaNoTrajo", () => {
     expect(r.aviso).toContain("No se borró nada");
   });
 });
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Lo que hay que limpiar afuera de la base antes de borrar (`antesDeBorrar`)
+ *
+ * Hoy: el evento de Google de una OT. Un evento que sobrevive a su fila no se
+ * puede volver a alcanzar, así que si no se puede borrar, la fila se queda.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe("antesDeBorrar: lo que hay que limpiar afuera", () => {
+  const ESPEJO_DE_OT = {
+    tabla: "ordenes_trabajo", numero: "ot_number", creada: "created_at_app", fila: "sheets_row",
+    deLaApp: { columna: "app_created", valor: true }, modulo: "mantenimiento", entidad: "orden_trabajo",
+  } as const;
+
+  /** Una base de mentira para el borrado: tres OT que sobran, y anota qué se borró. */
+  function baseDeBorrado() {
+    const hechos: string[] = [];
+    const filas = [1, 2, 3].map((n) => ({
+      id: `ot-${n}`, ot_number: 2900 + n, created_at_app: "2026-01-01T00:00:00.000Z",
+      sheets_row: n, app_created: false,
+    }));
+    const cliente = {
+      from: (tabla: string) => {
+        const self: Record<string, unknown> = {};
+        for (const m of ["select", "order", "range", "returns"]) self[m] = () => self;
+        self.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: filas, error: null }).then(r);
+        self.insert = () => { hechos.push(`insert ${tabla}`); return Promise.resolve({ data: null, error: null }); };
+        self.delete = () => ({
+          in: (_c: string, ids: string[]) => { hechos.push(`delete ${ids.join(",")}`); return Promise.resolve({ error: null }); },
+        });
+        return self;
+      },
+    };
+    return { cliente: cliente as never, hechos };
+  }
+
+  const corrida = {
+    clavesLeidas: new Set<string | number>(), cuando: "2026-11-03T09:00:00.000Z", inicio: "2026-11-03T09:00:00.000Z",
+  };
+
+  it("la OT cuyo evento no se pudo borrar no se borra; las demás sí", async () => {
+    const { cliente, hechos } = baseDeBorrado();
+    const r = await borrarLoQueLaPlanillaNoTrajo(cliente, ESPEJO_DE_OT, {
+      ...corrida,
+      antesDeBorrar: async () => new Map([["ot-2", "Google respondió 503"]]),
+    });
+    // Registro primero, después el borrado, y sin la 2902.
+    expect(hechos).toEqual(["insert auditoria", "delete ot-1,ot-3"]);
+    expect(r.borradas).toBe(2);
+    expect(r.numeros).toEqual([2901, 2903]);
+    expect(r.aviso).toContain("Quedaron 1 sin borrar");
+    expect(r.aviso).toContain("2902");
+    expect(r.aviso).toContain("Google respondió 503");
+  });
+
+  it("si ninguna se puede, no borra nada", async () => {
+    const { cliente, hechos } = baseDeBorrado();
+    const r = await borrarLoQueLaPlanillaNoTrajo(cliente, ESPEJO_DE_OT, {
+      ...corrida,
+      antesDeBorrar: async (ids) => new Map(ids.map((id) => [id, "caído"])),
+    });
+    expect(hechos).toEqual(["insert auditoria"]);
+    expect(r.borradas).toBe(0);
+    expect(r.aviso).toContain("Quedaron 3 sin borrar");
+  });
+
+  it("si lo de afuera tira, no se borra ninguna", async () => {
+    const { cliente, hechos } = baseDeBorrado();
+    const r = await borrarLoQueLaPlanillaNoTrajo(cliente, ESPEJO_DE_OT, {
+      ...corrida,
+      antesDeBorrar: async () => { throw new Error("se cortó"); },
+    });
+    expect(hechos).not.toContain("delete ot-1,ot-2,ot-3");
+    expect(hechos.filter((h) => h.startsWith("delete"))).toEqual([]);
+    expect(r.aviso).toContain("se cortó");
+  });
+
+  it("lo de afuera corre con los id que se van a borrar, no antes del registro", async () => {
+    const { cliente, hechos } = baseDeBorrado();
+    let vistoAntes: string[] = [];
+    await borrarLoQueLaPlanillaNoTrajo(cliente, ESPEJO_DE_OT, {
+      ...corrida,
+      antesDeBorrar: async (ids) => { vistoAntes = [...hechos]; expect(ids).toEqual(["ot-1", "ot-2", "ot-3"]); return new Map(); },
+    });
+    expect(vistoAntes).toEqual(["insert auditoria"]);
+  });
+});

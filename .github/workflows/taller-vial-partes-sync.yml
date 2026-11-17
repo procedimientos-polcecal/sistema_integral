@@ -1,16 +1,19 @@
 # Sincroniza los partes diarios de equipos móviles de Taller Vial (Google
 # Form "PARTE DIARIO EQUIPOS MÓVILES") cada 20 minutos.
 #
-# Mismo motivo que taller-vial-sync.yml: el plan Hobby de Vercel sólo admite
-# crons diarios, así que la frecuencia real la marca este workflow y el de
-# Vercel queda como red de seguridad. Reutiliza el mismo CRON_SECRET/APP_URL
-# que ya están cargados en el repositorio.
+# EL CRON VIVE EN vercel.json, NO ACÁ, desde el 05/11/2026. El motivo que
+# estaba escrito —el plan Hobby sólo admite crons diarios— ya no vale: el plan
+# es Pro. Y un cron de Actions no cumple lo que declara: éste decía cada 20
+# minutos y corría cada 4 a 8 horas. Ver mantenimiento-sync.yml.
+#
+# Para el disparo a mano reutiliza el mismo CRON_SECRET/APP_URL del repositorio.
 
 name: Sincronizar partes diarios de Taller Vial
 
 on:
-  schedule:
-    - cron: "*/20 * * * *"
+  # SIN `schedule` DESDE EL 05/11/2026: el cron volvió a vercel.json, que ahora
+  # sí puede correrlo cada 10 minutos. Dejar el de acá lo dispararía dos veces,
+  # desde dos programadores distintos y sin nada que los coordine.
   workflow_dispatch:
 
 concurrency:

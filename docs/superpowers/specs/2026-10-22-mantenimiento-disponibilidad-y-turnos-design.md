@@ -122,7 +122,7 @@ Las tres tablas que hay hoy y qué hacemos con cada una:
   `ausencia` de tipo `VACACIONES` y la ruta sincroniza la fila de `vacaciones`
   desde ahí (`sincronizarPeriodoVacaciones`, en `lib/rrhh/vacacionesDeAusencia.ts`).
   Leer las dos contaría la misma ausencia dos veces.
-- **`francos`** — **queda afuera del cruce, y conviene entender por qué.**
+- **`francos`** — quedó afuera del cruce al escribirse esto, y **entró el 26/10/2026**. Conviene leer las dos mitades: por qué se dejó afuera, y qué cambió.
 
 ### El franco: el agujero que queda abierto a propósito
 
@@ -155,6 +155,37 @@ simultáneos un lunes cualquiera.
 > en vez de asumir hoy. Las 56 filas viejas no se pueden recuperar — su fecha
 > verdadera no quedó registrada en ningún lado. Hasta que eso no esté, cruzar
 > francos sólo puede empeorar la pantalla.
+
+#### Actualización del 26/10/2026: el arreglo se hizo, y los francos entraron
+
+Lo de arriba queda como estaba porque fue cierto y explica por qué el cruce
+nació sin francos. Lo que cambió:
+
+- **El franco se marca cuando se formaliza**, no después — así lo contó el
+  usuario —, y en ese momento el día de descanso ya se sabe: casi siempre está
+  adelante. O sea que el dato existía y lo único que faltaba era pedirlo.
+- Se agregó **`francos.fecha_descanso`** (migración `20261026105634`), separada
+  de `fecha_tomado`. No se reinterpretó la vieja a propósito: si el día real se
+  escribiera en la misma columna, **las 56 filas viejas quedarían
+  indistinguibles de las nuevas y el cruce las creería**. Con una columna
+  nueva quedan en null, que es la verdad.
+- **Las 56 viejas se dan por perdidas**, decidido por el usuario.
+- El cruce pregunta `noViene()` de `lib/mantenimiento/disponibilidad.ts`, que
+  junta ausencia y franco en un solo lugar. Un franco cuenta sólo si está
+  `TOMADO` **y** tiene `fecha_descanso`.
+- `fecha_tomado` deja de mentir: pasa a significar cuándo se formalizó.
+
+Comprobado contra la base ese día: filtrando por `fecha_descanso`, la semana del
+01/09/2026 —donde caen 35 de los 56 viejos— devuelve **cero** filas.
+
+Lo que **no** cambió: la liquidación sigue sin mirar nada de esto.
+`planillaGeneral` suma las horas del franco por `fecha_generado` y sin mirar el
+estado, así que para el sueldo el franco pesa cuando se gana y no cuando se
+descansa.
+
+**Nota del 30/10/2026:** este texto se repuso después de que un commit mío sin
+pathspec se llevara puesto el trabajo de los francos y la reparación de otra
+sesión lo restaurara desde una foto anterior. El código está en `fb47d453`.
 
 ### `TARDANZA` no es una falta
 

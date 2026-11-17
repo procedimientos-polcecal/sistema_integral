@@ -10,6 +10,7 @@ import {
   type EquipoDeLaVista,
 } from "./mtbfVista";
 import type { FilaMtbf, Mtbf } from "./mtbf";
+import type { FilaMttr, Mttr } from "./mttr";
 
 const eq = (id: string, sectorId: string): EquipoDeLaVista =>
   ({ id, code: id.toUpperCase(), name: "Molino " + id, sectorId, sectorNombre: "S " + sectorId });
@@ -101,16 +102,40 @@ describe("la confiabilidad de la ficha", () => {
   const mtbf: Mtbf = {
     filas: [fila("a")], diasObservados: 319, sinAtribuir: [], mesEnCurso: "2026-10",
   };
+  const filaMttr: FilaMttr = {
+    equipmentId: "a", reparaciones: 4, mttr: 5.5, horasTotales: 22,
+    masLarga: { otNumber: 9, equipmentId: "a", fecha: "2026-09-01", horas: 12 },
+  };
+  const mttr: Mttr = {
+    filas: [filaMttr], mttrDeLaPlanta: 3.25, reparaciones: 4,
+    afuera: { deContratista: 0, sinHoras: 0, sinEquipo: 0 },
+  };
+  const indicadores = { mtbf, mttr };
 
   it("trae la fila del equipo y los datos de la planta", () => {
-    expect(confiabilidadDeLaFicha(mtbf, "a")).toEqual({
-      disponible: true, fila: mtbf.filas[0], diasObservados: 319, mesEnCurso: "2026-10",
+    expect(confiabilidadDeLaFicha(indicadores, "a")).toEqual({
+      disponible: true, fila: mtbf.filas[0], mttr: filaMttr,
+      diasObservados: 319, mesEnCurso: "2026-10",
     });
   });
 
   it("un equipo que no falló está disponible, con fila null", () => {
-    const r = confiabilidadDeLaFicha(mtbf, "b");
-    expect(r).toMatchObject({ disponible: true, fila: null });
+    const r = confiabilidadDeLaFicha(indicadores, "b");
+    expect(r).toMatchObject({ disponible: true, fila: null, mttr: null });
+  });
+
+  /**
+   * Un equipo puede tener MTBF y no tener MTTR: falló, pero ninguna de sus
+   * correctivas trae horas —357 de las 979 de la ventana están así—. Al revés
+   * no pasa, porque una reparación contable es una falla.
+   */
+  it("puede haber MTBF sin MTTR", () => {
+    const sinMttr: Mttr = {
+      filas: [], mttrDeLaPlanta: null, reparaciones: 0,
+      afuera: { deContratista: 0, sinHoras: 1, sinEquipo: 0 },
+    };
+    const r = confiabilidadDeLaFicha({ mtbf, mttr: sinMttr }, "a");
+    expect(r).toMatchObject({ disponible: true, fila: mtbf.filas[0], mttr: null });
   });
 
   /** Si la lectura falló no hay cuenta: nunca se puede confundir con "sin fallas". */
@@ -118,6 +143,7 @@ describe("la confiabilidad de la ficha", () => {
     const r = confiabilidadDeLaFicha(null, "a");
     expect(r).toEqual({ disponible: false });
     expect("fila" in r).toBe(false);
+    expect("mttr" in r).toBe(false);
   });
 });
 

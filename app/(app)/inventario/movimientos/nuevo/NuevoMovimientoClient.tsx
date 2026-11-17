@@ -166,7 +166,10 @@ export default function NuevoMovimientoClient({
       body: JSON.stringify({
         articulo_id: articulo.id,
         tipo,
-        cantidad: Number(cantidad),
+        // Va el texto tal cual se tipeó y lo lee la ruta con la misma
+        // función que `loQueFalta`. `Number("1,5")` daba NaN, y
+        // `JSON.stringify(NaN)` es null: la cantidad llegaba vacía.
+        cantidad,
         // Van los ids y no los nombres: el texto que termina en la planilla lo
         // resuelve la ruta contra la lista, así un cliente viejo o retocado no
         // puede escribir ahí una palabra que la validación no acepta.

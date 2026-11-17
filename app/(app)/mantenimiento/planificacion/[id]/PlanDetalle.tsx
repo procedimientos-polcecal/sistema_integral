@@ -3,7 +3,13 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
+import { useBorrador } from "@/lib/core/useBorrador";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { claveDeOrdenGut } from "@/lib/mantenimiento/gut";
+import { INVITADOS_DE_UNA_OT } from "@/lib/agenda/evento";
+import { comoSeLee } from "@/lib/core/fechas";
 
 const ESTADO_META: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   ATRASADO:   { label: "Atrasado",   color: "#DC2626", bg: "#FEF2F2", dot: "#EF4444" },
@@ -11,6 +17,29 @@ const ESTADO_META: Record<string, { label: string; color: string; bg: string; do
   POR_HACER:  { label: "Por hacer",  color: "#B45309", bg: "#FFFBEB", dot: "#F59E0B" },
   REALIZADO:  { label: "Realizado",  color: "#16A34A", bg: "#F0FDF4", dot: "#22C55E" },
   CANCELADA:  { label: "Cancelada",  color: "#475569", bg: "#F1F5F9", dot: "#94A3B8" },
+};
+
+/**
+ * Lo que contesta `POST /api/mantenimiento/planificacion/[id]/calendario` por
+ * cada ítem. Son los mismos cuatro estados de la ruta y no un vocabulario de
+ * la pantalla.
+ */
+type ResultadoDeItem = {
+  item_id: string;
+  ot_number: number | null;
+  estado: "mandada" | "mandada_en_otra_fecha" | "salteada" | "fallo";
+  fecha: string | null;
+  fecha_corrida: boolean;
+  mensaje: string | null;
+  advertencias: string[];
+};
+
+/** Cómo se ve cada estado. El color va por `style`, no por una utilidad junto a una clase sin capa. */
+const RESULTADO_META: Record<ResultadoDeItem["estado"], { titulo: string; color: string; bg: string; borde: string }> = {
+  mandada:               { titulo: "Mandada al calendario",       color: "#166534", bg: "#F0FDF4", borde: "#BBF7D0" },
+  mandada_en_otra_fecha: { titulo: "Mandada, pero en otra fecha", color: "#92400E", bg: "#FFFBEB", borde: "#FDE68A" },
+  salteada:              { titulo: "No se mandó",                 color: "#475569", bg: "#F8FAFC", borde: "#E2E8F0" },
+  fallo:                 { titulo: "Falló",                       color: "#B91C1C", bg: "#FEF2F2", borde: "#FECACA" },
 };
 
 function nombreCompleto(u: { nombre?: string; apellido?: string } | null | undefined): string {
@@ -30,6 +59,14 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
   const [filterSector, setFilterSector] = useState("");
   const [filterQ, setFilterQ]           = useState("");
   const [editItem, setEditItem]         = useState<any | null>(null);
+
+  // Mandar al calendario. `mandando` es "plan" o el id del ítem en curso: con
+  // uno andando se bloquean todos los botones, porque la ruta escribe una
+  // planilla de a una orden y dos corridas a la vez se pisarían.
+  const confirm = useConfirm();
+  const [mandando, setMandando]           = useState<string | null>(null);
+  const [resultados, setResultados]       = useState<Record<string, ResultadoDeItem>>({});
+  const [errorDelEnvio, setErrorDelEnvio] = useState<string | null>(null);
 
   const planDate = new Date(plan.fecha + "T12:00:00");
 
@@ -81,7 +118,14 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
     setItems(prev => prev.filter(i => i.id !== itemId));
   }
 
-  async function saveItemEdit(itemId: string, assigned_to: string, assigned_name: string, notas_item: string) {
+  /**
+   * Devuelve si entró. El modal se cierra igual —eso es de antes—, y por eso
+   * importa: lo que no entró se queda en el borrador y vuelve a aparecer al
+   * abrir ese ítem, en vez de perderse sin que nadie lo diga.
+   */
+  async function saveItemEdit(
+    itemId: string, assigned_to: string, assigned_name: string, notas_item: string
+  ): Promise<boolean> {
     const res = await fetch(`/api/mantenimiento/planificacion/${plan.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -90,6 +134,102 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
     const data = await res.json();
     if (res.ok) setItems(prev => prev.map(i => i.id === itemId ? data.data : i));
     setEditItem(null);
+    return res.ok;
+  }
+
+  /**
+   * `itemId` omitido es el plan entero. Cada ítem queda con lo que le pasó: el
+   * caso que importa es el que no hizo lo que el plan decía, y un resumen lo
+   * esconde.
+   */
+  async function mandarAlCalendario(itemId?: string) {
+    setMandando(itemId ?? "plan");
+    setErrorDelEnvio(null);
+    // Lo que había en pantalla es de una corrida anterior: si ésta falla, un
+    // renglón viejo «Mandada · 05/11» seguiría diciendo algo que esta corrida
+    // no produjo. Se limpia el mapa entero, o la entrada de ese ítem.
+    setResultados(prev => {
+      if (!itemId) return {};
+      const { [itemId]: _viejo, ...resto } = prev;
+      return resto;
+    });
+    // Sin una respuesta del servidor no se sabe qué llegó a salir: la ruta sigue
+    // recorriendo las órdenes aunque el cliente se haya desconectado, y «no se
+    // pudo conectar» se lee como «no pasó nada». Es el mismo aviso en las dos
+    // ramas que pueden quedar sin saber.
+    const PUEDE_HABER_SALIDO = itemId
+      ? " Revisá en el calendario antes de volver a mandar: puede que ya haya salido."
+      : " Revisá en el calendario antes de volver a mandar: puede que algunas órdenes ya hayan salido.";
+    const fallo = (motivo: string) => {
+      if (itemId) {
+        setResultados(prev => ({ ...prev, [itemId]: {
+          item_id: itemId, ot_number: null, estado: "fallo", fecha: null,
+          fecha_corrida: false, mensaje: motivo, advertencias: [],
+        } }));
+      } else {
+        // Sin respuesta no se inventan renglones.
+        setErrorDelEnvio(motivo);
+      }
+    };
+    try {
+      const res = await fetch(`/api/mantenimiento/planificacion/${plan.id}/calendario`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(itemId ? { item_id: itemId } : {}),
+      });
+      // Un corte por tiempo devuelve HTML y no JSON: no es motivo para quedarse sin decir nada.
+      const data = await res.json().catch(() => null) as
+        { error?: string; resultados?: ResultadoDeItem[] } | null;
+      if (!res.ok || !data?.resultados) {
+        // Un error con cuerpo es la ruta diciendo qué pasó (403, 404, 400: no
+        // salió nada). Sin cuerpo, no se sabe.
+        fallo(data?.error ?? `El servidor respondió ${res.status}.${PUEDE_HABER_SALIDO}`);
+        return;
+      }
+      const nuevos = Object.fromEntries(data.resultados.map(r => [r.item_id, r]));
+      setResultados(prev => itemId ? { ...prev, ...nuevos } : nuevos);
+    } catch (e) {
+      fallo(`No se pudo conectar con el servidor: ${e instanceof Error ? e.message : String(e)}.${PUEDE_HABER_SALIDO}`);
+    } finally {
+      setMandando(null);
+    }
+  }
+
+  async function mandarElPlanEntero() {
+    // Cada evento invita a cinco personas, y ése es el número que nadie espera:
+    // diez órdenes son cincuenta correos de golpe. «Hasta» porque la ruta
+    // saltea las cerradas y las que ya pasaron, y al dueño no se lo invita a sí mismo.
+    const invitados = INVITADOS_DE_UNA_OT.length;
+    const invitaciones = items.length * invitados;
+    const ok = await confirm({
+      title: "¿Mandar el plan al calendario?",
+      message:
+        `Se van a mandar hasta ${invitaciones} invitaciones por correo: ` +
+        `${items.length} ${items.length === 1 ? "orden" : "órdenes"} × ${invitados} invitados.\n` +
+        `Las órdenes cerradas o con fecha pasada se saltean y no invitan a nadie. ` +
+        `A las órdenes creadas desde el SdG, si el plan es para un día posterior a su fecha, se les corre la fecha; ` +
+        `a las que entraron por el formulario no, y salen en la suya.`,
+      confirmText: "Mandar",
+    });
+    if (ok) await mandarAlCalendario();
+  }
+
+  /**
+   * Mandar una sola orden manda el mismo correo que el plan entero —a cada uno
+   * de los invitados—, y un correo no se retira. Por eso pide confirmación igual
+   * que el botón de arriba: era el único camino a un envío que no la tenía.
+   */
+  async function mandarUnItem(item: any) {
+    const invitados = INVITADOS_DE_UNA_OT.length;
+    const ok = await confirm({
+      title: `¿Mandar la OT #${item.ot_number} al calendario?`,
+      message:
+        `Se van a mandar hasta ${invitados} invitaciones por correo.\n` +
+        `Si la orden está cerrada o su fecha ya pasó, se saltea y no invita a nadie. ` +
+        `Al dueño del evento no se lo invita a sí mismo.`,
+      confirmText: "Mandar",
+    });
+    if (ok) await mandarAlCalendario(item.id);
   }
 
   return (
@@ -106,7 +246,7 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
             {plan.created_by_user ? ` · Creado por ${nombreCompleto(plan.created_by_user)}` : ""}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {items.length > 0 && (
             <Link href={`/mantenimiento/planificacion/${plan.id}/imprimir`} target="_blank"
               className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
@@ -131,6 +271,14 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
               Parte diario
             </Link>
           )}
+          {canEdit && items.length > 0 && (
+            <button onClick={mandarElPlanEntero} disabled={mandando !== null}
+              className="btn-secondary disabled:opacity-50">
+              {mandando === "plan"
+                ? "Mandando…"
+                : `Mandar al calendario (${items.length} ${items.length === 1 ? "orden" : "órdenes"})`}
+            </button>
+          )}
           {canEdit && (
             <button onClick={() => setShowAddOT(true)}
               className="btn-primary">
@@ -142,6 +290,13 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
           )}
         </div>
       </div>
+
+      {errorDelEnvio && (
+        <div role="alert" className="rounded-lg px-3 py-2 text-sm"
+          style={{ background: RESULTADO_META.fallo.bg, color: RESULTADO_META.fallo.color, border: `1px solid ${RESULTADO_META.fallo.borde}` }}>
+          {errorDelEnvio}
+        </div>
+      )}
 
       {items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center">
@@ -157,6 +312,7 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
         <div className="space-y-3">
           {items.map((item, idx) => {
             const assignee = nombreCompleto(item.assigned_user) || item.assigned_name || null;
+            const resultado = resultados[item.id];
             return (
               <div key={item.id} className="card overflow-hidden">
                 <div className="px-4 py-3 flex items-start gap-3">
@@ -203,8 +359,17 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
                         </button>
                       </div>
                     )}
+                    {canEdit && (
+                      <div className="flex justify-end">
+                        <button onClick={() => mandarUnItem(item)} disabled={mandando !== null}
+                          className="text-xs text-slate-400 hover:text-blue-600 transition-colors disabled:opacity-50">
+                          {mandando === item.id ? "Mandando…" : "Al calendario"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
+                {resultado && <ResultadoDelItem r={resultado} />}
               </div>
             );
           })}
@@ -212,17 +377,11 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
       )}
 
       {showAddOT && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl my-8">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-900">Agregar órdenes al plan</h2>
-              <button onClick={() => setShowAddOT(false)} className="p-1 text-slate-400 hover:text-slate-700">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-4 space-y-3">
+        // Un selector: lo único que se escribe es un filtro, y elegir una OT la
+        // suma al plan al instante. No hay nada que descartar, así que sale
+        // derecho por el fondo, la X y Escape y nunca va a preguntar.
+        <Modal titulo="Agregar órdenes al plan" alSalir={() => setShowAddOT(false)} soloLectura ancho="ancho">
+            <div className="space-y-3">
               <div className="flex gap-2">
                 <Select value={filterSector} onChange={e => setFilterSector(e.target.value)}
                   className="input flex-1 text-sm">
@@ -262,8 +421,7 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
                 })}
               </div>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {editItem && (
@@ -276,32 +434,68 @@ export default function PlanDetalle({ plan, pendingOTs, usuarios, sectores, canE
   );
 }
 
+/**
+ * Lo que le pasó a un ítem al mandarlo. Lleva la fecha y, si el plan se la
+ * corrió a la orden, lo dice: es lo que la persona no esperaba encontrar.
+ */
+function ResultadoDelItem({ r }: { r: ResultadoDeItem }) {
+  const meta = RESULTADO_META[r.estado] ?? RESULTADO_META.fallo;
+  return (
+    <div role="status" className="px-4 py-2.5 text-xs space-y-1 break-words"
+      style={{ background: meta.bg, color: meta.color, borderTop: `1px solid ${meta.borde}` }}>
+      <p className="font-semibold">
+        {meta.titulo}{r.fecha ? ` · ${comoSeLee(r.fecha)}` : ""}
+        {r.fecha_corrida ? " · se le corrió la fecha a la orden" : ""}
+      </p>
+      {r.mensaje && <p>{r.mensaje}</p>}
+      {r.advertencias.map((a, i) => <p key={i}>Ojo: {a}</p>)}
+    </div>
+  );
+}
+
 function EditItemModal({ item, usuarios, onSave, onClose }: {
   item: any; usuarios: any[];
-  onSave: (a: string, b: string, c: string) => void;
+  /** Devuelve si entró: el borrador se tira sólo cuando sí. */
+  onSave: (a: string, b: string, c: string) => Promise<boolean>;
   onClose: () => void;
 }) {
-  const [assignedTo, setAssignedTo]     = useState(item.assigned_to ?? "");
-  const [assignedName, setAssignedName] = useState(item.assigned_name ?? "");
-  const [notas, setNotas]               = useState(item.notas_item ?? "");
+  /*
+   * Los tres campos de la asignación, recordados por ítem del plan. Van planos
+   * porque el guardado manda los tres juntos: así, volver a un borrador de ayer
+   * no le devuelve a los otros dos el valor que tenían ayer.
+   */
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("mantenimiento-asignar-item-del-plan", { tipo: "item", id: item.id }),
+    {
+      assignedTo: (item.assigned_to ?? "") as string,
+      assignedName: (item.assigned_name ?? "") as string,
+      notas: (item.notas_item ?? "") as string,
+    },
+  );
+  const { assignedTo, assignedName, notas } = valores;
+
   const [saving, setSaving]             = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    await onSave(assignedTo, assignedName, notas);
+    const entro = await onSave(assignedTo, assignedName, notas);
     setSaving(false);
+    // Sólo si entró: lo que no entró sigue en el borrador y vuelve a aparecer
+    // al abrir este ítem.
+    if (entro) tirar();
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl space-y-4">
-        <h2 className="text-sm font-bold text-slate-900">Asignar OT #{item.ot_number}</h2>
+    // El fondo, la X y Escape salen conservando: lo escrito queda y aparece
+    // igual al volver a abrir este ítem. Sólo «Cancelar» tira.
+    <Modal titulo={`Asignar OT #${item.ot_number}`} alSalir={onClose} tocado={tocado} ancho="chico">
+      <div className="space-y-4">
         <p className="text-xs text-slate-500 -mt-2 leading-snug">{item.descripcion}</p>
         <form onSubmit={submit} className="space-y-3">
           <div className="space-y-1">
             <label className="block text-xs font-medium text-slate-600">Asignar a (usuario del sistema)</label>
-            <Select value={assignedTo} onChange={e => { setAssignedTo(e.target.value); if (e.target.value) setAssignedName(""); }}
+            <Select value={assignedTo} onChange={e => cambiar(e.target.value ? { assignedTo: e.target.value, assignedName: "" } : { assignedTo: "" })}
               className="input w-full">
               <option value="">— Nombre libre —</option>
               {usuarios.map((u: any) => <option key={u.id} value={u.id}>{nombreCompleto(u)}</option>)}
@@ -310,28 +504,29 @@ function EditItemModal({ item, usuarios, onSave, onClose }: {
           {!assignedTo && (
             <div className="space-y-1">
               <label className="block text-xs font-medium text-slate-600">O escribir nombre</label>
-              <input value={assignedName} onChange={e => setAssignedName(e.target.value)}
+              <input value={assignedName} onChange={e => cambiar({ assignedName: e.target.value })}
                 placeholder="Nombre del operario" className="input w-full" />
             </div>
           )}
           <div className="space-y-1">
             <label className="block text-xs font-medium text-slate-600">Notas adicionales</label>
-            <textarea value={notas} onChange={e => setNotas(e.target.value)}
+            <textarea value={notas} onChange={e => cambiar({ notas: e.target.value })}
               rows={2} className="input resize-none w-full"
               placeholder="Ej: Llevar llave 32, coordinar con calcinación..." />
           </div>
-          <div className="flex gap-2 pt-1">
+          <PieDeModal className="flex gap-2">
             <button type="submit" disabled={saving}
-              className="btn-primary disabled:opacity-50">
+              className="btn-primary">
               {saving ? "Guardando..." : "Guardar"}
             </button>
-            <button type="button" onClick={onClose}
+            {/* El único que tira. */}
+            <button type="button" onClick={() => { tirar(); onClose(); }}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               Cancelar
             </button>
-          </div>
+          </PieDeModal>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }

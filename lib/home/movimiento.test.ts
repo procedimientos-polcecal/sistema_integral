@@ -130,3 +130,40 @@ describe("queMandarHoy", () => {
     expect(queMandarHoy({ fechaDeLaFoto: "2026-10-14", hoy: "2026-10-20" })).toBe("movimiento");
   });
 });
+
+describe("loQueSeMovio con avisos que son de una persona", () => {
+  /*
+   * La foto diaria es global y el conteo de divergencias de la Agenda es de
+   * quien mira, así que nunca está en ella. Sin esta excepción "subiría desde
+   * cero" todos los días, con el total entero rotulado como incremento, hasta
+   * que la persona abriera la Agenda.
+   */
+  it("no sale aunque la foto no lo tenga", () => {
+    expect(loQueSeMovio([aviso("agenda-divergencias", 3), aviso("mant-atrasadas", 5)], new Map())).toEqual([
+      { id: "mant-atrasadas", titulo: "t-mant-atrasadas", cantidad: 5, href: "/mant-atrasadas" },
+    ]);
+  });
+
+  it("las menciones sin leer tampoco: son de una persona", () => {
+    expect(loQueSeMovio([aviso("mensajes-menciones-sin-leer", 2)], new Map())).toEqual([]);
+  });
+
+  /*
+   * El contraste: los de salud son del sistema —no dependen de quién mira— así
+   * que la foto los recuerda y el movimiento los ve. Es el día que ese recurso
+   * cae, que es cuando hay que enterarse.
+   */
+  it("el de salud, que es del sistema, sí sale cuando sube", () => {
+    expect(loQueSeMovio([aviso("salud-agenda/canales", 1)], new Map([["salud-agenda/canales", 0]]))).toHaveLength(1);
+  });
+
+  /*
+   * Menos uno: la cantidad de `salud-sin-comprobar` **es el día** y no un
+   * conteo, así que sube sola todas las noches. Comparada contra la foto sería
+   * una novedad diaria y eterna — el mensaje que se repite, que es lo que
+   * enseña a apagar las notificaciones.
+   */
+  it("el de «no se pudo comprobar» no sale por movimiento aunque su número suba", () => {
+    expect(loQueSeMovio([aviso("salud-sin-comprobar", 20_400)], new Map([["salud-sin-comprobar", 20_399]]))).toEqual([]);
+  });
+});

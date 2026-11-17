@@ -66,7 +66,7 @@ describe("la OT 2845", () => {
       })]
     );
     expect(r.divergencias).toEqual([
-      { ot_number: 2845, campo: "la fecha de ejecución", enElSistema: "2026-10-01", enLaPlanilla: "2026-10-03" },
+      { ot_number: 2845, campo: "la fecha de inicio", enElSistema: "2026-10-01", enLaPlanilla: "2026-10-03" },
       { ot_number: 2845, campo: "la fecha de cierre", enElSistema: "2026-10-01", enLaPlanilla: "2026-10-03" },
       { ot_number: 2845, campo: "las horas", enElSistema: "1", enLaPlanilla: "(vacío)" },
     ]);
@@ -264,5 +264,52 @@ describe("la cancelada sin motivo, en el contraste", () => {
       [enLaPlanilla({ ot_number: 10, ...celda })]
     ).divergencias;
     expect(d).toEqual([]);
+  });
+});
+
+/**
+ * La fecha que ya se escribió en «Altas del sistema» y el derrame del master
+ * todavía no refleja.
+ *
+ * Durante esa ventana —de 3 a 53 horas medidas— los dos lados dicen fechas
+ * distintas **por construcción**, no por un problema. Sin esto, cada
+ * postergación dispararía el push de `mant-divergencias`, que es justo lo
+ * contrario de lo que ese aviso existe para hacer.
+ */
+describe("una fecha de ejecución en camino", () => {
+  const enCamino = {
+    fecha_ejecucion: "2026-11-05",
+    fecha_ejecucion_pendiente: "2026-11-05",
+  };
+
+  it("no es una divergencia: va a la cola", () => {
+    const r = contrastar(
+      [enElSistema({ ot_number: 2896, ...enCamino })],
+      [enLaPlanilla({ ot_number: 2896, fecha_ejecucion: "2026-11-02" })]
+    );
+    expect(r.divergencias).toEqual([]);
+    expect(r.enLaCola).toEqual([2896]);
+  });
+
+  it("sin la marca, la misma diferencia sí se informa", () => {
+    const r = contrastar(
+      [enElSistema({ ot_number: 2896, fecha_ejecucion: "2026-11-05" })],
+      [enLaPlanilla({ ot_number: 2896, fecha_ejecucion: "2026-11-02" })]
+    );
+    expect(r.divergencias).toHaveLength(1);
+    expect(r.divergencias[0].campo).toBe("la fecha de inicio");
+  });
+
+  /**
+   * Y cuando el derrame llega, la marca deja de tapar nada: los dos lados
+   * dicen lo mismo y no hay ni divergencia ni cola que informar. Es lo que
+   * permite que `sincronizarOrdenes` la limpie sin dejar la OT descubierta.
+   */
+  it("cuando el derrame llegó, los dos lados coinciden", () => {
+    const r = contrastar(
+      [enElSistema({ ot_number: 2896, ...enCamino })],
+      [enLaPlanilla({ ot_number: 2896, fecha_ejecucion: "2026-11-05" })]
+    );
+    expect(r.divergencias).toEqual([]);
   });
 });

@@ -1,0 +1,33 @@
+-- ============================================================
+-- SdG — El catálogo de razones de postergación no lleva «planificacion_del_dia»
+--
+-- NO HACE FALTA CORRERLA: ya se aplicó por PostgREST el 04/11/2026 (era DML).
+-- Está para que el repo y producción digan lo mismo, y es idempotente.
+--
+-- QUÉ PASÓ
+--
+-- El envío de un plan del día al calendario le corre la fecha a las órdenes del
+-- SdG por la ruta de postergar, y esa ruta exige una `razon`. Se cargó en este
+-- catálogo una fila `planificacion_del_dia` / «Planificación del día», inactiva,
+-- creyendo que la razón tenía que estar en la tabla.
+--
+-- POR QUÉ SE SACA
+--
+-- `mant_razones_de_postergacion` es la tabla del MENÚ MANUAL: etiqueta, días,
+-- orden y activa son todas preocupaciones de menú, y la ruta de postergar nunca
+-- valida `razon` contra ella (es texto libre que va a la nota y a la auditoría;
+-- ninguna tabla tiene una columna `razon`). La fila no compraba nada y dejaba un
+-- arma cargada: Configuración lista las razones activas e inactivas con un botón
+-- «Ofrecerla», y un clic la convertía en una opción manual. Desde ahí, una
+-- postergación que ningún plan hizo quedaría registrada con ese motivo en la
+-- auditoría y en la celda de observación previa de la planilla de producción,
+-- que es el daño que la razón dedicada existía para evitar.
+--
+-- `planificacion_del_dia` sigue existiendo, pero como código de sistema
+-- (`RAZON_DEL_PLAN` en lib/mantenimiento/planAlCalendario.ts), no como fila.
+--
+-- No toca `falta_repuesto`, que es la única que había.
+-- ============================================================
+
+delete from public.mant_razones_de_postergacion
+ where codigo = 'planificacion_del_dia';

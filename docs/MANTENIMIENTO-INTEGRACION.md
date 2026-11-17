@@ -164,12 +164,50 @@ Se llama `ORDEN DE TRABAJO`, la pestaña `OT`, y tenía 1.728 órdenes al portar
 Sus columnas coinciden con lo que leía el código de origen:
 
 `A N° OT · B fecha · C sector · D equipo · E especialidad · F tipo · G quién ·
-H descripción · I repuesto · J ejecución · K cierre · L (calculada) · M estado ·
+H descripción · I repuesto · J inicio · K cierre · L (calculada) · M estado ·
 N contratista · O horas · P/Q/R operarios · S prioridad · T frecuencia ·
-U próxima fecha · V fotos · W observaciones · X observación previa`
+U próxima fecha · V fotos · W observaciones · X observación previa ·
+Y fin (estimada)`
 
 La **X se agregó el 16/10/2026** y es la única que no estaba en el origen. Ver
 "Por qué una OT todavía no se hizo", más abajo.
+
+### Tres fechas que se confunden, y la Y que llegó el 02/11/2026
+
+Ese día la **J pasó de llamarse «FECHA DE EJECUCIÓN» a «FECHA DE INICIO»** y
+apareció la **Y, «FECHA DE FIN»**. Con eso la planilla pasó a tener tres fechas
+de trabajo y conviene leerlas juntas, porque dos son estimaciones y una no:
+
+| Columna | Qué es |
+|---|---|
+| **J — fecha de inicio** | Cuándo se compromete a **empezar**. Estimada. Es la que decide si una OT está atrasada |
+| **Y — fecha de fin** | Cuándo se calcula que **termina**. Estimada y **opcional** |
+| **K — fecha de cierre** | Cuándo se cerró **de verdad**. No es una estimación |
+
+Tres cosas que no se deducen del código:
+
+- **Por dentro la J se sigue llamando `fecha_ejecucion`**, en la base y en todo
+  `lib/mantenimiento`. Es la misma fecha con mejor nombre: renombrar la columna
+  habría arrastrado el MTBF, el contraste, el GUT y la programación del taller
+  sin cambiar nada de lo que hacen. Lo que sí se renombró es **el nombre que se
+  ve**, y vive en un solo lugar —`IMPRESCINDIBLES` de
+  [lib/mantenimiento/altaDeOT.ts](../lib/mantenimiento/altaDeOT.ts)— del que lo
+  toman los cuatro formularios, el contraste y los avisos.
+- **La Y no se guarda en `ordenes_trabajo`.** No hay columna ni migración: la
+  fecha de fin viaja del formulario a la planilla y se queda ahí, que es donde
+  manda. El día que haga falta verla en el sistema son una columna nueva y
+  leerla en `filaDeOrden`.
+- **Si el encabezado no trae «FECHA DE FIN», el dato no se escribe y el alta no
+  se cae.** Es la regla que ya valía para toda columna que el formulario puede
+  no tener, y acá tiene una consecuencia: hasta que esa columna exista en las
+  **dos** pestañas del libro de respuestas —`Respuestas de formulario` y
+  `Altas del sistema`—, cargar la fecha en la app no deja nada del otro lado.
+  El par está fijado con un test en `formulario.test.ts`.
+
+Y del lado de la planilla, la Y del master **no es derrame todavía**: nació
+vacía, sin fórmula. Para que traiga lo que cargan las dos pestañas necesita su
+propio `QUERY(IMPORTRANGE(...))` en la `Y2`, con la misma forma que la `S2` y
+—esto es lo que las alinea— el mismo `ORDER BY Col1`.
 
 **La columna L no es el estado.** Se llama "Column 19" y trae un "Atrasado / al
 día" calculado; el estado está en M. Confundirlas daría por atrasada media
@@ -334,6 +372,41 @@ sector, y como indicador propio ("Sectores a parar").
 Dar por realizada una OT sin decir qué se hizo pierde justamente lo que sirve
 después. Marcarla como "Realizado" abre el registro: cómo salió, cuándo, cuántas
 horas, quiénes, y qué se encontró.
+
+**La fecha —«Cuándo»— es obligatoria y no se precarga con hoy** (16/11/2026, a
+pedido). Arranca con la que la orden ya tenga, y **vacía si no tiene**. Las dos
+mitades arreglan cosas distintas y conviene no juntarlas: precargar la propia
+evita que reabrir una OT para corregirle las horas le mueva el cierre en
+silencio; no poner hoy evita lo contrario, que es el motivo del pedido — **una
+fecha puesta por el sistema no se distingue de una elegida**, así que quien
+registra el jueves un lunes aceptaba el lunes sin mirar y la orden quedaba
+cerrada el día que alguien la cargó. De esa fecha viven el MTTR y el historial
+del equipo.
+
+Lo que no se deduce del código es que **son dos reglas y no una**:
+
+- **En la pantalla la fecha se exige en los tres resultados** —completado,
+  parcial y cancelado— porque lo que dice ese campo es qué día se trabajó, y la
+  **ejecución** se guarda en los tres. Sin ella, `executed_at` sale de
+  `"T00:00"`: una fecha inválida que rebota después de no haber guardado nada.
+- **En el servidor se exige sólo cuando el pedido pone la orden en
+  `REALIZADO`** (`loQueFaltaParaDarPorRealizada`), que es el único de los tres
+  que llega a ese estado.
+
+Y la regla **no** es «toda orden realizada tiene fecha», que sería imposible de
+sostener: medido el 16/11/2026 sobre las 2.466 órdenes, **220 de las 2.415
+realizadas no tienen fecha de cierre y una sola la creó la app**. Las otras 219
+entran por la planilla, donde manda la planilla. Lo que esto cierra es que la
+app cree una más — y el agujero estaba del lado del servidor, porque un PATCH
+que sólo cambiaba el estado **pasaba de largo por todas las comprobaciones del
+cierre**. Ahora `estado: "REALIZADO"` entra a esa puerta aunque no mande
+ninguna fecha; el costo es una lectura más en ese pedido y en ningún otro.
+
+Ojo con una cosa al tocar esa puerta: las dos banderas de ahí son **dos y no
+una**. `tocaElCierre` —que el pedido traiga fecha o justificación— decide
+además si se reescribe la columna W de la planilla, así que ensancharla haría
+que un simple cambio de estado se lleve las observaciones. La que se ensanchó
+es `hayQueMirarElCierre`, que sólo gobierna las comprobaciones.
 
 Queda de los dos lados. En el sistema como **ejecución**
 (`mantenimientos_ejecuciones`), que hasta ahora sólo podía colgar de un
@@ -640,6 +713,80 @@ tiene: la que sí tiene se abre y se lee.
 columnas, así que hay que ensancharla a 24 y poner `OBSERVACIÓN PREVIA` en `X1`.
 Hasta que esté, la nota se guarda igual y la pantalla avisa que no llegó a la
 planilla con lo que haya dicho Google.
+
+### Y abajo hay otra caja de texto que **no** es esto (11/11/2026)
+
+Desde la mensajería interna, en la pantalla de la OT conviven **dos cosas que se
+escriben igual y no son lo mismo**, una debajo de la otra. Confundirlas es el
+error fácil, así que acá está cuál es cuál:
+
+| | «Por qué no se hizo» | El hilo de mensajes |
+|---|---|---|
+| Qué dice | por qué esta orden sigue abierta | lo que se habla sobre la orden |
+| Dónde vive | `ordenes_trabajo_notas` | `mensajes` + `mensajes_menciones` |
+| **A la planilla** | **sí, la última va a la columna X** | **no, a ninguna** |
+| Avisa a alguien | no | sí: al mencionado le sale un correo con el texto adentro |
+| Quién la puede escribir | quien puede editar la OT | **cualquiera que pueda abrir la pantalla** — ver y escribir son lo mismo, así que no depende de `canEdit` |
+
+De ahí salen las dos consecuencias que importan:
+
+- **Un mensaje no reemplaza a una justificación.** Explicar en el hilo por qué
+  la orden está parada deja la columna X vacía, y quien mira la planilla —que es
+  quien no entra al sistema— no se entera de nada. Eso es exactamente la
+  divergencia que no avisa de la que habla CLAUDE.md.
+- **Una justificación no reemplaza a un mensaje.** La nota no le llega a nadie:
+  si hay que avisarle a alguien, es una mención.
+
+La pantalla lo dice con el `aclaracion` de `<HiloDeMensajes>`
+(`app/(app)/mantenimiento/ordenes/OrdenesClient.tsx`), y el texto cambia según
+si esa orden pide justificación. Está escrito también acá porque un renglón de
+JSX no es donde alguien va a buscarlo seis meses después. El resto de la
+mensajería —cómo se decide quién puede ver un hilo, por qué el aviso es un
+correo— está en [el spec](superpowers/specs/2026-11-11-mensajeria-interna-design.md)
+y resumido en la fila de CLAUDE.md.
+
+## Cancelar una OT: la que no se va a hacer nunca (16/11/2026)
+
+Una OT sólo sabía terminar haciéndose. La que no se iba a hacer —equipo de baja,
+trabajo absorbido por otra orden— quedaba abierta para siempre: contaba como
+atrasada, se trepaba al tope del GUT con el +1000 y entraba en el push diario.
+La más vieja era del 11/12/2025.
+
+`CANCELADA` **reemplazó** a `SUSPENDIDA` en vez de sumarse. El dato que lo
+decidió: `SUSPENDIDA` tenía **0 filas de 2.453** y el único camino que llevaba
+ahí —el resultado «Cancelado» del modal de registrar— nunca produjo una. Dos
+palabras para «cerrada sin hacerse», una viva y una muerta, es como se pudre un
+vocabulario. El diseño completo está en
+[el spec](superpowers/specs/2026-11-13-mantenimiento-cancelar-una-ot-design.md).
+
+Cinco cosas que no se deducen del código:
+
+- **La justificación no es una columna: es una nota.** Reusa
+  `ordenes_trabajo_notas`, que ya es «por qué no se hizo» y ya exporta a la
+  columna X. Por eso cancelar no necesitó migración, y por eso una cancelada
+  puede volver a justificarse: las notas son un historial, no un campo.
+- **El motivo entra antes que el estado.** Es la regla de la auditoría de lo
+  irreversible: si la nota no entra, la orden no se cancela. Al revés quedarían
+  canceladas sin motivo, que es exactamente lo que este estado vino a impedir.
+  Vale para las **dos** puntas que cancelan: el PATCH de órdenes y el botón de
+  reiniciar un ciclo.
+- **Una cancelada no puede tener `fecha_cierre`**, y ése es el invariante que
+  más cuesta ver. El modal de «Registrar el trabajo» con resultado **Parcial**
+  deja la orden `EN_PROCESO` **con** fecha de cierre; cancelarla después dejaría
+  una fila que `costoEquipo` cobra como gasto real. La fecha que decide es la
+  que la orden va a **tener** —`elCierreQueQueda` de `cierreDeOT.ts`—, no la que
+  trae el cuerpo, y es la misma que miran las tres reglas del cierre.
+- **La puerta de la planilla no se puede cerrar.** La columna M la edita gente a
+  mano y no tiene desplegable, así que alguien puede escribir «Cancelada» sin
+  motivo. No se previene: se **detecta**. `laCancelacionNoTieneMotivo`
+  (`contraste.ts`) la informa como divergencia en el contraste que ya corre
+  dentro de la sincronización. Y si la consulta de notas falla, el detector
+  calla y lo dice en `canceladas_sin_revisar`: un detector apagado no se
+  distingue de uno que no encuentra nada.
+- **`gut_orden` es una columna generada con los estados cerrados escritos
+  adentro**, así que cancelar necesitó la migración `20261116082742`. Mientras
+  no se aplique, una cancelada conserva su +1000 y **sube** en el listado de OT
+  en vez de desaparecer — y eso es el listado entero, no sólo un tablero GUT.
 
 ## Iniciar una OT pregunta por el equipo
 
@@ -1456,11 +1603,17 @@ anotar qué hace falta no depende de saber si lo hay. Para conectarlo:
 Había que acordarse de apretar el botón en cada pantalla, y lo que se veía en el
 sistema era tan viejo como la última vez que alguien lo hizo.
 
-Ahora lo llaman dos relojes, igual que Compras: **GitHub Actions cada quince
-minutos**, que es la frecuencia real, y un **cron diario de Vercel** como red por
-si Actions falla. El cron vive en Actions y no en `vercel.json` porque el plan
-Hobby sólo admite crons diarios: poner una frecuencia mayor no degrada el cron,
-hace fallar el deploy entero.
+Ahora lo llama **un solo reloj: `vercel.json`, cada 10 minutos**. Hasta el
+05/11/2026 eran dos —Actions «cada quince minutos» y un cron diario de Vercel
+como red— y el motivo escrito era que el plan Hobby sólo admite crons diarios.
+**Las dos mitades de eso resultaron falsas**: el plan es Pro, y los quince
+minutos de Actions eran en los hechos **cada 4 a 8 horas**. El workflow
+`mantenimiento-sync.yml` conserva su disparo a mano y perdió el `schedule`.
+
+Para Mantenimiento esto importa más que para los otros, porque de esta
+sincronización cuelga el barrido que **mete las OT nuevas al calendario**: lo
+que antes tardaba hasta ocho horas en aparecerle a la gente, ahora tarda diez
+minutos.
 
 De paso se arregló un cron muerto: `vercel.json` llamaba todos los días a las 6
 a `/api/cron/sync`, una ruta que nunca existió en este repo —quedó copiada de la
@@ -1665,7 +1818,7 @@ haya marcado `ATRASADO` a mano —lo decide una persona— o que se le haya pasa
 la fecha en que tenía que hacerse —lo decide el calendario—.
 
 Lo que **no** cuenta: una realizada, aunque se haya hecho tarde, porque ya no
-hay nada que hacer con ella; y una suspendida, que se paró a propósito y
+hay nada que hacer con ella; y una cancelada, que se cerró a propósito y
 avisarla todos los días es ruido.
 
 Se muestran **en el tablero**, arriba y sólo cuando hay: un panel que dice "cero
@@ -1750,19 +1903,66 @@ una persona quede en dos turnos el mismo día.
 
 ### De dónde salen las ausencias, y qué se deja afuera a propósito
 
-Sólo de `ausencias`, la tabla de RRHH. Tres decisiones que parecen omisiones y
-no lo son:
+De `ausencias` y de `francos`, las dos tablas de RRHH. Tres decisiones que
+parecen omisiones y no lo son:
 
-- **`francos` está afuera del cruce.** `fecha_tomado` no es el día de descanso:
-  es **el día en que alguien apretó el botón** de "tomado"
-  (`FrancosClient.tsx` manda `hoyEnArgentina()`). Medido: de 217 francos hay 56
-  tomados y sus fechas caen en **tres días**, 35 de ellos el 01/09/2026. Cruzarlo
-  pintaría 35 huecos un lunes cualquiera, y es el mismo error que este proyecto
-  ya evita en las planillas: enlazar al que se le parece es peor que dejar en
-  null. **La consecuencia, asumida:** un franco tomado no abre hueco, y el
-  encargado puede ver programada a alguien que ese día no viene. Las 56 filas
-  viejas no se recuperan —la fecha real no quedó escrita en ningún lado—; el
-  arreglo es de RRHH (pedir el día real al marcarlo) y está nombrado en el spec.
+- **Un franco abre hueco por `fecha_descanso`, nunca por `fecha_tomado`**, y la
+  distinción es el arreglo del 26/10/2026. `fecha_tomado` es **el día en que
+  alguien apretó el botón** de "tomado": hasta esa fecha la pantalla mandaba
+  `hoyEnArgentina()` a mano, así que de 217 francos los 56 tomados caían en
+  **tres días**, 35 de ellos el 01/09/2026 — tres sesiones de alguien
+  poniéndose al día, no tres días en que descansó medio taller. Cruzar por ahí
+  habría pintado 35 huecos un lunes cualquiera.
+  Desde el 26/10/2026 marcar un franco **pide el día que se descansa** y lo
+  guarda en `fecha_descanso`, que es el que este cruce mira. Se puede pedir
+  porque el franco se marca **cuando se formaliza**, así que el día ya se sabe
+  y casi siempre está adelante.
+  **Los 56 viejos quedan con `fecha_descanso` en null y no abren hueco**: su
+  día real no quedó escrito en ningún lado y se dieron por perdidos a pedido.
+  Null es la verdad ahí —el sistema no sabe— y es la misma regla que el
+  proyecto aplica en las planillas: enlazar al que se le parece es peor que
+  dejar en null. Comprobado contra la base el 26/10/2026: filtrando por
+  `fecha_descanso`, la semana del 01/09 devuelve **cero** filas.
+  **Las dos fotos del dato, porque la primera contaba otra cosa.** El 26/10/2026
+  eran **56 de 217**: los *tomados*, no el total. El 04/11/2026 son **259**
+  francos: **59 `TOMADO` y 200 `PENDIENTE`**. Los pendientes no tienen día y es
+  lo correcto: `estaDeFranco` pide `TOMADO` **y** la fecha exacta.
+
+  **Un franco tomado después del 26/10 puede quedar sin día: hallazgo del
+  04/11/2026, sin arreglar.** Medido fila por fila sobre los 59 `TOMADO`:
+  - **Se sabe.** **56** se tomaron antes del 26/10/2026 y no tienen
+    `fecha_descanso`: son los viejos, y el número coincide exacto con el
+    documentado. **1** se tomó el 02/11/2026 **con** su fecha (se había creado el
+    14/10). **2** se tomaron el 02/11/2026 **sin** fecha (se crearon ese mismo
+    02/11). O sea que **de los tres francos tomados el 02/11, dos quedaron sin
+    fecha de descanso** (medido el 04/11/2026); **qué camino los escribió no se
+    sabe**. **De dónde sale cada
+    número:** los **40** francos creados desde el 26/10 (`created_at >=
+    2026-10-26`) y los **2** `TOMADO` entre ellos son **medidos**; los **38**
+    pendientes salen de **restarlos**, no de mirarlos uno por uno. Ninguno de
+    los 40 tiene fecha. El que sí guardó el día **no está entre los 40**: se
+    creó antes y se tomó después.
+  - **Una diferencia que no se explicó, y no hace falta rehacerla.** 259 − 40 =
+    219, y la foto del 26/10 decía 217: **el conteo del 04/11/2026 y esa foto
+    difieren en dos francos, y la causa no se averiguó.** Son mediciones de
+    momentos distintos; no hay evidencia de que alguna de las dos esté mal.
+  - **Conjetura, sin confirmar.** Que lo que distingue al que funcionó de los dos
+    que no sea haberse creado **y** tomado el mismo día. Es lo único visible en
+    los datos, y son dos casos: **no es una causa**. No se leyó el código del flujo de
+    francos para buscarla.
+  - **Qué significa.** Cada franco tomado sin fecha es una ausencia que la cuenta
+    de disponibles no ve, y ni la programación ni la Agenda pueden saber cuándo
+    descansó esa persona. **Lo observado es que un franco tomado quedó sin
+    día.** Por qué —un defecto del flujo, otra puerta de entrada, un dato
+    viejo, el flujo nuevo— no se sabe: no se leyó el flujo, y por eso no se lo
+    llama defecto.
+    **No se arregló desde acá.** Los 56 viejos siguen siendo
+    historia perdida mientras que estos 2 no lo son necesariamente (el día de
+    descanso podría estar adelante).
+  Lo que pregunta la programación es `noViene()` de
+  `lib/mantenimiento/disponibilidad.ts`, que junta las dos razones —ausencia
+  cargada y franco que se descansa— en un solo lugar, para que la grilla y los
+  candidatos no puedan calcularlas distinto.
 - **`TARDANZA` no cuenta como falta.** Está en el mismo enum que `VACACIONES`,
   pero quien llega tarde viene a trabajar: pintarlo como hueco muestra un
   agujero donde hay una persona, y la primera vez que pase el encargado deja de
@@ -1880,6 +2080,1126 @@ bug nuevo.
 - **Borrar una ausencia futura deja sus días marcados como ausente** en
   `calculos_diarios` después del recálculo. Es anterior a este trabajo y es de
   RRHH, no de acá.
+
+## El cuaderno de Piparo: leer una foto y sacar las OT (01–02/11/2026)
+
+Piparo entrega su mes en un **cuaderno manuscrito** y no con partes preimpresos
+como Candia. De ahí salen unas 35 OT por mes cargadas a mano, mientras que el
+cuaderno tiene unos 118 renglones: lo que no se cargaba, no existía. Esto lee las
+fotos con un modelo, deja los renglones para chequear contra el papel y genera
+las OT. El diseño está en el
+[spec del 30/10](superpowers/specs/2026-10-30-mantenimiento-cuaderno-de-piparo-design.md)
+y el plan en
+[docs/superpowers/plans/2026-11-01-mantenimiento-cuaderno-de-piparo.md](superpowers/plans/2026-11-01-mantenimiento-cuaderno-de-piparo.md);
+acá está lo que no se deduce del código y lo que se midió cuando por fin hubo
+una foto real.
+
+**Dónde vive.** La pantalla es `/mantenimiento/partes-contratista` (la misma
+ruta que Candia; `CuadernoClient.tsx`), las rutas están en
+`app/api/mantenimiento/cuaderno/` (`fotos`, `renglones`, `repetidos`, `generar`),
+la lógica pura en `lib/mantenimiento/cuaderno*.ts`, y las tablas son
+`mant_cuadernos`, `mant_cuadernos_fotos` y `mant_cuadernos_renglones` más el
+bucket privado `cuaderno-contratista` (10 MB, creado por SQL en la primera
+migración).
+
+### El modo lo decide `proveedores.modo_de_carga`
+
+El desplegable de contratista elige la pantalla: **PIPARO está en `cuaderno` y
+CANDIA en `parte_diario`**. Lo decide esa columna y no el nombre ni un id en una
+constante, así que el tercer contratista con cuaderno es un `update` y no un
+deploy. Lo que hay que saber: `ordenes_trabajo.contratista` es **texto** y no
+una FK, y el nombre del proveedor tiene que coincidir con él (medido: `PIPARO`
+exacto en el proveedor y en las 380 OT). El freno de los duplicados compara
+por ese texto, sin distinguir mayúsculas.
+
+### Lo que se midió contra el papel real (02/11/2026)
+
+Hasta acá todo se había probado con respuestas del modelo inventadas, y esa fue
+la excusa para no ver el papel: la pantalla está detrás del login. Se hizo de
+otra manera, **en sólo lectura**: un script llamó a `generateObject` con
+`esquemaDeLaLectura` y `PROMPT_DEL_CUADERNO` tal como los usa la ruta, le pasó
+cada una de las diez fotos de septiembre de 2026, y puso el resultado por
+`normalizarRenglones`, `engancharRenglonLeido` contra los **41 sectores y 269
+equipos reales**, y `enOrdenes`. No escribió nada en la base ni en el bucket.
+
+**Lo primero: con la llave de `.env.local` no se puede probar el modelo que
+manda.** `anthropic/claude-sonnet-5` devuelve **403 `RestrictedModelsError`**
+("Free tier users do not have access to this model") antes de llegar al modelo,
+igual que `claude-sonnet-4.6`, `claude-sonnet-4.5` y `claude-haiku-4.5`. Todo lo
+que sigue se midió con **`google/gemini-2.5-flash`**, el único de los probados
+que entra en el tier gratuito. **Eso no dice cómo lee Sonnet 5**: la letra de
+Piparo es justo donde más se nota la diferencia de modelo. Lo que sí vale
+igual es lo que depende del papel y del código, no del modelo.
+
+| | |
+|---|---|
+| Diez páginas | **140 renglones** (el spec calcula ~118), 28 OT saldrían y el resto queda pendiente |
+| Tiempo por página | 15 a 49 s, **salvo la 6: 201 y 214 s en dos corridas** (62.911 tokens de razonamiento sobre letra ilegible), a 26 s del tope de 240 s de la ruta |
+| Página 2 (la del 21–23/09) | 15 renglones, las dos veces; 24 y 41 s |
+| Enganche de esa página | 11 de 15 con sector, 5 con equipo, 4 en rojo (en la segunda corrida: 10, 4 y 5) |
+| Las diez | 37 de 140 con sector y **103 en rojo, con el catálogo de PIPARO vacío** (hay 23 lugares aprendidos y son todos de Candia) |
+
+**El rojo de la primera carga es sobre todo un catálogo vacío.** El 74% en rojo
+(103 de 140) **no es el código fallando**: es un catálogo de PIPARO que nadie
+enseñó todavía y un modelo que en las páginas 3 y 8 leyó «P/suls tut N°L» donde
+dice «P/Trit N°1». Al lado está la página 2, donde la letra es legible y los
+lugares son los de siempre: **11 de 15 con sector** con el mismo catálogo
+vacío. La diferencia entre las dos cifras es la letra y no el enganche; y cada
+sector que alguien confirma queda aprendido, así que la segunda carga arranca
+con menos rojo que la primera. «Horno 4 Rastro» queda en rojo porque ninguna abreviatura nombra
+los hornos —el sector es Calcinación, `PO-B1`— y es justo lo que el catálogo
+aprendido está para absorber.
+
+**Qué leyó bien, en la página 2**, que es la que el spec transcribe: las horas
+y los pesos (`= 920000` salió como 920.000 pesos y no como horas; `= 4` sin
+unidad quedó `unidad: null` y entró dudoso), las **dos llaves** con su total
+en un solo renglón y `en_llave` en todos, las comillas expandidas y marcadas
+`heredado`, y el sector de los renglones que nombran una planta. `Tranqueras
+D6` salió con equipo D6, sector **Cantera** y `sector_propuesto`, que es lo que
+decidió el Ruling 2 del plan.
+
+**Qué leyó mal o raro, y qué quedó sin red:**
+
+- **El encabezado del primer día está pisado a mano en el papel** (un dígito
+  escrito sobre otro). El spec lo lee 21; el modelo leyó **24, las dos veces, sin
+  marcarlo dudoso**. Nada del sistema avisa que el orden de los días quedó 24,
+  22, 23: las OT de ese día saldrían con otra fecha.
+- **El 23/09 salió «27» en una corrida y bien en la otra.** Con `temperature: 0`
+  la misma foto da dos lecturas distintas, y eso no se arregla con código: es la
+  prueba medida de por qué la pantalla pone **la foto fija al lado de los
+  renglones** (el 21 se leyó 24 las dos veces, el 23 se leyó 27 y 23), y por qué
+  la ruta se niega a releer una página que ya tiene renglones.
+- **La página trae un tercer día que el spec no transcribe** (23/09, una llave de
+  24 Hs) **y una línea entera tachada.** El prompt, que usa esa misma hoja como
+  ejemplo, tampoco las nombra: el modelo la devolvió como renglón dudoso en
+  una corrida y no la devolvió en la otra. Falta decidir qué es una línea
+  tachada, y no se resolvió acá porque no se puede validar contra Sonnet 5.
+- **La comilla se expandió a medias**: «Reparar rodillos 5 P/Trit N°1» perdió el
+  «2/cinta», así que la cinta 5 de ese renglón quedó sin equipo.
+- **`linea` no es el número de renglón.** En una corrida el modelo contó las
+  líneas físicas del papel, encabezados incluidos, y en la otra no. Sirve para
+  volver a la foto y para ordenar dentro de un día, no para contar.
+- **Un número se pegó a su unidad: «= 18 Hs» salió `1845` horas** (página 9,
+  «Cartelería P/Trit N°3»), y entró sin ninguna marca: sin eso, confirmar sin
+  mirar daba una OT de 1.845 horas. **Se arregló ahí mismo**:
+  `normalizarRenglones` marca dudoso todo renglón de más de **200 horas**
+  (`TOPE_DE_HORAS_POR_RENGLON`), nombra el número en el motivo y lo deja entrar
+  igual —nada se descarta ni se redondea—. El 200 está medido: lo más grande
+  que trae el cuaderno es una llave de 46 h, y después 40, 38 y 32. **A los
+  pesos no se les pone tope**: un importe grande es normal.
+- **El año se leyó «24» en diez renglones de la página 11** y el mes entero se
+  corrió a 2024. Ese sí lo atajó `normalizarRenglones`: «cae fuera del mes de la
+  carga» y quedó dudoso. Es la única validación de fecha que hay, y funcionó.
+
+**Lo que se sabe y no se probó.** La pantalla, la subida, la reducción en el
+cliente, el desplegable de equipos con 269 opciones, la vista previa y la
+generación están detrás del login y no se ejercitaron: lo que hay son las
+funciones puras y la lectura del modelo. **Falta una corrida real de `simular`
+desde la pantalla antes de la primera generación**, y esa primera generación
+no puede ser septiembre (ver más abajo).
+
+### Las trampas que cuestan caro
+
+- **El costo vive en dos lugares y nadie los ata**: `ordenes_trabajo.costo` es un
+  número en la base, y el mismo monto va escrito dentro del texto de
+  `REPUESTO UTILIZADO` (columna I de la planilla). La planilla no tiene columna de
+  costo y es de donde lee quien no entra al sistema, así que se usó la que ya
+  existía: de las 380 OT de PIPARO, **58 ya traían el monto escrito a mano ahí**,
+  de tres formas distintas. Si alguien edita uno y no el otro, divergen. Y
+  **`costoEquipo.ts` no suma este costo**: ese informe saltea toda OT con
+  contratista, y se decidió no tocarlo. Todo lo que se le pagó a Piparo era
+  invisible para el costo de la máquina y lo sigue siendo.
+- **La columna I del master es derrame y no guarda lo que se le escribe.** Es el
+  resultado de un `QUERY(IMPORTRANGE())` del libro de respuestas; escribirle
+  bloquea el derrame con un `#REF!` o lo pisa el próximo recálculo, y la
+  sincronización le devuelve a la base el texto viejo. Por eso, **al sumar horas
+  a una OT que ya existe se corrige en «Altas del sistema»** —de ahí derrama—
+  con `corregirLaAlta`, y **antes** de tocar la base: si Google falla, no se
+  toca nada. Vale para la H (descripción) y la J (fecha de ejecución) también, y
+  sólo para las OT que creó el sistema: las del formulario no están en esa
+  pestaña. Quien agregue otro campo editable que viaje por H, I o J pasa por la
+  misma puerta.
+- **Septiembre de 2026 ya está cargado a mano: 29 OT de PIPARO, 28 fechadas el
+  01/09.** Generar el cuaderno de septiembre las duplica, y una OT escrita en la
+  planilla se borra a mano, fila por fila. Hay un freno: la generación **se
+  niega con un 409** si el mes del cuaderno ya tiene OT del contratista que no
+  salieron de ningún cuaderno, y se levanta con `confirmar_duplicados: true`. Mira
+  **el mes entero y no el rango de los renglones**: con el rango justo, un
+  cuaderno que arrancaba el 02/09 no atrapaba las 28 del 01/09, que son
+  justo las que motivaron el freno. La vista previa (`simular`) no se niega:
+  informa. Una segunda corrida de la misma carga no se frena a sí misma, porque
+  lo que generó el sistema está enlazado a renglones. **La prueba real no
+  puede ser septiembre**: hay que usar un mes sin cargar.
+- **`en_llave` no existe como columna.** Se lo pide al modelo y se lo usa al
+  normalizar, pero no se guarda: cuando se agregó el campo no se pidió una
+  cuarta migración. Consecuencia, y es la más fea de la prueba real: **una llave
+  que nadie junta no se frena.** Las 46 h de la página 2 están escritas en
+  «Limpieza P/Trit N°1»; ese renglón tiene sector y horas, así que **sale como
+  una OT de 46 h por sí solo**, y los otros dos de la llave quedan
+  pendientes (`sin_sector` o `sin_horas`). Las horas están bien y las tareas
+  mal repartidas, sin ninguna marca. Los que quedaron en blanco de una llave se
+  ven en los pendientes, no en una advertencia de «esto venía de una llave».
+  **Es el comportamiento pedido y queda como riesgo asumido, no como defecto**:
+  quien carga decide si las junta, y la vista previa lo muestra antes de crear
+  nada.
+- **Primero se juntan los renglones, y después se confirma el sector.** Al
+  revés, confirmar le saca al renglón el estado «sin sector confirmado» y con eso
+  **sale de la propuesta de acumulación** (`propuestaDeGrupos` sólo mira los
+  que no lo tienen confirmado): «Tranqueras D6» del 17, el 21 y el 23 dejan de
+  proponerse juntas y salen como tres OT. Tampoco se hereda: un grupo sale sólo
+  si **todos** sus renglones traen sector y ninguno propuesto.
+- **Una foto leída no se relee.** Pisaría lo que una persona corrigió en
+  pantalla, y como el modelo no da lo mismo dos veces, tampoco sería la misma
+  lectura. Reintentar sólo vale para una foto que quedó en `fallo`.
+- **Lo dudoso no frena nada**, sólo pinta y tiene su filtro. Lo que frena la
+  generación es la falta de sector, de fecha o de horas y precio.
+- **Una OT sin equipo no es un error**: `equipment_id` admite null (118 de 156
+  OT de Candia lo tienen) y `equipo_raw` va como `<código del sector> - Edificio`,
+  la misma convención que la generación de Candia.
+
+### Lo que hay que tener en Vercel
+
+`AI_GATEWAY_API_KEY` tiene que estar cargada (está en Production y Preview desde
+el 05/10/2026 por el Asistente). **Con una llave del tier gratuito la lectura
+falla con el 403 de arriba**, y se ve en la foto como `fallo` con lo que dijo el
+Gateway sin traducir; no sé si la cuenta de producción tiene saldo, y comprobarlo
+es la primera foto que se sube. `CUADERNO_MODELO` es **opcional**: sin ella usa
+`anthropic/claude-sonnet-5`. Se carga para probar la cañería sin créditos
+(`google/gemini-2.5-flash` anduvo) y **la calidad de la lectura no se juzga con
+ese modelo**. Borrarla vuelve al bueno.
+
+Cada foto es una llamada de hasta 240 s dentro de una función de 300, y se mandan
+de a una: una página lenta como la 6 no tumba a las otras nueve. **Pero el margen
+es de 26 segundos**: con Gemini, una página densa tardó 201 y 214 s contra el
+corte de 240, y las otras nueve entre 15 y 49. Una página así puede quedar justo
+del lado equivocado y terminar en `fallo`; se reintenta. Con un modelo que no
+razona tanto no debería pasar, pero no se pudo medir.
+
+### La otra puerta: el mes en un Excel (02–03/11/2026)
+
+**No todos los meses vienen en el cuaderno.** Quien carga arma a veces la
+planilla él mismo, y en ese caso fotografiar lo que ya está tipeado para que un
+modelo lo vuelva a leer es dar una vuelta entera para perder exactitud —y mete
+los dudosos de la letra manuscrita en un dato que nunca fue manuscrito—. Así que
+un mes puede entrar por un `.xlsx` **como alternativa a las fotos**, no como
+otro modo: los renglones quedan iguales y todo lo de abajo —el enganche a sector
+y equipo, juntar y separar, confirmar el sector, el freno de duplicados,
+generar— no se entera de por dónde entraron.
+
+#### Las cinco columnas que se procesan
+
+| Columna | Obligatoria | Qué es |
+|---|---|---|
+| **Tarea** | **sí** | Qué se hizo. Es lo que va a la descripción de la OT |
+| **Fecha Desde** | no | El primer día |
+| **Fecha Hasta** | no | El último. Vacío quiere decir que duró un día |
+| **Hs** | **sí** | Las horas de esa tarea |
+| **Precio ($)** | no | Lo que se cobra por trabajo, cuando no se cobra por hora |
+
+**Se buscan por el texto del encabezado, no por la letra de la columna**, y eso
+no es comodidad. El 02/11/2026 este mismo contenido vivía en `K` a `O` —era el
+resumen de la derecha de una planilla que además traía el detalle día por día a
+la izquierda— y el 03/11 pasó a `A` a `E` al quedar la tabla sola. Leer por
+letra significa que mover la tabla una columna rompe la carga sin decir por qué.
+Se aceptan también `Descripción`, `Desde`, `Hasta`, `Horas` e `Importe`, y una
+sola columna `Fecha` se toma como el día en que empieza.
+
+**Una fila es una tarea y una tarea es una orden de trabajo.** No hay nada que
+agrupar: quien arma el archivo ya hizo la consolidación. Juntar y separar a mano
+siguen en la pantalla para el caso raro.
+
+#### Seis cosas que no se deducen del código
+
+- **El control es la fila de TOTALES**: sus horas tienen que dar la suma de las
+  filas. Medido sobre el archivo real, ese total está **escrito a mano y no es
+  una fórmula**, así que compararlo no es redundante — es lo que detecta una
+  fila tipeada de más, una de menos o un dígito cambiado. **Si no da, los
+  renglones entran igual**: no hay nada que retener, la tabla *es* el dato. Se
+  dice fuerte, con los dos números y la diferencia. Si no hay fila de TOTALES,
+  también se avisa: no hay contra qué comparar.
+- **El Excel guarda «Fecha Hasta» tal como viene, aunque sea igual a la
+  «Desde».** La primera versión guardaba null cuando las dos coincidían —«duró
+  un día», más prolijo— y estaba mal: de las 63 filas del archivo real, **45
+  quedaban con el campo vacío en pantalla, que es indistinguible de un dato que
+  se perdió**, y quien había tipeado las 63 fechas lo notó enseguida. Null
+  significa ahora que la celda no traía nada. (Los ~1.400 renglones que
+  entraron por foto siguen con null y tampoco les falta: una línea del cuaderno
+  manuscrito es de un día.) El código lo lee como `fecha_hasta ?? fecha`
+  (`totalesDeRenglones`), que es lo que hacía antes de que la columna existiera
+  (migración `20261103083610`).
+- **No hay check de que `fecha_hasta >= fecha`.** Un rango dado vuelta es un
+  error de quien tipeó y hay que **mostrárselo**: el intérprete lo marca dudoso
+  con su motivo y el renglón entra. Un check en la base haría fallar el insert
+  de las 63 filas por una.
+- **Que una carga sea de Excel no lo dice ninguna columna: lo dice la extensión
+  de la ruta** (`esRutaDeExcel` en `lib/mantenimiento/cuadernoOrigen.ts`). El
+  archivo va al mismo bucket y a la misma tabla (`mant_cuadernos_fotos`, con
+  `orden: 1`) justo para que la procedencia de cada renglón, el borrado de la
+  carga y el freno de duplicados sigan funcionando sin tocarse. Eso evitó una
+  migración de columna; la que sí hubo es `20261102115445`, porque
+  `allowed_mime_types` del bucket sólo tenía los cinco tipos de imagen y **subir
+  el `.xlsx` sin ella falla con un error de Storage que no explica nada**.
+- **No se mezclan fotos y planilla en una misma carga**, y la guarda está en las
+  dos rutas y no sólo en la pantalla: el `accept` de un campo de archivo no
+  impide elegir nada.
+- **`lib/core/excel.ts` no sirve para leerlo y por eso hay otro lector.** Ese
+  aplana cada celda a su valor, que es lo que quieren los cinco importadores que
+  lo usan. Acá esa diferencia se usa para no mentir: una celda de horas que es
+  una fórmula **sin resultado calculado** no es un cero sino un archivo que Excel
+  no recalculó, y un `#REF!` no es una celda vacía sino una referencia rota. El
+  lector propio es `cuadernoExcelArchivo.ts`, separado del intérprete
+  (`cuadernoExcel.ts`, puro) para poder probar las decisiones sin armar un
+  `.xlsx`.
+
+#### Lo que se midió (03/11/2026, `Tareas_Octubre_2026 2.xlsx`)
+
+Una hoja, 63 tareas, **1074 horas, y la fila de TOTALES dice 1074: cierra
+exacto**. La tarea más larga son 106 h y 18 de las 63 abarcan más de un día. 0
+precios. Un solo dudoso: **la fila 24 trae `#REF!` en «Fecha Desde»** —una
+referencia que quedó rota al sacar el detalle— y entra igual, marcada, usando su
+«Fecha Hasta». El tope de horas por fila es **500**: el error probable tipeando
+es el dígito de más (106 → 1060), y 500 lo atrapa dejando casi cinco veces el
+máximo visto de margen. No es el mismo número que `TOPE_DE_HORAS_POR_RENGLON`
+(200) ni tiene por qué serlo: allá una fila es un renglón de un día del cuaderno
+manuscrito, acá es una tarea entera a lo largo del mes.
+
+En pantalla, una carga de Excel **no muestra el panel de la foto**: no hay hoja
+contra la cual comparar. En su lugar van las cinco columnas que se leyeron, de
+qué fila salió cada renglón, y dos campos de fecha por renglón en vez de uno. El
+filtro de «dudosos» **se dejó**, aunque el plan decía sacarlo: el Excel también
+produce dudosos —un `#REF!`, una fecha que no existe, unas horas que no son un
+número— y esconderlos sería tapar problemas reales.
+
+**Hay además un filtro por sector, y existe para poder juntar** (03/11/2026).
+Con 63 tareas sueltas, juntar las que van en una misma OT obligaba a buscarlas a
+ojo por toda la lista. El desplegable lista **sólo los sectores que esa carga
+tiene**, con cuántos renglones cada uno, más «sin sector»; se combina con los
+chips —y **la cuenta de cada chip ya mira el sector elegido**, porque un chip que
+dijera «Sin sector (35)» con tres renglones abajo es peor que no tener número—.
+Al lado está **«Elegir los N que se ven»**, que es lo que convierte el filtro en
+una forma de juntar: se filtra por sector, se eligen todos, se juntan. Los
+renglones que ya son OT no entran en esa selección.
+
+**Y uno por equipo, que parece la gemela y no lo es** (03/11/2026). Lista sólo
+los equipos que esa carga tiene —no los 269 del catálogo—, se combina con el de
+sector y con los chips, y su razón de ser es la opción «— sin equipo —», que
+contesta de un vistazo cuántas líneas quedaron sin máquina. La diferencia que
+hay que tener presente: **sin sector un renglón no genera, y sin equipo genera
+igual** —`enOrdenes` no pide el equipo—. O sea que «sin equipo» no es una cola
+de trabajo pendiente sino una pregunta: esas horas no van a sumar al costo ni al
+MTBF de ninguna máquina. La pantalla lo dice cuando se elige ese filtro, para
+que nadie lo lea como algo que hay que completar antes de generar.
+
+Y la trampa que no se ve desde el filtro: **un grupo sólo conserva el equipo si
+todos sus renglones apuntan al mismo**. Juntar uno con equipo y uno sin deja la
+OT sin equipo —quedarse con el único que hay le daría al MTBF de esa máquina las
+horas de las otras tareas—, así que filtrar por equipo y juntar lo que queda a
+la vista no garantiza que la orden salga con él.
+
+#### Generar una sola OT sin juntar nada (03/11/2026)
+
+El botón de abajo genera **todo lo que puede salir**, y con el Excel eso no era
+lo que hacía falta. Medido sobre la carga real de octubre: de los 63 renglones,
+**46 ya salían como su propia OT y ninguno estaba juntado**; los otros 17 esperan
+el sector. O sea que el único botón ofrecía escribir 46 órdenes de una, contra
+un mes que ya tiene 91 OT de PIPARO cargadas a mano.
+
+La pregunta que llegó fue «no tengo la opción de generar una OT sin juntar», y
+revela el malentendido que había que cerrar: **juntar no es el camino para
+generar una sola**. Juntar es para cuando dos renglones son la misma tarea;
+usarlo como el botón de «generá éste» mete horas de tareas distintas en una
+orden, que es exactamente lo que el módulo evita.
+
+Así que la generación acepta `claves` —la `clave` de cada orden: el `grupo_id`,
+o `solo:<id>` si es un renglón suelto— y la barra de la selección tiene su
+propio botón. Tres cosas que no se deducen del código:
+
+- **El filtro cae sobre los grupos, no sobre los renglones.** `enOrdenes` corre
+  con la carga entera y recién después se eligen las claves. Elegir un renglón
+  juntado saca **su grupo entero**, con los compañeros que no se eligieron, y el
+  cartel los cuenta antes de escribir: una orden con la mitad de las horas de su
+  grupo sería peor que no tener el botón.
+- **El tope de 25 y el freno de duplicados se cuentan después del filtro**, o sea
+  sobre lo que de verdad se va a escribir. Generar de a uno pasa por el mismo
+  freno que generar de a 46.
+- **La comparación pantalla-contra-servidor sigue en pie.** Las dos puntas
+  filtran con la misma lista de claves, así que lo que compara es lo mismo
+  contra lo mismo. Si no coincide, no se genera.
+
+Y lo que la pantalla dice de más: cuántos de los elegidos **no salen todavía**
+(sin sector, sin fecha, o sin horas ni precio). Un botón que dijera «Generar 3»
+con 8 elegidos y no explicara los 5 restantes es la clase de número que nadie
+vuelve a creer.
+
+#### Sacar un renglón de la carga (03/11/2026)
+
+La otra mitad del mismo pedido: «que pueda borrar una línea, porque alguna de
+esas capaz ya tiene OT creada». Es el caso real de octubre —la planilla trae
+tareas cuya orden ya está escrita a mano— y hasta ahora no había qué hacer con
+ellas: dejarlas sin generar deja la carga eternamente en `EN_CHEQUEO` con
+renglones que nadie sabe por qué no salieron.
+
+Vive en `app/api/mantenimiento/cuaderno/renglones/[id]` y **no en el `DELETE` de
+`/renglones`**, que saca el `grupo_id` y deja el renglón vivo. Son dos cosas
+distintas: un `DELETE` que según el cuerpo desagrupa o destruye es la clase de
+ambigüedad que se paga una sola vez y cara.
+
+Lo que no se deduce del código:
+
+- **No se saca el que ya es una orden de trabajo del sistema**, ni el que está
+  en un grupo que ya generó. Lo segundo lo decide `sePuedeSeparar`, la misma
+  función que usa separar y no una copia: sacarlo le cambiaría el total a una
+  orden ya escrita en la planilla.
+- **Se audita, con el verbo `borrar`, y es el primero que escribe una persona.**
+  Hasta acá ese verbo lo escribían sólo las sincronizaciones
+  (`lib/core/borradoDeEspejo.ts`). El argumento no es «borrar es grave» sino
+  cuál pregunta queda sin respuesta: el archivo de origen sigue en el bucket,
+  así que **qué decía** se contesta sin la tabla; **quién lo sacó y cuándo** no.
+  Y estas filas son con lo que se le paga al contratista, así que una que
+  desaparece es una hora que no se factura por el criterio de una persona.
+  El registro se escribe **antes** del borrado —si no entra, no se borra—,
+  que es el orden que fijó `borradoDeEspejo.ts`.
+- **El estado de la carga se recalcula al sacar**, no sólo al generar: sacar el
+  último pendiente puede dejarla `GENERADA`. Por eso `actualizarElEstado` se
+  mudó de la ruta de generación a `lib/mantenimiento/cuadernoEstado.ts`: con una
+  copia en cada ruta, el día que la regla cambie una de las dos la sigue
+  diciendo vieja.
+- **Nada cuelga de `mant_cuadernos_renglones` por clave foránea** (comprobado
+  con `node scripts/que-cuelga-de.mjs`), así que borrar una fila no se lleva
+  nada en cascada.
+
+El botón va chico y abajo en el renglón, no al lado de los campos que se tocan
+todo el tiempo: es lo único irreversible de esa fila.
+
+#### La OT que queda escrita en la planilla y no entra al sistema (03/11/2026)
+
+**Crear una OT desde el cuaderno son dos escrituras que no se pueden atar.**
+Primero `altaEnLaPlanilla` toma un número y escribe la fila en «Altas del
+sistema»; después la ruta inserta en `ordenes_trabajo` y marca los renglones.
+Si lo segundo falla, **la orden ya está escrita en la planilla de producción**
+—que se borra a mano, fila por fila— y el sistema no sabe que existe. La ruta
+lo dice en la pantalla de quien generó, con esas palabras, y ahí se termina el
+rastro: si esa persona cierra la página, no queda nada.
+
+Pasó con la **OT 2983** («Pasar 1400 barras/cuadrados rompedores», fila 100).
+Lo que lo volvía peligroso no era la orden perdida sino que **su renglón seguía
+sin convertir**: la próxima generación habría creado una segunda OT por el
+mismo trabajo. Se encontró contando los números —la corrida hizo 2972..2982,
+saltó la 2983 y la siguiente arrancó en 2984— y se arregló insertando la fila
+con los mismos valores que habría armado la generación y enlazando su renglón.
+
+Ese conteo quedó como **`npx tsx scripts/ot-huerfanas-del-cuaderno.mts`**: lee
+la columna A de «Altas del sistema» y la compara contra `ordenes_trabajo` en
+ese rango. No escribe nada y no interpreta: lo que busca es estrecho a
+propósito —**un número que la planilla tiene y la base no**—, porque una OT
+sin renglón es normal (las que se cargan desde la pantalla de alta tampoco lo
+tienen) y mezclar las dos cosas lo volvería ruido. Si la pestaña no devuelve
+ninguna fila corta sin concluir nada, porque una planilla recalculando se lee
+igual que una vacía. Sale 1 si encuentra alguna; hoy da **HUÉRFANAS 0**.
+
+#### Octubre de 2026: el primer mes real que salió entero (03/11/2026)
+
+El Excel de octubre se generó completo. Los números, porque son la primera
+medición de este camino de punta a punta:
+
+- **58 renglones → 48 órdenes de trabajo**, OT **2972 a 3019**, sin saltearse
+  ningún número. 978 horas. Las 48 nacen `REALIZADO`, con horas y con fecha de
+  cierre. La carga quedó en `GENERADA`.
+- Las 63 filas originales fueron **58** porque se sacaron 5 renglones cuya OT ya
+  estaba cargada a mano (queda en `auditoria`, con quién y qué decía).
+- El **freno de duplicados saltó con 91** —las OT de PIPARO de octubre cargadas
+  por otro camino— y hubo que confirmarlo. Se cruzaron las 17 últimas contra
+  esas 91 antes de confirmar: **ninguna pisaba una real**. Las 5 que compartían
+  palabras («Rep paño zaranda», «Cambiar lateral cinta 5», «Limpieza techo 02»)
+  eran todas del **02/10**, con otras horas y otro equipo. El freno hace lo que
+  tiene que hacer —avisar— y la decisión sigue siendo de quien mira.
+- **47 de las 48 quedaron con `sheets_pendiente`** y eso es lo normal, no un
+  fallo: el master recibe la fila por `IMPORTRANGE` y tarda, así que el estado,
+  las horas y el cierre viajan en la cola. Mientras estén ahí,
+  `sincronizar.ts` **no las pisa** —es para eso que existe la marca— y
+  `exportarLoPendiente` las termina en el sync siguiente. Hasta entonces, esas
+  columnas del master se ven vacías y no hay nada perdido.
+
+**Lo que quedó sin explicar, y lo que hay que capturar la próxima vez.** No
+salió de una sola apretada: fueron **cuatro corridas de 12, 19, 8 y 9**, y
+ninguna se topó con un límite conocido —el tope son 25, el margen de tiempo son
+200 s y las corridas duraron 18, 29, 13 y 32 segundos, a 1,6 s por orden—. Se
+descartaron, midiendo contra los datos y la planilla reales: la validez de los
+renglones, la serie de números, el encabezado de altas, el armado de las
+celdas, el `INSERT` en `ordenes_trabajo` (probado con las 18, con números de
+descarte), el tamaño de la grilla (999 filas, vamos por la 119), la salud de
+las planillas y el permiso de escritura de la cuenta de servicio. **Queda la
+hipótesis de que quien genera eligió ir de a poco** —el botón de la selección
+y el filtro por sector hacen exactamente eso—, y no hay forma de distinguirlo
+en los datos. Si vuelve a pasar, **lo único que falta es el texto que muestra
+la pantalla**: la ruta deja cada fallo en `problemas`, sin traducir, y con esa
+línea se sabe dónde está. Sin ella no se puede arreglar sin adivinar, y lo que
+falla escribe en la planilla de producción.
+
+#### La descripción dice sólo qué se hizo, y lo demás va en su columna (03/11/2026)
+
+Al mirar las 48 órdenes recién generadas, lo que estaba mal era esto:
+
+    H (DESCRIPCIÓN): Resoldar chapas impacto rompedores p/ TRT Nº2 — PIPARO.
+                      El 19/10. 8 h en total. Según el cuaderno: Resoldar
+                      chapas impacto rompedores p/ TRT Nº2 (19/10, 8 h).
+    K (FECHA DE CIERRE): —    M (ESTADO): —    N (CONTRATISTA): —    O (HORAS): —
+
+Cuatro datos apilados en una celda de prosa **que tienen su propia columna**, y
+las cuatro columnas vacías. Desde un párrafo no se filtra ni se suma, y la
+planilla es de donde lee quien no entra al sistema.
+
+Son dos problemas distintos con el mismo síntoma, y conviene no confundirlos.
+
+**Uno: el texto.** `descripcionDeLaOrden` ahora devuelve sólo la tarea. Lo que
+pierde, dicho: el detalle renglón por renglón —qué día y cuántas horas cada
+uno— deja de estar en la planilla. No se pierde del sistema —vive en
+`mant_cuadernos_renglones`, enlazado a esa misma OT, y se ve en la pantalla del
+cuaderno—, pero quien mira sólo la planilla ve el total y no el reparto.
+
+**El denominador común de un grupo** vive en
+[lib/mantenimiento/cuadernoDescripcion.ts](../lib/mantenimiento/cuadernoDescripcion.ts),
+y lo que no se deduce del código es por qué no alcanzaba con «si son todas
+iguales, usar ésa»: medido sobre los **cinco grupos que una persona juntó de
+verdad, ninguno tiene las tareas idénticas**.
+
+| Las tareas del grupo | Queda |
+|---|---|
+| «Limpieza techo Hidratación» · «Limpieza techo hidratacion» · «Limpieza techos hidratacion» · «Limpieza techos hidratación» | **Limpieza techo Hidratación** |
+| «Limpieza p/ TRT Nº2» · «Limpieza y destorar pantalón en planta TRT Nº2» · «Limpieza espaldas tolvas p/ TRT Nº2 a pastareras y parte inferior» | **Limpieza TRT Nº2** |
+| «Limpieza p/ TRT Nº1» · «Limpieza túnel y pozo p/ TRT Nº1» | **Limpieza p/ TRT Nº1** |
+| «Pasillo en cinta 1 superior» · «Pasillo cinta 1» | **Pasillo cinta 1** |
+| «Limpieza en cinta tolva» · «Limpieza cola cinta 1 filer 2 parte superior» · «Limpieza en cinta 2 filer p/ sup.» · «Limpieza costado tolva filer 2» | las cuatro, con `·` |
+
+Tres cosas que no se deducen del código:
+
+- **El plural cuenta como la misma palabra** (`mismaPalabra`). Sin eso, «techo»
+  y «techos» no coinciden y el primer grupo se queda en «Limpieza Hidratación».
+  El límite es prefijo exacto, las dos de cuatro letras o más y a lo sumo dos
+  de diferencia: por eso **«Nº1» y «Nº2» no se parecen nunca**, que es lo que no
+  puede fallar —una OT de la TRT Nº1 en la Nº2 no se nota—.
+- **Con menos de dos palabras en común no se inventa un resumen**: se listan las
+  tareas distintas. Es el último caso, donde lo único compartido es «limpieza»,
+  y una orden que dijera sólo eso sería peor que no simplificar.
+- El texto sale **con las palabras de la primera tarea**, con sus acentos y sus
+  mayúsculas: es como lo escribió quien llevó el cuaderno.
+
+**Dos: las columnas, que es el problema de verdad.** De la K en adelante son
+literales del master, y para escribirlas la fila tiene que existir ahí —llega
+por `IMPORTRANGE` y tarda—. La generación lo intentaba **a medio segundo de
+crear la orden**, o sea nunca a tiempo, anotaba `sheets_pendiente` y ahí
+quedaba: lo terminaba quien abriera Órdenes o la sincronización, en la
+práctica cada 3 a 5 horas.
+
+Lo que lo cierra es que **el mecanismo ya existía y esta ruta era la única que
+no lo usaba**. Medido el 03/11/2026, el mismo día:
+
+| | |
+|---|---|
+| OT del cuaderno | **48 de 48 con K/M/N/O vacías**, 47 en la cola |
+| OT de `/api/mantenimiento/ordenes` (que sí reintenta) | **12 de 12 salieron, todas en el primer intento, a los 21 s** |
+
+Así que la generación drena su propia cola con `after()`, y lo que hay que
+saber antes de tocarlo:
+
+- **Una pasada para toda la corrida, no una por orden.** El master recibe las 25
+  juntas; esperar una vez y drenar la cola entera son 25 lecturas de la columna
+  A en vez de 25 esperas de 20 segundos.
+- Usa `exportarLoPendiente` **sin freno** —la misma función de la pantalla de
+  Órdenes y del sync—, así que drena todo lo que haya en la cola y no sólo lo
+  de esta corrida. Es lo correcto: lo viejo también hay que terminarlo.
+- **El `after()` corre dentro del mismo `maxDuration`**, así que las esperas se
+  recortan a lo que queda (`esperasQueEntran`). Pasarse no rompe nada —la cola
+  sigue siendo la red—, pero arrancar una espera de dos minutos cuando quedan
+  treinta segundos es desperdiciar el intento.
+
+**El costo no cambió**: sigue viajando en `REPUESTO UTILIZADO`, que es donde la
+práctica ya lo escribía a mano (58 de las 380 OT viejas de PIPARO). Con repuesto
+y precio queda `2 parches de 200 ($240.000)`; con precio solo, `$920.000`.
+
+**Las 48 de octubre se corrigieron a mano el 03/11/2026**, a pedido, con
+[scripts/corregir-ot-del-cuaderno.mts](../scripts/corregir-ot-del-cuaderno.mts)
+—que sin `--escribir` no toca nada—. Quedó: 48 descripciones acortadas en
+«Altas del sistema» y en la base, 0 con el texto viejo de los dos lados, 0 en la
+cola, y **47 de 48 con K/M/N/O en el master**.
+
+Tres cosas de esa corrida que vale la pena saber:
+
+- **La salvaguarda fue reconstruir el texto viejo** desde los renglones de cada
+  orden y exigir que coincidiera **exacto** con lo que la base tenía guardado.
+  Las 48 coincidieron, o sea que nadie las había editado; la que no hubiera
+  coincidido se salteaba, porque corregir lo que escribió una persona es peor
+  que dejar el texto largo.
+- **Primero la planilla y después la base.** Si la planilla sale y la base no,
+  la próxima sincronización las empareja; al revés, la planilla pisaría la base.
+- **La que faltaba era la 2983**, y se cargó a mano después (ver abajo).
+
+**Y una medida que va a volver: el drenaje pega contra la cuota de Google.**
+`exportarLoPendiente` lee la columna A del master **una vez por orden en la
+cola**; con 48 encoladas de golpe, una se cayó con
+
+    Google respondió 429: Quota exceeded for quota metric 'Read requests' and
+    limit 'Read requests per minute per user'
+
+y quedó en la cola hasta la pasada siguiente, que es exactamente lo que la cola
+existe para que pase. No se tocó nada por ahora —el reintento lo resuelve—,
+pero con un mes de 100 órdenes esto va a dejar varias para la segunda vuelta: el
+día que moleste, lo que hay que cambiar es que el drenaje lea la columna A **una
+vez por pasada** y no una por orden.
+
+#### La OT 2983, cargada a mano (03/11/2026)
+
+Era la única de las 48 sin K/M/N/O, y la hipótesis que teníamos era falsa: **sí
+estaba en `ordenes_trabajo`**. Lo que le había pasado es otra cosa, y es la que
+conviene recordar.
+
+La generación le escribió el alta en la planilla a las **14:08:21** y algo se
+cortó antes de guardar el resto. La fila quedó en «Altas del sistema» y en el
+master, y la **sincronización de las 14:44 la trajo a la base** —con lo único
+que la planilla tenía: descripción, sector, equipo y prioridad—. Por eso no
+estaba en la cola: `sheets_pendiente` nunca se le puso, así que el drenaje que
+terminó a las otras 47 ni la miraba.
+
+Comparada con sus hermanas le faltaban exactamente cuatro campos, y los cuatro
+salían de su propio renglón —línea 11, «Pasar 1400 barras/cuadrados rompedores»,
+del 07/10 al 21/10, 28 h—:
+
+| | tenía | quedó |
+|---|---|---|
+| `fecha_cierre` | null | 2026-10-21 |
+| `estado` | `POR_HACER` | `REALIZADO` |
+| `contratista` | null | PIPARO |
+| `horas` | null | 28 |
+
+Lo hizo
+[scripts/cargar-a-mano-la-ot-2983.mts](../scripts/cargar-a-mano-la-ot-2983.mts),
+que antes de escribir **comprueba que no haya otra orden con la misma
+descripción**: completar una que ya estuviera cubierta por otra sería darle dos
+órdenes al mismo trabajo, y a PIPARO se le paga por esto.
+
+Dos cosas que no se deducen del código:
+
+- **`fecha` no se tocó, y dice 2026-11-03.** No es un error de esta orden: **las
+  48 dicen lo mismo**, porque la sincronización la trae de la marca temporal
+  (columna B del master, derrame de la hoja de respuestas). Corregirla sólo en
+  ésta la habría dejado distinta de sus hermanas y la próxima corrida la pisaba
+  igual. La fecha del trabajo vive en `fecha_cierre` y en `fecha_ejecucion`.
+- **La columna L dice «Atrasado» en las 48, y está bien así.** Es la
+  `ARRAYFORMULA` del master, que compara la fecha de inicio con hoy y no mira el
+  estado: medido, **56 OT viejas de PIPARO ya «Realizado» dicen lo mismo**. No
+  lo causó esta carga y no hay nada que arreglar ahí.
+
+Después de esto, de las 48: **0 incompletas en la base, 0 en la cola, 0 con el
+texto viejo, y 48 de 48 con K, M, N y O en el master.**
+
+### Lo que quedó anotado
+
+- **`npm run catalogo` se dejó sin correr a propósito, para cuando el árbol esté
+  tranquilo.** Hoy el Asistente no conoce `ordenes_trabajo.costo`,
+  `proveedores.modo_de_carga` ni las tres tablas nuevas. Regenerarlo arrastra de
+  una vez lo de las otras sesiones (nueve tablas nuevas y columnas nuevas en
+  `avisos`, `francos`, `mantenimientos_programados` y `ordenes_servicio`), y las
+  15 tablas sin mapear en `lib/asistente/modulos.ts` piden decidir cada una:
+  mapearla o ponerla en `SIN_MAPEAR_A_PROPOSITO`. Las del cuaderno son de
+  `mantenimiento`.
+- **Pendientes del plan**: qué hacer con una línea tachada, y avisar cuando un
+  día sale fuera de orden. (El tope a las horas de un renglón ya está: ver más
+  arriba.)
+
+## Corregir un parte de contratista (04/11/2026)
+
+Un parte cargado se puede corregir desde la lista, **mientras ninguno de sus
+renglones haya generado una orden de trabajo**. Es la misma condición que ya
+tenía el borrado, y por el mismo motivo: una vez que el renglón es una OT,
+cambiarle las horas dejaría a la orden contando algo que el papel ya no dice, y
+la OT no se deshace desde el sistema —se borra a mano en la planilla, fila por
+fila—. En la lista, los que no se pueden corregir dicen «ya generó» en vez de
+ofrecer un botón que va a fallar.
+
+Cuatro cosas que no se deducen del código:
+
+- **Es el mismo formulario, no uno nuevo.** Corregir trae el parte al formulario
+  de carga y el botón cambia de texto. Dos formularios parecidos serían dos
+  controles que se separan, y el control —los renglones dan el total del
+  papel— es para lo que existe todo esto.
+- **`horasAMano` arranca en `true` al traer un parte.** Las horas que tiene las
+  escribió una persona mirando la hoja; con la propuesta encendida, el primer
+  cambio —agregar un renglón, tocar el total— las habría repartido parejas y
+  pisado lo que alguien decidió. Es exactamente la regla que `horasTrasUnCambio`
+  existe para defender, aplicada a la otra punta.
+- **El PUT reescribe el parte entero**, cabecera y renglones, y no por campo. El
+  control es del parte y no de la celda: un PATCH que cambiara unas horas
+  sueltas dejaría el parte sin cerrar sin que nada lo note. El POST y el PUT
+  leen el cuerpo con **la misma función** —`leerElParte`, pura y con tests—,
+  así que un parte corregido cierra o no se guarda, igual que uno nuevo.
+  Los renglones se borran y se vuelven a insertar; es seguro porque **nada
+  cuelga de `mant_partes_contratista_renglones` por clave foránea** y porque sus
+  ids no los usa nadie (a un renglón se lo nombra por su `orden`).
+- **Al corregir no se adelantan el número ni la fecha.** Eso es para la carga en
+  serie —quince hojas de una quincena—; después de una corrección dejaría el
+  formulario pidiendo un parte que nadie pedía.
+
+La ventana que queda abierta, dicha: entre comprobar que ningún renglón generó
+y borrarlos hay dos sentencias. Si justo ahí alguien genera la quincena, el
+borrado lleva su propia guarda (`orden_trabajo_id is null`) y, si no se llevó
+todo lo que había, **no se inserta nada** y sale un 409 que lo dice. Es la misma
+ventana que ya tenía el DELETE y el mismo riesgo asumido del módulo: generar lo
+aprieta una persona.
+
+Medido el 04/11/2026: 16 partes cargados, todos de CANDIA; **6 sin OT** —los que
+se pueden corregir— y 10 ya generados. El camino entero se corrió sobre un parte
+de mentira creado y limpiado para eso: la cabecera se actualiza, los dos
+renglones viejos se borran y entran los dos nuevos, y con un renglón enlazado a
+una OT la guarda cuenta 1 y las dos rutas se niegan.
+
+## El MTTR: cuánto tarda en volver (11/11/2026)
+
+El indicador que el [spec del MTBF](superpowers/specs/2026-10-16-mantenimiento-mtbf-design.md)
+dejó anotado en «lo que no es» —«los datos están… queda anotado, no se hace
+acá»—. Vive en [lib/mantenimiento/mttr.ts](../lib/mantenimiento/mttr.ts) y se
+lee al lado del MTBF, en la ficha del equipo y como columna del listado
+`/mantenimiento/mtbf`.
+
+**MTTR = horas de reparación / cantidad de reparaciones**, sobre la **misma
+ventana, el mismo tipo de orden y la misma fecha** que el MTBF: los mismos 365
+días, las mismas correctivas, el mismo `fecha_ejecucion`. No es una
+coincidencia sino el punto: los dos números se leen en la misma línea, y si
+cubrieran períodos distintos nada lo avisaría. `fechaDeFalla` es una sola
+función y la usan los dos, y hay un test que lo fija.
+
+Cinco cosas que no se deducen del código:
+
+- **`horas` es cuánto duró el trabajo, no horas-hombre, y eso ya estaba
+  verificado**: lo midió `costoEquipo.ts`, que necesitaba lo contrario
+  —multiplicarlo por la gente—. Las órdenes con tres operarios tienen la misma
+  mediana que las de uno, 3 horas, cuando serían el triple si ya vinieran
+  multiplicadas. Sin ese dato este indicador no se podía calcular.
+- **Las de contratista no entran, y es la mitad del diseño.** Ahí `horas` deja
+  de ser duración y pasa a ser lo que el tercero factura; la prueba es
+  aritmética: la **OT 2064 tiene 415 horas entre el 20 y el 29 de junio**,
+  nueve días de calendario, que son 216 horas de reloj. Medido el 11/11/2026,
+  el precio de mezclarlas: **3,3 h** de MTTR de planta contando sólo las
+  propias contra **5,5 h** mezclado, y las de contratista solas dan **26,9 h**.
+  Y el ranking se da vuelta: con ellas adentro **los dos primeros puestos son
+  «Edificio»** —PO-C1 con 84,8 h y PO-A1 con 49 h—, el equipo comodín al que se
+  imputa lo que no tiene máquina. Sin ellas, los primeros son la Cadena de
+  arrastre 6 y el Molino de bolas. El criterio de «es de un tercero» es **que
+  `contratista` tenga texto**, el mismo que ya usaba `costoEquipo.ts`.
+- **No es tiempo de parada de la máquina**, y eso va en texto visible y no en
+  un tooltip, igual que el aviso de días de calendario del MTBF
+  (`HORAS_DE_TRABAJO` en `mtbfVista.ts`). Tampoco se puede sacar del
+  calendario: `fecha_cierre - fecha_ejecucion` da **0 en 750 de 811**
+  correctivas cerradas de la ventana, porque el cierre se carga el mismo día
+  que se registra el trabajo.
+- **Las cuatro cuentas cierran, y eso es lo que lo hace auditable.** El
+  resultado trae `afuera` con los tres motivos de descarte, y la suma da las
+  correctivas de la ventana: medido con la lectura real, **555 contables + 89
+  de contratista + 330 sin horas + 5 sin equipo = 979**. Hay un test que lo
+  fija. Si una orden se contara en dos motivos, o en ninguno, la suma lo diría.
+- **El promedio se publica desde 3 reparaciones** (`MINIMO_REPARACIONES`): con
+  una, «el promedio» es esa orden. El equipo aparece igual, con su cuenta y sin
+  número, que es lo que hace el MTBF cuando no llega al piso de días
+  observados. De los 119 equipos con alguna reparación propia en la ventana,
+  **47 llegan a tres**.
+
+Dos detalles de la pantalla: la columna de MTTR **se ordena al revés que la de
+MTBF** —acá lo peor es el número más alto— y es el único par del listado donde
+pasa; y la ficha nombra **la reparación más larga con su número de OT**, porque
+un MTTR alto casi siempre es una orden larga y no un equipo lento.
+
+Y una lectura menos: `indicadoresDeLaPlanta()` calcula los dos sobre **una sola
+lectura** de las correctivas. `mtbfDeLaPlanta()` sigue existiendo porque
+`/api/mantenimiento/mtbf` devuelve ese objeto tal cual y el tablero lo consume
+por ahí.
+
+## Un trabajo no se cierra antes de empezar (05/11/2026)
+
+Se pidió una alerta que impida poner la fecha de cierre antes de la de inicio.
+La regla es `loQueImpideCerrar` en
+[lib/mantenimiento/cierreDeOT.ts](../lib/mantenimiento/cierreDeOT.ts), y dice
+dos cosas: **sin fecha de inicio no se puede cerrar**, y **el cierre no puede
+ser anterior al inicio**.
+
+Corre en cinco lugares y es **una sola función** en los cinco: el alta a mano,
+el alta sin señal, el POST —por `loQueSeContradice`, que ya hacía lo mismo con
+la fecha de fin—, el modal de registrar el trabajo y el PATCH. Dos copias de
+una regla es como el botón de los avisos se quedó dos días atrás en silencio el
+19/10/2026.
+
+Tres cosas medidas el 05/11/2026 sobre las 2.417 órdenes, que son las que no se
+deducen del código:
+
+- **Esto pasa, y bastante**: **63 de las 2.143 cerradas** tienen el cierre antes
+  del inicio. 31 por exactamente un día —el dedo que erra—, 23 por entre dos y
+  siete, y 9 por más de una semana: la 2568 arranca el 16/11 y cierra el 07/10,
+  la 1671 arranca el 03/05 y cierra el 03/02, que tiene toda la cara de un d/m
+  leído al revés. **Nada las detectaba**, porque cada fecha por separado es
+  perfectamente válida. **Las 63 quedan como están**: son dato de la planilla,
+  que es la que manda en este módulo, y corregirlas de este lado las pisa en la
+  próxima sincronización.
+- **La otra mitad de la regla no traba nada de lo que hay**: hay **una sola**
+  orden en todo el sistema sin fecha de inicio, y está abierta. Cierra el
+  agujero antes de que entre la primera.
+- **Y no frena lo normal**: de las cerradas, 2.080 pasan sin que diga nada, y
+  **1.747 de ésas empiezan y cierran el mismo día**, que es el caso más común
+  del módulo. El `<=` no es un detalle.
+
+**EL PRECIO, Y HOY NO TIENE SALIDA DESDE EL SISTEMA.** Hay **18 órdenes
+abiertas con fecha de inicio futura** —preventivos programados: la 3038 arranca
+mañana, las 1683 y 1684 en marzo de 2027—. Si una de ésas se hace antes y se
+registra, la regla la frena con razón: el cierre queda antes del inicio. Lo que
+habría que corregir ahí es la **fecha de inicio**, y **eso no se puede hacer
+desde la app**: no está en la lista blanca de `repartirRegistroDeOT`, así que
+ningún PATCH la toca, y postergar sólo la mueve hacia adelante
+(`loQueFaltaParaPostergar` rechaza `dias <= 0`). O sea que esa persona queda
+parada hasta que alguien corrija la fecha en la planilla. Está dicho acá y no
+resuelto porque resolverlo es decidir que la fecha de inicio se edita, y esa
+fecha es de la que viven el atraso, el MTBF y la programación del taller.
+
+El `min` de los `<input type="date">` —en los dos formularios de alta y en el
+modal de registrar— es la primera defensa y **no** la regla: deja en gris los
+días anteriores, pero se saltea tipeando y en el teléfono depende del
+navegador. Quien decide es la función, en la pantalla y en el servidor.
+
+**Y la alerta salta en el momento, no al guardar** (05/11/2026, a pedido). Las
+tres pantallas calculan la regla **durante el render** —no en un efecto con
+`setState`, que sería un segundo render para guardar algo que ya se sabe— y
+muestran el cartel rojo **pegado a las fechas**, que es donde está mirando
+quien las acaba de completar: en los dos modales el cartel de error vive abajo
+de todo, al lado de los botones, y en un teléfono eso son dos pantallas.
+
+Tres cosas de esa decisión que no se deducen del código:
+
+- **No grita mientras se completa.** `loQueSeContradice` se calla si falta la
+  fecha de inicio, así que la alerta aparece recién cuando las dos están y no
+  cierran. De eso depende que sea una alerta y no un cartel que está siempre.
+- **El botón de guardar sigue habilitado.** Deshabilitarlo dejaría el porqué
+  arriba y el botón mudo abajo; apretarlo repite la misma frase donde la
+  persona está mirando, y el guardado igual no pasa —lo frena el submit y, si
+  llegara, el servidor—. Los dos textos son el mismo a propósito.
+- **Va debajo de la grilla y no adentro de la celda** en el modal de registrar:
+  esa grilla es de dos columnas y el mensaje, que nombra las dos fechas
+  enteras, entraba partido en pedazos de 150 px.
+
+## El cierre anterior al inicio (12/11/2026)
+
+**Antes de desplegar: la columna `ordenes_trabajo.cierre_justificacion` no existe en producción hasta que alguien corra a mano la migración `20261112095357_…`.** Sin ella no falla sólo el alta de OT (el 400 de PostgREST): el `select` de `exportarLoPendiente` nombra la columna y su llamador, en `lib/mantenimiento/sincronizar.ts`, destructura `{ data: todos }` sin mirar `error`, así que `todos` queda `undefined`, `sinExportar` queda vacío y **la sincronización pisa con la planilla lo que el sistema acaba de registrar** —justo lo que `pendienteDeLaOT.ts` existe para evitar—, sin un solo error visible. Que ese `error` se ignore es anterior a esta rama y no se tocó.
+
+Una OT **se puede** cerrar con fecha anterior a su fecha de inicio, pero sólo si
+alguien dice por qué. La regla vive en
+[lib/mantenimiento/cierreAnteriorAlInicio.ts](../lib/mantenimiento/cierreAnteriorAlInicio.ts)
+y el texto lo valida `justificacionQueExplica()` del núcleo —el mismo filtro de
+no-respuestas con el que Compras deniega—, que rechaza «no», «x» y «prueba» y
+acepta «Duplicado». El diseño está en
+[el spec](superpowers/specs/2026-11-12-mantenimiento-cierre-anterior-al-inicio-design.md)
+y los pasos en [el plan](superpowers/plans/2026-11-12-mantenimiento-cierre-anterior-al-inicio.md).
+
+**Esto dio vuelta una regla de siete días antes, y sólo la mitad.** La sección
+de arriba —`loQueImpideCerrar`, 05/11/2026, a pedido— rechazaba con 400 **todos**
+estos casos. El 12/11/2026, también a pedido, **cede su segunda regla** cuando
+hay una justificación que explica. **La primera no cedió, y no por omisión:**
+una OT sin fecha de inicio sigue sin poder cerrarse, con justificación o sin
+ella, porque de esa fecha salen el atraso, el MTBF y la ventana del equipo, y no
+hay texto que haga calculable un intervalo sin un extremo. Las dos mediciones
+del 05/11 siguen escritas en el docstring de esa función y siguen siendo
+ciertas: lo que cambió no es el dato sino qué se hace con él.
+
+**Y el spec arrancó de una premisa falsa, que es lo que más conviene saber de
+toda esta historia.** Su sección «Qué se pide, y qué parte ya existe» dice que
+«hoy no hay ninguna regla que lo frene, en ningún lado», que `loQueSeContradice`
+no mira la fecha de cierre y que el PATCH no valida fechas. Las tres habían
+dejado de ser ciertas **siete días antes de escribirlo**, con la regla del
+05/11: la frase sobrevivió de haber leído el archivo en una rama anterior a ese
+commit. Con esa premisa en pie la función entera era inalcanzable —quien cargaba
+iba a ver a la vez el campo que pide el motivo y el cartel que decía que igual
+no se podía guardar—, y se descubrió a mitad de la rama. En total se corrigieron
+**cinco** afirmaciones de esa clase; otra decía que un cierre adelantado rompe
+el MTBF, que es falso: `fechaDeFalla` es `fecha_ejecucion` y, si falta, la
+`fecha` de la orden — ni el MTBF ni el MTTR leen `fecha_cierre` para fechar
+nada. La moraleja operativa es barata: **antes de escribir
+«hoy nada lo frena», mirar el historial del archivo.**
+
+**Lo que se perdió a propósito: el calendario en gris.** El `min` de los tres
+`<input type="date">` de cierre impedía elegir un día anterior al inicio, y eso
+también atajaba el dedo que erra por uno. Se sacó, porque ahora ese día es
+elegible. Lo reemplaza tener que escribir el motivo: la trampa de la fecha dada
+vuelta sigue existiendo, pero dejó de ser muda.
+
+**Lo medido el 12/11/2026 contra las 2.442 OT de producción**, que es lo que
+ordena las expectativas: de las **2.176 que tienen las dos fechas, 66 ya están
+así** —44 PROGRAMADO y 22 CORRECTIVO, o sea que el caso más frecuente no es el
+que motivó el pedido—, el adelanto típico es de **2 días** y 57 de las 66 caen
+dentro de la semana. Y **sólo 3 de las 66 entraron por la app**: las otras 63
+vinieron del formulario o de la planilla. O sea que **lo que entra por la
+planilla va a seguir cerrándose antes sin explicar nada**, porque ahí no hay
+dónde preguntar y la sincronización no corre ninguna de estas reglas — es la
+misma línea que ya tiene la fecha de fin, que también se controla sólo en el
+alta. Las 66 quedan en null a propósito: nadie escribió esa justificación, y
+rellenarla haría parecer explicado algo que no lo está.
+
+Seis cosas que no se deducen del código:
+
+1. **El PATCH compara contra la fecha guardada, no contra «vino el campo».**
+   `RegistrarOTModal` manda la fecha de cierre en **todos** sus guardados, así
+   que «vino la clave» sería siempre cierto y le pediría justificación a quien
+   sólo está corrigiendo las horas. Lo contesta `elCierreCambio`.
+2. **La celda W se compone desde la fila guardada y no desde el cuerpo del
+   pedido.** Por eso `repartirRegistroDeOT` manda `cierre_justificacion` al
+   `update` y **no** al `registro`: si viajara con el cuerpo, el segundo registro
+   de una OT —que no la trae— reescribiría la W sin el renglón «Cerrada antes
+   del inicio: …» y nadie se enteraría.
+3. **El drenaje de la cola arma la W con la justificación sola.** El registro se
+   rearma desde la fila y las observaciones no tienen columna propia en la base
+   desde la cual rearmarse, así que ese drenaje se lleva esa parte. Se acepta: la
+   alternativa era que la justificación de un alta no llegara nunca a la
+   planilla, porque la fila del master llega por `IMPORTRANGE` y tarda —de la K
+   en adelante, entre 3 y 53 horas medido el 21/10/2026—, así que la primera
+   escritura falla casi siempre. El dato no se pierde: las observaciones viven
+   en `mantenimientos_ejecuciones.observations`.
+4. **La columna se vacía cuando las fechas dejan de contradecirse.**
+   `laJustificacionQueSeGuarda` devuelve `null` si el cierre ya no es anterior al
+   inicio, y el disparador de la escritura en la planilla es «este PATCH tocó el
+   cierre» y no «vino la justificación». Dejarla llena sería que la ficha y la
+   planilla sigan diciendo «Cerrada antes del inicio» de una orden que ya no lo
+   está — el mismo argumento que ya estaba escrito en `celdaDeObservacionPrevia`.
+5. **El `select` de `exportarLoPendiente` es una lista de columnas escrita a
+   mano.** Si `cierre_justificacion` no está ahí, la cola rearma el registro sin
+   ella, la justificación de un alta **no llega nunca** a la planilla, y no falla
+   ni avisa nada: `loQueHayQueExportar` simplemente no ve la clave.
+6. **El orden de los dos chequeos está elegido a propósito, en las dos rutas y
+   en las tres pantallas: primero el faltante, después el impedimento.** Quien no
+   manda justificación tiene que leer «Falta cargar por qué se cerró antes de la
+   fecha de inicio», que nombra el campo que destraba el guardado, y no «No se
+   puede guardar porque…», que decía que no había nada que hacer — cierto
+   mientras valió la regla del 05/11 y falso desde el 12. En el PATCH
+   `loQueImpideCerrar` corría primero y hubo que moverlo: contestaba distinto
+   que el POST por el mismo hecho.
+
+**Y un cambio de comportamiento que nadie pidió, y que conviene saber.**
+«Registrar el trabajo» ahora precarga la fecha de cierre con la que la orden ya
+tiene; antes arrancaba siempre en **hoy**, así que reabrir una OT cerrada para
+corregirle las horas **le movía la fecha de cierre al día de hoy, en silencio**.
+También precarga la justificación guardada, y eso no es cosmético: sin ella ese
+mismo guardado mandaría el campo vacío y recibiría un 400, o borraría el motivo
+que había. Por eso el listado tiene que seguir trayendo `fecha_cierre` y
+`cierre_justificacion` — si dejara de hacerlo no habría un solo error de tipos.
+
+**El hueco que queda, y no es teórico: se llega por Postergar.** Los dos
+chequeos se disparan con `fecha_cierre` o `cierre_justificacion`, así que lo que
+mueva **sólo** la fecha de inicio pasa de largo por los dos. Por el PATCH eso no
+se puede —`repartirRegistroDeOT` es lista blanca y no nombra `fecha_ejecucion`—,
+pero **`app/api/mantenimiento/ordenes/[id]/postergar` sí la mueve, y hacia
+adelante** (`loQueFaltaParaPostergar` rechaza `dias <= 0`). Esa ruta **trae
+`estado` en su `select` y después no lo mira nunca**: pide que la orden exista,
+que sea `app_created` y que tenga fecha de ejecución, y actualiza. O sea que un
+POST sobre una orden ya REALIZADO y con fecha de cierre le corre el inicio y la
+deja con el cierre anterior al inicio, sin justificación y sin que nada pregunte.
+
+**Otro hueco, éste del lado de la planilla: la sincronización puede mover la fecha de inicio hacia atrás.**
+`lib/mantenimiento/sincronizar.ts` hace `upsert` de `fecha_ejecucion` desde la
+planilla (en el armado de `registros`), y si alguien la corrige allá la OT deja de
+tener el cierre adelantado mientras `cierre_justificacion` se queda llena: la
+ficha sigue diciendo «Por qué se cerró antes del inicio» de una orden que ya no
+lo está. Es poco probable y es el borde de «la planilla manda»; no se cerró.
+
+**Lo único que lo frena hoy es que la pantalla esconde el botón** en las órdenes
+realizadas —`pideJustificacion(o.estado)` en `OrdenesClient`, que es
+`!== "REALIZADO"`—, y una guarda de pantalla no frena a quien llame la ruta.
+**No se cerró a propósito**: taparlo es inventar una regla que nadie pidió sobre
+una ruta que hace otra cosa. Queda escrito como lo que es, que es por dónde se
+rompe.
+
+## El catálogo de tareas preventivas (12/11/2026)
+
+El motor de planes periódicos tiene **un plan cargado** y, al mismo tiempo, el
+**59,9 % de las OT del último año son PROGRAMADO** (1.455 contra 973
+correctivas). El preventivo se hace en volumen y se escribe a mano una orden
+por vez. El diseño, con todo lo medido, está en
+[el spec](superpowers/specs/2026-11-12-mantenimiento-catalogo-de-tareas-preventivas-design.md);
+acá lo que hay que saber antes de tocarlo:
+
+- **Una tarea es una acción sobre un componente.** La acción es vocabulario
+  nuevo (`ACCIONES_PREVENTIVAS`, seis entradas en
+  [lib/mantenimiento/tareasPreventivas.ts](../lib/mantenimiento/tareasPreventivas.ts))
+  y sale de los datos. El componente **no se inventa**: sale de
+  `equipos_componentes`.
+- **Y ahí está el hallazgo que desmintió el diseño inicial.** Se dio por
+  sentado que el objeto ya estaba resuelto —43 nombres curados— y la primera
+  corrida dio **156 de 1.465 órdenes (11 %)** con acción + componente. Las dos
+  listas hablan idiomas distintos: el catálogo nombra piezas de relevamiento
+  («Raspador / limpiador cinta», «Masa excéntrica») y las órdenes nombran lo
+  que se toca ese día. **Péndulos, grillas, rodamientos y correas no existen
+  como componente**, y son el segundo, tercero y cuarto objeto más frecuente de
+  todo el preventivo.
+- Por eso lo más accionable que imprime `npm run catalogo-de-tareas` no es el
+  catálogo sino **qué le falta a `equipos_componentes`**.
+- **Eso se completó el mismo día, y sin inventar nada**: qué equipo tiene qué
+  componente sale del historial, porque cada OT que nombra «péndulos» ya viene
+  con su `equipment_id`. `scripts/componentes-desde-las-ot.mts` agregó **91
+  filas** y la cobertura pasó de **156 órdenes (11 %) a 278 (19 %)**, y las
+  tareas de 26 a 46. Las filas llevan `componente_id` con prefijo
+  **`COMP-OT-`** justamente para poder sacarlas: `delete from
+  public.equipos_componentes where componente_id like 'COMP-OT-%'`. El script
+  **no escribe si no le pasan `--aplicar`**.
+- Lo que NO se puede hacer desde el sistema sigue siendo lo mismo: **inventar
+  un componente que ninguna OT nombra**. Un componente así no cuelga de ningún
+  equipo y la tarea aparecería en el lugar que no es.
+- **El 19 % de las PROGRAMADO no es preventivo**: 281 son reparación, obra o
+  soldadura. `ACCIONES_CORRECTIVAS` las reconoce **para contarlas, no para
+  reclasificar la OT**. Sin esa distinción, el «54 % con acción reconocida»
+  haría creer que hay 793 tareas preventivas donde hay 512.
+- El intervalo de cada tarea es **la mediana de los huecos y no el promedio**,
+  con menos de tres fechas no se opina, y dos órdenes del mismo día no son dos
+  repeticiones.
+
+**La pantalla para confirmar el catálogo está hecha desde el 12/11/2026**:
+`/mantenimiento/tareas-preventivas`, con la migración
+`20261112101003_mantenimiento_tareas_preventivas_confirmadas.sql`. Lo que hay
+que saber antes de tocarla: **sólo se guarda la decisión, nunca la propuesta**
+—se recalcula del historial en cada lectura—; **descartar escribe una fila**,
+porque sin ella la tarea vuelve mañana y la lista no se termina nunca; la clave
+natural es **(equipo, acción, componente)** y la ruta hace upsert sobre ella; y
+el **ritmo medido y el período decidido son dos columnas**, porque que no
+coincidan es información. Confirmar **todavía no genera ninguna orden**, y eso
+está escrito arriba de la pantalla.
+
+**La etapa de la propuesta no escribe nada y no lleva migración.** El orden de lo que sigue
+importa y está en el spec: primero que alguien de planta complete los
+componentes que faltan, después confirmar el catálogo, y recién ahí la tabla y
+el enganche con el motor de planes. Al revés da una tabla que cubre el 11 % del
+preventivo y la sensación de que el problema está resuelto.
+
+## Las OT encadenadas: el ciclo de martillos (12/11/2026)
+
+Una OT que al cerrarse genera la siguiente. Una **madre** arranca el ciclo, de
+su cierre nace una **hija** que se repite x veces, y después de la última vuelve
+la madre. El primer —y único— caso cargado:
+
+> **Cambio de martillos** → **Rotación de martillos** × 3 → Cambio de martillos → …
+
+en PO-C1-04 (Hidratación, cada 3 días), PY-B1-06 (Filler 2, 6), PY-A1-05
+(Filler 1, 6) y PY-C1-03 (Planta 0-2 mm, 10). **Filler 3 (PY-D1-03) hace el
+mismo ciclo y quedó afuera a pedido**, así que no es un olvido.
+
+El diseño está en
+[el spec](superpowers/specs/2026-11-12-mantenimiento-ot-encadenadas-design.md) y
+el plan en [su plan](superpowers/plans/2026-11-12-mantenimiento-ot-encadenadas.md).
+
+### Lo que no se deduce del código
+
+**1. El estado son dos campos y un corte, y el corte es todo.**
+`mant_ciclos_de_ot.desde` es la fecha del último trabajo **hecho** y
+`vuelta_desde` qué vuelta era ése. **Sólo cuentan las OT del ciclo creadas en
+`desde` o después.**
+
+Sin ese corte esto se rompe de la peor manera posible, y vale saber cómo porque
+la primera versión del diseño lo tenía así: el estado se derivaba de «la última
+OT con `ciclo_id`» y el botón de reinicio suspendía la hija que esperaba. Pero
+entonces la última pasaba a ser la hija **anterior, ya cerrada**, y la corrida
+siguiente volvía a crear exactamente la orden recién suspendida, fechada sobre
+un cierre viejo —o sea nacida atrasada— sobre martillos recién cambiados. Es,
+palabra por palabra, lo que quien pidió esto nombró como su única razón para
+dejar de confiar: «que genere OT sobre martillos que ya se cambiaron». El
+mecanismo que existía para evitar el anti-objetivo lo producía.
+
+**El corte lo mueven tres puntas y nada más**: la madre al cerrarse
+(`elCorteQueSigue`), el botón de reinicio y la carga inicial. Las hijas no:
+quedan dentro del rango y la decisión ya las lee bien. Por eso una madre cerrada
+devuelve `esperar` y no `crear` — **sin alguien que mueva el corte, el ciclo se
+detiene para siempre después del primer cambio**.
+
+**2. La cara es la vuelta más uno, y eso lo confirmaron los datos.** La
+rotación n lleva el martillo a la cara n+1, porque entra nuevo en la 1ª. No es
+una convención elegida: de las 248 OT de martillos de estos cuatro equipos,
+**63 nombran la cara en el texto libre y aparecen la 2ª, la 3ª y la 4ª — nunca
+la 1ª y nunca una 5ª**. Un juego que entra nuevo, se rota tres veces y se
+cambia. Esa coincidencia entre lo que dijo la gente y lo que dicen los datos es
+lo que hace que `repeticiones` = 3 no sea una conjetura.
+
+**3. El ciclo apunta a `mant_tareas_preventivas` y no guarda los nombres.** Ese
+catálogo —de la misma fecha, otra sesión— ya es donde vive «Rotación de
+Martillos en PO-C1-04 cada 3 días», y **existe para generar OT**. El día que
+alguien lo enganche al generador, estas cuatro máquinas recibirían la rotación
+dos veces en la planilla que mira la planta. Con la FK eso se contesta con un
+join; sin ella habría que cruzarlas por texto, que es lo que los dos diseños
+prohíben. Por lo mismo, el «cada cuántos días» **no se guarda en el ciclo**: es
+el `periodo_dias` de la tarea hija.
+
+**Si estás escribiendo ese enganche: una tarea referenciada por un ciclo activo
+no se genera por plan.**
+
+### Las tres capas contra el anti-objetivo
+
+El botón solo no alcanza **porque depende de que alguien se acuerde de
+apretarlo**.
+
+1. **El botón «Se cambiaron los martillos»**, en la ficha del equipo. Si la OT
+   viva es una hija, queda CANCELADA —con su motivo escrito, que la ruta inserta
+   **antes** de tocar el estado— y sale del ciclo. Si es la **madre**, no
+   se toca y se explica: el trabajo existió, y cerrarla desde un botón sería el
+   sistema registrando trabajo ajeno en las columnas M y K del master.
+
+   Escribía `SUSPENDIDA` hasta el 16/11/2026, cuando `CANCELADA` reemplazó a ese
+   estado en el vocabulario. No era un cambio de etiqueta: la palabra que este
+   botón dejaba en la columna M ya no la reconocía `estadoDeTexto`, así que la
+   sincronización siguiente la leía como `POR_HACER` y **revivía la orden que el
+   reinicio acababa de aparcar**. En `cicloDeOT.ts` pasó lo gemelo: la rama que
+   miraba `SUSPENDIDA` quedó muerta y una cancelada caía en «esperar», o sea que
+   el ciclo se quedaba esperando para siempre una orden que nadie iba a hacer.
+2. **El aviso que pregunta sin decidir** (`mant-ciclo-sospechoso-<equipo>`).
+   Es la única parte de todo esto que mira el texto de una descripción, y mirarlo
+   se puede porque **no decide**: un falso positivo cuesta una pregunta, uno que
+   no detecta deja todo como estaba.
+3. **La OT dice en qué se basa**: «Rotación de martillos — a 3ª cara (2 de 3).
+   Martillos cambiados el 23/10/2026». Es la que de verdad protege y no cuesta
+   nada: si los cambiaron el 05/11, quien abre la orden lo ve sin tener que
+   confiar en el estado interno de nada.
+
+### Por qué vive en el cron y no en el botón de cerrar
+
+Porque **las OT se cierran en la planilla**: de las 248 medidas, **225 ni
+siquiera nacieron en el sistema** (`app_created = false`). Un enganche en la
+ruta PATCH vería una minoría de los cierres. Es una reconciliación —`ciclos` en
+`SINCRONIZACIONES`, después de `ordenes` sí o sí— y la idempotencia la da el
+dato: si la última del ciclo está abierta no se hace nada.
+
+### El arranque lo trae un cambio de martillos (13/11/2026)
+
+**Los cuatro ciclos nacen con `desde` y `vuelta_desde` en null, y arrancan solos
+con el primer «Cambio de martillos» que se cierre a partir del día en que se
+configuraron.** Hasta entonces no generan ninguna OT.
+
+Es **la única parte de todo el mecanismo donde el texto de una descripción
+decide algo**, y eso es deliberado: la versión anterior pedía las cuatro fechas
+tipeadas, y lo que depende de que alguien se acuerde no pasa —el preventivo
+tenía pantalla, botón y cero OT generadas en toda la historia—. Peor: un ciclo
+sin arrancar **no genera órdenes, así que nada se atrasa** y `mant-atrasadas` no
+puede avisarlo. Se habría desplegado dormido.
+
+Lo que lo hace sostenible: decide *cuándo* arrancar y no *qué existe* (el ciclo
+ya lo configuró una persona); la orden que nace lleva escrita la fecha en que
+se basa, así que se puede desmentir; el botón de la ficha lo corrige en un clic;
+y la corrida informa `arrancados` con la OT que arrancó cada ciclo.
+
+**Mira hacia adelante y nunca hacia atrás**, y eso no es prudencia: medido el
+13/11/2026, arrancando del último cambio histórico los cuatro ciclos nacían con
+su primera rotación **atrasada 7, 21, 21 y 3 días**, y PY-B1-06 —que está en 4ª
+cara— recibiría «Rotación de Martillos — a 2ª cara» fechada el 23/10. Mirar
+hacia atrás produce exactamente el anti-objetivo.
+
+**Para verlo sin esperar a que alguien cambie unos martillos:**
+
+```bash
+npx tsx scripts/que-haria-el-ciclo.mts                  # qué haría la próxima corrida
+npx tsx scripts/que-haria-el-ciclo.mts --desde=2026-10-01   # «¿y si ya hubiera pasado?»
+```
+
+No escribe nada. El `--desde` corre el piso hacia atrás **sólo en la
+simulación**; la corrida de verdad usa siempre la fecha de configuración del
+ciclo.
+
+La carga a mano sigue existiendo en la ficha del equipo, para quien no quiera
+esperar al próximo cambio. Dejó de ser el camino principal y pasó a ser el atajo.
 
 ## Los datos: qué está y qué no
 

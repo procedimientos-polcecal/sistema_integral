@@ -21,7 +21,11 @@ import RegistrarOTModal from "./RegistrarOTModal";
 import CancelarOTModal from "./CancelarOTModal";
 import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
 import RepuestosOTModal from "./RepuestosOTModal";
+import HiloDeMensajes from "@/components/HiloDeMensajes";
 import JustificacionOT from "./JustificacionOT";
+import PostergarOTModal from "./PostergarOTModal";
+import MandarAlCalendarioModal from "./MandarAlCalendarioModal";
+import { fechaParaElCalendario, laOTEstaCerrada } from "@/lib/agenda/evento";
 import { pideJustificacion } from "@/lib/mantenimiento/notas";
 import { prioridadEfectiva } from "@/lib/mantenimiento/prioridad";
 import OrdenarTrabajo from "./OrdenarTrabajo";
@@ -791,7 +795,7 @@ export default function OrdenesClient({
                             alineadas a la derecha para que los días queden en
                             columna aunque los rótulos midan distinto. */}
                         <span
-                          title="Fecha de la orden y fecha de ejecución"
+                          title="Fecha de la orden y fecha de inicio"
                           className="shrink-0 hidden md:block text-right leading-tight tabular-nums"
                         >
                           <span className="block text-xs text-slate-400 whitespace-nowrap">
@@ -833,6 +837,7 @@ export default function OrdenesClient({
                         onPuntuar={() => setPuntuando(o)}
                         onCambiarParada={cambiarParada}
                         onJustificacion={() => cargarJustificadas(orders)}
+                        onPostergada={load}
                       />
                     )}
                   </div>
@@ -1010,6 +1015,7 @@ const NO_SE_CORRIGE_EN_EL_MASTER =
 
 function OTDetail({
   order: o, canEdit, onChangeEstado, onCambiarParada, onVerRepuestos, onPuntuar, onJustificacion,
+  onPostergada,
 }: {
   onVerRepuestos?: () => void;
   onPuntuar?: () => void;
@@ -1019,7 +1025,11 @@ function OTDetail({
   onCambiarParada: (id: string, valor: boolean) => void;
   /** Se agregó o se borró una justificación: el cartel de la fila cambió. */
   onJustificacion?: () => void;
+  /** Se corrió la fecha: el listado tiene que volver a leerse. */
+  onPostergada?: () => void;
 }) {
+  const [postergando, setPostergando] = useState(false);
+  const [mandandoAlCalendario, setMandandoAlCalendario] = useState(false);
   // Cancelar sólo se ofrece como destino desde donde la ruta lo deja: una
   // realizada tiene cierre.
   const ESTADO_OPTIONS = [
@@ -1041,7 +1051,7 @@ function OTDetail({
         <D label="Prioridad"       value={prioridadEfectiva(o)} />
         <D label="Operarios"       value={[o.operario_1, o.operario_2, o.operario_3].filter(Boolean).join(", ") || null} />
         <D label="Repuesto"        value={o.repuesto} />
-        <D label="Fecha ejecución" value={fechaDeLaOT(o.fecha_ejecucion)} />
+        <D label="Fecha de inicio" value={fechaDeLaOT(o.fecha_ejecucion)} />
         <D label="Fecha cierre"    value={fechaDeLaOT(o.fecha_cierre)} />
         {o.app_created && <D label="Origen" value="Creada desde la app" />}
       </div>
@@ -1112,17 +1122,97 @@ function OTDetail({
       {o.descripcion && (
         <div>
           <p className="text-xs text-slate-500 font-medium mb-0.5">Descripción</p>
-          <p className="text-sm text-slate-800">{o.descripcion}</p>
+          <p className="text-sm text-slate-800 whitespace-pre-wrap">{o.descripcion}</p>
         </div>
       )}
-      <div>
+      {/* Es la única pantalla donde esta justificación se lee: fuera de acá
+          sólo vive en la columna W de la planilla. Es de lectura; se corrige
+          volviendo a registrar el trabajo, como el resto de una OT cerrada. */}
+      {o.cierre_justificacion && (
+        <div>
+          <p className="text-xs text-slate-500 font-medium mb-0.5">Por qué se cerró antes del inicio</p>
+          <p className="text-sm text-slate-800 whitespace-pre-wrap">{o.cierre_justificacion}</p>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={onVerRepuestos}
           className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
         >
           Repuestos que hacen falta
         </button>
+
+        {/* ── POSTERGAR, Y POR QUÉ SÓLO EN ALGUNAS ──────────────────────────
+            La fecha de ejecución de una OT del formulario vive en la pestaña
+            que maneja Google Forms, y escribir ahí corre las filas de las
+            demás — es lo que dejó el registro de la OT 2796 pegado a la 2798
+            el 16/10/2026. Las que creó el SdG tienen su fila en «Altas del
+            sistema», que sí se puede reescribir.
+            En vez de esconder el botón sin más, se dice: un botón que no está
+            no se distingue de uno que falta. */}
+        {canEdit && o.app_created && pideJustificacion(o.estado) && (
+          <button
+            onClick={() => setPostergando(true)}
+            className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Postergar
+          </button>
+        )}
+        {canEdit && !o.app_created && pideJustificacion(o.estado) && (
+          <span className="text-xs text-slate-400">
+            La fecha de esta orden se cambia en la planilla: entró por el formulario.
+          </span>
+        )}
+
+        {/* ── AL CALENDARIO ─────────────────────────────────────────────────
+            Sin fecha de ejecución no hay día para el evento, así que el botón
+            queda deshabilitado **diciendo por qué**: uno gris sin explicación
+            no se distingue de uno roto. La fecha que cuenta es la pendiente
+            cuando la hay (`fechaParaElCalendario`), la misma que usa el
+            servidor. */}
+        {/* Una orden cerrada no lleva el botón: crearía un evento futuro de algo
+            que ya pasó. Cerrada es `fecha_cierre` **o** REALIZADO —168 de 986
+            REALIZADO no tienen fecha—, y lo decide `laOTEstaCerrada`, la misma
+            función que usa el servidor. */}
+        {canEdit && !laOTEstaCerrada(o) && (
+          fechaParaElCalendario(o) ? (
+            <button
+              onClick={() => setMandandoAlCalendario(true)}
+              className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Mandar al calendario
+            </button>
+          ) : (
+            <>
+              <button
+                disabled
+                className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 disabled:opacity-40"
+              >
+                Mandar al calendario
+              </button>
+              <span className="text-xs text-slate-400">
+                No se puede mandar al calendario: la orden no tiene fecha de ejecución.
+              </span>
+            </>
+          )
+        )}
       </div>
+
+      {mandandoAlCalendario && (
+        <MandarAlCalendarioModal
+          orden={o}
+          onCerrar={() => setMandandoAlCalendario(false)}
+          onMandada={() => setMandandoAlCalendario(false)}
+        />
+      )}
+
+      {postergando && (
+        <PostergarOTModal
+          orden={o}
+          onCerrar={() => setPostergando(false)}
+          onPostergada={() => { setPostergando(false); onPostergada?.(); }}
+        />
+      )}
 
       {/* Sólo en las que siguen abiertas: una realizada ya no debe ninguna
           explicación, y lo que se encontró al hacerla va en la observación de
@@ -1135,6 +1225,25 @@ function OTDetail({
           onCambio={onJustificacion}
         />
       )}
+
+      {/* Los mensajes de la orden, aparte de la justificación de arriba y fuera
+          del `pideJustificacion`: se puede hablar de una orden ya realizada, y
+          la justificación no. Una nota dice por qué no se hizo y llega a la
+          columna X de la planilla; un mensaje queda en el sistema, lo ve quien
+          pueda ver la orden y puede avisar por correo. No se mezclan ni una
+          reemplaza a la otra. Quien puede abrir esta pantalla puede leer y
+          escribir el hilo —ver y escribir son lo mismo—, así que no depende
+          de `canEdit`. */}
+      <HiloDeMensajes
+        tipo="orden_trabajo"
+        id={o.id}
+        aclaracion={
+          pideJustificacion(o.estado)
+            ? "Es una conversación con otras personas, no la justificación de arriba: " +
+              "«Por qué no se hizo» llega a la planilla de órdenes y los mensajes no."
+            : "Es una conversación con otras personas y no llega a ninguna planilla."
+        }
+      />
 
       {canEdit && (
         <div className="flex items-center gap-2 pt-1 flex-wrap">

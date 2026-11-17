@@ -190,3 +190,95 @@ describe("quienesEscriben", () => {
     expect([...escriben]).toEqual(["lib/modulo/conCola.ts"]);
   });
 });
+
+describe("quienesEscriben — una ruta que llama al handler de otra", () => {
+  /**
+   * El punto ciego que apareció con el envío del plan al calendario
+   * (04/11/2026): una ruta que escribe en la planilla **llamando al `POST` de
+   * otra ruta**. No llama a ninguna primitiva y la otra ruta es `aborta`, no
+   * `delega`, así que la propagación de siempre no la veía y quedaba sin
+   * declarar sin que nada lo dijera.
+   */
+  const POSTERGAR: Archivo = {
+    ruta: "app/api/modulo/postergar/route.ts",
+    texto: `
+      ${importa("escribirCeldas", "lib/core/sheets")}
+      export async function POST(request) { await escribirCeldas("id", []); }
+    `,
+  };
+  const REGISTRO_RUTAS = {
+    "app/api/modulo/postergar/route.ts": { estrategia: "aborta", porque: "la planilla primero" },
+  };
+  const LLAMADORA: Archivo = {
+    ruta: "app/api/modulo/plan/route.ts",
+    texto: `
+      ${importa("POST as postergar", "app/api/modulo/postergar/route")}
+      export async function POST(request) { return await postergar(request, {}); }
+    `,
+  };
+
+  it("cuenta como escritora la que importa el handler de una ruta registrada y lo llama", () => {
+    const escriben = quienesEscriben([POSTERGAR, LLAMADORA], REGISTRO_RUTAS);
+    expect([...escriben].sort()).toEqual([
+      "app/api/modulo/plan/route.ts",
+      "app/api/modulo/postergar/route.ts",
+    ]);
+  });
+
+  it("y sale ROMPE si no está declarada, y limpio si lo está como `aborta`", () => {
+    const sinDeclarar = rompe(revisarExportaciones([POSTERGAR, LLAMADORA], REGISTRO_RUTAS));
+    expect(sinDeclarar.map((x) => x.ruta)).toEqual(["app/api/modulo/plan/route.ts"]);
+
+    const h = revisarExportaciones([POSTERGAR, LLAMADORA], {
+      ...REGISTRO_RUTAS,
+      "app/api/modulo/plan/route.ts": { estrategia: "aborta", porque: "escribe a través de postergar" },
+    });
+    expect(h).toEqual([]);
+  });
+
+  it("también sin alias", () => {
+    const sinAlias: Archivo = {
+      ruta: "app/api/modulo/otra/route.ts",
+      texto: `
+        ${importa("PATCH", "app/api/modulo/editar/route")}
+        export const probar = () => PATCH(1, 2);
+      `,
+    };
+    const editar: Archivo = {
+      ruta: "app/api/modulo/editar/route.ts",
+      texto: `${importa("escribirCeldas", "lib/core/sheets")} export async function PATCH() { await escribirCeldas("id", []); }`,
+    };
+    const escriben = quienesEscriben([editar, sinAlias], {
+      "app/api/modulo/editar/route.ts": { estrategia: "cola", porque: "anota" },
+    });
+    expect(escriben.has("app/api/modulo/otra/route.ts")).toBe(true);
+  });
+
+  it("no cuenta si el handler viene de una ruta que no está en el registro", () => {
+    expect([...quienesEscriben([POSTERGAR, LLAMADORA], {})]).toEqual(["app/api/modulo/postergar/route.ts"]);
+  });
+
+  it("no cuenta si lo importado no es un handler: es la regla angosta a propósito", () => {
+    const ayudante: Archivo = {
+      ruta: "lib/modulo/ayudante.ts",
+      texto: `${importa("escribirCeldas", "lib/core/sheets")} export async function leerAlgo() { await escribirCeldas("id", []); }`,
+    };
+    const usa: Archivo = {
+      ruta: "app/api/modulo/usa/route.ts",
+      texto: `${importa("leerAlgo", "lib/modulo/ayudante")} export const x = () => leerAlgo();`,
+    };
+    const escriben = quienesEscriben([ayudante, usa], {
+      "lib/modulo/ayudante.ts": { estrategia: "aborta", porque: "no es delega" },
+    });
+    expect([...escriben]).toEqual(["lib/modulo/ayudante.ts"]);
+  });
+
+  it("no cuenta si lo importa y no lo llama", () => {
+    const soloImporta: Archivo = {
+      ruta: "app/api/modulo/plan/route.ts",
+      texto: `${importa("POST as postergar", "app/api/modulo/postergar/route")} export const referencia = postergar;`,
+    };
+    const escriben = quienesEscriben([POSTERGAR, soloImporta], REGISTRO_RUTAS);
+    expect(escriben.has("app/api/modulo/plan/route.ts")).toBe(false);
+  });
+});

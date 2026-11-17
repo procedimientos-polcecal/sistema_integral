@@ -1,11 +1,21 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { permisosCanteraDe } from "@/lib/cantera/auth";
-import { traerCubicaciones, traerPesadasAgrupadasPorOrigenMes, traerPesadasDolomitaD1DeOrigenPt2, traerVoladuras, traerYacimientos } from "@/lib/cantera/consultas";
+import { traerCubicaciones, traerCubicacionesMaterial, traerPesadasAgrupadasPorOrigenMes, traerPesadasDolomitaD1DeOrigenPt2, traerPesadasPorOrigenTipoMes, traerVoladuras, traerYacimientos } from "@/lib/cantera/consultas";
 import { sumarAcarreosPorYacimiento, toneladasDolomitaD1DePlanta2PorMes } from "@/lib/cantera/pesadas";
 import { metrosYPozos } from "@/lib/cantera/tramos";
 import { toneladasEstimadas } from "@/lib/cantera/toneladas";
 import { armarCierresCubicacion, type AcarreoPorYacimiento, type CierreCargado, type VoladuraParaCubicacion } from "@/lib/cantera/cubicacion";
+import {
+  acarreoPorMaterial,
+  cierresC1C3,
+  CLAVE_C1C3,
+  desglosarPorMaterial,
+  juntarAcarreoC1C3,
+  juntarVoladurasC1C3,
+  MES_DE_CORTE_POR_MATERIAL,
+  type ExistenciaDeMaterial,
+} from "@/lib/cantera/cubicacionPorMaterial";
 import CubicacionClient from "./CubicacionClient";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 
@@ -38,12 +48,14 @@ export default async function CubicacionPage() {
   const permisos = await permisosCanteraDe(supabase, user.id);
   if (!permisos.tieneAcceso) redirect("/");
 
-  const [yacimientos, voladuras, pesadasAgrupadas, pesadasDolomitaPt2, cubicaciones] = await Promise.all([
+  const [yacimientos, voladuras, pesadasAgrupadas, pesadasDolomitaPt2, cubicaciones, pesadasPorTipo, cubicacionesMaterial] = await Promise.all([
     traerYacimientos(supabase, true),
     traerVoladuras(supabase, {}),
     traerPesadasAgrupadasPorOrigenMes(supabase),
     traerPesadasDolomitaD1DeOrigenPt2(supabase),
     traerCubicaciones(supabase),
+    traerPesadasPorOrigenTipoMes(supabase),
+    traerCubicacionesMaterial(supabase),
   ]);
 
   const idPorCodigo = new Map(yacimientos.map((y) => [y.id, y.codigo]));
@@ -95,6 +107,34 @@ export default async function CubicacionPage() {
   const mesActual = hoyEnArgentina().slice(0, 7);
   const filas = armarCierresCubicacion(YACIMIENTOS_CUBICADOS, voladurasParaCubicacion, acarreos, cierresCargados, mesActual);
 
+  // ── C1 + C3 juntas, desde el mes de corte ────────────────────────────────
+  // La chocolata y la caliza de las dos canteras están mezcladas en los
+  // galpones, y al volar nadie sabe cuánto es de cada piedra. Entonces el
+  // balance es el de siempre pero con TOTALES (voladuras y acarreo de C1+C3),
+  // la existencia final se carga por material y se suma, y el reparto entre
+  // chocolata y caliza sale al final, medido (lib/cantera/cubicacionPorMaterial.ts).
+  const existenciasPorMaterial: ExistenciaDeMaterial[] = cubicacionesMaterial.map((c) => ({
+    mes: c.mes.slice(0, 7),
+    material: c.material,
+    existenciaFinal: c.existencia_final,
+    existenciaAcopio: c.existencia_acopio,
+  }));
+  const acarreoMaterial = acarreoPorMaterial(pesadasPorTipo);
+  const filasC1C3 = armarCierresCubicacion(
+    [CLAVE_C1C3],
+    juntarVoladurasC1C3(voladurasParaCubicacion),
+    juntarAcarreoC1C3(acarreos),
+    cierresC1C3(existenciasPorMaterial),
+    // El mes de corte se fuerza para poder cargar el primer cierre, y el mes en
+    // curso para ver lo que ya pasó antes de cargarlo.
+    [MES_DE_CORTE_POR_MATERIAL, mesActual]
+  );
+  const desglose = desglosarPorMaterial(
+    [...new Set(filasC1C3.map((f) => f.mes))],
+    existenciasPorMaterial,
+    acarreoMaterial.porMaterial
+  );
+
   const yacimientosCubicados = YACIMIENTOS_CUBICADOS
     .map((codigo) => yacimientos.find((y) => y.codigo === codigo))
     .filter((y): y is NonNullable<typeof y> => y !== undefined);
@@ -103,6 +143,11 @@ export default async function CubicacionPage() {
     <CubicacionClient
       yacimientos={yacimientosCubicados.map((y) => ({ id: y.id, codigo: y.codigo, nombre: y.nombre }))}
       filas={filas}
+      filasC1C3={filasC1C3}
+      desglose={desglose}
+      existenciasPorMaterial={existenciasPorMaterial}
+      mesDeCorte={MES_DE_CORTE_POR_MATERIAL}
+      acarreoSinMaterial={acarreoMaterial.sinMaterial}
       puedeEditar={permisos.puedeEditar}
     />
   );

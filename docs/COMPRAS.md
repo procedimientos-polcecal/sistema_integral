@@ -42,7 +42,7 @@ decisiones de personas distintas:
    | En comparativa | Compras | carga los presupuestos y elige la planilla |
    | Para comprar | **NICO o MAXI** | eligen un presupuesto: elegir **es** aprobar |
    | Compra aprobada | Compras | quién la aprobó y cuándo |
-   | Pedido | — | fecha, proveedor, costo + IVA y envío |
+   | Pedido | — | fecha, proveedor, costo + IVA y envío, y **para cuándo se espera que llegue** |
 
    En la planilla el estado dice a quién le toca: `PARA COMPRAR (NICO)`. Ese
    nombre no es decorativo — **sólo esa persona puede aprobar esa compra**. Si
@@ -54,6 +54,59 @@ decisiones de personas distintas:
 
    `RECIBIDO` existe en la app pero **no en el desplegable de la planilla**, así
    que no se escribe. Se define al desarrollar el seguimiento de compra.
+
+### La fecha estimada se pide al registrar el pedido (30/10/2026)
+
+Vivía sólo en el formulario de recepción, o sea que se cargaba **cuando la cosa
+ya había llegado**, que es justo cuando esa fecha no le sirve a nadie. Medido el
+30/10/2026: de los **356 RI que estaban en PEDIDO** —los que alguien está
+esperando— **7** tenían fecha estimada; de las 1.550 cargadas, casi todas eran
+de RI ya recibidos. Quien pregunta «¿cuándo llega?» es el que no puede cerrar su
+OT sin el repuesto, y la respuesta tiene que existir mientras todavía es una
+espera.
+
+Ahora la pide el modal **«Registrar el pedido»**, junto al proveedor y al costo,
+y se exige para avanzar: es la misma regla de siempre —cada paso deja cargado lo
+suyo—. Del formulario de recepción salió el campo editable, pero **la fecha se
+sigue mostrando ahí**, al lado de «¿Cumplió Compras?»: es contra ella que se
+juzga ese cumplimiento, y sin verla el juicio se da a ciegas. Corregirla —un
+proveedor que avisa que se atrasa— se hace en **Gestión de compra**, en la ficha
+del RI.
+
+Tres cosas que no se deducen del código:
+
+- **La exigencia es al *entrar* a PEDIDO, no en cada guardado que lo nombre.**
+  No está en la tabla `FALTA` de la ruta por eso: el formulario de recepción
+  manda `estado_compra: "PEDIDO"` en cada guardado sin fecha de recepción, así
+  que metida ahí habría dejado sin poder cargarse los **349** RI que ya estaban
+  en PEDIDO sin fecha. La condición es la misma con la que se dispara la orden
+  de Odoo, y vive en [lib/compras/registrarElPedido.ts](../lib/compras/registrarElPedido.ts).
+- **Volver de `EN_ESPERA` no la exige**, igual que no exige el proveedor ni el
+  costo: volver de la espera es retomar donde estaba, y exigirle algo deja
+  atrapado adentro al pedido que se frenó justamente porque le faltaba.
+- **El modal se abre mucho menos de lo que parece.** Medido el 30/10/2026: de
+  las **503 transiciones a PEDIDO** registradas, **5** tienen autor, y en los
+  últimos 60 días fueron **299 y 1**. `fecha_pedido` está en null en los 2.220
+  RI. El estado llega a PEDIDO por la **sincronización con la planilla**, casi
+  siempre saltando `SIN_INICIAR → PEDIDO` de una — el mismo motivo por el que la
+  orden de Odoo se mudó al importador el 02/10. Mientras mande la planilla, la
+  mayoría de los pedidos va a seguir sin fecha estimada: esto la pide donde una
+  persona la puede contestar, no en todos los casos. **Es el riesgo asumido y
+  está decidido a pedido.**
+
+### Y la orden de compra en Odoo se ofrece en el mismo modal
+
+Ya se creaba sola al entrar a PEDIDO, **y en silencio**: el listado tiraba a la
+basura el `orden_odoo` y el `aviso_odoo` que devuelve la ruta, así que ni el
+número que contabilidad necesita ni el fallo llegaban a nadie — sólo se veían
+entrando a la ficha de ese RI, y había **12 con `odoo_pendiente`**.
+
+Ahora el modal lo dice, con un casillero **tildado por defecto** (que es lo que
+el sistema venía haciendo). Lo nuevo no es crearla: es poder decir que no, y
+enterarse de cómo salió. Sólo un `false` explícito la saltea — cualquier llamada
+que no mande `crear_orden_odoo` la crea, como siempre. El casillero no aparece
+si no hay credenciales de Odoo: ofrecer algo que no se va a hacer es peor que no
+ofrecerlo.
 
 Por eso cada requerimiento lleva **dos estados independientes**:
 
@@ -157,6 +210,52 @@ trabajo es comparar. En el teléfono esa vista se convierte en tarjetas apiladas
 
 **Al aprobarse la compra, la comparativa se congela.** Desde ahí es el respaldo
 de por qué se eligió ese precio: no se agrega, no se edita y no se borra.
+
+## El semáforo de pedidos y el reclamo (12/11/2026)
+
+`/mis-pedidos` pinta de verde, amarillo o rojo los pedidos que **esperan a
+Compras**, y en los amarillos y rojos del área propia ofrece **«Reclamar»**:
+abre el hilo de mensajes de ese RI con la pregunta redactada y los gestores de
+Compras marcados. El diseño está en
+[el spec](superpowers/specs/2026-11-12-compras-semaforo-y-reclamo-design.md) y
+[el plan](superpowers/plans/2026-11-12-compras-semaforo-y-reclamo.md).
+
+Seis cosas que no se deducen del código:
+
+- **Los cortes son 30 y 90 días, y salieron de medir.** Con 10/30 quedaban 50
+  de 106 en rojo y Mantenimiento abría la pantalla con 33 reclamos posibles;
+  con 30/90 abre con 11. **El rojo tiene que costar poco de atender o deja de
+  significar algo** — que es exactamente lo que ya le pasó a la prioridad de
+  este módulo, con el 42% de los abiertos marcados `URGENTE`.
+- **`EN_ESPERA` queda afuera del conjunto reclamable**, y es lo que evita que
+  esto se muera en la primera semana: **9 de los 10 pedidos más viejos estaban
+  ahí**, frenados a propósito. Sin excluirlos, lo primero que ve el área arriba
+  de todo son pedidos que alguien congeló, y el primer reclamo se contesta con
+  «ése está en espera».
+- **El eje es la fecha de requerimiento y no la de necesidad.** La segunda está
+  cargada en 539 de 540, pero el **91% ya está vencido** y el margen mediano
+  entre pedir y necesitar es de **4 días**: la gente escribe «lo necesito ya»,
+  así que esa fecha no ordena nada.
+- **El destinatario sale del grant explícito de `usuario_modulos`, nunca de
+  `nivelEnModulo()`.** Esa función le devuelve `admin` a todo `admin_sistema`
+  sin mirar el grant: por ahí entraría una quinta persona que en Compras tiene
+  `lectura` explícita. Es el mismo error que ya se pagó con
+  `compras-por-aprobar`, que le llegaba a 6 personas de las cuales 3 no podían
+  aprobar. Hoy los cuatro del grant coinciden con `compras_aprobadores`, pero
+  son dos listas distintas por definición y pueden divergir.
+- **El orden por defecto no cambia; al filtrar por un color, sí.** Medido para
+  Mantenimiento —1.125 pedidos, 23 páginas— los 11 rojos caían en las páginas
+  5, 6, 7, 11, 12 y 15 y **la página 1 no tenía un solo punto de color**: con
+  el orden de siempre el semáforo era invisible. Y el orden sin filtro se deja
+  porque esta pantalla también sirve para buscar si alguien ya pidió lo mismo,
+  y eso se navega por número.
+- **Hay 5 pedidos que esperan a un aprobador y no a Compras** (`estado_aprobacion
+  = PENDIENTE`). Hoy no se nota porque las dos listas coinciden; el día que
+  dejen de coincidir, esos reclaman a quien no decide.
+
+Y una decisión de palabras que es una decisión de datos: el renglón dice
+**«último mensaje»** y no «reclamado». El hilo guarda cualquier conversación
+sobre el pedido, y el dato no sabe cuál fue un reclamo.
 
 ## Integración con el resto del SdG
 

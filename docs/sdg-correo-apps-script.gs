@@ -1,9 +1,26 @@
 /**
  * Apps Script que manda los correos del SdG.
  *
- * Hoy manda uno solo: el aviso de que una carga hecha sin señal en la planta
- * fue rechazada cuando el teléfono la mandó solo, con la app cerrada. Quien lo
- * llama es `lib/core/correo.ts`.
+ * Manda el aviso de una carga rechazada, el de una mención en un hilo y el
+ * resumen de novedades de RR.HH. del cierre del día. Quien lo llama es
+ * `lib/core/correo.ts`.
+ *
+ * ## ESTE ARCHIVO SE PUBLICA DOS VECES, DESDE DOS CUENTAS
+ *
+ * No son dos scripts distintos: es el mismo código pegado en dos proyectos,
+ * cada uno con su `SECRETO` y su url.
+ *
+ *   - **La casilla del sistema**, publicada por quien administra el SdG.
+ *     Sus variables son `SDG_CORREO_URL` y `SDG_CORREO_SECRET`.
+ *   - **La casilla de RR.HH.**, publicada desde `gestiondepersonas@polcecal.com`
+ *     (16/11/2026). Sus variables son `SDG_CORREO_RRHH_URL` y
+ *     `SDG_CORREO_RRHH_SECRET`.
+ *
+ * Hacen falta dos porque **una aplicación web se ejecuta como su dueño**: el
+ * remitente no se elige desde el pedido, lo decide qué cuenta publicó. Y que
+ * no se pueda elegir es deliberado —si el `doPost` aceptara un `from`, una url
+ * filtrada podría falsear el remitente—, así que mandar desde otra casilla es
+ * publicar desde esa otra casilla y no agregarle un parámetro a ésta.
  *
  * ## Por qué un script acá y no que el servidor mande el correo
  *
@@ -29,10 +46,25 @@
  *
  * ## Instalación
  *
- *   1. **Desde la cuenta de quien administra el SdG.** El dueño del proyecto es
- *      el remitente que la gente va a ver y a donde van a ir las respuestas.
- *      Se evaluó una casilla aparte y se descartó: en Workspace una cuenta
- *      nueva ocupa una licencia, y no hace falta para esto.
+ *   1. **Desde la cuenta que tiene que figurar como remitente**, porque el
+ *      dueño del proyecto es el remitente que la gente va a ver y a donde van
+ *      a ir las respuestas. Son dos implementaciones y cada una va desde su
+ *      cuenta:
+ *
+ *        - la **del sistema**, desde la cuenta de quien administra el SdG
+ *          (`SDG_CORREO_URL` / `SDG_CORREO_SECRET`);
+ *        - la **de RR.HH.**, desde `gestiondepersonas@polcecal.com`
+ *          (`SDG_CORREO_RRHH_URL` / `SDG_CORREO_RRHH_SECRET`).
+ *
+ *      Para la del sistema se evaluó una casilla aparte y se descartó: en
+ *      Workspace una cuenta nueva ocupa una licencia, y no hacía falta. La de
+ *      RR.HH. no crea ninguna casilla nueva — usa una que ya existe.
+ *
+ *      **Las dos son proyectos independientes.** Tienen su propia url, su
+ *      propio SECRETO y su propia autorización, y editar una no toca a la
+ *      otra: el día que se cambie este archivo hay que volver a implementar
+ *      **las dos**, cada una desde su cuenta, o una de las dos queda sirviendo
+ *      el código viejo sin avisar.
  *
  *      **Renombrar esa cuenta más adelante no rompe nada.** Un renombre en
  *      Workspace deja la misma cuenta, con el mismo Drive y el mismo proyecto,
@@ -49,20 +81,44 @@
  *      cuerpo se inyecte `from`, `cc` o copia oculta.
  *   2. script.google.com -> Nuevo proyecto, y pegar este archivo.
  *   3. Configuración del proyecto -> Propiedades del script:
- *        SECRETO  = el mismo valor que SDG_CORREO_SECRET en Vercel
- *        DOMINIOS = los dominios permitidos, separados por coma.
- *                   Por ejemplo: polcecal.com,polysan.com.ar
+ *        SECRETO  = el mismo valor que, EN VERCEL, tenga la variable de ESTA
+ *                   implementación: `SDG_CORREO_SECRET` para la del sistema,
+ *                   `SDG_CORREO_RRHH_SECRET` para la de RR.HH. **No son el
+ *                   mismo valor y no tienen por qué serlo**: son dos puertas
+ *                   distintas, y compartir el secreto hace que filtrar una
+ *                   abra las dos.
+ *        DOMINIOS = los dominios permitidos, separados por coma. Acá sí va lo
+ *                   mismo en las dos: polcecal.com,polysan.com.ar
  *      **Hay que apretar "Guardar propiedades de la secuencia de comandos"**:
  *      escribirlas y volver al editor no las guarda.
  *   4. Correr `revisarLasPropiedades` y mirar el registro de ejecuciones. Tiene
  *      que listar SECRETO y DOMINIOS; si dice "(ninguna)", se guardaron en otro
  *      lado.
  *   5. Implementar -> Nueva implementación -> Aplicación web:
- *        Ejecutar como: Yo (la casilla del sistema)
+ *        Ejecutar como: Yo (o sea, la cuenta del paso 1)
  *        Quién tiene acceso: Cualquier usuario
- *      La primera vez pide autorizar el permiso de mandar correo.
- *   6. Copiar la URL de la implementación a SDG_CORREO_URL en Vercel y en
- *      `.env.local`.
+ *      La primera vez pide autorizar el permiso de mandar correo. **"Cualquier
+ *      usuario" suena peor de lo que es**: sin eso, Google le pide sesión a
+ *      quien llame y el SdG no tiene ninguna; lo que de verdad protege la url
+ *      es el SECRETO del paso 3, y lo que impide que sea un relay abierto es
+ *      DOMINIOS.
+ *   6. Copiar la URL de la implementación a la variable de ESTA implementación
+ *      en Vercel —`SDG_CORREO_URL` o `SDG_CORREO_RRHH_URL`— y a `.env.local`.
+ *      **Tiene que terminar en `/exec`**: la que termina en `/dev` es la de
+ *      prueba, cambia con cada edición y exige sesión.
+ *      Vercel no aplica una variable nueva hasta el próximo despliegue.
+ *
+ *      **LA FORMA DE LA URL DELATA EL ACCESO, y es el diagnóstico más rápido
+ *      que hay.** Si sale
+ *      `script.google.com/a/macros/<dominio>/s/<id>/exec`, con ese
+ *      `/a/macros/<dominio>/` en el medio, el paso 5 quedó restringido al
+ *      dominio: Google no ejecuta nada y redirige a `ServiceLogin`, así que el
+ *      SdG recibe **HTML y un 401** en vez del JSON del script. La abierta es
+ *      `script.google.com/macros/s/<id>/exec`, sin el dominio. Medido el
+ *      16/11/2026 al publicar la de RR.HH., que salió restringida: una vez
+ *      corregido el acceso **las dos formas funcionan** —es la misma
+ *      implementación— así que no hace falta volver a copiar la URL; lo que
+ *      hay que cambiar es el acceso, no la variable.
  *   7. Probar con `mandarmeUnoDePrueba`, que se manda un correo a la propia
  *      casilla sin pasar por el SdG.
  *

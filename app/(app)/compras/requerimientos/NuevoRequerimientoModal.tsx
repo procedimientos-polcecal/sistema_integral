@@ -10,6 +10,7 @@ import {
 import { PRIORIDADES, PRIORIDAD_LABELS } from "@/lib/compras/constants";
 import { recortarParaPantalla } from "@/lib/compras/texto";
 import Select from "@/components/Select";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 type Opcion = { id: string; nombre: string };
 
@@ -43,7 +44,14 @@ export interface ValoresIniciales {
 
 /**
  * Alta de un requerimiento. Es el formulario que hoy vive en Google Forms, así
- * que se mantiene igual de corto: sólo descripción y área son obligatorias.
+ * que se mantiene igual de corto: descripción, área y dónde se necesita.
+ *
+ * El lugar se exige desde el 11/11/2026, a pedido. No cuesta nada: medido ese
+ * día, de los 2.270 RI **ninguno** estaba sin ubicación, así que esto no
+ * cambia una costumbre sino que cierra la puerta. Lo que se evitaba es que un
+ * pedido sin lugar no se puede filtrar por ubicación y, sobre todo, que de ahí
+ * salen el sector, el equipo ofrecido y quién paga: sin lugar, los tres
+ * quedan a cargo de quien pide.
  */
 export default function NuevoRequerimientoModal({
   areas, empresas, ubicaciones, inicial, advertencia, onClose, onSaved,
@@ -378,22 +386,16 @@ export default function NuevoRequerimientoModal({
   }
 
   return (
-    <div
-      onClick={cerrar}
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="mt-10 w-full max-w-2xl rounded-xl bg-white shadow-xl"
-      >
-        <div className="border-b border-slate-200 px-6 py-4">
-          <h2 className="text-lg font-bold text-slate-900">Nuevo requerimiento interno</h2>
-          <p className="text-sm text-slate-500">
+    // El fondo, la X y Escape salen conservando porque no hay nada que tirar:
+    // este formulario no pasa por `useBorrador` y pierde lo cargado al salir,
+    // como antes. Hoy los dos llaman a `cerrar`, que además recarga si
+    // el pedido ya se creó (ver más arriba).
+    <Modal titulo="Nuevo requerimiento interno" alSalir={cerrar} ancho="ancho">
+        <form onSubmit={enviar} className="space-y-4">
+          <p className="-mt-2 text-sm text-slate-500">
             El N° de RI se asigna solo y el pedido queda pendiente de aprobación.
           </p>
-        </div>
 
-        <form onSubmit={enviar} className="space-y-4 px-6 py-5">
           {/* Arriba de todo: es lo último que se puede mirar antes de que el
               pedido exista. */}
           {advertencia}
@@ -476,13 +478,19 @@ export default function NuevoRequerimientoModal({
           </div>
 
           {/* Dónde se necesita */}
-          <Campo label="Dónde se necesita">
+          <Campo label="Dónde se necesita" requerido>
             <Select
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={ubicacionId}
               onChange={(e) => elegirUbicacion(e.target.value)}
             >
-              <option value="">Sin especificar</option>
+              {/*
+                «Elegir…» y no «Sin especificar»: lo segundo se lee como una
+                opción válida, y dejar el lugar en blanco es lo que vuelve
+                imposible filtrar por ubicación y deducir el sector —de ahí
+                salen también el equipo y quién paga—.
+              */}
+              <option value="">Elegir…</option>
               {ubicaciones.map((u) => (
                 <option key={u.id} value={u.id}>{u.nombre}</option>
               ))}
@@ -578,7 +586,9 @@ export default function NuevoRequerimientoModal({
             </div>
           )}
 
-          <div className="flex justify-end gap-2 pt-1">
+          {/* Pegados al pie: «Cancelar» y
+              «Crear requerimiento» siempre están a mano en un formulario largo. */}
+          <PieDeModal>
             <button
               type="button"
               onClick={cerrar}
@@ -589,15 +599,14 @@ export default function NuevoRequerimientoModal({
             </button>
             <button
               type="submit"
-              disabled={guardando || creado || !descripcion.trim() || !areaId}
+              disabled={guardando || creado || !descripcion.trim() || !areaId || !ubicacionId}
               className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
             >
               {guardando ? "Guardando…" : creado ? "Ya se creó" : "Crear requerimiento"}
             </button>
-          </div>
+          </PieDeModal>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import InfoTip from "@/components/InfoTip";
 import { hoyEnArgentina, semanaDe } from "@/lib/core/fechas";
 import { useCargar } from "@/lib/core/useCargar";
+import { repartirPorTurno } from "@/lib/remises/empleadosDelTurno";
 
 const DAY_NAMES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
@@ -146,14 +147,24 @@ function TripCard({ tipo, fecha, turnoId, empleados }: { tipo: "ida" | "vuelta";
     if (data.empleadosSinCoordenadas > 0) setAviso(`${data.empleadosSinCoordenadas} empleado(s) sin coordenadas fueron ignorados.`);
   }
 
-  const activos = empleados;
+  // Mismo recorte que la lista de Asistencia en Hoy: los del turno más los que
+  // ya están marcados, que nunca pueden volverse invisibles.
+  const delTurno = useMemo(
+    () => repartirPorTurno(empleados, turnoId, plan ?? new Set<string>()),
+    [empleados, turnoId, plan]
+  );
+  const activos = delTurno.visibles;
   const cuenta = plan ? activos.filter((e) => plan.has(e.id)).length : 0;
 
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-medium text-slate-700">{tipo === "ida" ? "IDA – Búsqueda" : "VUELTA – Retorno"}</h3>
-        <span className="text-xs text-slate-400">{cuenta}/{activos.length}</span>
+        <span className="text-xs text-slate-400" title={
+          delTurno.deOtroTurno > 0 || delTurno.sinDatos > 0
+            ? `No se muestran ${delTurno.deOtroTurno} de otro turno y ${delTurno.sinDatos} sin datos de Remises`
+            : undefined
+        }>{cuenta}/{activos.length}</span>
       </div>
       <div className="max-h-64 overflow-y-auto space-y-1 mb-3">
         {!plan ? (

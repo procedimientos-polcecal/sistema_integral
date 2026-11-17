@@ -50,12 +50,14 @@ seguridad:
    tiempo: los días nuevos necesitan su fila aunque nadie toque nada— y de paso
    es la red por si algún camino de guardado quedara sin disparar el suyo.
 
-   **Vive en GitHub Actions, no en `vercel.json`.** El plan Hobby de Vercel
-   limita los crons en frecuencia *y en cantidad*, y pasarse no degrada el cron:
-   hace fallar el deploy entero. En `vercel.json` ya hay tres. Compras y
-   Mantenimiento dejan uno diario ahí como red por si Actions falla; este no,
-   justamente para no arrimarse al límite. Si algún día pasan a Pro, conviene
-   agregarlo.
+   **Vive en `vercel.json` desde el 05/11/2026.** Antes estaba en GitHub
+   Actions, y el motivo escrito era que el plan Hobby limita los crons en
+   frecuencia *y en cantidad*. El plan es Pro, así que ese límite no existía —y
+   la nota de acá ya decía «si algún día pasan a Pro, conviene agregarlo», sin
+   que nadie comprobara que ya estaban—. Importa además porque **un cron de
+   Actions no cumple lo que declara**: «cada 6 horas» desde allá era en los
+   hechos «cada 4 a 8», así que la ventana móvil de 45 días podía quedarse sin
+   recalcular más tiempo del que esta nota prometía.
 
 **El Analítico pide los seis meses en paralelo**, que son independientes entre sí.
 

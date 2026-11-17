@@ -44,7 +44,10 @@ export default function CargarAcarreoClient({
   async function guardarTipo(tipo: string) {
     setGuardandoTipo(tipo);
     setError("");
-    const cantidad = valores[tipo].trim() === "" ? 0 : Number(valores[tipo]);
+    // Va el texto tal cual y lo lee la ruta con `numeroDeCampo`. `Number("639,56")`
+    // daba NaN, y la ruta contestaba "la cantidad tiene que ser un número" sobre
+    // un campo que tenía un número escrito.
+    const cantidad = valores[tipo];
     const res = await fetch("/api/cantera/acarreos", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

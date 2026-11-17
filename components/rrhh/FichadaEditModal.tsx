@@ -3,9 +3,11 @@
 import { useMemo, useState } from "react";
 import { AVISO_DIA_SIN_PROTEGER, traeDiaSinProteger } from "@/lib/rrhh/fichadas/diaSinProteger";
 import { acreditarDia, instanteDePared, type CalculoDelDia } from "@/lib/rrhh/fichadas/acreditado";
+import { diaDeLaSalida, problemaDeLaFila } from "@/lib/rrhh/fichadas/turnoDeNoche";
 import type { TurnoLike } from "@/lib/rrhh/engine/recalcular-puro";
 import { useCargar } from "@/lib/core/useCargar";
 import AcreditadoDeFichada from "./AcreditadoDeFichada";
+import { Modal, PieDeModal } from "@/components/Modal";
 
 interface Fichada {
   id: string;
@@ -132,7 +134,22 @@ export default function FichadaEditModal({
     : undefined;
 
   function actualizarFila(idx: number, cambios: Partial<FilaFichada>) {
-    setFilas((prev) => prev.map((f, i) => (i === idx ? { ...f, ...cambios } : f)));
+    setFilas((prev) =>
+      prev.map((f, i) => {
+        if (i !== idx) return f;
+        const fila = { ...f, ...cambios };
+        // Al tipear la hora de salida, el día se acomoda solo: una salida
+        // anterior a la entrada es del día siguiente, porque un turno no
+        // termina antes de empezar. Es lo que hacía falta escribir a mano
+        // en el turno de 20 a 4 y lo que nadie se acordaba de hacer.
+        // Se recalcula sólo cuando se tocó una hora: si alguien edita la
+        // FECHA de salida a propósito, no se la pisamos.
+        if (cambios.horaSalida !== undefined || cambios.horaEntrada !== undefined) {
+          fila.fechaSalida = diaDeLaSalida(fila.fechaEntrada, fila.horaEntrada, fila.horaSalida);
+        }
+        return fila;
+      })
+    );
   }
   function agregarFila() {
     setFilas((prev) => [...prev, { id: null, fechaEntrada: fecha, horaEntrada: "", fechaSalida: fecha, horaSalida: "", eliminar: false }]);
@@ -157,6 +174,14 @@ export default function FichadaEditModal({
           continue;
         }
         if (fila.eliminar || !fila.horaEntrada) continue;
+        // Antes de mandar nada: una salida anterior a la entrada se guarda
+        // sin error y deja un día con horas imposibles. Hay 18 así en la
+        // base, todas escritas a mano (ver `turnoDeNoche.ts`).
+        const problema = problemaDeLaFila(
+          instanteDePared(fila.fechaEntrada, fila.horaEntrada),
+          instanteDePared(fila.fechaSalida, fila.horaSalida)
+        );
+        if (problema) throw new Error(problema);
         const body = {
           employeeId,
           fecha: fila.fechaEntrada,
@@ -239,9 +264,10 @@ export default function FichadaEditModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-medium text-slate-800 mb-1">Corregir fichada</h3>
+    // El fondo, la X y Escape salen conservando porque no hay nada que tirar:
+    // este formulario no pasa por `useBorrador` y pierde lo cargado al salir,
+    // como antes. Hoy los dos llaman a `onClose`.
+    <Modal titulo="Corregir fichada" alSalir={onClose}>
         <p className="text-sm text-slate-500 mb-4">
           {empleadoNombre} · {new Date(`${fecha}T00:00:00`).toLocaleDateString("es-AR", { timeZone: "UTC" })}
         </p>
@@ -356,7 +382,10 @@ export default function FichadaEditModal({
           </p>
         )}
 
-        <div className="flex justify-end gap-2 mt-4">
+        {/* El cuerpo del modal es el que scrollea: con varias marcaciones los
+            botones se iban abajo del todo. Pegados al pie, «Cancelar» y «Guardar»
+            siempre están a mano. */}
+        <PieDeModal className="flex justify-end gap-2 mt-4">
           {diaSinProteger && !error ? (
             <button onClick={onClose} type="button" className="btn-primary">
               Entendido
@@ -371,8 +400,7 @@ export default function FichadaEditModal({
               </button>
             </>
           )}
-        </div>
-      </div>
-    </div>
+        </PieDeModal>
+    </Modal>
   );
 }

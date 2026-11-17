@@ -1,4 +1,5 @@
 import { libroXlsx, type HojaAEscribir } from "./excel";
+import { cabeceraDeDescarga } from "./descarga";
 
 /**
  * Las descargas .xlsx del sistema.
@@ -12,11 +13,21 @@ import { libroXlsx, type HojaAEscribir } from "./excel";
  * así que alcanzó con un `await`.
  */
 
+/**
+ * El `Content-Disposition` sale de `cabeceraDeDescarga` desde el 03/11/2026, y
+ * no de un `filename="…"` armado acá.
+ *
+ * Las ocho descargas que ya existían llevan nombres ASCII, así que para ellas
+ * no cambia nada. La novena —las marcaciones de un empleado— lleva el apellido
+ * adentro del nombre del archivo, y las cabeceras HTTP son latin-1: un
+ * `PÉREZ` en el `filename=` común llega mojibake o hace que el runtime rechace
+ * la respuesta entera. El porqué completo está en `lib/core/descarga.ts`.
+ */
 function respuestaDeDescarga(filename: string, buffer: Buffer): Response {
   return new Response(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": cabeceraDeDescarga(filename),
     },
   });
 }
@@ -47,5 +58,20 @@ export async function xlsxMultiSheetResponse(
     filas: rows,
     anchos,
   }));
+  return respuestaDeDescarga(filename, await libroXlsx(hojas));
+}
+
+/**
+ * Igual que `xlsxMultiSheetResponse` pero con la hoja entera, para quien
+ * necesita ponerle imágenes (`HojaAEscribir.imagenes`).
+ *
+ * Es otra función y no un parámetro más de las que ya hay a propósito: las diez
+ * rutas que descargan un libro no se tocan, y la cabecera de descarga sale del
+ * mismo `respuestaDeDescarga`.
+ */
+export async function xlsxConImagenesResponse(
+  filename: string,
+  hojas: HojaAEscribir[]
+): Promise<Response> {
   return respuestaDeDescarga(filename, await libroXlsx(hojas));
 }

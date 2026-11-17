@@ -110,8 +110,17 @@ function soloElDia(valor: string | null | undefined): string | null {
 
 /**
  * Cuándo se rompió la máquina: la ejecución, y sólo si falta, la carga.
+ *
+ * Recibe **las dos fechas y no una `OtCruda`** porque `mttr.ts` la usa con su
+ * propia forma de orden, que trae `horas` y `contratista` y no trae
+ * `especialidad`. Que los dos indicadores fechen una correctiva igual no es
+ * cosmético: se leen en la misma línea de la misma ficha, y dos definiciones
+ * de "cuándo pasó" los desalinearían sin que nada avise.
  */
-export function fechaDeFalla(ot: OtCruda): string | null {
+export function fechaDeFalla(ot: {
+  fecha_ejecucion: string | null;
+  fecha: string | null;
+}): string | null {
   return soloElDia(ot.fecha_ejecucion) ?? soloElDia(ot.fecha);
 }
 

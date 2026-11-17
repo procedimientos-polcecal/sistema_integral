@@ -361,3 +361,77 @@ apretando de nuevo.
   habrá que decidir si son otra OT o un recargo de la misma.
 - **Otros contratistas.** La estructura es por proveedor, así que sirve para
   cualquiera; la regla de las horas es de Candia y vive en un solo lugar.
+
+## La descripción dice la actividad, y lo demás va en su columna (04/11/2026)
+
+El mismo cambio que se le hizo al cuaderno de PIPARO el día anterior, pedido
+por lo mismo: los datos que tienen columna propia estaban apilados en el texto,
+y las columnas llegaban vacías.
+
+    H (DESCRIPCIÓN): Limpieza — CANDIA. Quincena del 1/10 al 15/10. 24 h en
+                     total. Según los partes diarios: Horno N°1 (parte 1301,
+                     1/10, 4 h); Horno 1 (parte 1303, 5/10, 4 h); … Las horas
+                     de cada renglón las anotó quien cargó el parte…
+    K FECHA DE CIERRE: —   M ESTADO: —   N CONTRATISTA: —   O HORAS: —
+
+### Por qué alcanza con la actividad, medido
+
+No es una preferencia: **es lo que la planilla ya dice**. Las OT de CANDIA
+cargadas a mano —las que esto viene a reemplazar— tienen exactamente esa forma,
+una por sector:
+
+| OT | Sector | Horas | Descripción |
+|---|---|---|---|
+| 2723 | Planta filler 2 | 16 | «Limpieza general» |
+| 2720 | Calcinación | 56 | «Limpieza en general» |
+| 2719 | Servicios auxiliares | 16 | «Corte de pasto» |
+| 2717 | Servicios auxiliares | 20 | «Riego en planta» |
+
+Así que no se está inventando un formato: se está dejando de agregar uno.
+
+**Y no hace falta ningún denominador común** como en el cuaderno de PIPARO: acá
+el grupo se arma por la actividad **normalizada**, así que todos sus renglones
+dicen la misma. Medido sobre las 19 OT generadas: **cero tienen más de una
+forma de escribirla**.
+
+### Lo que se pierde, dicho
+
+Los lugares de Candia con su número de parte —«Horno N°1 (parte 1301, 1/10,
+4 h)»— salen de la planilla, y **10 de las 19 OT tienen más de un lugar**. No se
+pierden del sistema: cada renglón vive en `mant_partes_contratista_renglones`
+con su `lugar_raw` y su parte, enlazado a esa misma OT. Lo que se pierde es
+poder volver al papel **mirando sólo la planilla**, que era el argumento con el
+que se había escrito el texto largo.
+
+La consecuencia visible se puso delante de quien decide antes de escribir:
+**13 de las 19 quedan diciendo sólo «Limpieza»**, separadas por la columna
+SECTOR y por las horas. Se eligió así a propósito, y es lo que ya pasaba con
+las cargadas a mano.
+
+### El costo: no hay
+
+La otra mitad del pedido —«si la OT tiene un costo, que vaya en REPUESTO
+UTILIZADO»— **no aplica acá y conviene dejarlo escrito para no buscarlo de
+nuevo**. `mant_partes_contratista_renglones` no tiene columna de costo, y el
+parte tampoco: lo más cercano es `materiales`, que está **vacío en los 21
+partes cargados**. `horas_50` y `horas_100` están en cero en los 21. Así que
+`repuesto` sigue yendo en null, y el día que los partes traigan materiales o
+recargos, ésa es la columna donde van.
+
+### Y las columnas: el mismo agujero y el mismo arreglo
+
+De la K en adelante son literales del master y necesitan que la fila exista
+ahí, cosa que llega por `IMPORTRANGE` y tarda; la generación lo intentaba a
+medio segundo de crear la orden. Ahora drena con `after()` al final de la
+corrida, con `exportarLoPendiente` y `esperasQueEntran`, exactamente como la
+generación del cuaderno. Esta ruta además **no declaraba `maxDuration`**: ahora
+sí, porque el drenaje reparte lo que la corrida no gastó creando.
+
+### Lo que se corrigió de lo ya escrito
+
+Las 19 órdenes que ya existían se corrigieron con
+[scripts/corregir-ot-de-partes-de-candia.mts](../../../scripts/corregir-ot-de-partes-de-candia.mts),
+que antes de escribir **reconstruye el texto viejo desde los renglones y exige
+coincidencia exacta**: las 19 coincidieron, o sea que nadie las había editado.
+Después: 0 con el texto viejo en la base y en la planilla, 0 en la cola, y
+**19 de 19 con K, M, N y O en el master**.
