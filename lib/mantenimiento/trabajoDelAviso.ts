@@ -40,9 +40,9 @@
  *
  * ── EL TEXTO CRUDO NO SE INTERPRETA ──────────────────────────────────────────
  *
- * `ot_asignada` es texto libre de la planilla. Hoy hay siete que dicen
- * `Revision`, `-` o `si`, y dos que nombran **dos OT** (`1889 - 1886`,
- * `2567-2568`). Se muestran como vinieron: elegir una de las dos sería enlazar
+ * `ot_asignada` es texto libre de la planilla. Son 10 los que no
+ * son un número (medido el 17/11/2026): siete dicen `Revision`, `-` o `si`, dos
+ * nombran **dos OT** (`1889 - 1886`, `2567-2568`) y hay uno más. Se muestran como vinieron: elegir una de las dos sería enlazar
  * al que se le parece, y un enlace equivocado no se nota nunca.
  *
  * (El enlace automático aviso → OT es otra cosa y vive en `enlaceDelAviso.ts`.)
@@ -125,12 +125,21 @@ export function estadoDelTrabajo(
   return { tipo: "sin-ot" };
 }
 
+/** `font-medium`, que es lo que ya usaba `/mis-avisos` para los dos estados. */
+const PESO = 500;
+
 /** Cómo se dice y se pinta el estado de una orden. Lo usan las dos pantallas. */
 export interface ComoSeMuestra {
   /** «Cerrada el 6/11», «En proceso», «sin estado»… */
   texto: string;
   /** El color del estado, listo para un `style` (no una utilidad: ver abajo). */
   color: string;
+  /**
+   * El peso de la letra, el mismo para los tres estados: antes una pantalla
+   * lo ponía sólo a la abierta y la otra a las dos. Sale de acá para que sea un
+   * solo lugar. Va por `style` por la misma razón que el color.
+   */
+  peso: number;
 }
 
 /**
@@ -154,7 +163,7 @@ export interface ComoSeMuestra {
  */
 export function comoSeMuestraElTrabajo(t: EstadoDelTrabajo): ComoSeMuestra | null {
   if (t.tipo === "cerrado") {
-    return { texto: t.fecha ? `Cerrada el ${enDiaMes(t.fecha)}` : "Cerrada", color: "#15803D" };
+    return { texto: t.fecha ? `Cerrada el ${enDiaMes(t.fecha)}` : "Cerrada", color: "#15803D", peso: PESO };
   }
   // Ni el verde de lo hecho ni el ámbar de lo pendiente: el gris que el módulo
   // ya usa para este estado (`DashboardClient`, `MantenimientosClient`). Dice
@@ -163,12 +172,13 @@ export function comoSeMuestraElTrabajo(t: EstadoDelTrabajo): ComoSeMuestra | nul
   // entra porque esta función la comparten dos listas y un renglón de lista no
   // es donde se lee un párrafo.
   if (t.tipo === "cancelado") {
-    return { texto: "Cancelada", color: "#475569" };
+    return { texto: "Cancelada", color: "#475569", peso: PESO };
   }
   if (t.tipo === "abierto") {
     return {
       texto: t.comoSeLlama || "sin estado",
       color: t.estado === "ATRASADO" ? "#DC2626" : "#B45309",
+      peso: PESO,
     };
   }
   return null;

@@ -110,8 +110,8 @@ export interface Opciones {
  * el número fijo solo dejaría pasar un desastre. Con 2.201 OT el freno salta a
  * las 221; con 172 avisos, a las 50.
  */
-const TOPE = 50;
-const TOPE_PORCENTAJE = 10;
+export const TOPE = 50;
+export const TOPE_PORCENTAJE = 10;
 
 /** Qué se borra, qué se protege y si hay que frenar del todo. */
 export function queSeBorra(opciones: Opciones): Veredicto {

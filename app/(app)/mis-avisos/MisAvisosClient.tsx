@@ -129,8 +129,11 @@ export default function MisAvisosClient({
     }
   }, []);
 
-  // Los ids de las órdenes sin cerrar: 13 hoy y 55 en todo el sistema, a dos
-  // órdenes de magnitud de donde un `.in()` arma una URL que PostgREST rechaza.
+  // Los ids de las órdenes sin cerrar. Serán 13 **después** del relleno de los
+  // 182 enlaces (`scripts/rellenar-el-enlace-de-avisos.mts`); hasta entonces el
+  // mapa trae a lo sumo las 39 órdenes ya enlazadas. En todo el sistema hay 55
+  // abiertas, a dos órdenes de magnitud de donde un `.in()` arma una URL que
+  // PostgREST rechaza.
   //
   // Cuáles están cerradas lo decide el estado, igual que `estadoDelTrabajo`, y
   // son **dos** y no una: `REALIZADO` y `CANCELADA`. Dejar afuera la segunda
@@ -517,13 +520,12 @@ function EnQueTermino({
 
     if (trabajo.tipo === "cerrado" || trabajo.tipo === "cancelado" || trabajo.tipo === "abierto") {
       const numero = String(trabajo.ot);
-      // El color va por `style` y no por una utilidad: `.card` y los `.btn-*`
-      // están fuera de toda capa y le ganan a cualquier `text-*` de al lado.
-      // Texto y color salen de `comoSeMuestraElTrabajo`, la misma regla que usa
-      // `/mantenimiento/avisos`. El color va por `style` y no por una utilidad:
-      // `.card` y los `.btn-*` están fuera de toda capa y le ganan a `text-*`.
+      // Texto, color y peso salen de `comoSeMuestraElTrabajo`, la misma regla
+      // que usa `/mantenimiento/avisos`. El color va por `style` y no por una
+      // utilidad: `.card` y los `.btn-*` están fuera de toda capa y le ganan a
+      // cualquier `text-*` de al lado.
       const c = comoSeMuestraElTrabajo(trabajo)!;
-      const estado = <span style={{ color: c.color }} className="font-medium">{c.texto}</span>;
+      const estado = <span style={{ color: c.color, fontWeight: c.peso }}>{c.texto}</span>;
       return (
         <span className="flex flex-wrap items-baseline gap-x-1.5">
           {tieneMantenimiento ? (

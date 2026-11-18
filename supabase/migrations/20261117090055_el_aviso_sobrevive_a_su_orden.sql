@@ -16,9 +16,18 @@
 --    dispara es que la sincronización borra las OT que la planilla dejó de
 --    traer, así que el borrado en cascada deja de ser un caso raro. El aviso es
 --    el reporte de una persona, no un detalle de la orden: si la orden se va, el
---    aviso sobrevive y vuelve a decir «sin orden», que es lo verdadero.
---    Borrarlo con ella hace desaparecer un pedido de atención que nadie
---    resolvió.
+--    aviso **no se borra**. Borrarlo con ella haría desaparecer un pedido de
+--    atención que nadie resolvió.
+--
+--    Lo que `set null` NO hace es volver a decir «sin orden»: no toca
+--    `ot_asignada`, y `finalDelAviso()` devuelve `con-ot` en cuanto esa columna
+--    tenga texto, así que el aviso sigue diciendo «OT #2814», que es el número
+--    que la planilla todavía tiene. Y queda un **cuarto estado**:
+--    `work_order_id` en null con `ot_resuelta_en` puesto, el aviso cuya orden se
+--    borró. La resolución no lo limpia —`loQueHayQueReenlazar` no vacía cuando
+--    el número no resuelve, a propósito, para no perder un enlace bueno por una
+--    sincronización a medias—, así que ese sello queda hasta que el número
+--    vuelva a resolver o la celda se vacíe.
 --
 -- 2. `ot_enlazada_en is null` no separa los avisos en dos sino en tres: 17
 --    enlaces manuales (Ya tiene OT), 22 OT generadas desde el aviso y 182 por

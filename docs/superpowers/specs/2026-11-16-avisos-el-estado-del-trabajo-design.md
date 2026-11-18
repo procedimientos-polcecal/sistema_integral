@@ -20,17 +20,21 @@ va en las dos listas que ya existen y no en una pantalla nueva.
 
 ## Lo que se midió antes de decidir
 
-Todo contra producción, el 16/11/2026.
+Medido contra producción el 16/11/2026, y **vuelto a medir el 17/11/2026**: la
+tabla de abajo es la del 17/11 (238 avisos), y es la que usa el resto del
+documento. El 16/11 había dado 235 avisos, 4 sin OT y 9 de texto raro; la
+diferencia son avisos nuevos de ese día y el décimo texto que no se había
+contado.
 
-**El sistema hoy no puede contestar la pregunta, aunque el dato está.** De 235
-avisos:
+**El sistema hoy no puede contestar la pregunta, aunque el dato está.** De 238
+avisos (17/11/2026):
 
 | | |
 |---|---|
 | con `work_order_id` (el enlace de verdad) | **39** |
 | con el número de OT sólo como texto en `ot_asignada` | **182** |
 | texto que no es un número | 10 |
-| sin OT (pendientes o desestimados) | 4 |
+| sin OT (pendientes o desestimados) | 7 |
 
 Los 182 se pueden resolver: **el número existe como OT en 182 de 182, cero
 fallos.** Los 39 que sí tienen enlace vienen del «enlazar» manual del
@@ -41,7 +45,7 @@ fallos.** Los 39 que sí tienen enlace vienen del «enlazar» manual del
 **El resultado útil es chico y por eso vale.** De los 221 avisos que se pueden
 resolver, **208 tienen la orden REALIZADO y sólo 13 siguen abiertas**: 6
 atrasadas, 5 en proceso, 2 por hacer. O sea que esta pantalla existe para
-encontrar esos 13 entre 235.
+encontrar esos 13 entre 238.
 
 **Y hay dos cosas del dato que deciden qué puede decir la pantalla:**
 
@@ -100,8 +104,12 @@ tenía.** `avisos.work_order_id` está hoy en `on delete cascade`: borrar una OT
 tomó cuando sólo 39 avisos tenían enlace, y rellenar los 182 sube la superficie
 a **221**. La sincronización borra OT que la planilla deja de traer en cada
 corrida, así que no es teórico. Decidido a pedido: **pasa a `on delete set
-null`**. Si la OT se va, el aviso sobrevive y vuelve a decir «sin orden». El
-aviso es el reporte de una persona, no un detalle de la orden.
+null`**. Si la OT se va, **el aviso no se borra**: hoy borrar una OT borra el
+reporte de una persona, y mañana el reporte sobrevive. (No vuelve a decir «sin
+orden»: `set null` no toca `ot_asignada`, y `finalDelAviso()` devuelve `con-ot`
+mientras esa columna tenga texto, así que sigue diciendo «OT #2814», el número
+que la planilla todavía tiene.) El aviso es el reporte de una persona, no un
+detalle de la orden.
 
 **2. El enlace automático sigue a la planilla; el manual no se toca nunca.** El
 `.is("work_order_id", null)` que decía el diseño dejaba sin corregir un número
@@ -167,6 +175,7 @@ regla del `UPDATE` queda:
 | `ot_resuelta_en` puesto | **sí**: se corrige y se vacía siguiendo la planilla |
 | los dos en null y `work_order_id` puesto (22) | **no**, la OT nació de este aviso |
 | los dos en null y `work_order_id` en null (182) | **sí**, se completa |
+| `work_order_id` en null con `ot_resuelta_en` puesto (**cuarto estado**: la orden se borró y el `set null` dejó el aviso vivo) | **se limpia**, y es la única excepción a «un número que no resuelve no se toca»: esa regla protege un enlace bueno de una sincronización a medias, y acá no hay enlace que proteger —la columna ya está en null—, sólo un sello que miente. Si la celda vuelve a nombrar una orden que existe, se reenlaza y el sello se reescribe solo |
 
 Y el desenlazar pasa a decir la verdad en los tres casos, sin inventar nada:
 con `ot_resuelta_en` el número lo escribió alguien en la planilla y se arregla
@@ -182,8 +191,9 @@ corregirlo.
 
 ## Lo que NO es
 
-- **No resuelve los 9 avisos cuyo texto no es un número.** Siete dicen
-  `Revision`, `-` o `si`; dos nombran **dos OT** (`1889 - 1886`, `2567-2568`).
+- **No resuelve los 10 avisos cuyo texto no es un número.** Siete dicen
+  `Revision`, `-` o `si`, dos nombran **dos OT** (`1889 - 1886`, `2567-2568`) y
+  hay uno más (medido el 17/11/2026).
   Se muestran con el texto crudo, como hoy. Elegir una de las dos sería
   enlazar al que se le parece.
 - **No inventa una fecha de cierre** para las 22 OT cerradas que no la tienen.
@@ -218,7 +228,7 @@ corregirlo.
 que `scripts/rellenar-area-de-avisos.mts`. Es DML, así que lo puede correr un
 agente por PostgREST. Sólo toca filas con `work_order_id is null`, y sólo
 cuando `ot_asignada` es **exactamente dígitos** y ese número existe como
-`ot_number`. Esperado: **182 filas**, y los otros 53 sin tocar. El relleno sí
+`ot_number`. Esperado: **182 filas**, y los otros 56 sin tocar. El relleno sí
 mira `work_order_id is null` —corre una sola vez y no tiene que corregir
 nada—; el que mira `ot_enlazada_en` es el de la sincronización.
 
@@ -259,7 +269,7 @@ esto es sobre el trabajo. Firma:
 export type EstadoDelTrabajo =
   | { tipo: "cerrado"; ot: number; fecha: string | null }
   | { tipo: "abierto"; ot: number; estado: string }
-  | { tipo: "sin-enlace"; texto: string }   // los 9 del texto crudo
+  | { tipo: "sin-enlace"; texto: string }   // los 10 del texto crudo
   | { tipo: "sin-ot" };                      // pendiente o desestimado
 
 export function estadoDelTrabajo(aviso, ot): EstadoDelTrabajo;
@@ -289,7 +299,7 @@ El link a la OT sigue como está: sólo para quien tenga el módulo
 Mantenimiento, porque `/mantenimiento/ordenes` rebota al resto.
 
 **En `/mis-avisos` se suma un filtro** para lo único que esta pantalla vino a
-hacer posible: ver los que **siguen abiertos**. Son 13 de 235, y sin filtro hay
+hacer posible: ver los que **siguen abiertos**. Son 13 de 238, y sin filtro hay
 que recorrer cinco páginas para encontrarlos.
 
 ## Qué queda a criterio de quien lo construya
@@ -318,8 +328,9 @@ si marca algo, quiere decir que se tocó un camino de escritura sin querer.
 
 Y dos comprobaciones contra el dato, que ningún test ve:
 
-- Después del relleno, **182 avisos con enlace nuevo** y 53 sin tocar; en
-  total, 221 de 235 resueltos.
+- Después del relleno, **182 avisos con enlace nuevo** y 56 sin tocar —17
+  enlazados a mano, 10 con texto no numérico y 7 sin nada—; en total, 221 de
+  238 resueltos.
 - Después de la primera sincronización, que los avisos nuevos del Forms entren
   **con `work_order_id` puesto**. Es la única prueba de que no se congeló, y es
   la misma que en octubre confirmó que el área se completaba sola.
