@@ -7,7 +7,7 @@ import { comoSeLee, diaDeLaSemana, hoyEnArgentina, semanaDe, sumarDias } from "@
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import HojaDePersona from "./HojaDePersona";
 import LaReferencia from "./LaReferencia";
-import MesDeOrdenes from "./MesDeOrdenes";
+import MesDeOrdenes from "@/app/(app)/mantenimiento/ordenes/MesDeOrdenes";
 import PadronDelTaller, { type EmpleadoElegible } from "./PadronDelTaller";
 import {
   DIA_CORTO, OFICIO_TEXTO, ORDEN_OFICIO, TURNOS, TURNO_TEXTO,

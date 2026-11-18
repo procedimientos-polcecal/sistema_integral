@@ -122,7 +122,11 @@ describe("revisarResponsive", () => {
       ["app/(app)/remises/semana/SemanaClient.tsx", 1],
       ["app/(app)/cantera/destape/DestapeClient.tsx", 2],
       ["app/(app)/trituracion/partes/PartesClient.tsx", 2],
-      ["app/(app)/mantenimiento/ordenes/CalendarioDeFecha.tsx", 2],
+      // Era `CalendarioDeFecha.tsx` hasta el 17/11/2026: la grilla se mudó a
+      // `CalendarioDeOT.tsx` para que la compartan el alta de una OT y la
+      // pestaña «Mes». El modal quedó sin ningún `grid-cols-7`, así que la
+      // entrada se mudó y no se duplicó.
+      ["app/(app)/mantenimiento/ordenes/CalendarioDeOT.tsx", 2],
       ["app/(app)/agenda/Grilla.tsx", 1],
     ];
     let total = 0;

@@ -2190,18 +2190,29 @@ bug nuevo.
   `calculos_diarios` después del recálculo. Es anterior a este trabajo y es de
   RRHH, no de acá.
 
-### Y la otra mitad de programar: el mes de órdenes (17/11/2026)
+### Y la otra mitad de programar: el mes de órdenes (17–18/11/2026)
 
-Programación nació siendo **la gente**: quién viene cada día y quién falta.
-Desde el 17/11/2026 tiene dos pestañas, **Semana** y **Mes**, porque programar
-el taller es decidir las dos cosas a la vez y hasta ahora había que tener una
-de ellas en la cabeza.
+Programar el taller es decidir **el trabajo** y **la gente**, y cada cosa tiene
+su pantalla. Ninguna de las dos sabía nada del calendario de órdenes, así que
+para ubicar un trabajo había que tener la otra mitad en la cabeza. Desde el
+18/11/2026 **las dos llevan una pestaña «Mes»** con el mismo calendario:
 
-La pestaña **Mes** es el mismo calendario que se abre al cargar una OT —el de
-«Ver el mes»—, que desde este trabajo vive en
+| En el menú | La ruta | Sus pestañas |
+|---|---|---|
+| **Programación** | `/mantenimiento/planificacion` | Planes · **Mes** |
+| **Asignación RR.HH** | `/mantenimiento/programacion` | Semana · **Mes** |
+
+(Los dos rótulos no coinciden con su ruta **a propósito** desde el 17/11/2026 —
+el porqué está en `lib/core/nav.ts`—, y eso es lo primero que confunde al leer
+esto. Por eso el componente de la pestaña,
+[`MesDeOrdenes.tsx`](../app/(app)/mantenimiento/ordenes/MesDeOrdenes.tsx), no
+vive en ninguna de las dos carpetas sino al lado del calendario.)
+
+El calendario es el mismo que se abre al cargar una OT —el de «Ver el mes»—,
+que desde este trabajo vive en
 [`CalendarioDeOT.tsx`](../app/(app)/mantenimiento/ordenes/CalendarioDeOT.tsx) y
-lo comparten las dos pantallas. `CalendarioDeFecha` quedó como lo que de verdad
-es de su uso: el modal, su encabezado y el Escape.
+lo comparten las tres pantallas. `CalendarioDeFecha` quedó como lo que de
+verdad es de su uso: el `Modal` y su título.
 
 Lo que cambia es **qué se hace con un día**. En el alta de una OT se toca un día
 y esa fecha va al campo; acá se abre el día, se elige una orden y se la corre a
@@ -2214,7 +2225,9 @@ Cinco cosas que no se deducen del código:
   de la orden, con todo lo que eso trae — la planilla primero, porque es donde
   manda la fecha; `fecha_ejecucion_pendiente` para que la sincronización del
   medio no la pise; justificación obligatoria; y auditoría con el par
-  viejo/nuevo. Esta pestaña es **la tercera punta** que la llama.
+  viejo/nuevo. Es **el mismo `PostergarOTModal`** del listado de órdenes, con un
+  `destino` de más: son los dos únicos lugares que lo montan, y que sea uno solo
+  es lo que mantiene la justificación obligatoria en los dos caminos.
 - **El día en el que la grilla pinta una orden NO es el día desde el que esa
   ruta cuenta.** La grilla usa `fechaParaElCalendario` —la pendiente si la hay—
   y `postergar` recibe *cuántos días* y los suma siempre a `fecha_ejecucion`. En
