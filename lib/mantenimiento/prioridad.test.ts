@@ -81,12 +81,12 @@ describe("ordenSugerido", () => {
     // saldría primera. Hoy la lista que llega es de pendientes, pero el orden
     // no debe depender de eso.
     const base = { fecha: "2026-08-01", proxima_fecha: null };
-    const hecha   = { ...base, id: "hecha",   ot_number: 1, estado: "REALIZADO",  gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 5 }; // 125
-    const suspend = { ...base, id: "suspend", ot_number: 2, estado: "SUSPENDIDA", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 4 }; // 100
-    const sin     = { ...base, id: "sin",     ot_number: 3, estado: "POR_HACER" };
-    const baja    = { ...base, id: "baja",    ot_number: 4, estado: "POR_HACER",  gut_gravedad: 2, gut_urgencia: 2, gut_tendencia: 3 }; // 12
-    expect(ordenSugerido([hecha, suspend, baja, sin], HOY).map((o) => o.id))
-      .toEqual(["sin", "baja", "hecha", "suspend"]);
+    const hecha  = { ...base, id: "hecha",  ot_number: 1, estado: "REALIZADO", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 5 }; // 125
+    const cancel = { ...base, id: "cancel", ot_number: 2, estado: "CANCELADA", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 4 }; // 100
+    const sin    = { ...base, id: "sin",    ot_number: 3, estado: "POR_HACER" };
+    const baja   = { ...base, id: "baja",   ot_number: 4, estado: "POR_HACER", gut_gravedad: 2, gut_urgencia: 2, gut_tendencia: 3 }; // 12
+    expect(ordenSugerido([hecha, cancel, baja, sin], HOY).map((o) => o.id))
+      .toEqual(["sin", "baja", "hecha", "cancel"]);
   });
 
   it("con sólo dos de las tres notas cuenta como sin puntaje", () => {

@@ -18,6 +18,7 @@ import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import NuevaOTModal from "./NuevaOTModal";
 import IniciarOTModal from "./IniciarOTModal";
 import RegistrarOTModal from "./RegistrarOTModal";
+import CancelarOTModal from "./CancelarOTModal";
 import ProveedoresDesconocidos from "../ProveedoresDesconocidos";
 import RepuestosOTModal from "./RepuestosOTModal";
 import HiloDeMensajes from "@/components/HiloDeMensajes";
@@ -33,6 +34,7 @@ import PuntuarGutModal from "./PuntuarGutModal";
 import { ESCALAS_GUT, puntajeGut } from "@/lib/mantenimiento/gut";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
+import { ESTADO_CANCELADA, SE_CANCELA_DESDE } from "@/lib/mantenimiento/cancelacion";
 import InfoTip from "@/components/InfoTip";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
@@ -43,6 +45,9 @@ const ESTADOS = [
   { value: "EN_PROCESO", label: "En proceso", color: "#1D4ED8", bg: "#EFF6FF", dot: "#3B82F6" },
   { value: "POR_HACER",  label: "Por hacer",  color: "#B45309", bg: "#FFFBEB", dot: "#F59E0B" },
   { value: "REALIZADO",  label: "Realizado",  color: "#16A34A", bg: "#F0FDF4", dot: "#22C55E" },
+  // Gris y no verde: está cerrada pero no se hizo, y a un vistazo no puede
+  // leerse como trabajo terminado.
+  { value: "CANCELADA",  label: "Cancelada",  color: "#475569", bg: "#F1F5F9", dot: "#94A3B8" },
 ];
 
 export function estadoMeta(v: string) {
@@ -147,6 +152,7 @@ export default function OrdenesClient({
   const [kanbanLoading, setKanbanLoading] = useState(false);
   const [iniciando, setIniciando] = useState<any | null>(null);
   const [registrando, setRegistrando] = useState<any | null>(null);
+  const [cancelando, setCancelando] = useState<any | null>(null);
   const [puntuando, setPuntuando] = useState<any | null>(null);
   const [sinProveedor, setSinProveedor] = useState<string[]>([]);
   const [verRepuestos, setVerRepuestos] = useState<any | null>(null);
@@ -402,12 +408,37 @@ export default function OrdenesClient({
       if (orden) { setRegistrando(orden); return; }
     }
 
+    // Cancelar sin decir por qué es perder justo lo que después se busca: el
+    // modal pide el motivo y sin motivo no hay PATCH.
+    if (estado === ESTADO_CANCELADA) {
+      const orden = buscar();
+      if (orden) { setCancelando(orden); return; }
+    }
+
     const meta = estadoMeta(estado);
-    const ok = await confirm({
-      title: "Cambiar estado de la OT",
-      message: `La orden pasará al estado "${meta.label}". ¿Confirmás?`,
-      confirmText: "Cambiar estado",
-    });
+    // Sacar una orden de CANCELADA no es un cambio de estado cualquiera: da
+    // vuelta una decisión que alguien justificó por escrito. Se permite a
+    // propósito —la planilla también lo permite, y «no se hace nunca» es un
+    // juicio que se revisa—, pero el confirm tiene que decir qué se está
+    // haciendo y qué pasa con el motivo.
+    const actual = buscar()?.estado;
+    const reabre = actual === ESTADO_CANCELADA;
+    const ok = await confirm(
+      reabre
+        ? {
+            title: "Reabrir la OT cancelada",
+            message:
+              `Esta orden está cancelada y vas a reabrirla: pasará al estado "${meta.label}". ` +
+              `El motivo de la cancelación queda en el historial de la orden, ` +
+              `pero desde ahí se va a poder borrar como cualquier otra justificación. ¿Confirmás?`,
+            confirmText: "Reabrir",
+          }
+        : {
+            title: "Cambiar estado de la OT",
+            message: `La orden pasará al estado "${meta.label}". ¿Confirmás?`,
+            confirmText: "Cambiar estado",
+          }
+    );
     if (!ok) return;
     const res = await fetch("/api/mantenimiento/ordenes", {
       method: "PATCH",
@@ -430,7 +461,9 @@ export default function OrdenesClient({
   const ultimaPagina = Math.max(1, totalPages);
   if (!loading && page > ultimaPagina) setPage(ultimaPagina);
 
-  const kanbanGroups = ESTADOS.slice(1).map(e => ({
+  // Las canceladas están en ESTADOS para el filtro, pero una columna fija de
+  // órdenes que no se van a hacer sería ruido permanente en el tablero.
+  const kanbanGroups = ESTADOS.filter(e => KANBAN_ESTADOS.includes(e.value)).map(e => ({
     ...e,
     items: kanbanData[e.value]?.items ?? [],
     count: kanbanData[e.value]?.count ?? 0,
@@ -859,6 +892,18 @@ export default function OrdenesClient({
         />
       )}
 
+      {cancelando && (
+        <CancelarOTModal
+          orden={cancelando}
+          onCerrar={() => setCancelando(null)}
+          onCancelada={() => {
+            setCancelando(null);
+            if (view === "kanban") loadKanban();
+            else load();
+          }}
+        />
+      )}
+
       {verRepuestos && (
         <RepuestosOTModal
           orden={verRepuestos}
@@ -1002,7 +1047,16 @@ function OTDetail({
 }) {
   const [postergando, setPostergando] = useState(false);
   const [mandandoAlCalendario, setMandandoAlCalendario] = useState(false);
-  const ESTADO_OPTIONS = ["POR_HACER", "EN_PROCESO", "REALIZADO", "ATRASADO"];
+  // Cancelar sólo se ofrece como destino desde donde la ruta lo deja: una
+  // realizada tiene cierre.
+  const ESTADO_OPTIONS = [
+    "POR_HACER", "EN_PROCESO", "REALIZADO", "ATRASADO",
+    // También cuando ya está cancelada, para que la orden muestre su estado
+    // como chip (deshabilitado, como el actual de cualquier otra). Sin eso una
+    // cancelada se vería con cuatro chips y ninguno marcado.
+    ...(SE_CANCELA_DESDE.includes(o.estado) || o.estado === ESTADO_CANCELADA
+      ? [ESTADO_CANCELADA] : []),
+  ];
   return (
     <div className="px-4 pb-4 pt-2 bg-slate-50 border-t border-slate-100 space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
@@ -1185,6 +1239,7 @@ function OTDetail({
           ordenId={o.id}
           estado={o.estado}
           puedeEditar={canEdit}
+          cancelada={o.estado === ESTADO_CANCELADA}
           onCambio={onJustificacion}
           version={versionDelHistorial}
         />
@@ -1234,9 +1289,9 @@ function KanbanCard({ order: o, canEdit, onChangeEstado }: {
 }) {
   const [menu, setMenu] = useState(false);
   const NEXT: Record<string, string[]> = {
-    POR_HACER:  ["EN_PROCESO", "ATRASADO"],
-    EN_PROCESO: ["REALIZADO", "ATRASADO"],
-    ATRASADO:   ["EN_PROCESO", "REALIZADO"],
+    POR_HACER:  ["EN_PROCESO", "ATRASADO", ESTADO_CANCELADA],
+    EN_PROCESO: ["REALIZADO", "ATRASADO", ESTADO_CANCELADA],
+    ATRASADO:   ["EN_PROCESO", "REALIZADO", ESTADO_CANCELADA],
     REALIZADO:  ["EN_PROCESO"],
   };
   const nextOptions = NEXT[o.estado] ?? [];

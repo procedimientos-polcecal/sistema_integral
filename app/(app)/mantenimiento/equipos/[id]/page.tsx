@@ -8,6 +8,7 @@ import { hoyEnArgentina } from "@/lib/core/fechas";
 import { indicadoresDeLaPlanta } from "@/lib/mantenimiento/mtbfDatos";
 import { confiabilidadDeLaFicha } from "@/lib/mantenimiento/mtbfVista";
 import { rankingDeFallas, type OtConFalla } from "@/lib/mantenimiento/fallas";
+import { ESTADO_CANCELADA } from "@/lib/mantenimiento/cancelacion";
 import {
   costoDelEquipo,
   type OrdenDeServicio,
@@ -120,12 +121,14 @@ async function elCicloDelEquipo(
     { nombre: string; componente: string; periodo_dias: number | null } | null;
   if (!madre || !hija) return null;
 
-  // La que está esperando: ni hecha ni suspendida.
+  // La que está esperando: ni hecha ni cancelada. Tiene que decir lo mismo que
+  // el filtro de `ciclos/[id]/reiniciar`, que es el que decide cuál es la viva:
+  // si los dos no coinciden, la ficha muestra una orden que el reinicio no ve.
   const { data: vivas } = await supabase
     .from("ordenes_trabajo")
     .select("ot_number, ciclo_vuelta, fecha_ejecucion")
     .eq("ciclo_id", data.id)
-    .not("estado", "in", "(REALIZADO,SUSPENDIDA)")
+    .not("estado", "in", `(REALIZADO,${ESTADO_CANCELADA})`)
     .limit(1);
 
   return {

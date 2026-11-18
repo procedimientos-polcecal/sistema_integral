@@ -215,12 +215,17 @@ export const REGISTRO = {
   "app/api/mantenimiento/ciclos/[id]/reiniciar/route.ts": {
     estrategia: "cola",
     porque:
-      "Suspende la OT que el ciclo estaba esperando cuando la pieza se cambió fuera " +
+      "Cancela la OT que el ciclo estaba esperando cuando la pieza se cambió fuera " +
       "de turno, así que cambia un estado que se exporta. Escribe la M y la " +
       "observación previa, y lo que no salga queda en `sheets_pendiente` por " +
       "`elPendienteDelIntento`. Sin eso la sincronización siguiente leería la celda " +
       "vieja y devolvería la orden a POR_HACER — una orden que manda a rotar una " +
-      "pieza nueva, que es justo lo que este botón existe para evitar.",
+      "pieza nueva, que es justo lo que este botón existe para evitar. " +
+      "Escribía SUSPENDIDA hasta el 17/11/2026, y ahí la cola no alcanzaba: la " +
+      "palabra salía bien a la M pero `estadoDeTexto` había dejado de " +
+      "reconocerla, así que la vuelta la leía como POR_HACER aunque la " +
+      "exportación hubiera funcionado. Exportar no sirve si el otro lado no " +
+      "sabe leer lo que se escribió.",
   },
   "lib/mantenimiento/planillaDelAviso.ts": {
     estrategia: "delega",
@@ -327,7 +332,15 @@ export const REGISTRO = {
     porque:
       "El alta y el PATCH anotan el pendiente e insisten con `after()`. El PATCH " +
       "lo hace desde el 26/10/2026: antes devolvía el motivo a la pantalla y la " +
-      "sincronización le pisaba el registro del trabajo.",
+      "sincronización le pisaba el registro del trabajo. Al cancelar escribe dos " +
+      "celdas y **sólo una va a la cola**: la M —el estado— la rehace " +
+      "`loQueHayQueExportar` desde la fila, y la X —la última justificación— no, " +
+      "porque la observación previa no tiene columna en `ordenes_trabajo`. La X la " +
+      "reintenta el `after()`, que lleva las mismas celdas; si tampoco sale, el " +
+      "drenaje repone la M y deja la X, y la salida es volver a guardar la " +
+      "justificación desde la orden. Es la limitación que ya estaba medida en el " +
+      "encabezado de `ordenes/[id]/notas/route.ts` y no empeora: la X no la lee " +
+      "`filaDeOrden`, así que ninguna sincronización la pisa.",
   },
   "app/api/mantenimiento/partes-contratista/generar/route.ts": {
     estrategia: "cola",

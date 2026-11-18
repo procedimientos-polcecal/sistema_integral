@@ -16,9 +16,12 @@ import { cuantosPide } from "./stock";
  *    por nombre de `riDelRepuesto.ts` adivina: un falso positivo ahí haría leer
  *    «cubierta» a una orden por algo que no es suyo.
  *  - **Sólo órdenes abiertas**: las que no están en `CERRADAS` de `alertas.ts`
- *    (`REALIZADO` y `SUSPENDIDA`), la misma definición que usa el resto de
- *    Mantenimiento y no una tercera. Una orden ya hecha, o suspendida, no reclama
- *    piezas. Hoy no hay ninguna `SUSPENDIDA`, así que no cambia ningún número.
+ *    (`REALIZADO` y `CANCELADA`), la misma definición que usa el resto de
+ *    Mantenimiento y no una tercera. Una orden ya hecha, o cancelada, no reclama
+ *    piezas. **`CANCELADA` llegó el 16/11/2026 y reemplazó a `SUSPENDIDA`**, que
+ *    tenía 0 filas; medido el 18/11/2026, `CANCELADA` también tiene 0 de 2.491, así
+ *    que hoy el que saca órdenes de esta cuenta sigue siendo `REALIZADO` y nada
+ *    más. Eso va a cambiar en cuanto alguien cancele la primera.
  *
  * **La lectura por `repuesto_id` de todos los renglones del artículo es correcta
  * porque cambiar el artículo está frenado** (`articulo/route.ts`: un vínculo del

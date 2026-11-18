@@ -1,4 +1,5 @@
 import type { Turno } from "@/lib/mantenimiento/programacion";
+import { ESTADO_CANCELADA } from "@/lib/mantenimiento/cancelacion";
 
 /**
  * Lo que decide cómo es un evento de la agenda, sin red y sin base.
@@ -159,12 +160,23 @@ function esFechaDelDia(texto: string): boolean {
  * (17 %) no tienen `fecha_cierre`, así que mirar sólo la fecha dejaba el botón
  * en una de cada seis órdenes ya hechas.
  *
- * `SUSPENDIDA` queda afuera a propósito: suspender es una pausa y no una
- * terminación —puede retomarse y su fecha puede seguir sirviendo—, y sacarle el
- * botón sería quitar una capacidad que nadie pidió.
+ * **`CANCELADA` entra, y es lo contrario de lo que decía acá.** Mientras el
+ * tercer estado cerrado fue `SUSPENDIDA`, esta función lo dejaba afuera a
+ * propósito: suspender era una pausa y no una terminación, podía retomarse y su
+ * fecha seguía sirviendo, así que sacarle el botón era quitar una capacidad que
+ * nadie pidió. `CANCELADA`, que lo reemplazó el 16/11/2026, significa
+ * exactamente lo inverso —**no se va a hacer nunca**, y alguien escribió por
+ * qué—, así que el mismo razonamiento la manda para adentro.
+ *
+ * No alcanza con mirar la fecha: una cancelada **no puede tener** `fecha_cierre`
+ * —la regla de `cancelacion.ts` se lo prohíbe—, y de las tres puntas que hay es
+ * la única que no deja rastro en esa columna. Sin esta línea, los cinco lugares
+ * que preguntan acá seguían tratándola como viva: el botón de mandarla al
+ * calendario seguía apareciendo, el evento se seguía moviendo detrás de su
+ * fecha, y el plan la seguía ofreciendo.
  */
 export function laOTEstaCerrada(o: { fecha_cierre?: string | null; estado?: string | null }): boolean {
-  return Boolean(o.fecha_cierre) || o.estado === "REALIZADO";
+  return Boolean(o.fecha_cierre) || o.estado === "REALIZADO" || o.estado === ESTADO_CANCELADA;
 }
 
 /**

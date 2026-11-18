@@ -162,7 +162,12 @@ export function estadoDeTexto(valor: unknown): string {
   if (v === "REALIZADO") return "REALIZADO";
   if (v.includes("PROCESO")) return "EN_PROCESO";
   if (v === "ATRASADO") return "ATRASADO";
-  if (v === "SUSPENDIDA") return "SUSPENDIDA";
+  // Los dos géneros porque esa celda la tipea una persona: un «Cancelado» a
+  // mano que cayera en POR_HACER descancelaría la orden en la próxima
+  // sincronización, sin avisar. Es la misma tolerancia que `includes("PROCESO")`.
+  // Y lo que el sistema escribe («Cancelada», ver EN_LA_PLANILLA) tiene que
+  // leerse de vuelta como CANCELADA: el test del viaje de ida y vuelta lo ata.
+  if (v === "CANCELADA" || v === "CANCELADO") return "CANCELADA";
   return "POR_HACER";
 }
 
@@ -266,7 +271,7 @@ const EN_LA_PLANILLA: Record<string, string> = {
   EN_PROCESO: "En proceso",
   ATRASADO: "Atrasado",
   POR_HACER: "Por hacer",
-  SUSPENDIDA: "Suspendida",
+  CANCELADA: "Cancelada",
 };
 
 /**
@@ -314,7 +319,7 @@ export interface RegistroDeOT {
  * con campos de más no puede escribir columnas arbitrarias.
  */
 export const ESTADOS_DE_OT = [
-  "REALIZADO", "EN_PROCESO", "ATRASADO", "POR_HACER", "SUSPENDIDA",
+  "REALIZADO", "EN_PROCESO", "ATRASADO", "POR_HACER", "CANCELADA",
 ] as const;
 
 export type EstadoDeOT = (typeof ESTADOS_DE_OT)[number];

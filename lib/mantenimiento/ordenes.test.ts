@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  estadoDeTexto, filaDeOrden, paraLaBase, celdasParaRegistrar,
+  estadoDeTexto, filaDeOrden, paraLaBase, celdasParaRegistrar, celdaDeEstado,
   repartirRegistroDeOT,
   columnaDeFechaFin, fechaFinDeLaFila, faltaLaColumna,
   esEstadoDeOT,
@@ -369,6 +369,40 @@ describe("repartirRegistroDeOT y la falla", () => {
     expect(repartirRegistroDeOT({ horas: 2 }).update).not.toHaveProperty("falla_modo");
     expect(repartirRegistroDeOT({ falla_modo: "" }).update.falla_modo).toBeNull();
     expect(repartirRegistroDeOT({ falla_detalle: "   " }).update.falla_detalle).toBeNull();
+  });
+});
+
+describe("CANCELADA", () => {
+  it("el viaje de ida y vuelta: lo que se escribe es lo que se lee", () => {
+    // Si esto se rompe, la sincronización descancela la orden en silencio.
+    // Lo que sale de celdaDeEstado es exactamente lo que queda en la celda M.
+    expect(estadoDeTexto(celdaDeEstado("CANCELADA", 42))).toBe("CANCELADA");
+  });
+
+  it("acepta las dos formas que puede tipear una persona", () => {
+    expect(estadoDeTexto("Cancelada")).toBe("CANCELADA");
+    expect(estadoDeTexto("Cancelado")).toBe("CANCELADA");
+    expect(estadoDeTexto("  CANCELADA  ")).toBe("CANCELADA");
+  });
+
+  it("lo que no se reconoce sigue cayendo en por hacer", () => {
+    expect(estadoDeTexto("Anulada")).toBe("POR_HACER");
+    expect(estadoDeTexto("Suspendida")).toBe("POR_HACER");
+  });
+
+  it("en la planilla va el literal, no la fórmula", () => {
+    // Una cancelada no tiene que volver a decir «Atrasado» cuando la fecha pase.
+    expect(celdaDeEstado("CANCELADA", 42)).toBe("Cancelada");
+    expect(celdaDeEstado("POR_HACER", 42)).toBe('=IF(J42="","",L42)');
+  });
+
+  it("SUSPENDIDA ya no es un estado del vocabulario, y CANCELADA sí", () => {
+    // Un teléfono con la app vieja manda el estado que dejó de valer. Que el
+    // error además liste los que valen lo arma la ruta con `ESTADOS_DE_OT`
+    // (`mensajeDeEstadoInvalido`), y las rutas no se prueban en este repo: acá
+    // se fija el vocabulario, que es lo que ese mensaje interpola.
+    expect(esEstadoDeOT("SUSPENDIDA")).toBe(false);
+    expect(esEstadoDeOT("CANCELADA")).toBe(true);
   });
 });
 

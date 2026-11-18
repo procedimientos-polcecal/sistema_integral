@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   loQueFaltaParaDarPorRealizada,
   estadoSegunElCierre, loQueFaltaParaCerrar, loQueHayQueExportar, loQueImpideCerrar,
+  elCierreQueQueda,
 } from "./cierreDeOT";
+import { loQueImpideCancelar } from "./cancelacion";
 
 /**
  * Una OT que nace con fecha de cierre es una OT que ya se hizo: se esta
@@ -339,7 +341,7 @@ describe("lo que falta para dar una orden por realizada", () => {
    * obligatoria por la ejecucion, que es otra regla y vive en la pantalla.
    */
   it("los otros estados no los mira", () => {
-    for (const estado of ["EN_PROCESO", "SUSPENDIDA", "POR_HACER", "ATRASADO", "", null]) {
+    for (const estado of ["EN_PROCESO", "CANCELADA", "POR_HACER", "ATRASADO", "", null]) {
       expect(loQueFaltaParaDarPorRealizada(estado, null)).toEqual([]);
     }
   });
@@ -368,5 +370,67 @@ describe("lo que falta para dar una orden por realizada", () => {
     expect(loQueFaltaParaCerrar(sinNada)).toEqual([]);
     expect(loQueFaltaParaDarPorRealizada("REALIZADO", sinNada.fecha_cierre))
       .toEqual(["la fecha de cierre"]);
+  });
+});
+
+/**
+ * El arreglo que llegó sin test. La regla de cancelar miraba
+ * `body.fecha_cierre ?? laGuardada`, y lo que estaba mal no era el caso obvio
+ * sino los dos bordes: el cuerpo que no trae la clave y el que la trae vacía.
+ */
+describe("elCierreQueQueda", () => {
+  it("si el pedido no la trae, manda la guardada", () => {
+    expect(elCierreQueQueda(false, null, "2026-11-04")).toBe("2026-11-04");
+    expect(elCierreQueQueda(false, undefined, "2026-11-04")).toBe("2026-11-04");
+  });
+
+  it("si el pedido la trae, manda la del pedido aunque la orden tuviera otra", () => {
+    expect(elCierreQueQueda(true, "2026-11-10", "2026-11-04")).toBe("2026-11-10");
+  });
+
+  /**
+   * El caso que el `??` contestaba al revés: vaciar la fecha es un pedido, y
+   * la orden queda sin ella. Con `??`, el vacío se caía al valor guardado y la
+   * regla evaluaba contra una fecha que la orden ya no iba a tener.
+   */
+  it("vaciarla deja la orden sin fecha, y no vuelve a la guardada", () => {
+    expect(elCierreQueQueda(true, null, "2026-11-04")).toBeNull();
+    expect(elCierreQueQueda(true, "", "2026-11-04")).toBe("");
+  });
+
+  /** Entrada hostil: un número no puede llegar como número a un `.slice()`. */
+  it("lo que no es texto se convierte, no explota", () => {
+    expect(elCierreQueQueda(true, 5, null)).toBe("5");
+  });
+});
+
+/**
+ * ── EL CABLEADO, QUE ES LO QUE SE HABÍA ROTO ────────────────────────────────
+ *
+ * `loQueImpideCancelar` ya tenía sus tests y contestaba bien; lo que estaba mal
+ * era **qué fecha se le pasaba**. Estos dos van juntos a propósito: prueban la
+ * ruta de la fecha de punta a punta, desde «qué trajo el cuerpo y qué tenía la
+ * orden» hasta el veredicto, que es el tramo que ningún test de a uno cubría.
+ *
+ * El caso vivo: «Registrar el trabajo» con resultado **Parcial** manda
+ * `EN_PROCESO` junto con `fecha_cierre`, así que esa fila queda abierta y con
+ * fecha. Cancelarla después tiene que frenarse.
+ */
+describe("la fecha que llega a la regla de cancelar", () => {
+  const pedido = (fechaCierre: string | null) => ({
+    estadoPedido: "CANCELADA",
+    estadoActual: "EN_PROCESO",
+    justificacion: "El equipo se dio de baja.",
+    fechaCierre,
+  });
+
+  it("la guardada frena la cancelación aunque el cuerpo no mande fecha", () => {
+    const laQueDecide = elCierreQueQueda(false, undefined, "2026-11-04");
+    expect(loQueImpideCancelar(pedido(laQueDecide)).ok).toBe(false);
+  });
+
+  it("sin fecha por ninguna de las dos puntas, se cancela", () => {
+    const laQueDecide = elCierreQueQueda(false, undefined, null);
+    expect(loQueImpideCancelar(pedido(laQueDecide)).ok).toBe(true);
   });
 });

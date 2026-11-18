@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { fecha } from "@/lib/compras/constants";
 import { finalDelAviso } from "@/lib/mantenimiento/desestimarAviso";
 import { comoSeMuestraElTrabajo, estadoDelTrabajo, type OtDelAviso } from "@/lib/mantenimiento/trabajoDelAviso";
+import { ESTADO_CANCELADA } from "@/lib/mantenimiento/cancelacion";
 import type { Aviso } from "@/lib/mantenimiento/types";
 import NuevoAvisoModal from "@/app/(app)/mantenimiento/avisos/NuevoAvisoModal";
 import Select from "@/components/Select";
@@ -133,9 +134,17 @@ export default function MisAvisosClient({
   // mapa trae a lo sumo las 39 órdenes ya enlazadas. En todo el sistema hay 55
   // abiertas, a dos órdenes de magnitud de donde un `.in()` arma una URL que
   // PostgREST rechaza.
-  // «Cerrada» la decide `estado === "REALIZADO"`, igual que `estadoDelTrabajo`.
+  //
+  // Cuáles están cerradas lo decide el estado, igual que `estadoDelTrabajo`, y
+  // son **dos** y no una: `REALIZADO` y `CANCELADA`. Dejar afuera la segunda
+  // era lo que hacía que este filtro —«Sin cerrar», el que alguien pone para
+  // ver qué le falta— siguiera mostrándole su aviso a quien reportó la falla
+  // aunque ya se hubiera decidido por escrito que ese trabajo no se hace. Un
+  // pendiente que no se puede sacar de la lista es lo que enseña a no mirarla.
   const abiertas = ordenes
-    ? [...ordenes.entries()].filter(([, o]) => o.estado !== "REALIZADO").map(([id]) => id)
+    ? [...ordenes.entries()]
+        .filter(([, o]) => o.estado !== "REALIZADO" && o.estado !== ESTADO_CANCELADA)
+        .map(([id]) => id)
     : [];
   // El filtro sólo se aplica con el mapa leído. Si falló, no filtra y lo dice.
   const filtraAbiertas = sinCerrar && ordenes !== null && !falloOrdenes;
@@ -509,7 +518,7 @@ function EnQueTermino({
   if (final === "con-ot") {
     const trabajo = estadoDelTrabajo(aviso, ot);
 
-    if (trabajo.tipo === "cerrado" || trabajo.tipo === "abierto") {
+    if (trabajo.tipo === "cerrado" || trabajo.tipo === "cancelado" || trabajo.tipo === "abierto") {
       const numero = String(trabajo.ot);
       // Texto, color y peso salen de `comoSeMuestraElTrabajo`, la misma regla
       // que usa `/mantenimiento/avisos`. El color va por `style` y no por una

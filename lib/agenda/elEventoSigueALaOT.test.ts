@@ -113,8 +113,13 @@ describe("planDelEvento", () => {
   it("una OT REALIZADA sin fecha_cierre tampoco se toca (168 de 986 están así)", () => {
     expect(planDelEvento(fila({}, { fecha_cierre: null, estado: "REALIZADO" })))
       .toEqual({ tipo: "nada", mover: null, aviso: undefined, volverAAlertar: false });
-    // SUSPENDIDA es una pausa y no una terminación: su evento sigue a la fecha.
-    expect(planDelEvento(fila({}, { fecha_cierre: null, estado: "SUSPENDIDA" })).tipo).toBe("mover");
+    // Y una CANCELADA tampoco, que es el cambio del 16/11/2026: donde estaba
+    // `SUSPENDIDA` —una pausa, cuyo evento sí seguía a la fecha— ahora hay un
+    // estado que significa que el trabajo no se hace nunca. Mover el evento de
+    // una orden cancelada es mandarle a alguien un recordatorio de algo que ya
+    // se decidió que no pasa.
+    expect(planDelEvento(fila({}, { fecha_cierre: null, estado: "CANCELADA" })))
+      .toEqual({ tipo: "nada", mover: null, aviso: undefined, volverAAlertar: false });
   });
 
   it("mueve, y se lleva el aviso viejo si lo había", () => {

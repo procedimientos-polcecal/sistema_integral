@@ -108,12 +108,12 @@ describe("qué preguntas esperan, de todas las órdenes a la vez", () => {
     const notas = [
       pregunta({ id: "n1", orden_id: "porHacer" }),
       pregunta({ id: "n2", orden_id: "realizada" }),
-      pregunta({ id: "n3", orden_id: "suspendida" }),
+      pregunta({ id: "n3", orden_id: "cancelada" }),
     ];
     const ordenes = [
       orden({ id: "porHacer", estado: "POR_HACER" }),
       orden({ id: "realizada", estado: "REALIZADO" }),
-      orden({ id: "suspendida", estado: "SUSPENDIDA" }),
+      orden({ id: "cancelada", estado: "CANCELADA" }),
     ];
 
     expect(preguntasQueEsperan(notas, ordenes).map((e) => e.pregunta.id)).toEqual(["n1"]);

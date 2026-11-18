@@ -802,6 +802,60 @@ sale 500 o 400—. Al revés no rompe nada: con la migración puesta, el código
 viejo no nombra las columnas nuevas y los inserts viven del `default`. Y hasta
 correr `scripts/sembrar-consultados-de-compras.mts` la lista está vacía: el push
 no interrumpe a nadie y la pantalla lo dice.
+## Cancelar una OT: la que no se va a hacer nunca (16/11/2026)
+
+Una OT sólo sabía terminar haciéndose. La que no se iba a hacer —equipo de baja,
+trabajo absorbido por otra orden— quedaba abierta para siempre: contaba como
+atrasada, se trepaba al tope del GUT con el +1000 y entraba en el push diario.
+La más vieja era del 11/12/2025.
+
+`CANCELADA` **reemplazó** a `SUSPENDIDA` en vez de sumarse. El dato que lo
+decidió: `SUSPENDIDA` tenía **0 filas de 2.453** y el único camino que llevaba
+ahí —el resultado «Cancelado» del modal de registrar— nunca produjo una. Dos
+palabras para «cerrada sin hacerse», una viva y una muerta, es como se pudre un
+vocabulario. El diseño completo está en
+[el spec](superpowers/specs/2026-11-13-mantenimiento-cancelar-una-ot-design.md).
+
+Cinco cosas que no se deducen del código:
+
+- **La justificación no es una columna: es una nota.** Reusa
+  `ordenes_trabajo_notas`, que ya es «por qué no se hizo» y ya exporta a la
+  columna X. Por eso cancelar no necesitó migración, y por eso una cancelada
+  puede volver a justificarse: las notas son un historial, no un campo.
+- **El motivo entra antes que el estado.** Es la regla de la auditoría de lo
+  irreversible: si la nota no entra, la orden no se cancela. Al revés quedarían
+  canceladas sin motivo, que es exactamente lo que este estado vino a impedir.
+  Vale para las **dos** puntas que cancelan: el PATCH de órdenes y el botón de
+  reiniciar un ciclo.
+- **Una cancelada no puede tener `fecha_cierre`**, y ése es el invariante que
+  más cuesta ver. El modal de «Registrar el trabajo» con resultado **Parcial**
+  deja la orden `EN_PROCESO` **con** fecha de cierre; cancelarla después dejaría
+  una fila que `costoEquipo` cobra como gasto real. La fecha que decide es la
+  que la orden va a **tener** —`elCierreQueQueda` de `cierreDeOT.ts`—, no la que
+  trae el cuerpo, y es la misma que miran las tres reglas del cierre.
+- **La puerta de la planilla no se puede cerrar.** La columna M la edita gente a
+  mano y no tiene desplegable, así que alguien puede escribir «Cancelada» sin
+  motivo. No se previene: se **detecta**. `laCancelacionNoTieneMotivo`
+  (`contraste.ts`) la informa como divergencia en el contraste que ya corre
+  dentro de la sincronización. Y si la consulta de notas falla, el detector
+  calla y lo dice en `canceladas_sin_revisar`: un detector apagado no se
+  distingue de uno que no encuentra nada.
+- **`gut_orden` es una columna generada con los estados cerrados escritos
+  adentro**, así que cancelar necesitó la migración `20261116082742`. Sin ella,
+  una cancelada conserva su +1000 y **sube** en el listado de OT en vez de
+  desaparecer — y eso es el listado entero, no sólo un tablero GUT.
+
+  **Ya está aplicada**, comprobado contra producción el 18/11/2026 leyendo el
+  catálogo con `asistente_consulta`: `pg_get_expr` de la columna devuelve
+  `estado = ANY (ARRAY['REALIZADO'::text, 'CANCELADA'::text])`, `attgenerated`
+  es `s` y el índice `ordenes_trabajo_gut_orden_idx` volvió con
+  `(gut_orden DESC, ot_number DESC)`. **Se miraron los tres pedazos y no uno**,
+  porque la migración es `drop column` + `add column` + `create index` y el
+  modo de fallo que importaba era quedarse a medias: sin la columna muere el
+  listado entero, y sin el índice el orden por defecto pasa a ordenar la tabla
+  a mano sin que nada avise. Desde afuera no alcanzaba con leer filas: con 0
+  canceladas, la expresión vieja y la nueva dan el mismo número en las 2.489
+  órdenes, así que lo único que distingue una de otra es el catálogo.
 
 ## Iniciar una OT pregunta por el equipo
 
@@ -1859,7 +1913,7 @@ haya marcado `ATRASADO` a mano —lo decide una persona— o que se le haya pasa
 la fecha en que tenía que hacerse —lo decide el calendario—.
 
 Lo que **no** cuenta: una realizada, aunque se haya hecho tarde, porque ya no
-hay nada que hacer con ella; y una suspendida, que se paró a propósito y
+hay nada que hacer con ella; y una cancelada, que se cerró a propósito y
 avisarla todos los días es ruido.
 
 Se muestran **en el tablero**, arriba y sólo cuando hay: un panel que dice "cero
@@ -3179,9 +3233,18 @@ El botón solo no alcanza **porque depende de que alguien se acuerde de
 apretarlo**.
 
 1. **El botón «Se cambiaron los martillos»**, en la ficha del equipo. Si la OT
-   viva es una hija, queda SUSPENDIDA y sale del ciclo. Si es la **madre**, no
+   viva es una hija, queda CANCELADA —con su motivo escrito, que la ruta inserta
+   **antes** de tocar el estado— y sale del ciclo. Si es la **madre**, no
    se toca y se explica: el trabajo existió, y cerrarla desde un botón sería el
    sistema registrando trabajo ajeno en las columnas M y K del master.
+
+   Escribía `SUSPENDIDA` hasta el 16/11/2026, cuando `CANCELADA` reemplazó a ese
+   estado en el vocabulario. No era un cambio de etiqueta: la palabra que este
+   botón dejaba en la columna M ya no la reconocía `estadoDeTexto`, así que la
+   sincronización siguiente la leía como `POR_HACER` y **revivía la orden que el
+   reinicio acababa de aparcar**. En `cicloDeOT.ts` pasó lo gemelo: la rama que
+   miraba `SUSPENDIDA` quedó muerta y una cancelada caía en «esperar», o sea que
+   el ciclo se quedaba esperando para siempre una orden que nadie iba a hacer.
 2. **El aviso que pregunta sin decidir** (`mant-ciclo-sospechoso-<equipo>`).
    Es la única parte de todo esto que mira el texto de una descripción, y mirarlo
    se puede porque **no decide**: un falso positivo cuesta una pregunta, uno que

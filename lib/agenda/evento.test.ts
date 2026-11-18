@@ -214,12 +214,24 @@ describe("una OT cerrada no se manda", () => {
     expect(problemasDeMandarLaOT({ fecha_ejecucion: "2026-11-03", turno: "8-16", fecha_cierre: null, estado: "REALIZADO" }))
       .toContain("La OT ya está cerrada: no se manda al calendario una orden que ya se hizo");
   });
-  it("laOTEstaCerrada: fecha de cierre o REALIZADO, y SUSPENDIDA no", () => {
+  it("laOTEstaCerrada: fecha de cierre, REALIZADO o CANCELADA", () => {
     expect(laOTEstaCerrada({ fecha_cierre: "2026-11-04", estado: "POR_HACER" })).toBe(true);
     expect(laOTEstaCerrada({ fecha_cierre: null, estado: "REALIZADO" })).toBe(true);
-    expect(laOTEstaCerrada({ fecha_cierre: null, estado: "SUSPENDIDA" })).toBe(false);
     expect(laOTEstaCerrada({ fecha_cierre: null, estado: "EN_PROCESO" })).toBe(false);
     expect(laOTEstaCerrada({})).toBe(false);
+  });
+
+  /**
+   * La cancelada es la única cerrada que **no puede** dejar rastro en
+   * `fecha_cierre` —la regla de `cancelacion.ts` se lo prohíbe—, así que si el
+   * estado no se mira, no hay otra punta por donde se note. Sin esto, el botón
+   * de mandar al calendario seguía apareciendo sobre una orden que nadie va a
+   * hacer, y el evento se seguía moviendo detrás de su fecha.
+   */
+  it("una CANCELADA está cerrada, y con la fecha de cierre vacía que le obliga su regla", () => {
+    expect(laOTEstaCerrada({ fecha_cierre: null, estado: "CANCELADA" })).toBe(true);
+    expect(problemasDeMandarLaOT({ fecha_ejecucion: "2026-11-03", turno: "8-16", fecha_cierre: null, estado: "CANCELADA" }))
+      .toContain("La OT ya está cerrada: no se manda al calendario una orden que ya se hizo");
   });
 });
 

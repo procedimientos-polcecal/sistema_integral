@@ -104,11 +104,23 @@ describe("queSigueEnElCiclo", () => {
     expect(queSigueEnElCiclo(CICLO, filas).que).toBe("trabado");
   });
 
-  it("una SUSPENDIDA detiene el ciclo", () => {
-    const filas = [ot({ ot_number: 16, estado: "SUSPENDIDA" })];
+  /**
+   * Era `SUSPENDIDA`, que salió del vocabulario el 16/11/2026. Lo que hace
+   * caro el cambio no es la palabra: sin esta rama, una cancelada caía en el
+   * `esperar` de la función y el ciclo se quedaba esperando para siempre una
+   * orden que nadie iba a hacer.
+   */
+  it("una CANCELADA detiene el ciclo", () => {
+    const filas = [ot({ ot_number: 16, estado: "CANCELADA" })];
     const d = queSigueEnElCiclo(CICLO, filas);
     expect(d.que).toBe("trabado");
-    expect(d.que === "trabado" && d.porque).toContain("suspendida");
+    expect(d.que === "trabado" && d.porque).toContain("cancelada");
+  });
+
+  /** Y no «esperar», que es dónde caía antes y es lo que congelaba el ciclo. */
+  it("una CANCELADA no deja el ciclo esperándola", () => {
+    const filas = [ot({ ot_number: 16, estado: "CANCELADA" })];
+    expect(queSigueEnElCiclo(CICLO, filas).que).not.toBe("esperar");
   });
 
   // Review Focus 4

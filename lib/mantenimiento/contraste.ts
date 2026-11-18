@@ -60,6 +60,13 @@ export interface OrdenDelSistema {
    * de 3 a 53 horas, medido el 21/10/2026.
    */
   fecha_ejecucion_pendiente?: string | null;
+  /**
+   * Si la orden tiene al menos una nota. **No sale de `ordenes_trabajo`**: lo
+   * llena la sincronización con una consulta aparte a `ordenes_trabajo_notas`.
+   * Queda `undefined` cuando esa consulta no se hizo o falló, y eso significa
+   * «no se sabe», que es distinto de `false` («se miró y no hay»).
+   */
+  tiene_nota?: boolean;
 }
 
 export interface Divergencia {
@@ -147,6 +154,44 @@ export function laCeldaDelEstadoEstaVacia(p: OrdenLeida): boolean {
 }
 
 /**
+ * Una OT cancelada que no tiene ni una nota.
+ *
+ * Es la hermana de `laCeldaDelEstadoEstaVacia` y por lo mismo se informa con el
+ * nombre del problema y no con el de un campo: **no es una diferencia entre los
+ * dos lados** —los dos dicen «cancelada»— sino algo que sólo el sistema puede
+ * ver, porque la planilla no tiene dónde guardar un motivo.
+ *
+ * Existe porque en este módulo manda la planilla: cualquiera puede cancelar una
+ * de las 51 abiertas tipeando la palabra en la columna M, sin nota, sin autor y
+ * sin fecha, y eso no se puede impedir sin romper esa regla. Se detecta.
+ *
+ * **No puede sonar por lo que no importa**, que es la vara de `divergencias.ts`:
+ * el sistema nunca produce una cancelada sin nota —el PATCH no la deja y el alta
+ * rechaza una orden que nace cancelada—, así que toda la que aparezca entró por
+ * la planilla, que es justo lo que se quiere ver.
+ *
+ * **Sólo `false` cuenta.** Si no se sabe si hay nota (`undefined`: la consulta
+ * no corrió o falló, por ejemplo con la tabla todavía sin migrar) se calla;
+ * marcar todas las canceladas sería sonar por algo que no se midió.
+ *
+ * **Y ve menos de lo que esas dos frases sugieren**, que es lo que hay que
+ * saber antes de confiarle el caso entero: mira si hay *alguna* nota, no si hay
+ * una que hable de la cancelación, así que una «Cancelada» tipeada en la M
+ * sobre una orden que ya venía justificada no suena nunca. Medido el
+ * 16/11/2026: 21 de las 51 órdenes abiertas ya tienen nota, o sea que el punto
+ * ciego cubre hoy el 41% de las que se podrían cancelar a mano. Es la
+ * consecuencia directa de no marcar ninguna nota como «la de la cancelación»
+ * —Decisión 2 del diseño— y se deja así, porque marcarla sería contradecirla.
+ * Lo que esta función cubre es lo que se puede cubrir sin esa marca —cero
+ * notas—, no «toda cancelación sin motivo».
+ */
+export function laCancelacionNoTieneMotivo(
+  s: Pick<OrdenDelSistema, "estado" | "tiene_nota">
+): boolean {
+  return comparable(s.estado) === "CANCELADA" && s.tiene_nota === false;
+}
+
+/**
  * Qué dicen distinto el sistema y la planilla, de las órdenes que están en los
  * dos lados.
  *
@@ -193,6 +238,16 @@ export function contrastar(
         campo: "la celda del estado, sin la fórmula",
         enElSistema: comparable(s.estado) || "(vacío)",
         enLaPlanilla: "(vacía: no dice nada y no se va a actualizar sola)",
+      });
+    }
+
+    // Tampoco es una comparación: las dos puntas dicen «cancelada».
+    if (laCancelacionNoTieneMotivo(s)) {
+      divergencias.push({
+        ot_number: s.ot_number,
+        campo: "cancelada sin motivo",
+        enElSistema: "(cancelada, y sin ninguna justificación)",
+        enLaPlanilla: comparable(p.estado_raw) || "(vacío)",
       });
     }
 

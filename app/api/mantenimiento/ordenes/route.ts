@@ -6,8 +6,12 @@ import { altaEnLaPlanilla } from "@/lib/mantenimiento/formulario";
 import { escribirEnLaFilaDeLaOT, type FilaDeOT } from "@/lib/mantenimiento/planillaDeOT";
 import {
   celdasParaRegistrar, repartirRegistroDeOT,
-  esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT,
+  esEstadoDeOT, ESTADOS_DE_OT, type RegistroDeOT, type ValorDeCelda,
 } from "@/lib/mantenimiento/ordenes";
+import {
+  esCancelacion, loQueImpideCancelar, ESTADO_CANCELADA, SE_CANCELA_DESDE,
+} from "@/lib/mantenimiento/cancelacion";
+import { celdaDeObservacionPrevia } from "@/lib/mantenimiento/notas";
 import { fechaDeLaCarga, type FechaDeLaCarga } from "@/lib/mantenimiento/avisos";
 import { marcarElAviso } from "@/lib/mantenimiento/marcarElAviso";
 import {
@@ -16,7 +20,7 @@ import {
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import {
   estadoSegunElCierre, loQueFaltaParaDarPorRealizada, loQueHayQueExportar,
-  loQueImpideCerrar,
+  loQueImpideCerrar, elCierreQueQueda,
 } from "@/lib/mantenimiento/cierreDeOT";
 import { loQueFaltaParaCrear, loQueSeContradice } from "@/lib/mantenimiento/altaDeOT";
 import {
@@ -261,6 +265,27 @@ export async function POST(request: Request) {
   // OT sin que nadie se entere. El texto es lo que va a la planilla —tiene una
   // sola celda— y los renglones, a `ordenes_trabajo_repuestos`.
   const losRepuestos = repuestosDelCuerpo(body);
+
+  // ── UNA OT NO NACE CANCELADA ────────────────────────────────
+  //
+  // `CANCELADA` **sí es** un estado de OT, así que el chequeo de abajo lo deja
+  // pasar: esto se rechaza acá o no se rechaza en ningún lado. Y hay que
+  // rechazarlo, porque cancelar exige un motivo escrito y el alta no tiene
+  // dónde pedirlo —la nota cuelga de una orden que todavía no existe—. Una OT
+  // que naciera cancelada sería exactamente lo que este estado vino a impedir:
+  // «no se va a hacer» sin que nadie sepa por qué.
+  //
+  // Y no es una pérdida: crearla y cancelarla son dos pedidos, y el segundo
+  // pasa por el PATCH, que sí exige la justificación.
+  if (esCancelacion(estado)) {
+    // Alcanzable desde la cola igual que la rama de abajo, y por eso avisa:
+    // una app vieja que mande este estado dejaría la carga parada para siempre.
+    const error =
+      "Una orden de trabajo no se crea cancelada: se crea y después se cancela, " +
+      "escribiendo el motivo.";
+    avisarDeLaCarga(request, user.id, { ...deEstaCarga, status: 400, error, enDuda: false });
+    return NextResponse.json({ error }, { status: 400 });
+  }
 
   // El POST no validaba el estado y el PATCH sí: cualquier texto entraba a la
   // base y de ahí a la planilla, donde `EN_LA_PLANILLA[v] ?? v` lo escribía tal
@@ -740,6 +765,51 @@ export async function PATCH(request: Request) {
   const { id, estado, requiere_parada_sector } = body ?? {};
   if (!id) return NextResponse.json({ error: "ID requerido" }, { status: 400 });
 
+  const admin = createAdminClient();
+
+  // ── UNA SOLA LECTURA DE LA ORDEN, PARA LAS DOS REGLAS ─────────────────────
+  //
+  // Este PATCH tiene dos reglas que necesitan saber cómo está la orden **hoy**,
+  // y el cuerpo no se los trae. Cancelar: desde REALIZADO no se cancela, y una
+  // orden que ya guarda fecha de cierre tampoco —más abajo está por qué eso es
+  // un caso vivo y no una hipótesis—. Cerrar: contra qué fecha de inicio se
+  // mide el adelanto, y con qué justificación queda la orden cuando el pedido
+  // no manda ninguna. Cuatro columnas, una consulta.
+  //
+  // **La del cierre era condicional y pasó a correr siempre.** No es un
+  // descuido: cancelar necesita el estado en *todo* PATCH, así que con esa
+  // lectura ya puesta la condición de la otra no ahorraba una consulta, la
+  // duplicaba. Y dos lecturas de la misma fila en una ruta que después la
+  // escribe no cuestan sólo el doble: son dos fotos tomadas en instantes
+  // distintos, y entre ellas hay una ventana donde lo que una regla creyó
+  // comprobar ya no vale cuando la otra decide.
+  //
+  // **Los dos motivos por los que esta lectura puede no traer la fila se
+  // contestan distinto, y ésa es toda la razón del `maybeSingle` y del `if`
+  // de abajo.** Si el error se descartara, una caída pasajera de la base
+  // dejaría `estadoActual` en `undefined` y la regla contestaría «no se puede
+  // cancelar una orden en estado desconocido»: le echaría la culpa a la orden
+  // por un problema del servidor, y a quien está cancelando no le daría ni un
+  // motivo para reintentar. Es la regla escrita del repo —un diagnóstico que
+  // no se distingue de otro no es un diagnóstico— y acá cuesta barato
+  // respetarla: el fallo de lectura es un 500 y la fila que no está es un 404,
+  // con las mismas palabras que usa la ruta de notas.
+  const { data: laDeAhora, error: errorDeLaOrden } = await admin
+    .from("ordenes_trabajo")
+    .select("estado, fecha_ejecucion, fecha_cierre, cierre_justificacion")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (errorDeLaOrden) {
+    return NextResponse.json(
+      { error: `No se pudo leer la orden: ${errorDeLaOrden.message}` },
+      { status: 500 }
+    );
+  }
+  if (!laDeAhora) {
+    return NextResponse.json({ error: "No existe esa orden de trabajo" }, { status: 404 });
+  }
+
   // Lista blanca. No se acepta el resto del body para evitar escritura
   // arbitraria de columnas (mass-assignment).
   const update: Record<string, unknown> = { synced_at: new Date().toISOString() };
@@ -781,9 +851,122 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "No se envió ningún cambio" }, { status: 400 });
   }
 
-  const admin = createAdminClient();
+  // ── CON QUÉ CIERRE Y CON QUÉ TEXTO QUEDA LA ORDEN ─────────────────────────
+  //
+  // Lo que vino si vino, y lo guardado si no. Las dos puntas se resuelven acá
+  // y una sola vez, porque lo que se valida tiene que ser exactamente lo que se
+  // guarda — si no, se puede rechazar un texto que igual iba a quedar, o
+  // guardar uno que nadie validó.
+  //
+  // Va **después** del reparto porque de ahí sale `update.fecha_cierre` —la del
+  // cuerpo ya normalizada, `body.fecha_cierre || null`— y **antes de todas las
+  // reglas que la miran**: la de cancelar y las tres del cierre. Que sean una
+  // sola variable es el punto, y no lo era: cancelar traía la suya
+  // —`body.fecha_cierre ?? laDeAhora.fecha_cierre`— y las dos no contestaban
+  // igual. Con `fecha_cierre: ""` en el cuerpo el `??` lo dejaba pasar como
+  // valor, mientras `elCierre` resuelve con qué queda la orden de verdad. Dos
+  // nociones de «la fecha que decide» en la misma función es exactamente cómo
+  // una de las dos reglas se queda vieja sin que nada avise.
+  //
+  // La fecha vive en `cierreDeOT.ts` y no acá, con sus tests: es la que cuatro
+  // reglas miran y la que se contestaba mal. Su docstring tiene el porqué del
+  // booleano aparte y del caso de `Parcial`. El texto se queda como ternario
+  // porque no tiene ninguna de las dos trampas —ya viene `string | null` de
+  // `repartirRegistroDeOT`, y nada lo coacciona después—.
+  const elCierre = elCierreQueQueda(
+    body.fecha_cierre !== undefined,
+    update.fecha_cierre,
+    laDeAhora.fecha_cierre as string | null
+  );
+  const elTexto = body.cierre_justificacion !== undefined
+    ? (update.cierre_justificacion as string | null)
+    : (laDeAhora.cierre_justificacion as string | null);
 
-  // ── UN TRABAJO NO SE CIERRA ANTES DE EMPEZAR ───────────────────────────────
+  // ── CANCELAR: PRIMERO LA REGLA ────────────────────────────────────────────
+  //
+  // La fecha que mira es `elCierre` —con cuál **queda** la orden— y no la del
+  // cuerpo, y eso no es una precaución teórica: es un camino vivo. El modal de
+  // registrar el trabajo, con el resultado **«Parcial»**, manda
+  // `estado: "EN_PROCESO"` **junto con** `fecha_cierre`. Esa fila queda abierta
+  // y con fecha, y el viaje de ida y vuelta por la planilla no la corrige.
+  // Cancelarla después pasaba la regla —el estado actual deja cancelar y el
+  // cuerpo no trae fecha— y dejaba una `CANCELADA` con fecha de cierre: la fila
+  // que se contradice a sí misma, la que `costoEquipo` cobra como gasto real
+  // (`fecha_ejecucion ?? fecha_cierre ?? fecha`), que es justo lo que
+  // `SE_CANCELA_DESDE` existe para impedir.
+  //
+  // Acá estaba escrito que eso no podía pasar porque una orden con fecha de
+  // cierre es `REALIZADO` —lo fuerza `estadoSegunElCierre`— y desde
+  // `REALIZADO` no se cancela. Esa fuerza es del **alta**: la llaman el POST
+  // de acá y los dos formularios que lo alimentan, y nadie más. En el PATCH no
+  // interviene, y `repartirRegistroDeOT` copia `fecha_cierre` al update sin
+  // mirar el estado; la importación tampoco la aplica —`filaDeOrden` mapea la
+  // M y la K por separado—, así que la fila vuelve de la planilla tal cual.
+  // Medido el 16/11/2026: 0 de 2.466 filas tienen hoy una fecha de cierre con
+  // un estado del que se pueda cancelar. Eso dice que **todavía no había
+  // pasado**, no que no pudiera pasar.
+  //
+  // Qué impide cancelar no se decide acá: lo contesta `loQueImpideCancelar`,
+  // que es pura y tiene sus tests —una justificación con un estado que no es
+  // cancelación, un estado del que no se cancela, una fecha de cierre, un
+  // texto vacío o demasiado largo—. Acá se le pasa lo que llegó y se obedece
+  // el veredicto, una sola vez. Repetir cualquiera de esos chequeos sería
+  // tener la regla en dos lugares, que es como una de las dos se queda vieja.
+  const cancelacion = loQueImpideCancelar({
+    estadoPedido: estado,
+    estadoActual: laDeAhora.estado,
+    justificacion: body.justificacion,
+    fechaCierre: elCierre,
+  });
+  if (!cancelacion.ok) {
+    return NextResponse.json({ error: cancelacion.error }, { status: 400 });
+  }
+
+  // ── EL MOTIVO ENTRA ANTES QUE EL ESTADO ───────────────────────────────────
+  //
+  // Es la regla de la casa, la misma que la auditoría de lo irreversible: el
+  // registro se escribe **antes** de la acción que no se deshace — «si no
+  // entra, no se borra». Acá: si la nota no entra, la orden no se cancela.
+  //
+  // Al revés quedarían órdenes canceladas sin motivo, que es exactamente lo
+  // que este estado vino a impedir: «no se va a hacer» sin decir por qué es
+  // una OT que desaparece del tablero sin que nadie sepa qué pasó. Y el error
+  // de este lado es barato: una nota sin cancelación es una justificación más
+  // en el historial, que es lo que cualquier OT abierta puede tener de todos
+  // modos.
+  //
+  // **La escritura de la nota va pegada al `update`, allá abajo, y no acá**, y
+  // ésa es la otra mitad de la regla: antes de la acción que no se deshace,
+  // pero después de todo lo que todavía puede rechazar el pedido. Entre este
+  // punto y el `update` sólo quedan chequeos que no escriben nada —los tres
+  // del cierre—, y si alguno contesta 400 conviene que la nota no esté puesta:
+  // lo que no se escribió tampoco hay que deshacerlo. Ponerla acá arriba, antes
+  // de esos chequeos, dejaría una justificación suelta en el historial de una
+  // orden que nunca se canceló.
+  //
+  // La condición se calcula una sola vez para los dos lugares que dependen de
+  // ella —la nota y la celda X—: tocar una y no la otra dejaría una
+  // cancelación con el motivo guardado y la planilla sin él, o al revés.
+  const seCancela = esCancelacion(estado);
+
+  // ── LAS DOS CELDAS, EN UNA SOLA ESCRITURA ─────────────────────────────────
+  //
+  // Cancelar toca la **M** —el estado— y la **X** —la última justificación—, y
+  // las dos van en la misma llamada: cada escritura relee la columna A del
+  // master para encontrar la fila, así que partirla en dos cuesta el doble y
+  // abre una ventana donde el estado ya cambió y el motivo todavía no está.
+  //
+  // El `after()` de más abajo reintenta con este mismo `extra`, así que el
+  // reintento de los cuatro minutos se lleva la X sin una línea de código.
+  // Lo que el drenaje no puede rehacer es la X: `exportarLoPendiente` arma el
+  // registro desde la fila de `ordenes_trabajo` con `loQueHayQueExportar`, y
+  // la observación previa no tiene columna ahí. Esa limitación ya existía
+  // —está medida en el encabezado de `ordenes/[id]/notas/route.ts`— y no
+  // empeora: la M sí la repone el drenaje, y la salida para la X es volver a
+  // guardar la justificación desde la orden.
+  const extra = seCancela ? [celdaDeObservacionPrevia(cancelacion.texto)] : [];
+
+  // ── UN TRABAJO NO SE CIERRA ANTES DE EMPEZAR ──────────────────────────────
   //
   // La misma regla que el alta, por la misma función (`loQueImpideCerrar`),
   // porque es el mismo hecho: una orden que nace cerrada y una que se cierra
@@ -795,21 +978,11 @@ export async function PATCH(request: Request) {
   // está en ninguna de sus dos listas, así que este PATCH no la puede cambiar.
   // El inicio contra el que se compara es el que tiene la orden, siempre.
   //
-  // Se lee **sólo cuando el pedido toca el cierre** —su fecha o su
-  // justificación—: un PATCH que cambia el estado o las observaciones no paga
-  // esta consulta.
-  //
-  // Y se traen **tres** columnas y no sólo la fecha de inicio. Las otras dos
-  // son el estado guardado del cierre, y hacen falta las dos:
-  //
-  // - `fecha_cierre`, porque un pedido puede tocar **sólo la justificación** y
-  //   entonces el cierre contra el que hay que mirarla es el que la orden ya
-  //   tiene. Sin él, un PATCH que manda la justificación sola no sabría si
-  //   sigue habiendo un adelanto que explicar.
-  // - `cierre_justificacion`, porque un pedido puede mover la fecha de cierre
-  //   **sin mandar justificación**: cualquier PATCH que no venga de «Registrar
-  //   el trabajo». Sin el texto guardado, lo que se escribiría es el
-  //   `undefined` del cuerpo, y eso borraría una justificación válida.
+  // Sale de `laDeAhora`, la lectura única de allá arriba, junto con el estado
+  // y la justificación guardadas. Esto tenía su propia consulta, condicionada a
+  // que el pedido tocara el cierre; cancelar trajo una lectura que corre
+  // siempre y esa condición dejó de ahorrar nada. El porqué de juntarlas —y de
+  // por qué dos fotos de la misma fila son peores que una— está escrito allá.
   //
   // Medido el 05/11/2026 sobre las 2.417 órdenes, que es lo que dice si esto
   // sirve: 63 de las 2.143 cerradas tienen el cierre antes del inicio. No son
@@ -828,10 +1001,6 @@ export async function PATCH(request: Request) {
   // cierre, y **una sola la creó la app** — el resto entra por la planilla,
   // donde no se puede exigir nada porque la planilla manda.
   //
-  // El costo de agregarlo es una lectura más **sólo en ese pedido**: los otros
-  // cambios de estado —iniciar una OT, moverla en el kanban— no mandan
-  // `REALIZADO` y siguen sin pagar nada.
-  //
   // **Son dos y no una, y mezclarlas rompe algo que no se ve.** `tocaElCierre`
   // conserva su sentido de siempre —el pedido trae alguna de las dos claves—
   // porque más abajo decide si se reescribe la columna W de la planilla, y
@@ -845,77 +1014,6 @@ export async function PATCH(request: Request) {
     tocaElCierre || String(body?.estado ?? "").trim().toUpperCase() === "REALIZADO";
 
   if (hayQueMirarElCierre) {
-    const { data: laOrden, error: noSePudoLeer } = await admin
-      .from("ordenes_trabajo")
-      .select("fecha_ejecucion, fecha_cierre, cierre_justificacion")
-      .eq("id", id).maybeSingle();
-
-    if (noSePudoLeer) {
-      return NextResponse.json({ error: noSePudoLeer.message }, { status: 500 });
-    }
-    if (!laOrden) {
-      return NextResponse.json({ error: "No se encontró la orden" }, { status: 404 });
-    }
-
-    /**
-     * La fecha del cuerpo como texto, que es lo único que sabe recortar `dia()`.
-     *
-     * No es una formalidad: `update.fecha_cierre` es lo que mandó el cuerpo sin
-     * que nadie le mire el tipo —`repartirRegistroDeOT` hace `body.fecha_cierre
-     * || null` y nada más—. Mientras lo consumía sólo `loQueImpideCerrar`, que
-     * arranca con un `String(...)`, un `fecha_cierre: 5` terminaba en el 400 de
-     * la base; ahora llega también a `.slice()`, y sin esto sería un TypeError y
-     * un 500. Es entrada hostil y no un caso de la pantalla, pero el 500 tapa
-     * el 400 que ya estaba bien.
-     */
-    const comoFecha = (v: unknown): string | null =>
-      v === null || v === undefined ? null : String(v);
-
-    // Con qué cierre y con qué texto queda la orden después de este pedido: lo
-    // que vino si vino, y lo guardado si no. Las dos puntas se resuelven acá y
-    // una sola vez, porque lo que se valida tiene que ser exactamente lo que se
-    // guarda — si no, se puede rechazar un texto que igual iba a quedar, o
-    // guardar uno que nadie validó.
-    const elCierre = body.fecha_cierre !== undefined
-      ? comoFecha(update.fecha_cierre)
-      : (laOrden.fecha_cierre as string | null);
-    const elTexto = body.cierre_justificacion !== undefined
-      ? (update.cierre_justificacion as string | null)
-      : (laOrden.cierre_justificacion as string | null);
-
-    // ── Y SI SE CIERRA ANTES DE EMPEZAR, QUE DIGA POR QUÉ ────────────────────
-    //
-    // Lo que se mira es **el estado en que queda la orden** y no lo que vino en
-    // el cuerpo: si después de este pedido el cierre es anterior al inicio y no
-    // hay justificación que explique, va el 400 — mande el pedido la fecha, la
-    // justificación o las dos. Cuándo se hace la pregunta es otra cosa y está
-    // abajo.
-    //
-    // **Mirar sólo la fecha dejaba un agujero**: un PATCH con
-    // `cierre_justificacion: ""` no cambia ninguna fecha, así que pasaba de
-    // largo, y `laJustificacionQueSeGuarda` escribía ese vacío tal cual —esa
-    // función no pregunta si el texto explica, a propósito—. Quedaba una orden
-    // con el cierre antes del inicio y la columna vacía, que es exactamente el
-    // estado que esta regla existe para impedir.
-    //
-    // Y no traba a quien sólo corrige las horas, que es lo que había que
-    // cuidar: ese pedido no manda ninguna de las dos claves, así que
-    // `tocaElCierre` es falso y nada de esto corre. El único que manda la fecha
-    // en todos sus guardados es «Registrar el trabajo», y por eso ese modal
-    // precarga **también la justificación guardada** y no sólo la fecha: sin
-    // eso, reabrir una OT adelantada para corregirle las horas mandaría el
-    // vacío y recibiría este 400.
-    //
-    // **Y adentro, la pregunta se hace sólo si algo del cierre cambió de
-    // verdad**: la fecha es otra, o el pedido trae la justificación. Reenviar
-    // la misma fecha y nada más no es cerrar de nuevo y no tiene por qué
-    // recibir una pregunta. Con los llamadores de hoy las dos ramas dan lo
-    // mismo —de los cuatro PATCH que hay a esta ruta, uno solo manda
-    // `fecha_cierre`, y va a mandar también la justificación—, así que esto es
-    // la guarda para el próximo llamador y no una diferencia que se vea hoy.
-    //
-    // El mensaje es el de las altas, letra por letra, para que quien carga vea
-    // siempre la misma frase venga de donde venga el pedido.
     // ── PRIMERO: QUE DIGA CUÁNDO ────────────────────────────────────────────
     //
     // Antes que el porqué y que la contradicción, por el orden de siempre —el
@@ -935,13 +1033,41 @@ export async function PATCH(request: Request) {
       );
     }
 
+    // ── Y SI SE CIERRA ANTES DE EMPEZAR, QUE DIGA POR QUÉ ────────────────────
+    //
+    // Lo que se mira es **el estado en que queda la orden** y no lo que vino en
+    // el cuerpo: si después de este pedido el cierre es anterior al inicio y no
+    // hay justificación que explique, va el 400 — mande el pedido la fecha, la
+    // justificación o las dos.
+    //
+    // **Mirar sólo la fecha dejaba un agujero**: un PATCH con
+    // `cierre_justificacion: ""` no cambia ninguna fecha, así que pasaba de
+    // largo, y `laJustificacionQueSeGuarda` escribía ese vacío tal cual —esa
+    // función no pregunta si el texto explica, a propósito—. Quedaba una orden
+    // con el cierre antes del inicio y la columna vacía, que es exactamente el
+    // estado que esta regla existe para impedir.
+    //
+    // Y no traba a quien sólo corrige las horas, que es lo que había que
+    // cuidar: ese pedido no manda ninguna de las dos claves, así que
+    // `tocaElCierre` es falso y nada de esto corre. El único que manda la fecha
+    // en todos sus guardados es «Registrar el trabajo», y por eso ese modal
+    // precarga **también la justificación guardada** y no sólo la fecha: sin
+    // eso, reabrir una OT adelantada para corregirle las horas mandaría el
+    // vacío y recibiría este 400.
+    //
+    // **Y la pregunta se hace sólo si algo del cierre cambió de verdad**: la
+    // fecha es otra, o el pedido trae la justificación. Reenviar la misma fecha
+    // y nada más no es cerrar de nuevo y no tiene por qué recibir una pregunta.
+    //
+    // El mensaje es el de las altas, letra por letra, para que quien carga vea
+    // siempre la misma frase venga de donde venga el pedido.
     if (
-      elCierreCambio(elCierre, laOrden.fecha_cierre) ||
+      elCierreCambio(elCierre, laDeAhora.fecha_cierre) ||
       body.cierre_justificacion !== undefined
     ) {
       const falta = loQueFaltaPorElCierreAdelantado({
         fecha_cierre: elCierre,
-        fecha_ejecucion: laOrden.fecha_ejecucion,
+        fecha_ejecucion: laDeAhora.fecha_ejecucion,
         cierre_justificacion: elTexto,
       });
       if (falta.length > 0) {
@@ -978,7 +1104,7 @@ export async function PATCH(request: Request) {
     // el mismo 400 que esa orden recibe hoy, así que nada empeora, pero es el
     // único lugar donde las dos rutas todavía contestan distinto.
     if (update.fecha_cierre) {
-      const impide = loQueImpideCerrar(laOrden.fecha_ejecucion, elCierre, elTexto);
+      const impide = loQueImpideCerrar(laDeAhora.fecha_ejecucion, elCierre, elTexto);
       if (impide.length > 0) {
         return NextResponse.json(
           { error: `No se puede guardar porque ${impide.join(", ")}.` },
@@ -993,13 +1119,87 @@ export async function PATCH(request: Request) {
     // escribirla en todo PATCH dejaría a `update` siempre con dos claves y un
     // pedido vacío de verdad no recibiría más su 400.
     update.cierre_justificacion = laJustificacionQueSeGuarda(
-      elCierre, laOrden.fecha_ejecucion, elTexto
+      elCierre, laDeAhora.fecha_ejecucion, elTexto
     );
   }
 
-  const { data: updated, error } = await admin
-    .from("ordenes_trabajo").update(update).eq("id", id).select().single();
+  // ── Y ACÁ SÍ, EL MOTIVO, PEGADO AL `update` ───────────────────────────────
+  //
+  // El porqué de que esto vaya **antes** de la escritura y **después** de todos
+  // los chequeos está escrito allá arriba, donde se calcula `seCancela`.
+  if (seCancela) {
+    const { error: errorDeLaNota } = await admin
+      .from("ordenes_trabajo_notas")
+      .insert({ orden_id: id, texto: cancelacion.texto, creado_por: user.id });
+
+    // 500 y no 400: que la base no acepte el insert es un fallo del servidor,
+    // y el cuerpo que llegó puede estar perfecto. El código de estado es lo
+    // único que separa «arreglá el pedido» de «volvé a intentar», y un 4xx acá
+    // le diría lo primero a quien no tiene nada que arreglar: volvería a tipear
+    // el mismo motivo para recibir la misma respuesta. El texto ya decía
+    // «probá de nuevo»; ahora el código dice lo mismo.
+    //
+    // Lo que **no** es el motivo, aunque suene: la cola de las cargas sin
+    // señal. `mandarALaRuta` de `public/sw.js` manda siempre `method: "POST"`,
+    // así que no llega nunca a este PATCH y no hay ningún 4xx suyo que frenar.
+    if (errorDeLaNota) {
+      return NextResponse.json(
+        {
+          error:
+            "La orden no se canceló porque no se pudo guardar el motivo: " +
+            `${errorDeLaNota.message}. Probá de nuevo.`,
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  // ── Y EL ESTADO DEL QUE SE CANCELA SE COMPRUEBA AL ESCRIBIR ───────────────
+  //
+  // La regla de arriba leyó el estado y después escribe, y entre las dos cosas
+  // no había nada cuidándolo: un PATCH concurrente que realice la orden —estado
+  // `REALIZADO` y su `fecha_cierre`— justo en esa ventana dejaría la fila
+  // cancelada **y** con fecha de cierre, que es la fila que se contradice a sí
+  // misma y la razón por la que `cancelacion.ts` excluye `REALIZADO`.
+  //
+  // La ventana son milisegundos en una ruta que se usa unas pocas veces por
+  // día, así que esto no es un bug que esté pasando: es la diferencia entre un
+  // invariante probable y uno garantizado, y cuesta un filtro. La misma lista
+  // que mira la regla viaja en el `WHERE` del update, así que comprobar y
+  // escribir pasan a ser una sola operación. `CANCELADA` entra en la lista
+  // porque volver a justificar una ya cancelada tiene que seguir andando.
+  let laEscritura = admin.from("ordenes_trabajo").update(update).eq("id", id);
+  if (seCancela) {
+    laEscritura = laEscritura.in("estado", [...SE_CANCELA_DESDE, ESTADO_CANCELADA]);
+  }
+
+  const { data: updated, error } = await laEscritura.select().maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Cero filas quiere decir dos cosas distintas según si el filtro estaba
+  // puesto, y por eso son dos respuestas.
+  //
+  // **Cancelando**: la orden se leyó hace un instante, así que existir existe;
+  // lo que pasó es que su estado dejó de ser uno de los que se pueden cancelar.
+  // Es el mismo 400 que habría dado la regla. No se promete nada sobre la nota
+  // —quedó escrita, salvo que lo que cambió haya sido un borrado, que se la
+  // lleva en cascada—, y prometerlo sería afirmar algo que no se comprobó.
+  //
+  // **Sin cancelar**: no hay filtro, así que la única explicación es que la
+  // fila ya no esté. Pasa: el borrado de espejo se lleva OT de verdad. Antes
+  // esto salía como un 500 con el código de PostgREST adentro.
+  if (!updated) {
+    return seCancela
+      ? NextResponse.json(
+          {
+            error:
+              "No se canceló: la orden cambió de estado mientras se guardaba el " +
+              "motivo. Mirá cómo quedó antes de volver a cancelarla.",
+          },
+          { status: 400 }
+        )
+      : NextResponse.json({ error: "No existe esa orden de trabajo" }, { status: 404 });
+  }
 
   // ── LO QUE VA A LA CELDA W, DESPUÉS DEL UPDATE Y NO ANTES ─────────────────
   //
@@ -1034,7 +1234,10 @@ export async function PATCH(request: Request) {
   );
   if (paraLaCeldaW !== undefined) registro.cierre_justificacion = paraLaCeldaW;
 
-  const planilla_error = await escribirEnLaPlanilla(updated, registro);
+  // La X —el motivo de la cancelación— viaja en `extra` y no por `registro`:
+  // es otra celda y otra regla. La W la compone la orden ya guardada; la X la
+  // escribe el texto que acaba de entrar como nota.
+  const planilla_error = await escribirEnLaPlanilla(updated, registro, extra);
 
   // ── Y SI NO SALIÓ, SE ANOTA Y SE INSISTE ──────────────────────────────────
   //
@@ -1065,7 +1268,7 @@ export async function PATCH(request: Request) {
 
     after(async () => {
       const r = await reintentarHastaQueSalga({
-        intentar: () => escribirEnLaPlanilla(updated, registro),
+        intentar: () => escribirEnLaPlanilla(updated, registro, extra),
       });
       await admin
         .from("ordenes_trabajo")
@@ -1086,10 +1289,18 @@ export async function PATCH(request: Request) {
  * Qué celdas tocar lo decide `celdasParaRegistrar`; la escritura —con la guarda
  * de que la fila siga siendo la de esta OT— vive en `planillaDeOT.ts`, porque
  * las notas escriben la columna X por el mismo camino.
+ *
+ * `extra` son las celdas que no salen del registro, y hoy es una sola: la **X**
+ * de la cancelación, que es una nota y no un campo de `ordenes_trabajo`. Va por
+ * parámetro y no adentro de `celdasParaRegistrar` para que esa función siga
+ * siendo «el reparto de la tabla a la planilla» y nada más — y para que las dos
+ * llamadas de la ruta, la primera y la del `after()`, le pasen lo mismo sin que
+ * ninguna tenga que acordarse de reconstruirlo.
  */
 async function escribirEnLaPlanilla(
   orden: FilaDeOT,
-  registro: RegistroDeOT
+  registro: RegistroDeOT,
+  extra: readonly { columna: number; valor: ValorDeCelda }[] = []
 ): Promise<string | null> {
-  return escribirEnLaFilaDeLaOT(orden, celdasParaRegistrar(registro));
+  return escribirEnLaFilaDeLaOT(orden, [...celdasParaRegistrar(registro), ...extra]);
 }

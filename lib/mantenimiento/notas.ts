@@ -97,7 +97,7 @@ export function laUltimaNota<T extends { creado_en: string }>(
 /**
  * Si a esta orden hay que pedirle una justificación.
  *
- * Todas las que no están realizadas: una por hacer, una atrasada, una suspendida
+ * Todas las que no están realizadas: una por hacer, una atrasada, una cancelada
  * y hasta una en proceso siguen sin estar hechas, y la pregunta es la misma.
  *
  * Un estado que no conocemos pide igual. Esconder el bloque dejaría una OT sin

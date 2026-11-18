@@ -99,3 +99,33 @@ describe("comoSeMuestraElTrabajo", () => {
     expect(comoSeMuestraElTrabajo({ tipo: "sin-ot" })).toBeNull();
   });
 });
+
+/**
+ * La cancelada no es «cerrada» ni «abierta», y las dos salidas fáciles mienten
+ * en la pantalla de quien avisó. Estos tres tests existen para que volver a
+ * cualquiera de las dos se note.
+ */
+describe("una OT cancelada", () => {
+  const conOt = { work_order_id: "ot-a", ot_asignada: "2814" };
+
+  it("tiene su propio tipo, y no el de cerrada", () => {
+    expect(estadoDelTrabajo(conOt, { ot_number: 2814, estado: "CANCELADA", fecha_cierre: null }))
+      .toEqual({ tipo: "cancelado", ot: 2814 });
+  });
+
+  it("no cae en abierto, que es donde la dejaba esperando para siempre", () => {
+    expect(estadoDelTrabajo(conOt, { ot_number: 2814, estado: "CANCELADA", fecha_cierre: null }).tipo)
+      .not.toBe("abierto");
+  });
+
+  /**
+   * Ni el verde de lo hecho —«tu problema se resolvió» sobre trabajo que nadie
+   * hizo— ni el ámbar de lo pendiente. El gris es el que el módulo ya usa para
+   * este estado en sus otras pantallas.
+   */
+  it("se dice «Cancelada» y se pinta gris, sin fecha", () => {
+    const c = comoSeMuestraElTrabajo({ tipo: "cancelado", ot: 2814 })!;
+    expect(c).toEqual({ texto: "Cancelada", color: "#475569", peso: 500 });
+    expect(c.color).not.toBe("#15803D");
+  });
+});

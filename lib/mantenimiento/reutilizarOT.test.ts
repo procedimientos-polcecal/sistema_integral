@@ -31,8 +31,8 @@ const VOCABULARIO: Vocabulario = {
   tipos: TIPOS_DE_OT,
   quien: QUIENES_DE_OT,
   // Los estados del formulario son un subconjunto a propósito: una OT no nace
-  // suspendida. Es la única lista que no sale del vocabulario, y por eso es la
-  // única que se escribe acá.
+  // cancelada (el POST la rechaza). Es la única lista que no sale del
+  // vocabulario, y por eso es la única que se escribe acá.
   estados: ["POR_HACER", "EN_PROCESO", "REALIZADO", "ATRASADO"],
   prioridades: PRIORIDADES_DE_OT,
 };

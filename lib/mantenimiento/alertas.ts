@@ -9,7 +9,7 @@ import { esGutAlto, type NotasGut } from "./gut";
  * La primera la decide una persona; la segunda, el calendario.
  *
  * Lo que **no** cuenta: una orden realizada —aunque se haya hecho tarde, ya no
- * hay nada que hacer con ella— y una suspendida, que se paró a propósito y
+ * hay nada que hacer con ella— y una cancelada, que no se va a hacer nunca y
  * avisarla todos los días es ruido.
  */
 
@@ -27,7 +27,7 @@ export interface Atrasable {
  * nada, sólo decide qué cuenta como atrasada. No se unifican a propósito. Si un
  * día aparece un estado nuevo, hay que mirar las dos y decidir en cada una.
  */
-export const CERRADAS = ["REALIZADO", "SUSPENDIDA"];
+export const CERRADAS = ["REALIZADO", "CANCELADA"];
 
 /**
  * El día de hoy como `aaaa-mm-dd`, en hora de Argentina.

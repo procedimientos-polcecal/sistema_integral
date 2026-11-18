@@ -65,8 +65,8 @@
  *    la primera del hilo: dos seguimientos apuntando a la primera dejarían
  *    abiertos a los dos.
  *
- * 3. **Que la orden ya no espere nada**: REALIZADO o SUSPENDIDA, los estados de
- *    `CERRADAS_GUT`. Una realizada ya se hizo y una suspendida no espera el
+ * 3. **Que la orden ya no espere nada**: REALIZADO o CANCELADA, los estados de
+ *    `CERRADAS_GUT`. Una realizada ya se hizo y una cancelada no espera el
  *    repuesto de nadie, así que preguntar ahí es ruido. La lista es la de
  *    `gut.ts` y no una propia porque «ya no espera» ya está escrito en tres
  *    lugares —esa lista, su gemela `CERRADAS` de `alertas.ts` y el `case` de la
@@ -77,8 +77,8 @@
  *
  *    No coincide, a propósito, con `pideJustificacion` de `notas.ts`, que sólo
  *    exceptúa a REALIZADO. Allá la pregunta es si hace falta explicar por qué la
- *    orden sigue abierta, y una suspendida sí necesita explicación; acá es si
- *    alguien espera una respuesta, y a una suspendida no le espera nadie.
+ *    orden sigue abierta, y una cancelada sí necesita explicación; acá es si
+ *    alguien espera una respuesta, y a una cancelada no le espera nadie.
  *
  *    Un estado vacío o que no conocemos deja la pregunta abierta: esconderla
  *    dejaría una OT esperando una respuesta que nadie ve, que es peor que mostrar
@@ -242,7 +242,7 @@ export function preguntaAbiertaDelRepuesto(
  * están, y por las mismas tres razones del encabezado: la tabla no se actualiza, una
  * fila nueva al cerrarla terminaría en la celda X de la planilla, y una marca
  * guardada sería un segundo dato. A la pregunta a cuyo repuesto sacaron la delata el
- * `repuesto_id` en null; a la de una orden suspendida o realizada, el estado.
+ * `repuesto_id` en null; a la de una orden cancelada o realizada, el estado.
  *
  * Es lo que `preguntasAbiertas` descarta, menos lo que **tuvo su final**:
  *
@@ -324,7 +324,7 @@ export function itemDeLaConsulta(
  *
  * **La ruta no la usa**, y no es un descuido. Lo que la ruta rechaza es lo que
  * `preguntasAbiertas` daría por cerrado desde que nace —una orden realizada o
- * suspendida—, porque ahí el push saldría para una pregunta que no aparece en la
+ * cancelada—, porque ahí el push saldría para una pregunta que no aparece en la
  * bandeja de nadie. Una pregunta sobre una orden en proceso no nace cerrada:
  * quedaría guardada, abierta y a la vista, aunque la pantalla no la ofrezca.
  *
@@ -574,7 +574,7 @@ export function comprobarNotaNueva(
   if (!repuesto) return rechazo(400, "Ese repuesto no está en la lista de esta orden.");
 
   if (laOrdenYaNoEspera(estadoDeLaOrden)) {
-    return rechazo(409, "Esta orden ya no espera ningún repuesto: está realizada o suspendida.");
+    return rechazo(409, "Esta orden ya no espera ningún repuesto: está realizada o cancelada.");
   }
 
   const abierta = preguntaAbiertaDelRepuesto(notas, repuesto.id, estadoDeLaOrden);

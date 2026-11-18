@@ -20,7 +20,7 @@ describe("las constantes", () => {
     expect(SIN_PUNTAJE).toBe(27);
     expect(EMPUJON_ABIERTA).toBe(1000);
     expect(ES_ALTO_GUT).toBe(65);
-    expect(CERRADAS_GUT).toEqual(["REALIZADO", "SUSPENDIDA"]);
+    expect(CERRADAS_GUT).toEqual(["REALIZADO", "CANCELADA"]);
   });
 });
 
@@ -37,6 +37,9 @@ describe("puntajeGut", () => {
 });
 
 describe("claveDeOrdenGut", () => {
+  it("una cancelada no lleva el empujón: ya no espera nada", () => {
+    expect(claveDeOrdenGut({ estado: "CANCELADA" })).toBe(27);
+  });
   it("una abierta con puntaje suma el empujón", () => {
     expect(claveDeOrdenGut({ estado: "POR_HACER", gut_gravedad: 4, gut_urgencia: 5, gut_tendencia: 4 })).toBe(1080);
   });
@@ -116,8 +119,8 @@ describe("esquemaGut", () => {
 const CASOS = [
   { estado: "REALIZADO", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 5 },
   { estado: "REALIZADO" },
-  { estado: "SUSPENDIDA", gut_gravedad: 2, gut_urgencia: 3, gut_tendencia: 4 },
-  { estado: "SUSPENDIDA", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: null },
+  { estado: "CANCELADA", gut_gravedad: 2, gut_urgencia: 3, gut_tendencia: 4 },
+  { estado: "CANCELADA", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: null },
   { estado: "POR_HACER", gut_gravedad: 4, gut_urgencia: 5, gut_tendencia: 4 },
   { estado: "POR_HACER" },
   { estado: "EN_PROCESO", gut_gravedad: 1, gut_urgencia: 1, gut_tendencia: 1 },

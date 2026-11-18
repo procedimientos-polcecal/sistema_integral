@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { contrastar, porOrden, type OrdenDelSistema } from "./contraste";
+import { contrastar, laCancelacionNoTieneMotivo, porOrden, type OrdenDelSistema } from "./contraste";
 import type { OrdenLeida } from "./ordenes";
 
 const enElSistema = (p: Partial<OrdenDelSistema> & { ot_number: number }): OrdenDelSistema => ({
@@ -212,6 +212,58 @@ describe("la celda del estado vacía", () => {
         fecha_cierre: null, horas: null, operario_1: null, operario_2: null })]
     );
     expect(r.divergencias).toEqual([]);
+  });
+});
+
+/**
+ * Una OT cancelada sin ninguna nota. El sistema no la produce nunca —el PATCH
+ * la rechaza y el alta rechaza una orden que nace cancelada—, así que toda la
+ * que aparezca entró por la planilla, tipeando la palabra en la columna M.
+ */
+describe("laCancelacionNoTieneMotivo", () => {
+  it("una cancelada sin notas es un defecto", () => {
+    expect(laCancelacionNoTieneMotivo({ estado: "CANCELADA", tiene_nota: false })).toBe(true);
+  });
+
+  it("una cancelada con nota no suena", () => {
+    expect(laCancelacionNoTieneMotivo({ estado: "CANCELADA", tiene_nota: true })).toBe(false);
+  });
+
+  it("una abierta sin nota tampoco: es el caso normal de las 51 de hoy", () => {
+    // Sonar por esto hundiría la lista, que es la vara de divergencias.ts.
+    expect(laCancelacionNoTieneMotivo({ estado: "ATRASADO", tiene_nota: false })).toBe(false);
+  });
+
+  /**
+   * Si la consulta de las notas falló (la tabla todavía no existe, por
+   * ejemplo) no se sabe si tiene nota: callar. Marcar todas las canceladas
+   * sería sonar por lo que no se midió.
+   */
+  it("si no se sabe si tiene nota, no suena", () => {
+    expect(laCancelacionNoTieneMotivo({ estado: "CANCELADA" })).toBe(false);
+  });
+});
+
+describe("la cancelada sin motivo, en el contraste", () => {
+  const cancelada = { estado: "CANCELADA" };
+  const celda = { estado: "CANCELADA", estado_raw: "Cancelada" };
+
+  it("se informa con el nombre del problema aunque los dos lados digan lo mismo", () => {
+    const d = contrastar(
+      [enElSistema({ ot_number: 10, ...cancelada, tiene_nota: false })],
+      [enLaPlanilla({ ot_number: 10, ...celda })]
+    ).divergencias;
+    expect(d).toHaveLength(1);
+    expect(d[0].campo).toContain("cancelada sin motivo");
+    expect(d[0].enLaPlanilla).toBe("Cancelada");
+  });
+
+  it("con nota no se informa nada", () => {
+    const d = contrastar(
+      [enElSistema({ ot_number: 10, ...cancelada, tiene_nota: true })],
+      [enLaPlanilla({ ot_number: 10, ...celda })]
+    ).divergencias;
+    expect(d).toEqual([]);
   });
 });
 

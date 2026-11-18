@@ -77,10 +77,10 @@ describe("la cuenta de un repuesto", () => {
     expect(cuenta.estaOrden).toMatchObject({ orden_id: "o2", cubiertas: 10 });
   });
 
-  it("una OT suspendida tampoco: usa la misma definición de cerrada que el resto de Mantenimiento", async () => {
+  it("una OT cancelada tampoco: usa la misma definición de cerrada que el resto de Mantenimiento", async () => {
     base.reiniciar({
       ...base.estado.tablas,
-      ordenes_trabajo: [orden(1, { estado: "SUSPENDIDA", fecha: "2026-10-01" }), orden(2)],
+      ordenes_trabajo: [orden(1, { estado: "CANCELADA", fecha: "2026-10-01" }), orden(2)],
       ordenes_trabajo_repuestos: [renglon(1), renglon(2)],
     });
     const cuenta = await cuentaDeUnRepuesto(cliente, de(2));

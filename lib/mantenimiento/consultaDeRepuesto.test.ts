@@ -145,24 +145,24 @@ describe("que pregunta sigue abierta", () => {
     expect(preguntasAbiertas([fila as NotaDeLaOT], "POR_HACER")).toHaveLength(1);
   });
 
-  // Una suspendida no espera nada de nadie, igual que una realizada: son los dos
+  // Una cancelada no espera nada de nadie, igual que una realizada: son los dos
   // estados de `CERRADAS_GUT`, la lista con la que el GUT las manda al final.
-  it("una OT suspendida tampoco tiene preguntas abiertas", () => {
-    expect(preguntasAbiertas([pregunta()], "SUSPENDIDA"))
+  it("una OT cancelada tampoco tiene preguntas abiertas", () => {
+    expect(preguntasAbiertas([pregunta()], "CANCELADA"))
       .toEqual([]);
   });
 
   // Con cualquier otro estado sigue abierta, y con uno que no conocemos también:
   // esconder una pregunta es peor que mostrar una de más, porque la OT queda
   // esperando una respuesta que nadie ve.
-  it("cualquier estado que no sea REALIZADO ni SUSPENDIDA la deja abierta, conocido o no", () => {
+  it("cualquier estado que no sea REALIZADO ni CANCELADA la deja abierta, conocido o no", () => {
     for (const estado of ["POR_HACER", "ATRASADO", "EN_PROCESO", "CUALQUIER_COSA", "", null]) {
       expect(preguntasAbiertas([pregunta()], estado)).toHaveLength(1);
     }
   });
 
   it("el estado se lee sin importar mayúsculas ni espacios", () => {
-    for (const estado of ["realizado", "Realizado", " REALIZADO ", "suspendida", " Suspendida "]) {
+    for (const estado of ["realizado", "Realizado", " REALIZADO ", "cancelada", " Cancelada "]) {
       expect(preguntasAbiertas([pregunta()], estado)).toEqual([]);
     }
   });
@@ -339,15 +339,15 @@ describe("las preguntas que quedaron sin responder", () => {
   // La orden que ya no espera cierra sus preguntas por la misma cuenta que
   // `preguntasAbiertas` (los estados de `CERRADAS_GUT`), así que la que nadie había
   // contestado queda sin responder igual que si hubieran sacado el repuesto.
-  it("en una orden suspendida o realizada, la que nadie contestó quedó sin responder", () => {
-    for (const estado of ["SUSPENDIDA", "REALIZADO"]) {
+  it("en una orden cancelada o realizada, la que nadie contestó quedó sin responder", () => {
+    for (const estado of ["CANCELADA", "REALIZADO"]) {
       expect(ids([pregunta()], estado), estado).toEqual(["n1"]);
     }
   });
 
   it("y en esa misma orden, la que sí contestaron no", () => {
     const r = respuesta({ id: "n2", responde_a: "n1" });
-    expect(ids([pregunta(), r], "SUSPENDIDA")).toEqual([]);
+    expect(ids([pregunta(), r], "CANCELADA")).toEqual([]);
   });
 
   it("una justificación no es una pregunta", () => {
@@ -493,8 +493,8 @@ describe("en qué estados se ofrece preguntar", () => {
   // `EN_PROCESO` queda afuera por pedido del diseño, aunque `preguntasAbiertas` la
   // cuente como abierta: una cosa es cuándo se ofrece abrir una pregunta y otra
   // cuándo una pregunta que ya existe deja de esperar.
-  it("en proceso, realizada y suspendida no", () => {
-    for (const estado of ["EN_PROCESO", "REALIZADO", "SUSPENDIDA"]) {
+  it("en proceso, realizada y cancelada no", () => {
+    for (const estado of ["EN_PROCESO", "REALIZADO", "CANCELADA"]) {
       expect(sePuedePreguntarEn(estado), estado).toBe(false);
     }
   });
@@ -701,8 +701,8 @@ describe("comprobar una nota nueva contra la orden", () => {
       expect(comprobarNotaNueva(preguntar(), contexto([pregunta(), r])).ok).toBe(true);
     });
 
-    it("sobre una orden realizada o suspendida se rechaza: nace cerrada", () => {
-      for (const estado of ["REALIZADO", "SUSPENDIDA"]) {
+    it("sobre una orden realizada o cancelada se rechaza: nace cerrada", () => {
+      for (const estado of ["REALIZADO", "CANCELADA"]) {
         expect(comprobarNotaNueva(preguntar(), contexto([], estado)), estado)
           .toEqual(rechazada(409, /ya no espera/i));
       }
@@ -777,7 +777,7 @@ describe("comprobar una nota nueva contra la orden", () => {
     });
 
     it("en una orden que ya no espera nada, se rechaza", () => {
-      for (const estado of ["REALIZADO", "SUSPENDIDA"]) {
+      for (const estado of ["REALIZADO", "CANCELADA"]) {
         expect(comprobarNotaNueva(responder("n1"), contexto([pregunta()], estado)), estado)
           .toEqual(rechazada(409, /ya no está abierta/i));
       }

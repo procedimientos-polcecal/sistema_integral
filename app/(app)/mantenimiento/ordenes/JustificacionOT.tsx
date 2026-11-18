@@ -33,16 +33,22 @@ import HistorialDeLaOT, { type NotaDelHistorial } from "./HistorialDeLaOT";
  */
 
 export default function JustificacionOT({
-  ordenId, estado, puedeEditar, onCambio, version,
+  ordenId, estado, puedeEditar, cancelada = false, onCambio, version,
 }: {
   ordenId: string;
   /**
    * El estado de la orden. «Abierta» depende de él: una pregunta sobre una orden
-   * realizada o suspendida ya no espera nada, y sin esto la pantalla seguiría
+   * realizada o cancelada ya no espera nada, y sin esto la pantalla seguiría
    * ofreciendo cerrar una pregunta que nadie espera.
    */
   estado: string | null;
   puedeEditar: boolean;
+  /**
+   * La orden está cancelada. Su motivo es lo único que dice por qué no se hizo
+   * y el servidor no deja borrarlo (409): se puede escribir otro, no sacar uno.
+   * Ofrecer el botón sería ofrecer algo que siempre falla.
+   */
+  cancelada?: boolean;
   /** Para que el listado refresque el cartel de "sin justificar". */
   onCambio?: () => void;
   /**
@@ -219,7 +225,7 @@ export default function JustificacionOT({
             onChange={(e) => { setTexto(e.target.value); setError(""); }}
             maxLength={MAXIMO_DE_NOTA}
             rows={2}
-            placeholder="Por qué todavía no se hizo…"
+            placeholder={cancelada ? "Agregar otra explicación…" : "Por qué todavía no se hizo…"}
             className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
           />
           <button

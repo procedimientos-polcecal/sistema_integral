@@ -2,6 +2,7 @@ import { haceCuanto } from "@/lib/core/haceCuanto";
 import {
   preguntasAbiertas, preguntasSinResponder, type NotaDeLaOT, type TipoDeNota,
 } from "@/lib/mantenimiento/consultaDeRepuesto";
+import { esCancelacion } from "@/lib/mantenimiento/cancelacion";
 
 /**
  * La lista del historial de una orden: una entrada por nota, con su tipo y lo que
@@ -21,9 +22,9 @@ import {
  * ninguna RESPUESTA apunta» pasa toda la suite de `lib/` y es un error: una pregunta
  * superada por un seguimiento tampoco tiene respuesta y ya no espera, y un «Ya llegó»
  * escrito sobre ella no cierra nada —el seguimiento sigue abierto—. Tampoco la tiene la
- * de una orden suspendida, ni la de un repuesto que sacaron de la lista.
+ * de una orden cancelada, ni la de un repuesto que sacaron de la lista.
  *
- * Esas dos últimas —la orden suspendida y el repuesto que sacaron de la lista— son
+ * Esas dos últimas —la orden cancelada y el repuesto que sacaron de la lista— son
  * las que «quedaron sin responder»: se rotulan en vez de desaparecer, que es lo que
  * pide el diseño, y se derivan de las filas sin guardar nada
  * (`preguntasSinResponder`).
@@ -52,7 +53,7 @@ export default function HistorialDeLaOT({
   notas: readonly NotaDelHistorial[];
   /**
    * El estado de la orden. «Abierta» depende de él: una pregunta sobre una orden
-   * realizada o suspendida ya no espera nada, y sin esto la lista seguiría ofreciendo
+   * realizada o cancelada ya no espera nada, y sin esto la lista seguiría ofreciendo
    * cerrar una pregunta que nadie espera.
    */
   estado: string | null;
@@ -65,6 +66,19 @@ export default function HistorialDeLaOT({
   ahora?: Date;
 }) {
   if (notas.length === 0) return null;
+
+  /*
+   * **Una cancelada no deja borrar una nota.** Viene del listado de OT, donde
+   * el motivo de la cancelación es lo único que dice por qué esa orden no se
+   * hizo: borrarlo deja el estado sin explicación y no se recupera de ningún
+   * lado. Se saca del `estado` que este componente ya recibe y **no de una prop
+   * aparte**, que sería la misma verdad escrita dos veces —la del listado, que
+   * se calcula `o.estado === ESTADO_CANCELADA`, y ésta—.
+   *
+   * «Ya llegó» no necesita la guarda: cuelga de `esperando`, y una cancelada
+   * está en `CERRADAS_GUT`, así que `preguntasAbiertas` ya devuelve vacío.
+   */
+  const cancelada = esCancelacion(estado);
 
   const esperando = new Set(preguntasAbiertas(notas, estado).map((p) => p.id));
   const sinResponder = new Set(preguntasSinResponder(notas, estado).map((p) => p.id));
@@ -120,7 +134,7 @@ export default function HistorialDeLaOT({
                   todos los que pueden editar y el servidor es el que decide:
                   esconderlo según el usuario acá sería repetir la regla en un
                   segundo lugar, que es donde se desincronizan. */}
-              {puedeEditar && (
+              {puedeEditar && !cancelada && (
                 <button
                   onClick={() => onBorrar(n)}
                   className="text-slate-300 underline hover:text-red-600"

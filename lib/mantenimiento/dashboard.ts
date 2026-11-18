@@ -101,8 +101,10 @@ const PESO_DEL_ESTADO: Record<string, number> = {
  * Un sector sin ninguna no aparece: las claves de lo que devuelve son los
  * sectores a parar, así que de acá sale también el conteo del indicador.
  *
- * Quedan afuera las `REALIZADO` y las `SUSPENDIDA`, que es lo que decide quien
- * consulta: la lista llega ya filtrada por estado.
+ * Quedan afuera las `REALIZADO` y las `CANCELADA`, que es lo que decide quien
+ * consulta: la lista llega ya filtrada por estado —con una lista blanca de los
+ * abiertos, así que un estado nuevo queda afuera solo hasta que alguien lo
+ * sume a mano, que es el lado seguro del error—.
  */
 export function paradasExigidas(
   ordenes: OTPendiente[]

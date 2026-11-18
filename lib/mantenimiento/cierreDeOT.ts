@@ -107,6 +107,44 @@ export function loQueFaltaParaDarPorRealizada(
   return cargado(fechaCierre) ? [] : ["la fecha de cierre"];
 }
 
+/**
+ * Con qué fecha de cierre **queda** la orden después de un pedido: la que vino
+ * si vino, y la guardada si no.
+ *
+ * ── POR QUÉ ESTO ES UNA FUNCIÓN Y NO UN `??` ───────────────────────────────
+ *
+ * Porque `??` contesta mal en un caso que pasa. El PATCH de órdenes miraba
+ * `body.fecha_cierre ?? laGuardada`, y con `fecha_cierre: ""` en el cuerpo el
+ * `??` lo deja pasar como valor —el vacío no es `null` ni `undefined`—, así que
+ * la orden quedaba evaluándose contra una fecha que no es con la que iba a
+ * quedar. Lo que decide es **si la clave vino**, y eso no se puede deducir del
+ * valor después de que `repartirRegistroDeOT` lo normalizó a `body.x || null`:
+ * para ahí, «no vino» y «vino vacía» son el mismo `null`. De ahí el booleano
+ * aparte, que es el único que sabe la diferencia.
+ *
+ * ── Y POR QUÉ IMPORTA QUE SEA UNA SOLA ─────────────────────────────────────
+ *
+ * Porque cuatro reglas distintas miran esa fecha —las tres del cierre y la de
+ * cancelar—, y dos nociones de «la fecha que decide» en la misma ruta es
+ * exactamente cómo una de las dos se queda vieja sin que nada avise. El caso
+ * vivo que lo mostró: «Registrar el trabajo» con resultado **Parcial** deja la
+ * orden `EN_PROCESO` **con** `fecha_cierre`; cancelarla después pasaba la regla
+ * —el cuerpo no trae fecha— y dejaba una `CANCELADA` con fecha de cierre, que
+ * es la fila que `costoEquipo` cobra como gasto real.
+ *
+ * El `String()` no es una formalidad: lo que llega es lo que mandó el cuerpo
+ * sin que nadie le mire el tipo, y un `fecha_cierre: 5` termina en el `.slice()`
+ * de quien la consuma — un TypeError y un 500 tapando el 400 que ya estaba bien.
+ */
+export function elCierreQueQueda(
+  vinoEnElPedido: boolean,
+  loQueVino: unknown,
+  laGuardada: string | null
+): string | null {
+  if (!vinoEnElPedido) return laGuardada;
+  return loQueVino === null || loQueVino === undefined ? null : String(loQueVino);
+}
+
 export function loQueFaltaParaCerrar(datos: DatosDelCierre): string[] {
   if (!cargado(datos.fecha_cierre)) return [];
 

@@ -103,7 +103,16 @@ export function resolver(
     equipment_id: equipo?.id ?? null,
     sector_id:
       equipo?.sector_id ??
-      (porTexto ? enlaces.porCodigoDeSector.get(porTexto.toUpperCase()) ?? null : null) ??
+      // El `?? null` que había acá adentro no hacía nada —el `??` de afuera ya
+      // trata igual al `undefined` que devuelve un `Map.get()` que no
+      // encuentra—, pero sacarlo **no es cosmético**: con él, TypeScript 6
+      // marca la expresión entera como «siempre nula» (TS2871) y el build se
+      // cae. Es un falso positivo y está comprobado reduciéndolo a tres
+      // líneas: `(t ? m.get(t) ?? null : null) ?? m.get("x") ?? null` lo
+      // dispara y `(t ? m.get(t) : null) ?? m.get("x") ?? null` no, siendo lo
+      // mismo. Si vuelve a aparecer un `?? null` adentro de un ternario que
+      // alimenta otro `??`, es esto.
+      (porTexto ? enlaces.porCodigoDeSector.get(porTexto.toUpperCase()) : null) ??
       enlaces.porSector.get((fila.sector_raw ?? "").toLowerCase().trim()) ??
       null,
   };

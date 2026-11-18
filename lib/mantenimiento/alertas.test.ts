@@ -29,9 +29,9 @@ describe("estaAtrasada", () => {
     expect(estaAtrasada({ estado: "POR_HACER", proxima_fecha: null }, HOY)).toBe(false);
   });
 
-  it("una suspendida no está atrasada", () => {
-    // Se paró a propósito: avisarlo todos los días es ruido.
-    expect(estaAtrasada({ estado: "SUSPENDIDA", proxima_fecha: "2026-01-01" }, HOY)).toBe(false);
+  it("una cancelada no está atrasada", () => {
+    // No se va a hacer nunca: avisarlo todos los días es ruido.
+    expect(estaAtrasada({ estado: "CANCELADA", proxima_fecha: "2026-01-01" }, HOY)).toBe(false);
   });
 });
 

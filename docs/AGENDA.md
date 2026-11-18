@@ -219,10 +219,15 @@ de una OT pertenece a la orden, no a nadie —mandarla a otra casilla lo
 actualiza el cliente admin, fuera de RLS—.
 
 **Una OT cerrada no lleva el botón, y el servidor también la rechaza.** «Cerrada»
-es `fecha_cierre` **o** `estado = 'REALIZADO'` (`laOTEstaCerrada`, una sola
-función): **168 de 986 OT `REALIZADO` no tienen `fecha_cierre`**, así que mirar
-sólo la fecha dejaba pasar a una de cada seis. `SUSPENDIDA` queda afuera: es una
-pausa, no una terminación.
+es `fecha_cierre`, `estado = 'REALIZADO'` **o** `estado = 'CANCELADA'`
+(`laOTEstaCerrada`, una sola función): **168 de 986 OT `REALIZADO` no tienen
+`fecha_cierre`**, así que mirar sólo la fecha dejaba pasar a una de cada seis.
+
+La cancelada entró el 16/11/2026 y es la que más necesita el estado: **no puede
+tener `fecha_cierre`** —se lo prohíbe la regla de `cancelacion.ts`—, así que es
+la única cerrada que no deja ninguna huella en esa columna. Donde antes decía
+que `SUSPENDIDA` quedaba afuera por ser una pausa y no una terminación, hoy hay
+un estado que significa lo contrario: no se va a hacer nunca.
 
 **El evento sigue a la OT, pero sólo en el horario.** Si la sincronización de la
 planilla cambia `fecha_ejecucion`, el evento se mueve solo; si la OT se borra

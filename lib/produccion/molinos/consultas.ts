@@ -29,6 +29,7 @@ import type { TurnoDeRobot } from "./turnos";
 import { indicadoresDe, type Indicadores } from "./indicadores";
 import { TURNOS_EN_ORDEN_DE_RELOJ } from "./formato";
 import { turnosSinExplicar } from "./cola";
+import { ESTADO_CANCELADA } from "@/lib/mantenimiento/cancelacion";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -411,7 +412,11 @@ export const DIAS_DE_VENTANA_DE_OT = 90;
  * desplegable simplemente cambia de tamaño.
  */
 export function filtroDeVentanaDeOt(hoy: string, diasAtras = DIAS_DE_VENTANA_DE_OT): string {
-  return `fecha.gte.${sumarDias(hoy, -diasAtras)},estado.neq.REALIZADO`;
+  // Las dos cerradas y no sólo `REALIZADO`. Una `CANCELADA` no es una orden
+  // abierta —es trabajo que no se va a hacer nunca—, así que con `neq` se
+  // colaba en el desplegable para siempre, cayera donde cayera su fecha, que
+  // es justo lo que la ventana de 90 días existe para evitar.
+  return `fecha.gte.${sumarDias(hoy, -diasAtras)},estado.not.in.(REALIZADO,${ESTADO_CANCELADA})`;
 }
 
 /**

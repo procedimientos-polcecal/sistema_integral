@@ -118,13 +118,15 @@ export const EMPUJON_ABIERTA = 1000;
 /**
  * Los estados que ya no esperan nada y van después de lo abierto.
  *
- * Espeja el `case` de la columna generada `gut_orden` (migración
- * 20261021104750): si cambia, hay que escribir una migración nueva. Tiene una
- * gemela con los mismos valores, `CERRADAS` en `alertas.ts`, que NO espeja la
- * migración —sólo decide qué orden está atrasada—. No se unifican: tienen
- * dueños distintos y un estado nuevo (¿"ANULADA"?) se decide en cada una.
+ * Espeja el `case` de la columna generada `gut_orden`, tal como lo deja la
+ * migración `20261116082742_gut_orden_cuenta_la_cancelada_como_cerrada.sql`,
+ * que cambió SUSPENDIDA por CANCELADA (y no la 20261021104750 que la creó): si
+ * cambia, hay que escribir una migración nueva. Tiene una gemela con los mismos
+ * valores, `CERRADAS` en `alertas.ts`, que NO espeja la migración —sólo decide
+ * qué orden está atrasada—. No se unifican: tienen dueños distintos y un estado
+ * nuevo se decide en cada una.
  */
-export const CERRADAS_GUT: readonly string[] = ["REALIZADO", "SUSPENDIDA"];
+export const CERRADAS_GUT: readonly string[] = ["REALIZADO", "CANCELADA"];
 
 /** Desde este puntaje una orden se considera de GUT alto. */
 export const ES_ALTO_GUT = 65;

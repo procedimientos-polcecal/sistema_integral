@@ -134,11 +134,11 @@ describe("a qué entradas se les ofrece «Ya llegó»", () => {
     expect(cuantas(html, YA_LLEGO)).toBe(1);
   });
 
-  // Una orden suspendida no espera el repuesto de nadie, así que ahí no hay nada que
+  // Una orden cancelada no espera el repuesto de nadie, así que ahí no hay nada que
   // cerrar. Sin el estado, la pantalla seguiría ofreciendo «Ya llegó» sobre algo
   // que ya está cerrado.
   it("a ninguna, en una orden que ya no espera nada", () => {
-    for (const estado of ["SUSPENDIDA", "REALIZADO"]) {
+    for (const estado of ["CANCELADA", "REALIZADO"]) {
       const html = dibujar([pregunta({ id: "q1" })], { estado });
       expect(cuantas(html, YA_LLEGO), estado).toBe(0);
       expect(html, estado).not.toContain("sin respuesta");
@@ -212,8 +212,8 @@ describe("las que quedaron sin responder", () => {
     expect(q1).not.toContain("sin respuesta");
   });
 
-  it("a la de una orden suspendida la rotula, y dice que es por la orden", () => {
-    const html = dibujar([pregunta({ id: "q1" })], { estado: "SUSPENDIDA" });
+  it("a la de una orden cancelada la rotula, y dice que es por la orden", () => {
+    const html = dibujar([pregunta({ id: "q1" })], { estado: "CANCELADA" });
     expect(entrada(html, "texto de q1")).toContain("Quedó sin responder: la orden ya no espera nada");
   });
 

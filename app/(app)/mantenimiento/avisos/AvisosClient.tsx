@@ -568,6 +568,7 @@ function ConOt({ aviso, sinOt, puedeEditar, onDesenlazar }: {
 function textoDelTrabajo(t: ReturnType<typeof estadoDelTrabajo>, sinOt: string) {
   switch (t.tipo) {
     case "cerrado":
+    case "cancelado":
     case "abierto": {
       // Texto y color salen de `comoSeMuestraElTrabajo`, la misma regla que usa
       // `/mis-avisos`: dos pantallas no pueden decir cosas distintas del aviso.

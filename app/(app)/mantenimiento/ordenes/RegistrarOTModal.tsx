@@ -29,17 +29,24 @@ import {
  * palabra y el compilador no lo comprueba.
  */
 
+/*
+ * Sin «Cancelado», a propósito. Este modal es «se fue a hacer el trabajo y
+ * salió así»: registra una ejecución con horas, operarios y `fecha_cierre`, y
+ * la explicación que pide va a la columna W (lo que se encontró al hacerlo).
+ * Cancelar una OT no es el resultado de una visita sino que no se va a hacer
+ * nunca: es su propia acción, con su propio motivo (columna X), y no pone
+ * `fecha_cierre`. Y no se pierde ningún caso real: esa opción era el único
+ * camino que llevaba a SUSPENDIDA, y en 2.453 órdenes no produjo ni una fila.
+ */
 const RESULTADOS = [
   { valor: "completado", label: "Completado" },
   { valor: "parcial", label: "Parcial" },
-  { valor: "cancelado", label: "Cancelado" },
 ] as const;
 
 /** A qué estado de la OT lleva cada resultado. */
 const ESTADO_SEGUN: Record<string, string> = {
   completado: "REALIZADO",
   parcial: "EN_PROCESO",
-  cancelado: "SUSPENDIDA",
 };
 
 export default function RegistrarOTModal({
@@ -234,7 +241,7 @@ export default function RegistrarOTModal({
 
   async function guardar() {
     if (!observaciones.trim() && resultado !== "completado") {
-      setError("Contá qué pasó: un trabajo parcial o cancelado sin explicación no sirve después.");
+      setError("Contá qué pasó: un trabajo parcial sin explicación no sirve después.");
       return;
     }
 

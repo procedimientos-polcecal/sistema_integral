@@ -12,6 +12,7 @@ import {
   NOMBRE_DE_LA_CONSULTA, URL_DE_LAS_CONSULTAS,
   type NotaDeLaOT, type RepuestoDeLaOT,
 } from "@/lib/mantenimiento/consultaDeRepuesto";
+import { esCancelacion } from "@/lib/mantenimiento/cancelacion";
 
 /**
  * Por qué una orden de trabajo todavía no se hizo, y lo que Mantenimiento le
@@ -255,6 +256,36 @@ export async function POST(request: Request, { params }: Params) {
  * Después se reescribe la celda con la que quedó siendo la última. Borrar sin
  * eso dejaría la planilla mostrando una justificación que en el sistema ya no
  * existe, que es exactamente la divergencia que no avisa.
+ *
+ * ── LA JUSTIFICACIÓN DE UNA OT CANCELADA NO SE BORRA ────────────────────────
+ *
+ * Cancelar exige una justificación (PATCH de `ordenes`), y sin este corte ese
+ * requisito tiene una puerta de atrás: cancelo con motivo, borro la nota, y
+ * queda una orden cancelada sin razón escrita en ningún lado —con la columna X
+ * mostrando, además, la justificación anterior, que habla de otra cosa—.
+ *
+ * Es una regla sobre la orden y no sobre el autor, así que **no va en el filtro
+ * del `delete`** —ése es de `creado_por` y se queda así—: es una lectura aparte
+ * que rechaza, y va **antes** del `delete` para que no se borre nada que después
+ * haya que reponer. Contesta 409 y no 400: el pedido está bien formado, choca
+ * con el estado de la orden.
+ *
+ * No se pierde nada con negarlo. Corregir una justificación sigue pudiendo: se
+ * escribe otra, que pasa a ser la última y viaja a la columna X. Lo que deja de
+ * poderse es borrar —cualquiera, aunque haya varias— y con eso quedar con cero;
+ * el mensaje dice qué hacer en vez de sólo recibir un no.
+ *
+ * Por qué no las dos alternativas:
+ * - **Marcar la nota de la cancelación** para proteger sólo esa contradice lo
+ *   decidido para esta función, que es no marcar ninguna: las notas son un
+ *   historial plano y gana la más nueva.
+ * - **Auditar** la cancelación con `auditar()` pediría un décimo verbo en
+ *   `ACCIONES` (`lib/core/auditoria.ts`), una lista cerrada, o sea una segunda
+ *   migración para registrar algo que la nota ya dice mejor y en el lugar donde
+ *   se lo busca.
+ *
+ * Lo que el corte no cubre: la protección es por el estado **de ahora**. Si la
+ * orden sale de CANCELADA, sus notas vuelven a poderse borrar.
  */
 export async function DELETE(request: Request, { params }: Params) {
   const { id } = await params;
@@ -266,6 +297,28 @@ export async function DELETE(request: Request, { params }: Params) {
   if (!nota) return NextResponse.json({ error: "Falta la nota" }, { status: 400 });
 
   const admin = createAdminClient();
+
+  // Si no se puede leer el estado no se sigue: borrar a ciegas es justo lo que
+  // este corte existe para evitar. Una orden que no existe pasa de largo y la
+  // frena el `delete` de abajo, que no encuentra la nota.
+  const { data: ordenActual, error: errorEstado } = await admin
+    .from("ordenes_trabajo")
+    .select("estado")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (errorEstado) return NextResponse.json({ error: errorEstado.message }, { status: 500 });
+
+  if (esCancelacion(ordenActual?.estado)) {
+    return NextResponse.json(
+      {
+        error:
+          "La justificación de una orden cancelada no se borra: es lo único que dice por qué " +
+          "no se hizo. Para corregirla, escribí otra: pasa a ser la última y es la que va a la planilla.",
+      },
+      { status: 409 }
+    );
+  }
 
   const { data: borradas, error } = await admin
     .from("ordenes_trabajo_notas")

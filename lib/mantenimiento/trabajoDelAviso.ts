@@ -49,6 +49,7 @@
  */
 
 import { enDiaMes } from "./desestimarAviso";
+import { ESTADO_CANCELADA } from "./cancelacion";
 
 /** Lo que hace falta saber de la orden. Es una proyección chica a propósito. */
 export interface OtDelAviso {
@@ -60,6 +61,8 @@ export interface OtDelAviso {
 export type EstadoDelTrabajo =
   /** La orden está `REALIZADO`. `fecha` puede faltar: son 220 de 2.489. */
   | { tipo: "cerrado"; ot: number; fecha: string | null }
+  /** La orden está `CANCELADA`: cerrada, pero el trabajo no se hizo ni se va a hacer. */
+  | { tipo: "cancelado"; ot: number }
   /** La orden existe y sigue sin cerrarse. `comoSeLlama` es para la pantalla. */
   | { tipo: "abierto"; ot: number; estado: string; comoSeLlama: string }
   /** Hay algo que decir pero no se pudo leer la orden: se muestra el texto crudo. */
@@ -85,6 +88,25 @@ export function estadoDelTrabajo(
     const estado = String(ot.estado ?? "");
     if (estado === "REALIZADO") {
       return { tipo: "cerrado", ot: ot.ot_number, fecha: ot.fecha_cierre ?? null };
+    }
+    // Una cancelada **no es ninguna de las dos**, y por eso vale un tipo propio
+    // en vez de sumarse a cualquiera de los `if` de al lado. Es la decisión de
+    // esta función, porque las dos salidas fáciles mienten en la pantalla de
+    // quien avisó, que es justamente a quien hay que contestarle:
+    //
+    // - Como `cerrado` diría «Cerrada el …» en verde, o sea «tu problema se
+    //   resolvió», sobre un trabajo que nadie hizo ni va a hacer. Es la mentira
+    //   cara, porque el que avisó deja de insistir.
+    // - Como `abierto` lo deja esperando para siempre: lo pinta ámbar entre lo
+    //   pendiente y el filtro «Sin cerrar» se lo sigue mostrando, aunque la
+    //   decisión ya esté tomada y escrita. Es donde caía antes de que
+    //   `CANCELADA` existiera, y es lo que este estado vino a sacar del medio.
+    //
+    // Lo que corresponde es la tercera cosa: se decidió que no se hace. Sin
+    // fecha, porque una cancelada no puede tener `fecha_cierre` —se lo prohíbe
+    // la regla de `cancelacion.ts`— y el porqué vive en las notas de la orden.
+    if (estado === ESTADO_CANCELADA) {
+      return { tipo: "cancelado", ot: ot.ot_number };
     }
     return {
       tipo: "abierto",
@@ -113,7 +135,7 @@ export interface ComoSeMuestra {
   /** El color del estado, listo para un `style` (no una utilidad: ver abajo). */
   color: string;
   /**
-   * El peso de la letra, el mismo para cerrada y abierta: antes una pantalla
+   * El peso de la letra, el mismo para los tres estados: antes una pantalla
    * lo ponía sólo a la abierta y la otra a las dos. Sale de acá para que sea un
    * solo lugar. Va por `style` por la misma razón que el color.
    */
@@ -142,6 +164,15 @@ export interface ComoSeMuestra {
 export function comoSeMuestraElTrabajo(t: EstadoDelTrabajo): ComoSeMuestra | null {
   if (t.tipo === "cerrado") {
     return { texto: t.fecha ? `Cerrada el ${enDiaMes(t.fecha)}` : "Cerrada", color: "#15803D", peso: PESO };
+  }
+  // Ni el verde de lo hecho ni el ámbar de lo pendiente: el gris que el módulo
+  // ya usa para este estado (`DashboardClient`, `MantenimientosClient`). Dice
+  // que el asunto está cerrado sin decir que el trabajo se hizo, que es
+  // exactamente lo que pasó. El motivo está en las notas de la orden; acá no
+  // entra porque esta función la comparten dos listas y un renglón de lista no
+  // es donde se lee un párrafo.
+  if (t.tipo === "cancelado") {
+    return { texto: "Cancelada", color: "#475569", peso: PESO };
   }
   if (t.tipo === "abierto") {
     return {

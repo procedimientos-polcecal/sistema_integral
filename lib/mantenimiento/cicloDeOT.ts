@@ -43,6 +43,7 @@
  */
 
 import { comoSeLee, sumarDias } from "@/lib/core/fechas";
+import { ESTADO_CANCELADA } from "@/lib/mantenimiento/cancelacion";
 
 export interface CicloParaDecidir {
   id: string;
@@ -131,11 +132,26 @@ export function queSigueEnElCiclo(
     return crearLaSiguiente(ciclo, ciclo.vuelta_desde, ciclo.desde);
   }
 
-  if (ultima.estado === "SUSPENDIDA") {
+  // Decía `SUSPENDIDA`, que salió del vocabulario el 16/11/2026 cuando
+  // `CANCELADA` lo reemplazó: la rama quedó muerta y una cancelada caía en el
+  // `esperar` de abajo, o sea que el ciclo se quedaba esperando para siempre
+  // una orden que ya nadie iba a hacer. Es la trampa exacta que este estado
+  // vino a cerrar, entrando por el único lugar que no la miraba.
+  //
+  // **Trabado y no «crear la siguiente»**, aunque cancelada sea cerrada: de
+  // una cancelación no sale ninguna fecha desde la cual contar los días —la
+  // regla le prohíbe tener `fecha_cierre`— y, sobre todo, nadie dijo que el
+  // ciclo deba seguir. Cancelar una vuelta es un juicio sobre esa orden; si el
+  // ciclo sigue o no lo decide una persona, con el botón de reinicio.
+  //
+  // La que cancela el **propio** reinicio no llega acá: esa ruta le limpia el
+  // `ciclo_id`, y lo que entra a esta función son las OT de este ciclo. Lo que
+  // esta rama atrapa es una cancelación hecha a mano desde la pantalla de la OT.
+  if (ultima.estado === ESTADO_CANCELADA) {
     return {
       que: "trabado",
       porque:
-        `La OT ${ultima.ot_number} del ciclo está suspendida, así que no se ` +
+        `La OT ${ultima.ot_number} del ciclo está cancelada, así que no se ` +
         `sabe si había que seguir. Se destraba reiniciando el ciclo desde la ` +
         `ficha del equipo.`,
     };

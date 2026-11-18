@@ -32,17 +32,17 @@ describe("la ventana de OT que se ofrece para enlazar", () => {
   it("son 90 dias, y las abiertas entran sea cual sea su fecha", () => {
     expect(DIAS_DE_VENTANA_DE_OT).toBe(90);
     // 30/10 menos 90 dias es el 1/8.
-    expect(filtroDeVentanaDeOt("2026-10-30")).toBe("fecha.gte.2026-08-01,estado.neq.REALIZADO");
+    expect(filtroDeVentanaDeOt("2026-10-30")).toBe("fecha.gte.2026-08-01,estado.not.in.(REALIZADO,CANCELADA)");
   });
 
   it("el corte se mueve con los dias que se pidan", () => {
-    expect(filtroDeVentanaDeOt("2026-10-30", 30)).toBe("fecha.gte.2026-09-30,estado.neq.REALIZADO");
+    expect(filtroDeVentanaDeOt("2026-10-30", 30)).toBe("fecha.gte.2026-09-30,estado.not.in.(REALIZADO,CANCELADA)");
   });
 
   it("otsParaEnlazar le pasa ese filtro a la base", async () => {
     const { admin, llamadas } = clienteFalso([ot(2929, "2026-10-29")], []);
     await otsParaEnlazar(admin, "2026-10-30");
-    expect(llamadas.or).toEqual(["fecha.gte.2026-08-01,estado.neq.REALIZADO"]);
+    expect(llamadas.or).toEqual(["fecha.gte.2026-08-01,estado.not.in.(REALIZADO,CANCELADA)"]);
   });
 
   it("una OT ya enlazada que cae fuera de la ventana se agrega, y la lista sale de la mas nueva a la mas vieja", async () => {

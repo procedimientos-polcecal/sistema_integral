@@ -572,16 +572,53 @@ export async function exportarLoPendiente(
 async function anotarLasDivergencias(
   admin: ReturnType<typeof createAdminClient>,
   deLaPlanilla: readonly OrdenLeida[]
-): Promise<{ cuantas: number; recortadas: number; error: string | null }> {
-  const vacio = { cuantas: 0, recortadas: 0 };
+): Promise<{
+  cuantas: number;
+  recortadas: number;
+  error: string | null;
+  /** Por qué no pudo correr la revisión de canceladas sin motivo; null si corrió. */
+  sinRevisarCanceladas: string | null;
+}> {
+  const vacio = { cuantas: 0, recortadas: 0, sinRevisarCanceladas: null };
   try {
     // `traerTodo` porque son 2.300 y PostgREST corta en 1.000 sin avisar.
-    const delSistema = await traerTodo<OrdenDelSistema>((desde, hasta) =>
+    const delSistema = await traerTodo<OrdenDelSistema & { id: string }>((desde, hasta) =>
       admin
         .from("ordenes_trabajo")
-        .select("ot_number, sector_raw, equipo_raw, especialidad, tipo, quien, descripcion, fecha_ejecucion, fecha_cierre, estado, contratista, horas, operario_1, operario_2, operario_3, prioridad, sheets_pendiente, fecha_ejecucion_pendiente")
+        .select("id, ot_number, sector_raw, equipo_raw, especialidad, tipo, quien, descripcion, fecha_ejecucion, fecha_cierre, estado, contratista, horas, operario_1, operario_2, operario_3, prioridad, sheets_pendiente, fecha_ejecucion_pendiente")
         .range(desde, hasta)
     );
+
+    // Qué órdenes tienen alguna nota, para detectar las canceladas sin motivo.
+    // Va aparte y no como embed de la consulta de arriba por lo mismo que
+    // explica `ordenes/justificadas/route.ts`: un embed ataría las órdenes a que
+    // la tabla exista. Con `traerTodo` y no `.in()` porque no hay ids que
+    // acotar y las notas sólo crecen (25 hoy). Si falla, `tiene_nota` queda sin
+    // definir y el detector calla: se pierde un aviso, no la sincronización.
+    // Esa pérdida **antes era invisible** —un detector que deja de mirar no se
+    // distingue de uno que no encuentra nada— y ahora no lo es: el motivo sale
+    // en `canceladas_sin_revisar` del resultado. No se reusa `error`, que
+    // quiere decir «no se pudo anotar nada»: acá el contraste sí corrió y sólo
+    // faltó esta revisión, y mezclarlos haría parecer total un fallo parcial.
+    let sinRevisarCanceladas: string | null = null;
+    try {
+      // El `.order()` no es decorativo aunque hoy no cambie nada: un `.range()`
+      // sin orden deja que la base devuelva las filas como quiera, y dos tandas
+      // con órdenes distintos pueden saltearse una. Con 25 notas no hay segunda
+      // tanda, pero pasadas las 1.000 una nota salteada se convierte en una
+      // «cancelada sin motivo» que nadie escribió — un falso positivo en el
+      // único detector que se construyó para no tener ninguno, y que por eso
+      // se mira. `orden_id` solo alcanza: los empates quedan pegados, así que
+      // una fila que se saltee entre sus iguales no le saca el id al conjunto.
+      const conNota = new Set(
+        (await traerTodo<{ orden_id: string }>((desde, hasta) =>
+          admin.from("ordenes_trabajo_notas").select("orden_id").order("orden_id").range(desde, hasta)
+        )).map((n) => n.orden_id)
+      );
+      for (const o of delSistema) o.tiene_nota = conNota.has(o.id);
+    } catch (e) {
+      sinRevisarCanceladas = e instanceof Error ? e.message : String(e);
+    }
 
     const { filas, total, recortadas } = loQueSeGuardaDelContraste(
       contrastar(delSistema, deLaPlanilla)
@@ -597,7 +634,7 @@ async function anotarLasDivergencias(
       if (alta.error) return { ...vacio, error: alta.error.message };
     }
 
-    return { cuantas: total, recortadas, error: null };
+    return { cuantas: total, recortadas, error: null, sinRevisarCanceladas };
   } catch (e) {
     return { ...vacio, error: e instanceof Error ? e.message : String(e) };
   }
@@ -922,6 +959,11 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     // Un fallo acá no frena la corrida —anotar es secundario, importar no—, así
     // que se dice. Mientras la migración no esté corrida, esto dice por qué.
     ...(divergencias.error ? { divergencias_sin_anotar: divergencias.error } : {}),
+    // Distinto del anterior: el contraste corrió entero, sólo no pudo buscar
+    // las canceladas sin motivo. Si aparece, ese detector está apagado.
+    ...(divergencias.sinRevisarCanceladas
+      ? { canceladas_sin_revisar: divergencias.sinRevisarCanceladas }
+      : {}),
     // Las órdenes entraron, pero esta corrida no trajo `fecha_fin`: la lectura
     // falló por algo que no es la migración sin correr.
     ...(fechaFinSinImportar ? { fecha_fin_sin_importar: fechaFinSinImportar } : {}),
