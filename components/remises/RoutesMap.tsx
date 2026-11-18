@@ -65,7 +65,13 @@ export default function RoutesMap({
         layersRef.current.push(l);
       } else if (puntos.length > 0) {
         const secuencia = hoja.tipo === "ida" ? [...puntos, fabrica] : [fabrica, ...puntos];
-        const l = L.polyline(secuencia.map((p) => [p.lat!, p.lng!]), { color, weight: 4, opacity: 0.7, dashArray: hoja.tipo === "ida" ? "8,4" : undefined }).addTo(map);
+        // El `as [number, number]` es el mismo que ya tiene su gemela de arriba:
+        // Leaflet pide una tupla de dos y de un `.map()` sale un `number[]`, que
+        // no es lo mismo. TypeScript 5 y 6 lo dejan pasar por inferencia
+        // contextual, así que esto no arregla nada hoy — lo escribe igual
+        // porque TypeScript 7 lo rechaza, y porque dos líneas que hacen lo
+        // mismo conviene que se escriban igual.
+        const l = L.polyline(secuencia.map((p) => [p.lat!, p.lng!] as [number, number]), { color, weight: 4, opacity: 0.7, dashArray: hoja.tipo === "ida" ? "8,4" : undefined }).addTo(map);
         layersRef.current.push(l);
       }
 

@@ -1,4 +1,20 @@
-import webpush from "web-push";
+/*
+ * **El `* as` no es cosmético y no se vuelve a poner `import webpush from`.**
+ *
+ * `web-push` 4 es ESM puro y **no tiene default export** —`src/index.js`
+ * exporta cada función por nombre—, así que el import por defecto que había
+ * acá hasta el 18/11/2026 deja `webpush` en `undefined` y la primera llamada
+ * revienta. Medido antes de cambiarlo, con la versión 4 ya instalada:
+ * `import webpush from "web-push"` falla con «does not provide an export
+ * named 'default'».
+ *
+ * Lo que lo vuelve peligroso es que **ningún test de este repo lo atrapa**: los
+ * tres que tocan notificaciones mockean `web-push` entero, justamente porque lo
+ * que quieren probar es a quién se le manda y qué dice. Un push que no sale no
+ * rompe ninguna pantalla ni devuelve ningún error a nadie: simplemente no
+ * llega, y eso se descubre cuando alguien pregunta por qué no le avisaron.
+ */
+import * as webpush from "web-push";
 
 /**
  * El envío de una notificación Web Push.
