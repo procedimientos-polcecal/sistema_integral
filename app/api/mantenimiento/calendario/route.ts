@@ -20,7 +20,7 @@ import {
  * El calendario de selección: un mes (o el rango que pida la grilla) de órdenes
  * de trabajo, día por día, con cuánta gente del taller hay cada uno.
  *
- * Lo abre quien elige la fecha de ejecución de una OT, para ver qué tiene cada
+ * Lo abre quien elige la fecha de inicio de una OT, para ver qué tiene cada
  * día antes de decidir. Muestra órdenes y no eventos de la agenda, y no filtra
  * por estado: ver el trabajo que hay, cerrado o no, es lo que sirve para decidir
  * dónde poner el siguiente.
