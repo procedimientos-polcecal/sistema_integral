@@ -64,6 +64,10 @@
       "schedule": "30 11 * * *"
     },
     {
+      "path": "/api/cron/avisos-al-instante",
+      "schedule": "11,26,41,56 10-23 * * *"
+    },
+    {
       "path": "/api/cron/remises-notificaciones",
       "schedule": "0 22 * * *"
     },

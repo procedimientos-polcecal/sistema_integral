@@ -40,16 +40,16 @@ export interface ConteosParaAvisos {
  * la planilla no es decorativo: el stock sale de las fórmulas de allá, así que
  * la próxima sincronización lo revierte.
  */
-const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href: string }[] = [
-  { clave: "rrhhSinClasificar", id: "rrhh-sin-clasificar", titulo: "Ausencias sin clasificar", href: "/rrhh/asistencia?tab=dia" },
-  { clave: "mantenimientoAtrasadas", id: "mant-atrasadas", titulo: "Órdenes de trabajo atrasadas", href: "/mantenimiento/ordenes?estado=ATRASADO" },
+const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href: string; modulo: Modulo | null }[] = [
+  { clave: "rrhhSinClasificar", id: "rrhh-sin-clasificar", titulo: "Ausencias sin clasificar", modulo: "rrhh", href: "/rrhh/asistencia?tab=dia" },
+  { clave: "mantenimientoAtrasadas", id: "mant-atrasadas", titulo: "Órdenes de trabajo atrasadas", modulo: "mantenimiento", href: "/mantenimiento/ordenes?estado=ATRASADO" },
   // Órdenes en las que el sistema y la planilla dicen cosas distintas. La
   // tabla se rehace en cada sincronización, así que su tamaño es la
   // divergencia de hoy y no un acumulado: lo que se arregla desaparece solo.
-  { clave: "mantenimientoDivergencias", id: "mant-divergencias", titulo: "Órdenes que dicen distinto en el sistema y en la planilla", href: "/mantenimiento/ordenes" },
-  { clave: "comprasEsperandoAprobacion", id: "compras-por-aprobar", titulo: "Requerimientos esperando aprobación", href: "/compras/aprobaciones" },
-  { clave: "inventarioSinPlanilla", id: "inv-sin-planilla", titulo: "Movimientos que no llegaron a la planilla", href: "/inventario/movimientos" },
-  { clave: "produccionSinPlanilla", id: "produccion-sin-planilla", titulo: "Partes de producción que no llegaron a la planilla", href: "/produccion" },
+  { clave: "mantenimientoDivergencias", id: "mant-divergencias", titulo: "Órdenes que dicen distinto en el sistema y en la planilla", modulo: "mantenimiento", href: "/mantenimiento/ordenes" },
+  { clave: "comprasEsperandoAprobacion", id: "compras-por-aprobar", titulo: "Requerimientos esperando aprobación", modulo: "compras", href: "/compras/aprobaciones" },
+  { clave: "inventarioSinPlanilla", id: "inv-sin-planilla", titulo: "Movimientos que no llegaron a la planilla", modulo: "inventario", href: "/inventario/movimientos" },
+  { clave: "produccionSinPlanilla", id: "produccion-sin-planilla", titulo: "Partes de producción que no llegaron a la planilla", modulo: "produccion", href: "/produccion" },
   /*
    * Una orden sin cerrar es un camión que se fue sin que nadie marcara la
    * salida. No es sólo un dato faltante: el espejo escribe **al cerrar**, así
@@ -57,11 +57,11 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * quien no entra al sistema. Se avisa de las de días anteriores y no de las de
    * hoy, que están abiertas porque el camión está ahí.
    */
-  { clave: "despachoAbiertas", id: "despacho-sin-cerrar", titulo: "Órdenes de carga sin cerrar de días anteriores", href: "/despacho" },
-  { clave: "despachoSinPlanilla", id: "despacho-sin-planilla", titulo: "Órdenes de carga que no llegaron a la planilla", href: "/despacho/ordenes" },
-  { clave: "facturacionSinVincular", id: "facturacion-sin-vincular", titulo: "Facturas en el buzón sin vincular a una compra", href: "/facturacion?estado=recibida" },
-  { clave: "canteraSinConciliar", id: "cantera-sin-conciliar", titulo: "Registros de cantera con factura sin conciliar o a revisar", href: "/cantera/registros" },
-  { clave: "calidadEnvasesSinPlanilla", id: "calidad-envases-sin-planilla", titulo: "Movimientos de envases que no llegaron a la planilla", href: "/calidad/envases/movimientos" },
+  { clave: "despachoAbiertas", id: "despacho-sin-cerrar", titulo: "Órdenes de carga sin cerrar de días anteriores", modulo: "despacho", href: "/despacho" },
+  { clave: "despachoSinPlanilla", id: "despacho-sin-planilla", titulo: "Órdenes de carga que no llegaron a la planilla", modulo: "despacho", href: "/despacho/ordenes" },
+  { clave: "facturacionSinVincular", id: "facturacion-sin-vincular", titulo: "Facturas en el buzón sin vincular a una compra", modulo: "facturacion", href: "/facturacion?estado=recibida" },
+  { clave: "canteraSinConciliar", id: "cantera-sin-conciliar", titulo: "Registros de cantera con factura sin conciliar o a revisar", modulo: "cantera", href: "/cantera/registros" },
+  { clave: "calidadEnvasesSinPlanilla", id: "calidad-envases-sin-planilla", titulo: "Movimientos de envases que no llegaron a la planilla", modulo: "calidad", href: "/calidad/envases/movimientos" },
   /*
    * En carbonilla manda la planilla, y desde el 23/10/2026 una fila que cambió
    * se relee sola. Lo que queda en la bandeja es lo que el SdG **no puede**
@@ -75,8 +75,8 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * supo porque alguien preguntó. Un tablero que hay que acordarse de abrir no
    * es un tablero: por eso esto va al resumen diario, que llega solo.
    */
-  { clave: "calidadCarbonillaBandeja", id: "calidad-carbonilla-bandeja", titulo: "Filas de la planilla de carbonilla que el sistema no pudo leer", href: "/calidad/carbonilla" },
-  { clave: "tallerVialSinEquipo", id: "taller-vial-sin-equipo", titulo: "Cargas de combustible sin un equipo reconocido", href: "/taller-vial/cargas" },
+  { clave: "calidadCarbonillaBandeja", id: "calidad-carbonilla-bandeja", titulo: "Filas de la planilla de carbonilla que el sistema no pudo leer", modulo: "calidad", href: "/calidad/carbonilla" },
+  { clave: "tallerVialSinEquipo", id: "taller-vial-sin-equipo", titulo: "Cargas de combustible sin un equipo reconocido", modulo: "taller_vial", href: "/taller-vial/cargas" },
   /*
    * Reemplaza a "service de 250 hs vencido" y "service por vencer", que medían
    * una tabla con **un solo service** en todo el sistema y por lo tanto sólo
@@ -89,9 +89,9 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * más coinciden con nada. Reusar uno sería peor: a quien lo había descartado
    * le llegaría ya silenciado un aviso que nunca vio.
    */
-  { clave: "tallerVialSinService", id: "taller-vial-sin-service", titulo: "Equipos sin ningún service registrado", href: "/taller-vial/services" },
-  { clave: "trituracionSinPlanilla", id: "trituracion-sin-planilla", titulo: "Partes de trituración sin exportar a la planilla", href: "/trituracion/partes" },
-  { clave: "syhVencidas", id: "syh-vencidas", titulo: "Condiciones inseguras vencidas", href: "/seguridad-higiene/condiciones?estado=Vencida" },
+  { clave: "tallerVialSinService", id: "taller-vial-sin-service", titulo: "Equipos sin ningún service registrado", modulo: "taller_vial", href: "/taller-vial/services" },
+  { clave: "trituracionSinPlanilla", id: "trituracion-sin-planilla", titulo: "Partes de trituración sin exportar a la planilla", modulo: "trituracion", href: "/trituracion/partes" },
+  { clave: "syhVencidas", id: "syh-vencidas", titulo: "Condiciones inseguras vencidas", modulo: "seguridad_higiene", href: "/seguridad-higiene/condiciones?estado=Vencida" },
   /*
    * Es **un** aviso y no tres («sin evaluar», «sin asignar», «sin lugar»), a
    * propósito. Una condición a la que le pusieron los cinco puntajes pero
@@ -105,7 +105,7 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * `alguna`) y son lo que hacen los botones del encabezado de esa pantalla: lo
    * ata `lib/seguridadHigiene/filtrosUrl.test.ts`.
    */
-  { clave: "syhSinCompletar", id: "syh-sin-completar", titulo: "Condiciones inseguras sin completar", href: "/seguridad-higiene/condiciones?estado=abierta&falta=alguna" },
+  { clave: "syhSinCompletar", id: "syh-sin-completar", titulo: "Condiciones inseguras sin completar", modulo: "seguridad_higiene", href: "/seguridad-higiene/condiciones?estado=abierta&falta=alguna" },
   /*
    * La foto que lleva más de tres días sin copia en Drive: el respaldo está
    * **atascado**, que no es lo mismo que «todavía no corrió el cron».
@@ -122,7 +122,7 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * las fotos de ayer, que el cron de esta noche todavía no alcanzó. La cuenta
    * está en `corteDeFotosAtascadas`, que tiene su test.
    */
-  { clave: "syhFotosSinRespaldar", id: "syh-fotos-sin-respaldar", titulo: "Fotos de condiciones inseguras sin copia de respaldo en Drive", href: "/seguridad-higiene" },
+  { clave: "syhFotosSinRespaldar", id: "syh-fotos-sin-respaldar", titulo: "Fotos de condiciones inseguras sin copia de respaldo en Drive", modulo: "seguridad_higiene", href: "/seguridad-higiene" },
   /*
    * LA AGENDA.
    *
@@ -151,7 +151,7 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * diciendo cosas parecidas es exactamente lo que la campana y el push evitan
    * al salir de una sola función.
    */
-  { clave: "agendaDivergencias", id: "agenda-divergencias", titulo: "Eventos del calendario que alguien cambió desde Google", href: "/agenda" },
+  { clave: "agendaDivergencias", id: "agenda-divergencias", titulo: "Eventos del calendario que alguien cambió desde Google", modulo: null, href: "/agenda" },
   /*
    * LA MENSAJERÍA: las menciones que a alguien le quedaron sin leer. Es de quien
    * mira, como `agenda-divergencias`, y tampoco se gatea por módulo: una mención
@@ -166,7 +166,7 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
    * sale al mencionar; esto es el stock que queda hasta que se lee. No pasa por
    * `avisarAQuienDecide()`: una mención no frena nada hasta que alguien decida.
    */
-  { clave: "mensajesMencionesSinLeer", id: "mensajes-menciones-sin-leer", titulo: "Menciones sin leer en conversaciones del sistema", href: "/mis-menciones" },
+  { clave: "mensajesMencionesSinLeer", id: "mensajes-menciones-sin-leer", titulo: "Menciones sin leer en conversaciones del sistema", modulo: null, href: "/mis-menciones" },
 ];
 
 /**
@@ -189,6 +189,25 @@ const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href
  * y enseñarle al cron del resumen a leerla.
  */
 export const ES_POR_PERSONA: ReadonlySet<string> = new Set(["agenda-divergencias", "mensajes-menciones-sin-leer"]);
+
+/**
+ * De qué módulo es cada aviso, por id.
+ *
+ * `null` es **transversal y no un olvido**: la Agenda y la mensajería no están
+ * en `MODULOS_ORDEN` y las ve cualquiera con sesión. Son exactamente las dos de
+ * `ES_POR_PERSONA`, y `lib/home/moduloDelAviso.test.ts` fija ese invariante:
+ * toda entrada declara su módulo salvo las que son de una persona.
+ *
+ * **Este mapa no son todos los avisos que circulan, y creerlo costó una fuga.**
+ * Tiene sólo las entradas de `AVISOS`; los ids que se arman en el momento
+ * —`ritmo-`, `salud-` y `mant-ciclo-sospechoso-`— no están acá y no pueden
+ * estar. Quien decide su módulo es `moduloDelAviso`, por prefijo, y hay un
+ * segundo test que lee **este archivo** para que un productor dinámico nuevo
+ * no se cuele sin declararlo.
+ */
+export const MODULO_POR_AVISO: ReadonlyMap<string, Modulo | null> = new Map(
+  AVISOS.map((a) => [a.id, a.modulo])
+);
 
 export function avisosDeConteos(conteos: Partial<ConteosParaAvisos>): Notificacion[] {
   return AVISOS.flatMap(({ clave, id, titulo, href }) => {

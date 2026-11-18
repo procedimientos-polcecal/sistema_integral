@@ -3390,13 +3390,24 @@ Eso contesta «¿alguien lo tomó?» y deja sin contestar la que importa:
 aviso cuya orden se cerró hace tres semanas que para uno cuya orden está
 atrasada desde diciembre.
 
-**Lo primero, para quien lo retome: la migración `20261117090055` todavía no
-está aplicada y el relleno (`scripts/rellenar-el-enlace-de-avisos.mts`) todavía
-no se corrió.** Todo lo que sigue describe el estado al que se llega cuando las
-dos cosas estén hechas: hoy `ot_resuelta_en` no existe en la base, el grupo de
-los 182 sigue siendo texto en `ot_asignada` y las dos listas muestran el estado
-sólo de los 39 avisos que ya tenían `work_order_id`. El orden es migración,
-relleno, y recién después la primera sincronización con este código.
+**Anda desde el 17/11/2026, y el relleno nunca hizo falta.** Se aplicó la
+migración y **la primera sincronización enlazó sola los 182**: los 182 sellos
+de `ot_resuelta_en` tienen todos la misma marca de tiempo, 12:51 del 17/11
+UTC, que es la corrida `mantenimiento/avisos · ok=true · filas=239`. El script
+`scripts/rellenar-el-enlace-de-avisos.mts` se corrió en seco después y dio
+**0 para enlazar**: la resolución y el relleno deciden con la misma función
+—`loQueHayQueReenlazar`—, así que el que llegue primero deja al otro sin
+trabajo, y el que llega primero es siempre la sincronización, que corre cada
+diez minutos. El script queda igual: es el camino de vuelta si alguna vez hay
+que rehacerlo de una, y es idempotente.
+
+Medido el 18/11/2026 con las funciones de la pantalla sobre los datos de
+producción, que es lo que se ve al abrir la lista: de **244** avisos, 210
+dicen «Cerrada», **11 tienen el trabajo todavía abierto** —4 «Atrasada» en
+rojo, 4 «Por hacer» y 3 «En proceso» en ámbar—, 13 no tienen orden y 10
+muestran el texto crudo porque no es un número (`-`, `Revision`, `RI 1888`).
+Los 11 son el pedido original: hasta acá la lista decía «OT #2814» igual para
+una orden cerrada en julio que para la **A10 → OT #902**, que sigue abierta.
 
 El diseño está en
 [el spec](superpowers/specs/2026-11-16-avisos-el-estado-del-trabajo-design.md)
