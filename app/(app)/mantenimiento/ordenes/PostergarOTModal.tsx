@@ -15,7 +15,7 @@ interface Razon {
 }
 
 /**
- * Correrle la fecha de ejecución a una orden.
+ * Correrle la fecha de inicio a una orden.
  *
  * ── LA JUSTIFICACIÓN ES OBLIGATORIA Y NO HAY CAMINO QUE LA ESQUIVE ──────────
  *

@@ -620,11 +620,11 @@ export default function OrdenesClient({
           </div>
 
           {/* El rango va en su propia fila: son tres controles que se leen
-              juntos como una frase —"fecha de ejecución, del 1 al 31"— y
+              juntos como una frase —"fecha de inicio, del 1 al 31"— y
               mezclados entre los desplegables se pierden.
 
               Cuál de las tres fechas se pregunta primero, porque cambia la
-              respuesta: "las de agosto" da 180 por emisión y 195 por ejecución.
+              respuesta: "las de agosto" da 180 por creación y 195 por inicio.
               El `max` y el `min` cruzados son lo que evita el rango al revés,
               que devuelve cero y no dice por qué. */}
           <div className={`${filtrosAbiertos ? "flex" : "hidden"} sm:flex flex-wrap items-center gap-2`}>
@@ -789,7 +789,7 @@ export default function OrdenesClient({
                           </span>
                         )}
                         {/* Las dos fechas que se miran de un vistazo: cuándo se
-                            emitió la orden y cuándo se hace. La de ejecución es
+                            creó la orden y cuándo se hace. La de inicio es
                             la que más se busca —es la que contesta "¿cuándo
                             toca?"— y estaba sólo adentro del detalle, así que
                             averiguarla era abrir las órdenes de a una.
@@ -799,14 +799,14 @@ export default function OrdenesClient({
                             alineadas a la derecha para que los días queden en
                             columna aunque los rótulos midan distinto. */}
                         <span
-                          title="Fecha de la orden y fecha de inicio"
+                          title="Fecha de creación y fecha de inicio"
                           className="shrink-0 hidden md:block text-right leading-tight tabular-nums"
                         >
                           <span className="block text-xs text-slate-400 whitespace-nowrap">
-                            <span className="text-slate-300">Orden</span> {fechaDeLaOT(o.fecha) ?? "—"}
+                            <span className="text-slate-300">Creación</span> {fechaDeLaOT(o.fecha) ?? "—"}
                           </span>
                           <span className="block text-xs text-slate-400 whitespace-nowrap">
-                            <span className="text-slate-300">Ejec.</span> {fechaDeLaOT(o.fecha_ejecucion) ?? "—"}
+                            <span className="text-slate-300">Inicio</span> {fechaDeLaOT(o.fecha_ejecucion) ?? "—"}
                           </span>
                         </span>
                         <svg className={`w-4 h-4 text-slate-300 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
@@ -823,13 +823,21 @@ export default function OrdenesClient({
                           26/10/2026". Metidas ahí, la fecha que se busca se
                           cortaba justo en las órdenes abiertas, que son las
                           únicas que llevan ese cartel. A lo ancho sobran: las
-                          dos juntas miden 195 de 310.
+                          dos juntas medían 195 de 310.
+                          Los rótulos cambiaron el 18/11/2026 —"Orden" y
+                          "Ejec." pasaron a "Creación" e "Inicio", que es como
+                          se llaman ahora en la planilla y en el filtro— y eso
+                          son cuatro caracteres más. No se volvió a medir en el
+                          teléfono: a 5,6 px por carácter, que es lo que dan
+                          los 195 px de los 35 caracteres de antes, la línea
+                          queda en ~217 de 310. Entra, pero el margen pasó de
+                          115 px a ~93.
                           En `md:` desaparece, porque ahí las muestra la
                           columna de la derecha. */}
                       <p className="md:hidden mt-1.5 text-xs text-slate-400 tabular-nums whitespace-nowrap">
-                        <span className="text-slate-300">Orden</span> {fechaDeLaOT(o.fecha) ?? "—"}
+                        <span className="text-slate-300">Creación</span> {fechaDeLaOT(o.fecha) ?? "—"}
                         {" · "}
-                        <span className="text-slate-300">Ejec.</span> {fechaDeLaOT(o.fecha_ejecucion) ?? "—"}
+                        <span className="text-slate-300">Inicio</span> {fechaDeLaOT(o.fecha_ejecucion) ?? "—"}
                       </p>
                     </button>
                     {isOpen && (
@@ -1056,7 +1064,7 @@ function OTDetail({
         <D label="Operarios"       value={[o.operario_1, o.operario_2, o.operario_3].filter(Boolean).join(", ") || null} />
         <D label="Repuesto"        value={o.repuesto} />
         <D label="Fecha de inicio" value={fechaDeLaOT(o.fecha_ejecucion)} />
-        <D label="Fecha cierre"    value={fechaDeLaOT(o.fecha_cierre)} />
+        <D label="Fecha de cierre" value={fechaDeLaOT(o.fecha_cierre)} />
         {o.app_created && <D label="Origen" value="Creada desde la app" />}
       </div>
 
@@ -1066,7 +1074,8 @@ function OTDetail({
           va a la pestaña OT a corregirlo. Hacer eso no deja nada: esas
           columnas son derrame de un IMPORTRANGE y se revierten solas, sin
           error y sin aviso. Eso fue lo que el 26/10/2026 dio vuelta dos veces
-          la fecha de ejecución de la 2896 y la 2897.
+          la fecha de inicio —la J, que entonces se llamaba «FECHA DE
+          EJECUCIÓN»— de la 2896 y la 2897.
           La frase se arma con la lista de `ordenes.ts`, que está pegada al
           mapa de columnas y tiene un test que no deja que se despeguen. */}
       <p className="text-xs text-slate-400">
@@ -1147,7 +1156,7 @@ function OTDetail({
         </button>
 
         {/* ── POSTERGAR, Y POR QUÉ SÓLO EN ALGUNAS ──────────────────────────
-            La fecha de ejecución de una OT del formulario vive en la pestaña
+            La fecha de inicio de una OT del formulario vive en la pestaña
             que maneja Google Forms, y escribir ahí corre las filas de las
             demás — es lo que dejó el registro de la OT 2796 pegado a la 2798
             el 16/10/2026. Las que creó el SdG tienen su fila en «Altas del
@@ -1169,7 +1178,7 @@ function OTDetail({
         )}
 
         {/* ── AL CALENDARIO ─────────────────────────────────────────────────
-            Sin fecha de ejecución no hay día para el evento, así que el botón
+            Sin fecha de inicio no hay día para el evento, así que el botón
             queda deshabilitado **diciendo por qué**: uno gris sin explicación
             no se distingue de uno roto. La fecha que cuenta es la pendiente
             cuando la hay (`fechaParaElCalendario`), la misma que usa el
@@ -1195,7 +1204,7 @@ function OTDetail({
                 Mandar al calendario
               </button>
               <span className="text-xs text-slate-400">
-                No se puede mandar al calendario: la orden no tiene fecha de ejecución.
+                No se puede mandar al calendario: la orden no tiene fecha de inicio.
               </span>
             </>
           )

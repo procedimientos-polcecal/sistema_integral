@@ -98,17 +98,26 @@ export const PRIORIDADES_DE_OT = ["🟠 Alta", "🟡 Media", "🟢 Baja"] as con
 /**
  * Sobre qué fecha corre el rango.
  *
- * Una orden tiene tres y no son la misma pregunta: **cuándo se emitió**
+ * Una orden tiene tres y no son la misma pregunta: **cuándo se creó**
  * (`fecha`), **cuándo se hizo o se va a hacer** (`fecha_ejecucion`) y **cuándo
  * se cerró** (`fecha_cierre`). Las tres están cargadas —1.818, 1.818 y 1.566 de
  * 1.819— y elegir una por nosotros sería contestar otra cosa: "las de agosto"
- * da 180 por emisión y 195 por ejecución, y quien pregunta sabe cuál quiere.
+ * da 180 por creación y 195 por inicio, y quien pregunta sabe cuál quiere.
  *
  * El default es `fecha`, que es la que la tabla muestra y la más completa.
+ *
+ * **Los rótulos cambiaron el 18/11/2026 y las columnas no.** La planilla pasó
+ * a llamar «FECHA DE INICIO» a la J —que decía «FECHA DE EJECUCIÓN»— y acá se
+ * emparejó la pantalla, incluida la primera, que se decía «fecha de la orden»
+ * y ahora dice de creación. Los valores (`""`, `fecha_ejecucion`,
+ * `fecha_cierre`) son los mismos a propósito: viajan en la URL del listado y
+ * en los filtros guardados, así que renombrarlos rompería los enlaces que
+ * alguien ya tiene anotados, y la columna de la base sigue llamándose
+ * `fecha_ejecucion`.
  */
 export const CAMPOS_DE_FECHA = [
-  ["", "Fecha de la orden"],
-  ["fecha_ejecucion", "Fecha de ejecución"],
+  ["", "Fecha de creación"],
+  ["fecha_ejecucion", "Fecha de inicio"],
   ["fecha_cierre", "Fecha de cierre"],
 ] as const;
 

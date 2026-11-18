@@ -163,7 +163,7 @@ toque.
 Se llama `ORDEN DE TRABAJO`, la pestaña `OT`, y tenía 1.728 órdenes al portarla.
 Sus columnas coinciden con lo que leía el código de origen:
 
-`A N° OT · B fecha · C sector · D equipo · E especialidad · F tipo · G quién ·
+`A N° OT · B fecha (la de creación) · C sector · D equipo · E especialidad · F tipo · G quién ·
 H descripción · I repuesto · J inicio · K cierre · L (calculada) · M estado ·
 N contratista · O horas · P/Q/R operarios · S prioridad · T frecuencia ·
 U próxima fecha · V fotos · W observaciones · X observación previa ·
@@ -204,10 +204,62 @@ Tres cosas que no se deducen del código:
   `Altas del sistema`—, cargar la fecha en la app no deja nada del otro lado.
   El par está fijado con un test en `formulario.test.ts`.
 
-Y del lado de la planilla, la Y del master **no es derrame todavía**: nació
-vacía, sin fórmula. Para que traiga lo que cargan las dos pestañas necesita su
-propio `QUERY(IMPORTRANGE(...))` en la `Y2`, con la misma forma que la `S2` y
-—esto es lo que las alinea— el mismo `ORDER BY Col1`.
+Y del lado de la planilla, la Y del master **ya es derrame**: la `Y2` tiene su
+`QUERY(IMPORTRANGE(...))` con el mismo `ORDER BY Col1` que las demás, que es lo
+que las alinea fila por fila.
+
+#### La Y trae la mitad: la misma columna está en dos letras distintas
+
+Medido el 18/11/2026 contra las tres pestañas reales. **La fecha de fin no
+quedó en el mismo lugar en las dos pestañas del libro de respuestas**:
+
+| Pestaña | Dónde quedó `FECHA DE FIN` | Qué hay en la AF |
+|---|---|---|
+| `Respuestas de formulario` | **AG** (la 33) | `Columna 31`, vacía en las 2.273 filas |
+| `Altas del sistema` | **AF** (la 32) | la fecha de fin |
+
+La `Y2` pide `Col32` a las dos, así que de la pestaña del formulario trae la
+columna vacía. El resultado medido: de las **100** fechas cargadas desde el
+SdG llegan **100**, y de las **16** cargadas desde el formulario de Google
+llega **0** — son las OT 2952, 2967 a 2971, 3022, 3038, 3040, 3041, 3057,
+3064, 3072, 3073, 3074 y 3084, que tienen su fecha en el libro de respuestas y
+la Y del master en blanco.
+
+**No lo arregla el código**: el alta del SdG busca la columna por el nombre del
+encabezado, así que escribe bien en la AF sin saber que es la AF, y del otro
+lado no hay nada que leer todavía. Es la fórmula, y hay dos maneras:
+
+1. **Cambiar la `Y2`** para pedirle a cada pestaña su propia columna, que es lo
+   que no se rompe si mañana una de las dos suma un campo:
+
+   ```
+   =QUERY({QUERY(IMPORTRANGE("<url del libro de respuestas>", "Respuestas de formulario!A2:AG10000"), "SELECT Col1, Col33", 0);
+           QUERY(IMPORTRANGE("<url del libro de respuestas>", "Altas del sistema!A2:AF10000"), "SELECT Col1, Col32", 0)},
+          "SELECT Col2 WHERE Col1 IS NOT NULL ORDER BY Col1", 0)
+   ```
+
+2. **Borrar la `Columna 31` de `Respuestas de formulario`**, con lo que la
+   fecha de fin pasa a la AF en las dos y la `Y2` de hoy anda sin tocarla. Esa
+   columna está vacía en las 2.273 filas, así que no se pierde nada — pero es
+   la pestaña que maneja Google Forms, donde mover columnas es justamente lo
+   que dejó el registro de la OT 2796 pegado a la 2798 el 16/10/2026.
+
+Lo que no cambia en ninguno de los dos casos: **el encabezado se busca por su
+nombre y con `trim()`**, y hoy las dos pestañas lo tienen escrito
+`"FECHA DE FIN  "`, con dos espacios al final. Por eso el alta funciona.
+
+#### Y los nombres de la pantalla, emparejados el 18/11/2026
+
+La pantalla de órdenes decía «fecha de ejecución» y «fecha de la orden»
+mientras la planilla ya decía otra cosa. Ahora el filtro, las dos fechas de
+cada fila, el detalle, los cuatro formularios y los errores de postergar dicen
+**fecha de creación** (la B, que en la planilla se llama `FECHA` a secas) y
+**fecha de inicio** (la J).
+
+Lo que **no** cambió, y conviene saberlo antes de buscar: la columna de la base
+sigue siendo `fecha_ejecucion`, y los valores del filtro que viajan en la URL
+—`fecha_ejecucion`, `fecha_cierre`— también, para no romper los enlaces
+guardados. O sea que el nombre viejo sigue vivo en el código a propósito.
 
 **La columna L no es el estado.** Se llama "Column 19" y trae un "Atrasado / al
 día" calculado; el estado está en M. Confundirlas daría por atrasada media

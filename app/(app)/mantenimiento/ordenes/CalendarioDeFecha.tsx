@@ -15,7 +15,7 @@ import type { Oficio } from "@/lib/mantenimiento/programacion";
 import { colorDeEspecialidad, textoSobreLaEspecialidad, LEYENDA_DE_ESPECIALIDADES } from "./coloresDeEspecialidad";
 
 /**
- * El calendario que se abre al elegir la fecha de ejecución de una OT: qué
+ * El calendario que se abre al elegir la fecha de inicio de una OT: qué
  * tiene cada día del mes, para decidir dónde ubicar la próxima orden sin
  * apilar tareas del mismo tipo el mismo día.
  *
@@ -212,7 +212,7 @@ function CalendarioDeFecha({
     // Se abre **encima** de otro formulario (`NuevaOTModal`). Antes iba con
     // `z-[60]` para quedar sobre el panel de abajo; ahora el `Modal` va en un
     // portal a `body` y, al montarse después, queda apilado encima del primero.
-    <Modal titulo="Elegir la fecha de ejecución" alSalir={onCerrar} soloLectura ancho="ancho">
+    <Modal titulo="Elegir la fecha de inicio" alSalir={onCerrar} soloLectura ancho="ancho">
         {/* Los filtros cambian lo que se pinta, no lo que se pidió. */}
         <div className="flex flex-wrap gap-2 pb-2">
           <div className="flex-1 basis-28">

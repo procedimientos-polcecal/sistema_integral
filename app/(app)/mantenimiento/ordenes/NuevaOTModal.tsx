@@ -451,7 +451,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
               de cierre quedaba sola en un segundo renglón. En el teléfono va
               una por renglón, como todo el resto. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <F label="Fecha creación">
+            <F label="Fecha de creación">
               <input type="date" value={form.fecha} onChange={e => f("fecha", e.target.value)} className="input" />
             </F>
             <F label="Fecha de inicio" required>
@@ -492,7 +492,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
             <F label="Fecha de fin (estimada)" required>
               <input type="date" value={form.fecha_fin} min={form.fecha_ejecucion || undefined} onChange={e => f("fecha_fin", e.target.value)} className="input" />
             </F>
-            <F label="Fecha cierre">
+            <F label="Fecha de cierre">
               <input type="date" value={form.fecha_cierre} onChange={e => f("fecha_cierre", e.target.value)} className="input" />
             </F>
           </div>

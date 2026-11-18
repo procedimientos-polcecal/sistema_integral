@@ -4,11 +4,23 @@
  * Se lee por posición de columna, como en el origen y verificado contra la
  * planilla "ORDEN DE TRABAJO", pestaña OT:
  *
- *   A N° OT · B fecha · C sector · D equipo · E especialidad · F tipo ·
- *   G quién lo realiza · H descripción · I repuesto · J ejecución · K cierre ·
- *   L (calculada, se saltea) · M estado · N contratista · O horas ·
- *   P/Q/R operarios · S prioridad · T frecuencia · U próxima fecha ·
- *   V fotos · W observaciones · X observación previa
+ *   A N° OT · B fecha (la de creación) · C sector · D equipo ·
+ *   E especialidad · F tipo · G quién lo realiza · H descripción ·
+ *   I repuesto · J inicio · K cierre · L (calculada, se saltea) · M estado ·
+ *   N contratista · O horas · P/Q/R operarios · S prioridad · T frecuencia ·
+ *   U próxima fecha · V fotos · W observaciones · X observación previa
+ *
+ * **La J se llamaba «FECHA DE EJECUCIÓN» hasta el 18/11/2026 y la clave de la
+ * base sigue siendo `fecha_ejecucion`.** El encabezado de la planilla dice
+ * «FECHA DE INICIO» y la pantalla también; renombrar la columna pediría una
+ * migración y no cambiaría nada de lo que se lee, así que no se hizo. Lo mismo
+ * con la B, que la pantalla llama «fecha de creación»: el encabezado es
+ * «FECHA» a secas.
+ *
+ * **La Y existe en la planilla y acá no**: es la fecha de fin estimada que la
+ * carga quien crea la orden (la real es la K), y de este lado todavía no se
+ * lee ni se guarda — se decidió así el 02/11/2026, cuando se agregó. O sea
+ * que el mapa de abajo llega hasta la X a propósito y no por olvido.
  *
  * La L se llama "Column 19" y trae un "Atrasado / al día" calculado. **No es el
  * estado**: el estado está en M, y confundirlas daría por atrasada media
@@ -101,7 +113,7 @@ export const COLUMNA_OBSERVACION_PREVIA: number = COL.observacionPrevia;
  * derrame la pisa al recalcular. Si entre las dos cosas pasa una
  * sincronización, el sistema toma el valor nuevo y la siguiente lo devuelve al
  * viejo — una fecha que se corrige y se descorrige sola, que es lo que se
- * reportó ese día con la fecha de ejecución de la 2896 y la 2897.
+ * reportó ese día con la fecha de inicio de la 2896 y la 2897.
  *
  * La L es otra cosa y por eso va aparte: no es derrame sino la fórmula de
  * atrasado/al día del propio master. Tampoco se escribe, pero por otro motivo.
@@ -145,7 +157,7 @@ export const TODAS_LAS_COLUMNAS: readonly number[] = Object.values(COL);
  * frase. Lo que importa es que estén los que una persona sí corrige.
  */
 export const LO_QUE_NO_SE_CORRIGE_EN_EL_MASTER: readonly string[] = [
-  "la fecha de la orden", "el sector", "el equipo", "la especialidad",
+  "la fecha de creación", "el sector", "el equipo", "la especialidad",
   "el tipo", "quién lo realiza", "la descripción", "el repuesto",
   "la fecha de inicio", "la prioridad",
 ];

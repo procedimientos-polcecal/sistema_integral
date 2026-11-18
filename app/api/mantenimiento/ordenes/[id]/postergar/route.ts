@@ -12,11 +12,11 @@ import { celdaDeObservacionPrevia } from "@/lib/mantenimiento/notas";
 type Params = { params: Promise<{ id: string }> };
 
 /**
- * POST — correrle la fecha de ejecución a una orden, con justificación.
+ * POST — correrle la fecha de inicio a una orden, con justificación.
  *
  * ── EL ORDEN DE LOS PASOS ES LA MITAD DEL DISEÑO ────────────────────────────
  *
- * **Primero la planilla y después la base.** La fecha de ejecución de una OT en
+ * **Primero la planilla y después la base.** La fecha de inicio de una OT en
  * el master es la columna J, que es derrame de un `IMPORTRANGE`: la de verdad
  * vive en `Altas del sistema`. Si se guardara primero en la base y la planilla
  * fallara, quedaría una fecha nueva acá y la vieja allá — que es exactamente la
@@ -68,7 +68,7 @@ export async function POST(request: Request, { params }: Params) {
   if (!orden.app_created) {
     return NextResponse.json({
       error:
-        "Esta orden entró por el formulario, así que su fecha de ejecución no se " +
+        "Esta orden entró por el formulario, así que su fecha de inicio no se " +
         "puede mover desde el sistema: vive en la pestaña que maneja Google Forms " +
         "y escribir ahí corre las filas de las demás. Hay que cambiarla allá.",
     }, { status: 400 });
@@ -77,7 +77,7 @@ export async function POST(request: Request, { params }: Params) {
   const nueva = laNuevaFecha(orden.fecha_ejecucion, Number(body.dias));
   if (!nueva) {
     return NextResponse.json({
-      error: "Esta orden no tiene fecha de ejecución, así que no hay de dónde correrla.",
+      error: "Esta orden no tiene fecha de inicio, así que no hay de dónde correrla.",
     }, { status: 400 });
   }
 

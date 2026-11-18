@@ -66,7 +66,7 @@ const ESTADOS_OT = [
  * Y CONVIVIR TIENE UN PRECIO QUE YA SE PAGÓ UNA VEZ: el 19/10/2026 otra sesión
  * sumó `loQueFaltaParaCrear` a la ruta y al modal, y este formulario no se
  * enteró. Con sus valores por defecto le faltaban el sector, el equipo, la
- * especialidad y la fecha de ejecución, así que toda OT cargada en la planta
+ * especialidad y la fecha de inicio, así que toda OT cargada en la planta
  * iba a recibir un 400 —definitivo para la cola— y quedar parada. **Las dos
  * validaciones tienen que salir de la misma función**, que es la que corre la
  * ruta: cualquier otra cosa es esperar a que alguien se acuerde.
@@ -361,7 +361,7 @@ export default function FormularioOTOffline({
 
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <F label="Fecha creación">
+        <F label="Fecha de creación">
           <input
             type="date"
             value={form.fecha}
@@ -413,7 +413,7 @@ export default function FormularioOTOffline({
             className="input"
           />
         </F>
-        <F label="Fecha cierre">
+        <F label="Fecha de cierre">
           <input
             type="date"
             value={form.fecha_cierre}
