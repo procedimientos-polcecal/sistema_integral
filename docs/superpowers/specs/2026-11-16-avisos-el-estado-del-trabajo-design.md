@@ -228,7 +228,10 @@ corregirlo.
 que `scripts/rellenar-area-de-avisos.mts`. Es DML, así que lo puede correr un
 agente por PostgREST. Sólo toca filas con `work_order_id is null`, y sólo
 cuando `ot_asignada` es **exactamente dígitos** y ese número existe como
-`ot_number`. Esperado: **182 filas**, y los otros 56 sin tocar. El relleno sí
+`ot_number`. Esperado: **182 filas**, y los otros 56 sin tocar. (Lo que pasó
+el 17/11/2026: la sincronización llegó primero y las enlazó ella, así que el
+script dio 0. Era previsible y no se vio venir — los dos usan la misma función
+y la sincronización corre cada diez minutos.) El relleno sí
 mira `work_order_id is null` —corre una sola vez y no tiene que corregir
 nada—; el que mira `ot_enlazada_en` es el de la sincronización.
 
@@ -330,7 +333,13 @@ Y dos comprobaciones contra el dato, que ningún test ve:
 
 - Después del relleno, **182 avisos con enlace nuevo** y 56 sin tocar —17
   enlazados a mano, 10 con texto no numérico y 7 sin nada—; en total, 221 de
-  238 resueltos.
+  238 resueltos. **Verificado el 18/11/2026**, con los 182 escritos por la
+  sincronización y no por el script: 244 avisos (entraron 6 nuevos), 221 con
+  orden enlazada, **0 con el sello huérfano** que barre `loQueHayQueReenlazar`.
+  Corriendo `estadoDelTrabajo` y `comoSeMuestraElTrabajo` sobre esas 244 filas
+  con el mismo embebido de la pantalla: 210 «Cerrada», **11 abierto** (4
+  «Atrasada», 4 «Por hacer», 3 «En proceso»), 13 sin orden, 10 con texto
+  crudo. Suman 244.
 - Después de la primera sincronización, que los avisos nuevos del Forms entren
   **con `work_order_id` puesto**. Es la única prueba de que no se congeló, y es
   la misma que en octubre confirmó que el área se completaba sola.

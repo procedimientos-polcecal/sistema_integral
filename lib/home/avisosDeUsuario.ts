@@ -71,18 +71,43 @@ export interface QuienMira {
 async function avisosDeLosModulos(
   supabase: SupabaseClient,
   modulos: Modulo[],
-  opciones: { usuarioId?: string; saludDelSistema?: boolean } = {}
+  opciones: {
+    usuarioId?: string;
+    saludDelSistema?: boolean;
+    /** Qué hacer con un conteo que falla. Ver `contarSiTiene`. */
+    alFallar?: "cero" | "tirar";
+  } = {}
 ): Promise<Notificacion[]> {
   const tiene = (m: Modulo) => modulos.includes(m);
   const hoy = hoyEnArgentina();
 
-  /** Un conteo, o 0 si la persona no tiene ese módulo. Sin `any`: eslint lo rechaza. */
+  /**
+   * Un conteo, o 0 si la persona no tiene ese módulo. Sin `any`: eslint lo
+   * rechaza.
+   *
+   * **Un conteo que falla es un 0, y eso miente de una forma cara.** Con
+   * `alFallar: "cero"` —lo que hace la campana— un timeout en una tabla deja
+   * ese aviso en 0 y la pantalla muestra un número de menos: molesto, pero se
+   * arregla solo en la próxima carga.
+   *
+   * Para los dos crons es peor, y por eso existe `"tirar"`: lo que ellos hacen
+   * con el resultado es **guardarlo como la referencia contra la que se mide
+   * el movimiento**. Un 0 espurio saca el aviso de la foto o del vistazo, y la
+   * corrida siguiente —cuando el conteo vuelve a andar— lo ve aparecer de cero
+   * y manda **el stock entero rotulado como delta**: «23 más · Órdenes de
+   * trabajo atrasadas» sin que se haya atrasado ninguna. Es el anti-goal
+   * textual de los dos diseños, y es exactamente el agujero que `ultimaFoto`
+   * ya había tenido por otra puerta.
+   */
   const contarSiTiene = async (
     modulo: Modulo,
-    armar: () => PromiseLike<{ count: number | null }>
+    armar: () => PromiseLike<{ count: number | null; error?: { message: string } | null }>
   ): Promise<number> => {
     if (!tiene(modulo)) return 0;
-    const { count } = await armar();
+    const { count, error } = await armar();
+    if (error && opciones.alFallar === "tirar") {
+      throw new Error(`no se pudo contar un aviso de ${modulo}: ${error.message}`);
+    }
     return count ?? 0;
   };
   const head = (tabla: string) =>
@@ -264,6 +289,11 @@ async function lasSospechasDeLosCiclos(
  * **No pasa por `filtrarDescartadas` a propósito.** Un descarte es de alguien;
  * la foto no es de nadie. Si la foto se calculara con los descartes de una
  * persona, el movimiento de todos quedaría atado a lo que esa persona silenció.
+ *
+ * **Tira si un conteo falla, y por eso quien la llama tiene que atajarla.** Lo
+ * que se hace con este resultado es guardarlo como la referencia contra la que
+ * se mide el movimiento, así que un 0 espurio no se nota hoy y mañana sale
+ * como un delta del tamaño del stock. El porqué largo está en `contarSiTiene`.
  */
 export async function avisosDeTodoElSistema(
   supabase: SupabaseClient
@@ -271,7 +301,10 @@ export async function avisosDeTodoElSistema(
   // Sin `usuarioId`: la Agenda de una persona no entra en una foto que es de
   // todos. Con la salud sí: ésa es del sistema y la foto la recuerda como a
   // cualquier otra, de modo que el resumen avisa el día que un recurso cae.
-  return avisosDeLosModulos(supabase, [...MODULOS_ORDEN], { saludDelSistema: true });
+  return avisosDeLosModulos(supabase, [...MODULOS_ORDEN], {
+    saludDelSistema: true,
+    alFallar: "tirar",
+  });
 }
 
 /**

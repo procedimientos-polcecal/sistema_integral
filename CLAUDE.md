@@ -49,7 +49,7 @@ código.
 | Mantenimiento — preguntarle a Compras por un repuesto | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## Preguntarle a Compras por un repuesto` · [spec](docs/superpowers/specs/2026-10-26-mantenimiento-preguntar-a-compras-design.md) · [plan](docs/superpowers/plans/2026-10-29-mantenimiento-preguntar-a-compras.md). Tres cosas que no se deducen del código: la conversación vive en `ordenes_trabajo_notas`, **la misma tabla que las justificaciones**, separada por `tipo` —así que para «por qué sigue abierta» hay que filtrar `tipo = 'JUSTIFICACION'`, porque la última fila puede ser una pregunta—; **«abierta» se calcula en TypeScript y nunca en SQL**, porque es una anti-unión que PostgREST no sabe expresar y escribirla allá sería una segunda definición separada de la que tiene los tests; y el conteo del resumen **lee con el cliente admin a propósito**, porque quien contesta está en Compras y no tiene Mantenimiento —medido: con su sesión la campana decía 0 sin error mientras el push decía 3— |
 | Mantenimiento — programación del taller<br>**(en el menú: «Asignación RR.HH»)** | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## La programación semanal del taller` · [spec](docs/superpowers/specs/2026-10-22-mantenimiento-disponibilidad-y-turnos-design.md) · [plan](docs/superpowers/plans/2026-10-23-mantenimiento-programacion-del-taller.md). Dos cosas que no se deducen del código: el cuadro entero se repite a las **6** semanas y no a las 2 ni a las 3 —son dos ciclos, de período 2 y de período 3—, y `francos` **entra al cruce por `fecha_descanso` y nunca por `fecha_tomado`**. Son dos cosas distintas y confundirlas fue el bug: `fecha_tomado` es el día en que alguien apretó el botón —los 56 francos tomados de antes del 26/10/2026 caen en tres fechas, y cruzar ésa pintaría 35 huecos un lunes—, mientras que `fecha_descanso` es el día que la persona no viene, que se carga al marcarlo y suele estar adelante. Los 56 viejos quedaron con `fecha_descanso` en null y **no abren hueco**: el sistema no sabe cuándo descansaron y decirlo es mejor que inventarlo. **Dos fotos del mismo dato, y la vieja contaba otra cosa:** el 26/10/2026 eran 56 de 217 —los *tomados*, no el total—; el 04/11/2026 son 259 francos: **200 `PENDIENTE`**, que todavía no tienen día y es lo correcto (`estaDeFranco` pide `TOMADO` y la fecha exacta), y **59 `TOMADO`**, de los cuales **56 son los viejos sin fecha**, **1 se tomó el 02/11 con su día** y **2 se tomaron el 02/11 sin día**. Se sabe, entonces, sólo que **dos francos tomados el 02/11 quedaron sin día** (medido el 04/11/2026); **qué camino los escribió no se sabe**, y que lo distinga haberse creado y tomado el mismo día es **una conjetura de dos casos, sin confirmar**; no se arregló (el detalle está en la sección de la programación del taller de ese documento) |
 | Mantenimiento — el cuaderno de Piparo | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## El cuaderno de Piparo` · [spec](docs/superpowers/specs/2026-10-30-mantenimiento-cuaderno-de-piparo-design.md) · [plan](docs/superpowers/plans/2026-11-01-mantenimiento-cuaderno-de-piparo.md). Lo que no se deduce del código: **el modo de carga lo decide `proveedores.modo_de_carga`** y no el nombre ni un id —PIPARO en `cuaderno`, CANDIA en `parte_diario`—; **el costo vive en dos lugares que nadie ata** —`ordenes_trabajo.costo` y el texto de `REPUESTO UTILIZADO` en la planilla, donde 58 de las 380 OT de PIPARO ya traían el monto a mano— y **`costoEquipo.ts` no lo suma**, porque saltea toda OT con contratista; **septiembre de 2026 ya está cargado a mano** (29 OT, 28 el 01/09) y generarlo las duplica, así que hay un freno que se niega con un 409 y se levanta con `confirmar_duplicados`: **la primera prueba real no puede ser septiembre**; la columna I del master es derrame y no guarda lo que se le escribe, por eso al sumar horas a una OT existente se corrige en «Altas del sistema» (`corregirLaAlta`); `en_llave` **no es una columna**, y por eso una llave que nadie junta no se frena: el renglón que trae las 46 h sale solo como una OT de 46 h y los otros dos quedan pendientes; y **primero se juntan los renglones y después se confirma el sector**, porque confirmar saca al renglón de la propuesta de acumulación. Medido contra las diez fotos reales el 02/11/2026: el tier gratuito del AI Gateway **no incluye Sonnet 5** (403), así que se midió con `google/gemini-2.5-flash` y **eso no dice cómo lee el modelo que manda**; una página tardó 201 y 214 s en las dos corridas —el tope de la ruta es 240—, y un «= 18 Hs» salió como 1.845 horas sin ninguna marca —por eso `normalizarRenglones` marca dudoso todo renglón de más de 200 h, que es lo que ya no se pasa de largo. `AI_GATEWAY_API_KEY` tiene que estar en Vercel y `CUADERNO_MODELO` es opcional. **Un mes también puede entrar por un `.xlsx`** (03/11/2026), como alternativa a las fotos y no como otro modo: lo que dice de dónde vino no es una columna sino la extensión de la ruta (`esRutaDeExcel`). Procesa cinco columnas —**Tarea · Fecha Desde · Fecha Hasta · Hs · Precio ($)**, obligatorias sólo Tarea y Hs— y las busca **por el nombre del encabezado y no por la letra**, porque el mismo contenido ya se mudó de `K:O` a `A:E` en un día. **Una fila es una OT**: no hay nada que agrupar. El control es la fila de TOTALES contra la suma de las filas; si no da, los renglones entran igual y se dice la diferencia. `fecha_hasta` en null quiere decir «duró un día», no que falte. `lib/core/excel.ts` **no sirve** para leerlo porque aplana las celdas y pierde la diferencia entre un cero, una fórmula sin recalcular y un `#REF!`. Y dos cosas del 03/11/2026 que vinieron de ahí: **juntar no es el camino para generar una sola OT** —con el Excel 46 de 63 renglones salen solos, sin ningún grupo, y el único botón generaba los 46 de una—, así que la generación acepta `claves` y la barra de la selección tiene su propio botón; el filtro cae sobre **los grupos y no sobre los renglones**, o sea que elegir un renglón juntado saca su grupo entero y el cartel lo dice. Y **un renglón se puede sacar de la carga** (`cuaderno/renglones/[id]`, un `DELETE` aparte del que desagrupa), para la tarea que ya tiene su OT cargada a mano: borrar la fila **se audita con `borrar`**, y es el primer `borrar` que escribe una persona. Y del 03/11/2026, lo que hay que saber antes de tocar el texto de una OT: **la descripción dice sólo la tarea** —el contratista, la fecha de cierre y las horas tienen columna propia en el master (N, K, O) y desde una celda de prosa no se filtra ni se suma—, el costo sigue yendo en `REPUESTO UTILIZADO`, y **un grupo sale por su denominador común** (`cuadernoDescripcion.ts`): de los cinco grupos juntados de verdad, **cero tenían las tareas idénticas**, así que el plural cuenta como la misma palabra —pero «Nº1» y «Nº2» no se parecen nunca— y con menos de dos palabras en común se listan las tareas en vez de inventar un resumen. El problema de verdad ahí no era el texto sino que **esas columnas llegaban vacías**: el master recibe la fila por `IMPORTRANGE` y la generación lo intentaba a medio segundo de crear la orden. Medido el mismo día: 48 de 48 OT del cuaderno con K/M/N/O vacías contra **12 de 12 de `/api/mantenimiento/ordenes`, que sí reintenta, resueltas a los 21 s**. Ahora la generación drena con `after()`, **una pasada para toda la corrida** y con las esperas recortadas a lo que queda de `maxDuration` (`esperasQueEntran`) |
-| Mantenimiento — el estado del trabajo en un aviso | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## Un aviso no termina cuando nace la OT` · **Lo primero, para quien lo retome: la migración `20261117090055` no está aplicada y el relleno (`scripts/rellenar-el-enlace-de-avisos.mts`) no se corrió** —hasta entonces `ot_resuelta_en` no existe en la base y los 182 de abajo son el estado al que se llega y no el de hoy: las listas muestran el estado sólo de las 39 órdenes ya enlazadas—. [spec](docs/superpowers/specs/2026-11-16-avisos-el-estado-del-trabajo-design.md) · [plan](docs/superpowers/plans/2026-11-17-avisos-el-estado-del-trabajo.md). Un aviso no termina cuando nace la OT: termina cuando esa OT se cierra, y hasta el 17/11/2026 las dos listas decían «OT #2814» para una orden cerrada hace tres semanas y para una atrasada desde diciembre. De 238 avisos, **13** tienen la orden abierta: encontrar esos 13 es todo el punto. Cuatro cosas que no se deducen del código: **`ot_enlazada_en is null` no separa los avisos en dos sino en tres** —17 enlazados a mano, **22 cuya OT nació del aviso** y 182 que traían el número sólo como texto de la planilla—, y la columna que distingue a los últimos es `ot_resuelta_en`, que escribe sólo la resolución automática; sin ella, vaciar la celda `OT ASIGNADA` dejaría huérfana una de esas 22 órdenes, que es **lo que `loQueImpideDesenlazar` se niega a hacer** con ese argumento escrito. **«Cerrada» lo decide `estado` y jamás la presencia de una fecha**: 220 de 2.489 OT están en `REALIZADO` sin `fecha_cierre`, así que leerlo al revés diría «abierta» sobre trabajo terminado. **`/mis-avisos` lee el estado por una ruta con cliente admin y no embebido**, porque `ordenes_trabajo` está cerrada con `mant_puede_ver()` y a 6 de los 14 usuarios el embebido les devolvería null en silencio —el embebido se había «verificado» con la `SUPABASE_SERVICE_ROLE_KEY`, que saltea RLS, así que esa prueba no valía—; `/mantenimiento/avisos` sí embebe, porque ahí sólo entra quien tiene el módulo. Y **nada de esto se exporta**: `OT ASIGNADA` sigue siendo la columna que escribe una persona, y el enlace se resuelve leyendo `ot_asignada` de la tabla y no de la fila de la planilla, que es lo que hace que respete sola a los avisos con la exportación pendiente |
+| Mantenimiento — el estado del trabajo en un aviso | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## Un aviso no termina cuando nace la OT` · **Anda desde el 17/11/2026 y el relleno nunca hizo falta**: aplicada la migración, la primera sincronización enlazó sola los 182 —los 182 sellos llevan la misma marca de tiempo— y el script quedó dando 0, porque los dos deciden con la misma función y la sincronización corre cada diez minutos. Medido el 18/11 sobre producción con las funciones de la pantalla: de 244 avisos, 210 «Cerrada», **11 con el trabajo abierto**, 13 sin orden y 10 con texto que no es un número. [spec](docs/superpowers/specs/2026-11-16-avisos-el-estado-del-trabajo-design.md) · [plan](docs/superpowers/plans/2026-11-17-avisos-el-estado-del-trabajo.md). Un aviso no termina cuando nace la OT: termina cuando esa OT se cierra, y hasta el 17/11/2026 las dos listas decían «OT #2814» para una orden cerrada hace tres semanas y para una atrasada desde diciembre. De 238 avisos, **13** tienen la orden abierta: encontrar esos 13 es todo el punto. Cuatro cosas que no se deducen del código: **`ot_enlazada_en is null` no separa los avisos en dos sino en tres** —17 enlazados a mano, **22 cuya OT nació del aviso** y 182 que traían el número sólo como texto de la planilla—, y la columna que distingue a los últimos es `ot_resuelta_en`, que escribe sólo la resolución automática; sin ella, vaciar la celda `OT ASIGNADA` dejaría huérfana una de esas 22 órdenes, que es **lo que `loQueImpideDesenlazar` se niega a hacer** con ese argumento escrito. **«Cerrada» lo decide `estado` y jamás la presencia de una fecha**: 220 de 2.489 OT están en `REALIZADO` sin `fecha_cierre`, así que leerlo al revés diría «abierta» sobre trabajo terminado. **`/mis-avisos` lee el estado por una ruta con cliente admin y no embebido**, porque `ordenes_trabajo` está cerrada con `mant_puede_ver()` y a 6 de los 14 usuarios el embebido les devolvería null en silencio —el embebido se había «verificado» con la `SUPABASE_SERVICE_ROLE_KEY`, que saltea RLS, así que esa prueba no valía—; `/mantenimiento/avisos` sí embebe, porque ahí sólo entra quien tiene el módulo. Y **nada de esto se exporta**: `OT ASIGNADA` sigue siendo la columna que escribe una persona, y el enlace se resuelve leyendo `ot_asignada` de la tabla y no de la fila de la planilla, que es lo que hace que respete sola a los avisos con la exportación pendiente |
 | RRHH | [docs/RRHH-ACTUALIZACION.md](docs/RRHH-ACTUALIZACION.md) · marcaciones desde Lenox: [spec](docs/superpowers/specs/2026-10-07-rrhh-marcaciones-desde-lenox-design.md) · [plan](docs/superpowers/plans/2026-10-07-rrhh-marcaciones-desde-lenox.md) |
 | Disponibilidad y ausentismo | **Transversal, no es un módulo**: vive en `app/(app)/disponibilidad`, `app/api/disponibilidad` y `lib/rrhh/ausentismo`, y la ve cualquiera con sesión. La sección `## Disponibilidad y ausentismo` de [docs/RRHH-ACTUALIZACION.md](docs/RRHH-ACTUALIZACION.md) · [spec](docs/superpowers/specs/2026-10-29-disponibilidad-y-ausentismo-design.md) · [plan](docs/superpowers/plans/2026-10-29-disponibilidad-y-ausentismo.md). Cuatro cosas que no se deducen del código: **el motivo no sale nunca del lado abierto** —`ausencias` se lee con el cliente admin, así que RLS no corre y el único permiso es el de la ruta; el `tipo` entra sólo para descartar la `TARDANZA` y se tira antes del JSON—, y por eso **la proyección se arma campo por campo y los tests preguntan sobre el JSON serializado**, que es lo único que llega del otro lado; **«agregado» no es anónimo cuando el grupo es chico** —un sector tiene UNA persona y, cruzando los dos endpoints abiertos, 42 de 78 celdas con motivo quedaban atribuidas a alguien, también en sectores de 9 y de 13, así que se sacó el desglose por motivo y quien no pasa el control ve sólo el total—; **los inactivos entran enteros** porque quien se fue en agosto igual faltó en marzo, y filtrarlos vuelve huérfanas sus ausencias sin avisar; y **la `TARDANZA` cuenta distinto según quién pregunta** a propósito —no abre hueco en disponibilidad, sí suma un día en el mensual—, lo que deja un canal residual conocido que hoy no filtra nada porque hay 0 tardanzas cargadas. Se comprueba con `npx tsx scripts/probar-rutas-de-disponibilidad.mts` |
 | Agenda | **Transversal, no es un módulo** —no está en `MODULOS_ORDEN` y la ven los catorce—: vive en `app/(app)/agenda`, `lib/agenda`, `app/api/agenda` y `app/api/cron/agenda`. [docs/AGENDA.md](docs/AGENDA.md) · [spec](docs/superpowers/specs/2026-10-30-agenda-y-google-calendar-design.md) · [plan](docs/superpowers/plans/2026-11-02-agenda-y-google-calendar.md) · las OT que entran solas (04/11/2026): la sección `## Las OT que entran solas al calendario` de ese documento · [spec](docs/superpowers/specs/2026-11-04-agenda-ot-automatica-design.md) · [plan](docs/superpowers/plans/2026-11-04-agenda-ot-automatica.md) · **la vista de calendario** (04/11/2026: semana, día y lista —**no hay vista de mes**—, con una banda de alertas y un detalle en modal): la sección `## La vista de calendario` de ese documento · [spec](docs/superpowers/specs/2026-11-04-agenda-vista-de-calendario-design.md) · [plan](docs/superpowers/plans/2026-11-04-agenda-vista-de-calendario.md); lo que no se deduce del código: **en un teléfono la semana dibuja un solo día** —el ancho no llega al servidor, así que se dibujan las dos grillas y CSS esconde una—, **lo que se acomoda en columnas son pedazos de un día y no eventos** (un evento que cruza la medianoche se parte), y **la banda nombra también los pendientes**, lo que obliga a traerlos siempre sea de cuando sea. **Lo primero, para quien despliegue: la sección «Lo que sólo se puede comprobar en la primera corrida real» de ese documento** —la migración **ya está aplicada** (al 04/11/2026 hay dos eventos en producción) y la pantalla se abrió en un navegador **sólo con eventos de ejemplo y sin sesión**: `/agenda` con una sesión real y la base de verdad no la abrió nadie—, y de las OT automáticas, que **`20261104161017_ot_fecha_fin.sql` va antes del código** (si no, el alta de una OT falla en el insert *después* de escribir la planilla) y que **la columna de gente disponible no dice nada hasta que se cargue el padrón** (`mant_personal_taller` vacía) y que **subcuenta ausencias**: de los francos sin `fecha_descanso`, 200 son pendientes (correcto), 56 son viejos que ya pasaron y 2 se tomaron el 02/11 sin día, no se sabe por qué, no se leyó el flujo de francos, y no se tocó desde la Agenda. Tres cosas que no se deducen del código: **el SdG manda y Google es el espejo, pero avisa en vez de pisar** (a diferencia de Producción con su planilla), y **divergencia son sólo borrado y movido**: los RSVP quedan afuera porque con cinco invitados por OT serían el cambio más frecuente y eso termina con la gente apagando las notificaciones; **un evento borrado en Google vuelve con 200 y `status: "cancelled"` y no con 404**, y un `PATCH` sobre uno borrado contesta 200 y lo deja borrado —resucitarlo pide `PUT` con `status: "confirmed"`—, y **en un `PATCH` omitir `attendees` es «no los toques» y en un `PUT` es «no hay»**, la asimetría que casi borra los cinco invitados de una OT; y **`aviso` no es `google_pendiente`**: uno es «algo que mirar» y el otro «falta escribir», y mandar un borrado fallido a la segunda hacía que el cron recreara un evento que se quiso borrar. Además, un evento con `ot_id` no se edita desde la Agenda y un evento divergido deja de moverse solo hasta que el dueño destrabe. **Del 04/11/2026, cuatro más que valen para quien toque las OT automáticas:** **el evento nace sólo si la fecha no pasó, y no es una restricción arbitraria** —de 780 órdenes en 90 días, 574 (73,6 %) tienen la ejecución anterior al alta, y de las 151 cargadas en el SdG 121 ya la tenían pasada al cargarlas: sin el freno, nueve de cada diez eventos serían del pasado y cada uno invitaría a cinco personas a algo terminado—; **el apilado agrupa por especialidad (misma gente) y se topea a las 20:00**, porque sin tope la undécima llega a las 24:30, `instanteDe` la rechaza y la orden queda sin evento y sin aviso, y **`yaTomados` se sacó a propósito**: el bucle no corre en una transacción, la segunda orden ya ve a la primera y adelantarla la contaba dos veces (08:00 y 11:00 en vez de 08:00 y 09:30); **«gente disponible» cuenta por día y no por turno**, porque los grupos A y B no pasan nunca por 8–16 y por turno daría cero mecánicos —1.764 de 2.410 órdenes— para siempre; y **el `aviso` de un evento de OT tiene tres escritores, cada uno limpia sólo lo suyo y el del borrado fallido gana siempre**, porque es el único registro de un evento que quedó vivo en cinco calendarios. También: **`fecha_fin` vacía es «duró un día»**, sin backfill, y **`RAZON_DEL_PLAN` es un código de sistema que no va como fila en `mant_razones_de_postergacion`**, porque Configuración la ofrecería como opción manual. **Y del 13/11/2026: el evento de una OT se escribe con `sendUpdates=none` y el que crea una persona con `all`** —lo decide `avisaALosInvitados()` por si la fila tiene `ot_id`—, porque en ocho días 30 eventos de OT habían mandado **120 invitaciones**, 30 a cada una de `gerencia@`, `produccion@` y `nicolaslenzetti@`. **No se sacó ningún invitado ni se dejó de crear el evento**: sigue apareciendo en los cinco calendarios, sólo que llega sin avisar — y lo que esto **no** apaga es el recordatorio propio del calendario el día del evento. El parámetro de las cuatro funciones de escritura de `lib/core/calendar.ts` es **obligatorio y sin valor por omisión** justamente para que el próximo camino de escritura no herede una de las dos sin elegirla, que es como habían quedado las cuatro en `all` |
@@ -821,9 +821,11 @@ equipo.
 
 ## Un aviso nuevo sale por dos lados, y hay un tercero que se gana aparte
 
-Desde el 18/10/2026 el SdG manda **un resumen diario por push**: una
-notificación por persona con lo que tiene para mirar en sus módulos, a las 11:30
-UTC (8:30 de Argentina), después del último sync. Cada uno las prende en **Mi
+Desde el 18/10/2026 el SdG manda **un resumen por push**: una notificación por
+persona con lo que tiene para mirar en sus módulos, a las 11:30 UTC (8:30 de
+Argentina), después del último sync. **Era diario y desde el 17/11/2026 manda
+sólo los lunes** —el movimiento del día lo avisa ahora un cron cada quince
+minutos, más abajo—, aunque la corrida sigue siendo diaria. Cada uno las prende en **Mi
 cuenta → Notificaciones**, y **por aparato** — la clave de `push_suscripciones`
 es `(usuario_id, endpoint)`, así que el celular y la computadora son dos filas.
 
@@ -834,9 +836,9 @@ sea que un aviso mal calibrado ya no es una campanita de más: es una
 notificación en el teléfono de alguien.
 
 **Pero no dicen lo mismo: la campana muestra el stock y el push el
-movimiento.** Desde el 18/10/2026 el resumen diario dice lo que **se movió**
-desde el resumen anterior —«3 más · Órdenes de trabajo atrasadas»— y los
-**lunes** manda los totales. El motivo está medido: contando stocks, el push de
+movimiento.** Desde el 18/10/2026 el push dice lo que **se movió** —«3 más ·
+Órdenes de trabajo atrasadas»— y los **lunes** manda los totales. El motivo
+está medido: contando stocks, el push de
 mañana decía lo mismo que el de hoy. «Facturas en el buzón sin vincular: 1»
 dijo lo mismo trece días; hay **un solo service en todo el sistema**, así que
 «15 equipos sin service» no podía bajar; 19 de las 23 OT atrasadas tienen más
@@ -845,20 +847,65 @@ de una semana y la más vieja es del 11/12/2025. Y la prueba de que ya costó: d
 **los 13 avisos descartados** cada una — descartar era la única defensa contra
 un mensaje que se repite.
 
-Tres cosas que no se deducen del código:
+**Y desde el 17/11/2026 el movimiento no espera al día siguiente: lo manda un
+cron propio cada quince minutos** (`app/api/cron/avisos-al-instante`), dentro
+de la misma ventana 7:00–21:00 que el resto de los avisos al instante. El
+resumen de las 8:30 **sigue corriendo todos los días pero manda sólo los
+lunes**, con los totales. Se pidió así: que una ausencia cargada y cualquier
+novedad se sepan enseguida, y por push y no por correo.
 
-- **La `cantidad` de un aviso se compara contra la foto del día anterior**
-  (`avisos_fotos`, que escribe el mismo cron al final de cada corrida). Si
-  cambiás **qué cuenta** un aviso sin cambiarle el id, el día del cambio sale
-  una novedad falsa del tamaño del salto. Id nuevo para conteo nuevo.
+Seis cosas que no se deducen del código:
+
+- **La `cantidad` de un aviso se compara contra el vistazo anterior**
+  (`avisos_vistos`, una fila por aviso que se pisa unas 56 veces por día), y
+  **no** contra la foto del día anterior. Son dos tablas y dos relojes:
+  `avisos_fotos` tiene una fila por aviso **y por día** y es contra la que se
+  calculan los totales de los lunes —su fecha es además la idempotencia de ese
+  cron—, así que mezclarlas rompe el delta semanal. Si cambiás **qué cuenta**
+  un aviso sin cambiarle el id, la corrida siguiente saca una novedad falsa del
+  tamaño del salto. Id nuevo para conteo nuevo.
+- **La familia `salud-*` avisa por el flanco y no por el número.** Su
+  `cantidad` es la racha de corridas fallidas, y con diez sincronizaciones
+  corriendo seis veces por hora esa racha sube unas seis veces por hora
+  mientras el recurso siga roto: tratarla como un conteo son **hasta 56 pushes
+  en un día por un solo sync caído**. Así que se avisa cuando pasa de sana a
+  rota, una vez. Que un recurso arreglado y vuelto a romper avise de nuevo
+  **depende de que el vistazo se guarde reemplazando y no acumulando** — las
+  dos mitades se sostienen juntas y están atadas con tests de los dos lados.
+- **Un aviso nuevo tiene que declarar su `modulo` en `lib/home/avisos.ts`**, o
+  por el camino instantáneo no le llega a nadie —o le llega a todos, según la
+  rama, y las dos cosas por accidente—. Esa relación vivía implícita en la
+  llamada al conteo, que se hacía una vez por persona; el instantáneo calcula
+  **una sola vez para los dieciséis** y filtra después, así que ya no hay dónde
+  aplicarla. Las únicas entradas **de la tabla** sin módulo son las
+  transversales —la Agenda y la mensajería—, que son exactamente las dos de
+  `ES_POR_PERSONA`. Y **los ids que se arman en el momento no están en esa
+  tabla y no pueden estar**: `ritmo-` lleva el módulo adentro, `salud-` es del
+  sistema a propósito, y `mant-ciclo-sospechoso-` se declara por prefijo en
+  `moduloDelAviso.ts`. Ése último ya se escapó una vez —sin módulo, el push de
+  una sospecha de ciclo le llegaba a quien sólo tiene Remises—, así que hay un
+  test que **lee `avisos.ts`** y exige que todo id dinámico tenga su prefijo
+  declarado.
 - **Los lunes son la red, no un extra.** Contando sólo movimiento, algo que
   dejó de moverse no se nombra nunca más — y hay una OT atrasada desde
   diciembre de 2025. Si sacás el recordatorio semanal, el depósito se pudre en
-  silencio.
+  silencio. Y **el cron diario no se saca de `vercel.json` aunque mande sólo
+  los lunes**: además escribe `avisos_fotos`, que es contra lo que se calculan
+  esos totales y es el candado contra el reenvío.
 - **Un aviso con lista de responsables va a la lista.** `compras-por-aprobar`
   va a `compras_aprobadores` y no a todo el que vea Compras: medido, le llegaba
   a 6 personas y 3 no podían aprobar. Los administradores siguen recibiendo
-  todo lo demás.
+  todo lo demás. Ése además **queda afuera del instantáneo**, porque ya avisa
+  solo al nacer el requerimiento y llegaría dos veces por lo mismo.
+- **Las ausencias cargadas son un push y no un aviso de la campana.** Su id
+  —`rrhh-ausencias-cargadas`, en `lib/rrhh/ausenciasRecientes.ts`— no está en
+  `lib/home/avisos.ts` y no hay que buscarlo ahí: una ausencia cargada no queda
+  pendiente de nada, así que no hay stock que contar y en la campana sería un
+  número que sólo crece. Se cuenta por **`created_at` y nunca por
+  `fecha_desde`**: la mediana entre que una ausencia empieza y que alguien la
+  carga es de **33 días**. Le llega a todos, que es lo que se pidió, y es una
+  audiencia **distinta** de la del correo de RR.HH. de las 15:50, que va a doce
+  encargados con el detalle del día.
 
 Y una trampa que no se deduce del código: **la `cantidad` de un aviso de ritmo
 no cuenta cosas.** Es cuántos umbrales lleva el módulo sin cargarse, y existe
@@ -1082,6 +1129,18 @@ invocación y la ventana 7:00–21:00 sin encolar— y que **divergencia sean s�
 borrado y movido**; el detalle está en [docs/AGENDA.md](docs/AGENDA.md). Si
 agregás un emisor instantáneo, sea por ese archivo o por afuera, anotalo allá.
 
+**Y hay una quinta, que no cumple ninguna de las tres y por eso es otra cosa.**
+Desde el 17/11/2026 el cron `avisos-al-instante` manda cada quince minutos lo
+que se movió desde la corrida anterior. No hay una persona nombrada esperando
+—le llega a todo el que vea ese módulo—, nada se frena hasta que alguien
+decida, y lo que cuenta es un delta y no un hecho puntual. **No es un aviso al
+instante en el sentido de las tres condiciones: es el resumen diario, más
+seguido.** Se lo nombra acá para que no se lo confunda con el portón: lo que lo
+hace sostenible es lo mismo que al resumen —una sola notificación por persona y
+por corrida, y nunca el total sino lo que cambió— más la ventana que sí heredó.
+Pedir que algo entre ahí no es pedir pasar por `avisarAQuienDecide()`: alcanza
+con que sea un aviso de `lib/home/avisos.ts` con su módulo declarado.
+
 Tres cosas más que no se deducen del código, y que son las que evitan que esto
 termine en que alguien apague las notificaciones:
 
@@ -1120,14 +1179,19 @@ la lista de los candidatos que **no** pasan el filtro y por qué — que es lo q
 permite decirle que no al próximo módulo que lo pida.
 
 **El payload de un push es plano: `{title, body, url}`.** Es el `Aviso` de
-[lib/core/webpush.ts](lib/core/webpush.ts) y lo mandan los **cinco** emisores que
-hay —el resumen diario, el aviso al instante, el de Remises, el aviso **a una
-sola persona nombrada** (31/10/2026,
-[lib/core/avisoAUnaPersona.ts](lib/core/avisoAUnaPersona.ts): Compras contestó
-tu consulta por un repuesto, y le llega sólo a quien preguntó) y el de la
-divergencia de la Agenda (03/11/2026)—. El número sale de contar quién llama a
-`enviarPush`, que es de donde se corrige éste: dos ramas distintas lo dejaron
-en «cuatro» el mismo día, cada una contando un cuarto distinto. La `url` va en
+[lib/core/webpush.ts](lib/core/webpush.ts) y lo mandan los **seis** emisores que
+hay —el resumen de `avisos-diarios`, el cron `avisos-al-instante` que desde el
+17/11/2026 manda cada quince minutos lo que se movió, el aviso al instante de
+`avisarAQuienDecide()`, el de Remises, el aviso **a una sola persona nombrada**
+(31/10/2026, [lib/core/avisoAUnaPersona.ts](lib/core/avisoAUnaPersona.ts):
+Compras contestó tu consulta por un repuesto, y le llega sólo a quien preguntó)
+y el de la divergencia de la Agenda (03/11/2026)—. El número sale de contar
+quién llama a `enviarPush`, que es de donde se corrige éste y lo único que
+impide que mienta: dos ramas distintas lo dejaron en «cuatro» el mismo día, cada
+una contando un cuarto distinto, y el 18/11/2026 **volvió a pasar con «cinco»**
+—una rama listaba el de una sola persona y no el cron nuevo, la otra al revés, y
+las dos decían cinco—. Así que ese **seis** es un `grep -rn "enviarPush" lib app`
+de esa fecha y no la suma de lo que cada rama se acordaba. La `url` va en
 el primer nivel, no adentro de un `data`.
 
 **El de una sola persona es el único que no le habla a una lista**: los demás

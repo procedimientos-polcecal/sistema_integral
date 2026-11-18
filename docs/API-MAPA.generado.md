@@ -4,7 +4,7 @@
 > Lo escrito a mano —para qué sirve cada módulo, cómo está armada una ruta y
 > las trampas— está en [API.md](API.md). Acá sólo hay lo que sale del código.
 
-Al 2026-11-16: **310 rutas** y **485 handlers** en 25 carpetas.
+Al 2026-11-18: **312 rutas** y **487 handlers** en 25 carpetas.
 
 ## Cómo leer la columna «guarda»
 
@@ -39,11 +39,11 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 
 | Guarda | Rutas |
 |---|---|
-| secreto del cron | 19 |
+| secreto del cron | 20 |
 | secreto propio | 3 |
 | token contra la base | 1 |
 | permiso de módulo | 203 |
-| sesión | 28 |
+| sesión | 29 |
 | el proxy | 56 |
 | **ABIERTA** | 0 |
 
@@ -157,11 +157,12 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/compras/ubicaciones/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarCompras` | `compras_requerimientos`, `compras_ubicaciones` | admin |
 | `/api/compras/ubicaciones` | GET, POST | permiso de módulo · `puedeEditarCompras` | `compras_ubicaciones` | admin |
 
-## cron (19)
+## cron (20)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
 | `/api/cron/agenda` | GET | secreto del cron | — | admin · 300s |
+| `/api/cron/avisos-al-instante` | GET | secreto del cron | `notificaciones_descartes`, `push_suscripciones`, `usuario_modulos`, `usuarios` | admin · paginado · 300s |
 | `/api/cron/avisos-diarios` | GET | secreto del cron | `push_suscripciones`, `usuario_modulos`, `usuarios` | admin · paginado |
 | `/api/cron/calidad-envases-bajada` | GET | secreto del cron | `calidad_envases_movimientos` | admin · 300s |
 | `/api/cron/calidad-envases-sync` | GET | secreto del cron | — | 300s |
@@ -235,7 +236,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/inventario/reservas-taller-vial` | GET | permiso de módulo · `tieneAccesoInventario` | `equipos`, `inventario_articulos`, `taller_vial_reparaciones`, `taller_vial_repuestos_asignados`, `taller_vial_services` | — |
 | `/api/inventario/sync` | POST | permiso de módulo · `tieneAccesoInventario` | — | — |
 
-## mantenimiento (62)
+## mantenimiento (63)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
@@ -244,6 +245,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/mantenimiento/avisos/enlazar` | GET, POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `avisos`, `ordenes_trabajo` | admin |
 | `/api/mantenimiento/avisos` | POST | sesión | `avisos`, `compras_areas`, `usuario_areas_compras`, `usuarios` | admin · planilla |
 | `/api/mantenimiento/avisos/sync` | POST | permiso de módulo · `puedeEditarMantenimiento` | — | 300s |
+| `/api/mantenimiento/avisos/trabajo` | GET | sesión | `avisos`, `ordenes_trabajo` | admin · paginado |
 | `/api/mantenimiento/calendario` | GET | permiso de módulo · `puedeVerMantenimiento` | `ausencias`, `francos`, `mant_personal_taller`, `ordenes_trabajo` | admin · paginado |
 | `/api/mantenimiento/ciclos/[id]/reiniciar` | POST | permiso de módulo · `puedeEditarMantenimiento` | `mant_ciclos_de_ot`, `ordenes_trabajo`, `ordenes_trabajo_notas` | admin |
 | `/api/mantenimiento/ciclos/[id]` | PATCH | permiso de módulo · `puedeEditarMantenimiento` | `mant_ciclos_de_ot` | admin |
@@ -565,6 +567,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/compras/ubicaciones/[id]` | `lib/compras/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/ubicaciones` | `lib/compras/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/cron/agenda` | `lib/agenda/canales`, `lib/agenda/reintentarPendientes`, `lib/core/cron`, `lib/core/sincronizaciones`, `lib/supabase/admin` |
+| `/api/cron/avisos-al-instante` | `lib/core/access`, `lib/core/cron`, `lib/core/paginado`, `lib/core/types`, `lib/core/webpush`, `lib/home/avisosDeUsuario`, `lib/home/moduloDelAviso`, `lib/home/notificaciones`, `lib/home/novedadAlInstante`, `lib/home/resumenDeAvisos`, `lib/home/vistazoDeAvisos`, `lib/rrhh/ausenciasRecientes`, `lib/supabase/admin` |
 | `/api/cron/avisos-diarios` | `lib/core/cron`, `lib/core/fechas`, `lib/core/paginado`, `lib/core/types`, `lib/core/webpush`, `lib/home/avisosDeUsuario`, `lib/home/fotoDeAvisos`, `lib/home/movimiento`, `lib/home/resumenDeAvisos`, `lib/supabase/admin` |
 | `/api/cron/calidad-envases-bajada` | `lib/calidad/envases/bajada`, `lib/calidad/envases/sincronizar`, `lib/core/cron`, `lib/core/paginado`, `lib/core/sheets`, `lib/core/sincronizaciones`, `lib/supabase/admin` |
 | `/api/cron/calidad-envases-sync` | `lib/calidad/envases/sincronizar`, `lib/core/cron` |
@@ -617,6 +620,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/mantenimiento/avisos/enlazar` | `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/mantenimiento/avisos`, `lib/mantenimiento/enlazarOtAlAviso`, `lib/mantenimiento/marcarElAviso`, `lib/mantenimiento/pendienteDelAviso`, `lib/mantenimiento/planillaDelAviso`, `lib/mantenimiento/reutilizarOT`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/avisos` | `lib/compras/areaDelUsuario`, `lib/core/fechas`, `lib/core/sheets`, `lib/mantenimiento/avisarDeLaCarga`, `lib/mantenimiento/avisos`, `lib/mantenimiento/claveDeCarga`, `lib/mantenimiento/enlaces`, `lib/mantenimiento/planilla`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/avisos/sync` | `lib/mantenimiento/auth`, `lib/mantenimiento/sincronizar`, `lib/supabase/server` |
+| `/api/mantenimiento/avisos/trabajo` | `lib/core/paginado`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/calendario` | `lib/core/fechas`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/calendarioDeOT`, `lib/mantenimiento/disponibilidad`, `lib/mantenimiento/genteDelDia`, `lib/mantenimiento/programacion`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ciclos/[id]/reiniciar` | `lib/core/fechas`, `lib/mantenimiento/auth`, `lib/mantenimiento/cierreDeOT`, `lib/mantenimiento/notas`, `lib/mantenimiento/ordenes`, `lib/mantenimiento/pendienteDeLaOT`, `lib/mantenimiento/planillaDeOT`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ciclos/[id]` | `lib/core/cuerpo`, `lib/mantenimiento/arranqueDelCiclo`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |

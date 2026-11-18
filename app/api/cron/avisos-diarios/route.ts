@@ -4,14 +4,22 @@ import { revisarElSecreto } from "@/lib/core/cron";
 import { traerTodo } from "@/lib/core/paginado";
 import { enviarPush } from "@/lib/core/webpush";
 import { avisosDeUsuario, avisosDeTodoElSistema } from "@/lib/home/avisosDeUsuario";
-import { resumirParaPush, resumirElMovimiento } from "@/lib/home/resumenDeAvisos";
-import { loQueSeMovio, queMandarHoy } from "@/lib/home/movimiento";
+import { resumirParaPush } from "@/lib/home/resumenDeAvisos";
+import { queMandarHoy } from "@/lib/home/movimiento";
 import { ultimaFoto, guardarFoto } from "@/lib/home/fotoDeAvisos";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 
 /**
- * El resumen diario: una notificación por persona con lo que tiene para mirar.
+ * El resumen semanal: una notificación por persona con lo que tiene para
+ * mirar.
+ *
+ * **Corre todos los días y manda sólo los lunes**, desde el 17/11/2026. Las
+ * dos mitades de esa frase importan: lo que corre todos los días escribe
+ * `avisos_fotos`, que es contra lo que el lunes se calculan los totales y es
+ * además el candado contra el reenvío. Lo que se movió hoy lo avisa ahora el
+ * cron de las novedades al instante, cada quince minutos. El detalle está
+ * abajo, donde empieza el recorrido de las personas.
  *
  * POR QUÉ UN RESUMEN Y NO UN AVISO POR CADA COSA
  *
@@ -61,7 +69,7 @@ export async function GET(request: Request) {
   // manda nada y sólo se guarda. Tratar "sin foto" como "todo es nuevo" sería
   // un push de estreno con los trece avisos, que es justo lo que este cambio
   // viene a evitar.
-  const { fecha: fechaDeLaFoto, foto, error: errorAlLeerLaFoto } = await ultimaFoto(admin);
+  const { fecha: fechaDeLaFoto, error: errorAlLeerLaFoto } = await ultimaFoto(admin);
 
   // La tabla la crea una migración y la aplica una persona, así que entre el
   // deploy y esa aplicación no existe. Se dice con todas las letras y se corta:
@@ -112,7 +120,28 @@ export async function GET(request: Request) {
   let vencidas = 0;
   let fallos = 0;
 
-  for (const [usuarioId, aparatos] of queMandar === "nada" ? [] : porUsuario) {
+  // ── Sólo los lunes, desde el 17/11/2026 ──
+  //
+  // El movimiento diario lo manda ahora el cron de las novedades al instante
+  // (`app/api/cron/avisos-al-instante/route.ts`), cada quince minutos y contra
+  // `avisos_vistos`. Repetirlo acá a las 8:30 sería el mismo push dos veces
+  // por lo mismo, con la diferencia de que éste llega a destiempo: lo que se
+  // movió a las 9 de ayer ya se avisó a las 9 de ayer.
+  //
+  // DOS COSAS QUE HAY QUE SABER ANTES DE «TERMINAR DE SACARLO»:
+  //
+  //   - **El cron NO se saca de `vercel.json`, y `queMandarHoy` sigue
+  //     devolviendo sus tres valores.** Además de mandar, esta corrida escribe
+  //     `avisos_fotos` al final, y la fecha de esa foto es la idempotencia de
+  //     los lunes (`queMandarHoy`: si la última foto es la de hoy, esta
+  //     corrida ya pasó). Sacarlo se lleva los totales **y** el candado contra
+  //     el reenvío.
+  //   - **Los lunes hay solapamiento conocido**: la misma persona recibe los
+  //     totales de las 8:30 y además las novedades del cron nuevo desde las
+  //     7:00. Es una vez por semana y es el precio de conservar la red
+  //     semanal, que es lo único que nombra algo que dejó de moverse — hay una
+  //     OT atrasada desde diciembre de 2025.
+  for (const [usuarioId, aparatos] of queMandar === "totales" ? porUsuario : []) {
     // Una cuenta dada de baja no recibe: sigue teniendo suscripciones hasta que
     // el `on delete cascade` las limpie, y eso sólo pasa si se borra la fila.
     const { data: usuario } = await admin
@@ -128,13 +157,9 @@ export async function GET(request: Request) {
       grants: (grants ?? []) as UsuarioModulo[],
     });
 
-    // Los lunes el total; el resto de los días, lo que se movió. Las dos
-    // salen de los mismos avisos: lo único que cambia es contra qué se
-    // comparan y cómo se redactan.
-    const resumen =
-      queMandar === "totales"
-        ? resumirParaPush(avisos)
-        : resumirElMovimiento(loQueSeMovio(avisos, foto));
+    // El total de lo que tiene para mirar. El movimiento lo dice el cron de
+    // las novedades al instante, en el momento en que pasa.
+    const resumen = resumirParaPush(avisos);
     if (!resumen) continue;
     conAvisos++;
 
@@ -165,8 +190,21 @@ export async function GET(request: Request) {
   //
   // Si falla no se voltea nada: ya se mandó lo que había que mandar, y la
   // comparación de mañana se hace contra la última foto que exista.
-  const todos = await avisosDeTodoElSistema(admin);
-  const { error: errorDeLaFoto } = await guardarFoto(admin, hoy, todos);
+  //
+  // **`avisosDeTodoElSistema` tira si un conteo falla, y acá eso significa no
+  // guardar foto.** Un conteo fallido vale 0, y un 0 espurio en la foto de hoy
+  // es un delta del tamaño del stock mañana: «23 más · Órdenes de trabajo
+  // atrasadas» sin que se haya atrasado ninguna. Sin foto, mañana se compara
+  // contra la última que exista y el delta abarca los dos días, que es la
+  // verdad.
+  let todos: Awaited<ReturnType<typeof avisosDeTodoElSistema>> = [];
+  let errorDeLaFoto: string | undefined;
+  try {
+    todos = await avisosDeTodoElSistema(admin);
+    errorDeLaFoto = (await guardarFoto(admin, hoy, todos)).error;
+  } catch (e) {
+    errorDeLaFoto = (e as Error)?.message ?? String(e);
+  }
   if (errorDeLaFoto) console.error("avisos-diarios: no se pudo guardar la foto:", errorDeLaFoto);
 
   return NextResponse.json({
