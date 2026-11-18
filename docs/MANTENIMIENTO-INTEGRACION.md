@@ -784,9 +784,21 @@ Cinco cosas que no se deducen del código:
   calla y lo dice en `canceladas_sin_revisar`: un detector apagado no se
   distingue de uno que no encuentra nada.
 - **`gut_orden` es una columna generada con los estados cerrados escritos
-  adentro**, así que cancelar necesitó la migración `20261116082742`. Mientras
-  no se aplique, una cancelada conserva su +1000 y **sube** en el listado de OT
-  en vez de desaparecer — y eso es el listado entero, no sólo un tablero GUT.
+  adentro**, así que cancelar necesitó la migración `20261116082742`. Sin ella,
+  una cancelada conserva su +1000 y **sube** en el listado de OT en vez de
+  desaparecer — y eso es el listado entero, no sólo un tablero GUT.
+
+  **Ya está aplicada**, comprobado contra producción el 18/11/2026 leyendo el
+  catálogo con `asistente_consulta`: `pg_get_expr` de la columna devuelve
+  `estado = ANY (ARRAY['REALIZADO'::text, 'CANCELADA'::text])`, `attgenerated`
+  es `s` y el índice `ordenes_trabajo_gut_orden_idx` volvió con
+  `(gut_orden DESC, ot_number DESC)`. **Se miraron los tres pedazos y no uno**,
+  porque la migración es `drop column` + `add column` + `create index` y el
+  modo de fallo que importaba era quedarse a medias: sin la columna muere el
+  listado entero, y sin el índice el orden por defecto pasa a ordenar la tabla
+  a mano sin que nada avise. Desde afuera no alcanzaba con leer filas: con 0
+  canceladas, la expresión vieja y la nueva dan el mismo número en las 2.489
+  órdenes, así que lo único que distingue una de otra es el catálogo.
 
 ## Iniciar una OT pregunta por el equipo
 
