@@ -76,11 +76,20 @@ jobs:
       - name: Tests
         run: npm test
 
+      # `npm run tipos` y no `npx tsc --noEmit`: el árbol cruzó el límite de
+      # memoria por omisión de Node y el chequeo de tipos muere con un
+      # mark-compact de V8, que parece un bug de TypeScript y no lo es. El
+      # script le sube el heap; el porqué medido está en su encabezado.
       - name: Tipos
-        run: npx tsc --noEmit
+        run: npm run tipos
 
+      # El build lleva el heap como `env:` del paso y no desde el repo, porque
+      # `npm run build` es también el comando que corre Vercel y allá hoy anda:
+      # subirle el techo desde `package.json` o un `.npmrc` cambiaría el camino
+      # de producción para arreglar una molestia del CI. Acá no es Vercel.
       - name: Build
         env:
+          NODE_OPTIONS: --max-old-space-size=8192
           NEXT_PUBLIC_SUPABASE_URL: https://ci-sin-proyecto.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: clave-falsa-de-ci
           NEXT_PUBLIC_APP_URL: https://ci-sin-deploy.invalid

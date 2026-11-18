@@ -1164,13 +1164,44 @@ advertencia completa está en el encabezado del propio `public/sw.js`.
 
 ```bash
 npm test              # vitest — la lógica pura, que es donde están las decisiones
-npx tsc --noEmit
-npm run build
+npm run tipos         # tsc --noEmit, con el heap que hoy hace falta
+NODE_OPTIONS=--max-old-space-size=8192 npm run build
 node scripts/revisar-arbol-commiteado.mjs   # antes de dar por buena una tarea
 node scripts/revisar-responsive.mjs         # lo que no entra en un telefono de 375 px
 node scripts/revisar-exportaciones.mjs      # si alguna escritura a una planilla no deja nada atras
 npm run planillas                           # si alguna planilla se cayo por una formula
 ```
+
+**El heap de las dos primeras no es un adorno.** El árbol cruzó el límite de
+memoria por omisión de Node y los dos mueren con `FATAL ERROR: Ineffective
+mark-compacts near heap limit`. Lo que lo vuelve caro no es el fallo sino cómo
+se ve: el stack es de V8 y el del build sale **después** de
+`✓ Compiled successfully`, en la fase «Running TypeScript», así que parece un
+bug de Next o un error de tipos y no es ninguno de los dos. Medido el
+17/11/2026: a la mañana `tsc` todavía pasaba con el heap por omisión y el build
+ya no; cinco horas y 21 commits después, `tsc` tampoco. Empeora con cada semana
+de trabajo, y el día que 8192 no alcance va a volver a parecer otra cosa.
+
+Por eso `npm run tipos` ([scripts/verificar-tipos.mjs](scripts/verificar-tipos.mjs)),
+que es `tsc --noEmit` con el heap puesto. **El build no lo lleva desde el
+repo, a propósito**: `npm run build` es también el comando que corre Vercel y
+allá hoy anda, así que subirle el techo desde `package.json` o un `.npmrc`
+cambiaría el camino de producción para arreglar una molestia local — con el
+techo más alto V8 tarda más en recolectar, y en un contenedor de 8 GB eso
+cambia un aborto de V8 (que hoy no pasa) por un OOM que mata el deploy entero.
+Cuánto heap tiene hoy ese contenedor no se puede medir desde acá. En el CI sí
+va, como `env:` del paso, porque el CI no es Vercel.
+
+**Y antes de arreglar un error de tipos, mirar qué TypeScript corrió.** El
+18/11/2026 el `node_modules` del checkout principal tenía **7.0.2** instalado
+por fuera del lock, que fija **5.9.3** y lo dice a propósito —el commit
+`9a3847fe` dejó afuera los siete saltos que piden cambiar un rango, TS 7 entre
+ellos—. Con el 7 aparecen tres errores (en `mantenimiento/tipos/route.ts`,
+`remises/RoutesMap.tsx` y `mantenimiento/enlaces.ts`) que **no existen con el
+5.9.3** y que el CI nunca ve, porque `npm ci` instala el lock. Arreglarlos
+sería adaptar el código a un compilador que el repo decidió no adoptar. Para
+comprobarlo sin tocar el `node_modules` compartido:
+`NODE_OPTIONS=--max-old-space-size=8192 npx -p typescript@5.9.3 tsc --noEmit`.
 
 **`revisar-exportaciones` es la sexta y es la gemela de `revisar-responsive`**:
 existe porque incumplir «toda ruta que toque un campo que se exporta tiene que
