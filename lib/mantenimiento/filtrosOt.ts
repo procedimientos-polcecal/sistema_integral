@@ -117,28 +117,64 @@ const CAMPOS_VALIDOS: readonly string[] = CAMPOS_DE_FECHA.map(([v]) => v);
 /**
  * En qué orden se listan las órdenes.
  *
- * El default es el sugerido —`gut_orden` descendente—, que sube lo abierto por
- * encima de lo cerrado y dentro de eso lo de más puntaje GUT. Sirve para
- * repartir trabajo, que es para lo que se mira el listado casi siempre.
+ * **Desde el 18/11/2026 el listado arranca por número**, de la más nueva a la
+ * más vieja, que es como se nombra una orden cuando alguien pregunta "¿qué pasó
+ * con la 2884?". Se pidió, y el motivo es que las dos cosas que se hacen con
+ * esta pantalla no se ordenan igual: buscar una orden puntual quiere el número,
+ * y repartir trabajo quiere el GUT.
  *
- * **Pero no sirve para buscar una orden puntual**, y eso es lo que faltaba: con
- * el sugerido, la OT 2884 puede estar en cualquier página. Por número va de la
- * más nueva a la más vieja, que es como se las nombra cuando alguien pregunta
- * "¿qué pasó con la 2884?".
+ * El sugerido —`gut_orden` descendente, que sube lo abierto por encima de lo
+ * cerrado y dentro de eso lo de más puntaje— **no se fue a ningún lado**: sigue
+ * en el desplegable y a un clic. Y la pregunta para la que existe ya tiene su
+ * propia pestaña en esta misma pantalla, «En qué orden hacer lo que está
+ * pendiente», que no está paginada ni filtrada y lo contesta mejor que un
+ * listado de 2.516 filas de a 50.
  *
- * Ordenar **en la base y no en el cliente**, igual que el resto: son 2.264
+ * EL QUE SE DIO VUELTA ES EL `""`, Y ESO HAY QUE LEERLO DESPACIO PORQUE LA
+ * PANTALLA Y LA RUTA NO LO ENTIENDEN IGUAL, A PROPÓSITO:
+ *
+ * - Para **la pantalla**, `""` es el número: el default no viaja a la barra de
+ *   direcciones —`escribirEnLaUrl` saltea lo vacío—, igual que el primer valor
+ *   de `CAMPOS_DE_FECHA`. Por eso el sugerido necesitó un valor propio: si
+ *   fuera él el vacío, **elegirlo no se podría guardar en el enlace** y al
+ *   recargar volvería al número.
+ * - Para **la ruta**, un pedido sin `orden` sigue siendo el sugerido, y eso es
+ *   lo que deja en su sitio a los **cuatro** lugares que piden órdenes sin
+ *   decir ninguno: el tablero kanban —donde cada columna muestra primero lo más
+ *   urgente—, el historial de un equipo, la pantalla de mantenimientos y
+ *   `?pendientes=1`.
+ *
+ * Las dos lecturas conviven porque **`consultaDeLaRuta` traduce**: lo que la
+ * pantalla calla, al pedirle los datos a la API lo dice como `orden=numero`.
+ * La barra de direcciones habla el idioma de la pantalla y la consulta el de la
+ * ruta, que es la misma distinción que ya hacía la página (`pagina` contra
+ * `page`).
+ *
+ * Un enlace viejo con `?orden=numero` sigue ordenando por número: la pantalla
+ * sólo distingue el sugerido de todo lo demás, así que lo lee como `""`, que es
+ * justamente el número, y en la próxima escritura el parámetro se cae solo.
+ *
+ * Ordenar **en la base y no en el cliente**, igual que el resto: son 2.516
  * filas paginadas de a 50, y ordenar la página que se está mirando no es
  * ordenar nada.
  */
 export const ORDENES_DEL_LISTADO = [
-  ["", "Sugerido (GUT)"],
-  ["numero", "N° de OT"],
+  ["", "N° de OT"],
+  ["gut", "Sugerido (GUT)"],
 ] as const;
 
-const ORDENES_VALIDOS: readonly string[] = ORDENES_DEL_LISTADO.map(([v]) => v);
+/**
+ * **La lista blanca no sale del desplegable, y es la única del archivo que no
+ * lo hace.** `numero` no es una opción —la opción por número vale `""`— pero sí
+ * es un valor que hay que aceptar: es el que `consultaDeLaRuta` le manda a la
+ * ruta, porque del otro lado el vacío quiere decir el sugerido, y es además el
+ * que traen los enlaces anteriores al 18/11/2026.
+ */
+const ORDENES_VALIDOS: readonly string[] = ["", "numero", "gut"];
 
 /**
- * El orden pedido, o `""` —el sugerido— si no se reconoce.
+ * El orden pedido, o `""` —que para la pantalla es el número y para la ruta el
+ * sugerido— si no se reconoce. El porqué de esas dos lecturas está arriba.
  *
  * La lista blanca vive acá y no en la ruta por lo mismo que `columnaDeFecha`:
  * de esto sale un nombre de columna para la consulta, y dejar que quien lo use
@@ -220,7 +256,12 @@ export function leerFiltrosDeLaUrl(
     campoFecha: CAMPOS_VALIDOS.includes(params.get("campo_fecha") ?? "")
       ? params.get("campo_fecha") ?? ""
       : "",
-    orden: ordenDelListado(params.get("orden")),
+    // La pantalla tiene dos estados y no tres: el sugerido, o el número —que
+    // es `""` desde el 18/11/2026—. Todo lo demás cae en el número, y ahí entra
+    // el `orden=numero` de los enlaces viejos, que así siguen diciendo lo
+    // mismo y además se limpian solos en la próxima escritura. Ver
+    // `ORDENES_DEL_LISTADO`: la ruta lee ese mismo vacío al revés.
+    orden: ordenDelListado(params.get("orden")) === "gut" ? "gut" : "",
     desde: laFecha(params, "desde"),
     hasta: laFecha(params, "hasta"),
     estado: losQueEstanEnLaLista(params, "estado", ESTADOS_DE_OT),
@@ -292,8 +333,16 @@ export const escribirFiltrosEnLaUrl = (f: FiltrosOt, pagina = 1): string =>
  * cuando no es la primera: son dos cosas parecidas con reglas distintas, una
  * para pedirle datos al servidor y otra para que un enlace se pueda leer y
  * compartir. Por eso acá se piden los filtros sin página y se pega la propia.
+ *
+ * **El orden es el segundo de esos casos, y desde el 18/11/2026 es el que más
+ * importa:** la pantalla calla el suyo cuando es el de siempre —por número—,
+ * pero callarlo del lado de la ruta querría decir otra cosa, el sugerido, que
+ * es lo que la ruta le sigue dando a los cuatro lugares que no piden ninguno.
+ * Así que acá se dice en voz alta. Sin esta línea el listado arrancaría por
+ * GUT y el desplegable diría «N° de OT»: nada fallaría y todo estaría mal. El
+ * porqué completo está en `ORDENES_DEL_LISTADO`.
  */
 export function consultaDeLaRuta(f: FiltrosOt, pagina: number): string {
-  const query = escribirFiltrosEnLaUrl(f);
+  const query = escribirFiltrosEnLaUrl({ ...f, orden: f.orden || "numero" });
   return query ? `${query}&page=${pagina}` : `page=${pagina}`;
 }

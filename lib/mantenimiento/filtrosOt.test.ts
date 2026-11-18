@@ -3,7 +3,7 @@ import {
   leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, hayAlgunFiltro, consultaDeLaRuta,
   columnaDeFecha, FILTROS_VACIOS, type FiltrosOt,
   TIPOS_DE_OT, QUIENES_DE_OT, ETIQUETA_DE_TIPO, ETIQUETA_DE_QUIEN,
-  ordenDelListado,
+  ordenDelListado, ORDENES_DEL_LISTADO,
 } from "./filtrosOt";
 import { leerPaginaDeLaUrl } from "@/lib/core/filtrosUrl";
 
@@ -85,7 +85,10 @@ describe("escribir los filtros en la URL", () => {
     const filtros: FiltrosOt = {
       busqueda: "rodamiento",
       campoFecha: "fecha_ejecucion",
-      orden: "numero",
+      // El sugerido y no el numero: el numero es el default de la pantalla y
+      // vale `""`, asi que no viaja. Lo que tiene que volver igual es lo que
+      // alguien eligio.
+      orden: "gut",
       desde: "2026-08-01",
       hasta: "2026-08-31",
       estado: ["ATRASADO", "EN_PROCESO"],
@@ -183,17 +186,23 @@ describe("si hay algun filtro puesto", () => {
 });
 
 /**
- * La ruta entiende el mismo query string que la barra de direcciones: asi,
- * reproducir lo que alguien ve no requiere traducir nada.
+ * La ruta entiende el mismo query string que la barra de direcciones, asi que
+ * reproducir lo que alguien ve casi no requiere traducir nada.
+ *
+ * CASI: hay dos cosas que no se escriben igual de los dos lados, y las dos
+ * estan probadas aca abajo. La pagina —`pagina` y solo cuando no es la
+ * primera, contra `page` y siempre— y, desde el 18/11/2026, el orden: la
+ * pantalla calla el suyo cuando es por numero y la ruta necesita oirlo, porque
+ * de ese lado el silencio quiere decir el sugerido.
  */
 describe("la consulta que se le manda a la ruta", () => {
-  it("sin filtros va solo la pagina", () => {
-    expect(consultaDeLaRuta(FILTROS_VACIOS, 1)).toBe("page=1");
+  it("sin filtros va la pagina y el orden, que no es un filtro", () => {
+    expect(consultaDeLaRuta(FILTROS_VACIOS, 1)).toBe("orden=numero&page=1");
   });
 
   it("con filtros, los filtros y la pagina", () => {
     expect(consultaDeLaRuta({ ...FILTROS_VACIOS, estado: ["ATRASADO"] }, 3))
-      .toBe("estado=ATRASADO&page=3");
+      .toBe("orden=numero&estado=ATRASADO&page=3");
   });
 });
 
@@ -242,7 +251,7 @@ describe("la pagina en la barra de direcciones", () => {
 
   // La de la ruta es otra: siempre va, y con otro nombre.
   it("la de la API no se mezcla con la de la URL", () => {
-    expect(consultaDeLaRuta(FILTROS_VACIOS, 1)).toBe("page=1");
+    expect(consultaDeLaRuta(FILTROS_VACIOS, 1)).toBe("orden=numero&page=1");
     expect(escribirFiltrosEnLaUrl(FILTROS_VACIOS, 1)).toBe("");
   });
 });
@@ -293,7 +302,10 @@ describe("en que orden se lista", () => {
    * nombre de columna para la consulta, asi que la lista blanca vive en `lib/`
    * y no en la ruta — lo mismo que `columnaDeFecha`.
    */
-  it("acepta los dos que existen y nada mas", () => {
+  it("acepta los tres que existen y nada mas", () => {
+    expect(ordenDelListado("gut")).toBe("gut");
+    // `numero` no es una opcion del desplegable pero si un valor valido: es el
+    // que `consultaDeLaRuta` le manda a la ruta.
     expect(ordenDelListado("numero")).toBe("numero");
     expect(ordenDelListado("")).toBe("");
     expect(ordenDelListado("ot_number; drop table")).toBe("");
@@ -302,10 +314,44 @@ describe("en que orden se lista", () => {
     expect(ordenDelListado(undefined)).toBe("");
   });
 
-  it("viaja en la URL y vuelve igual", () => {
-    const url = escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, orden: "numero" });
-    expect(url).toContain("orden=numero");
-    expect(leerFiltrosDeLaUrl(new URLSearchParams(url), catalogos).orden).toBe("numero");
+  /**
+   * Pedido el 18/11/2026: que el listado arranque por numero de OT.
+   *
+   * La pantalla tiene dos estados y no tres —el sugerido o el numero—, y el
+   * numero es el vacio, asi que entrar por el menu lo da sin que viaje nada.
+   */
+  it("sin nada en la URL, la pantalla arranca por numero", () => {
+    expect(leerFiltrosDeLaUrl(new URLSearchParams(""), catalogos).orden).toBe("");
+    expect(ORDENES_DEL_LISTADO[0]).toEqual(["", "N° de OT"]);
+  });
+
+  /**
+   * La otra mitad del pedido, y la que es facil de romper sin que nada falle:
+   * al pedirle los datos a la ruta el orden se dice EN VOZ ALTA, porque de ese
+   * lado el vacio quiere decir el sugerido. Sin esto el listado arrancaria por
+   * GUT con el desplegable diciendo «N° de OT».
+   */
+  it("lo que la pantalla calla, la consulta de la ruta lo dice", () => {
+    expect(consultaDeLaRuta(FILTROS_VACIOS, 1)).toBe("orden=numero&page=1");
+    expect(consultaDeLaRuta({ ...FILTROS_VACIOS, orden: "gut" }, 1)).toBe("orden=gut&page=1");
+    // Y en la barra de direcciones el default sigue sin ensuciar el enlace.
+    expect(escribirFiltrosEnLaUrl(FILTROS_VACIOS)).toBe("");
+  });
+
+  /**
+   * El sugerido necesito un valor propio justamente para esto: si fuera el
+   * vacio no viajaria —`escribirEnLaUrl` saltea lo vacio— y elegirlo no se
+   * podria guardar en el enlace.
+   */
+  it("el sugerido viaja en la URL y vuelve igual", () => {
+    const url = escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, orden: "gut" });
+    expect(url).toContain("orden=gut");
+    expect(leerFiltrosDeLaUrl(new URLSearchParams(url), catalogos).orden).toBe("gut");
+  });
+
+  /** Un enlace de antes del 18/11/2026 sigue ordenando por numero. */
+  it("el `orden=numero` viejo sigue siendo el numero", () => {
+    expect(leerFiltrosDeLaUrl(new URLSearchParams("orden=numero"), catalogos).orden).toBe("");
   });
 
   /**

@@ -1794,6 +1794,21 @@ la escala (3×3×3). Y **lo cerrado va al final**: el +1000 existe porque, sin �
 una orden realizada de 125 puntos quedaría para siempre arriba de todo, por
 encima de la que entró hoy.
 
+**El listado de órdenes ya no arranca por GUT (18/11/2026).** Se pidió que
+abriera ordenado por N° de OT, y es un cambio de pantalla y no del GUT: el
+sugerido sigue en el desplegable, a un clic, y la pregunta para la que existe
+—en qué orden hacer el trabajo— ya tiene su propia pestaña sin paginar.
+
+Lo que no se deduce del código y conviene saber antes de tocarlo: **la pantalla
+y la ruta leen el mismo `""` al revés, a propósito**. Para la pantalla es el
+número, así que el default no ensucia el enlace; para la ruta sigue siendo el
+sugerido, que es lo que mantiene en su sitio a los **cuatro** lugares que piden
+órdenes sin decir ningún orden —el tablero kanban, el historial de un equipo,
+la pantalla de mantenimientos y `?pendientes=1`—. Lo que las concilia es una
+sola línea, el `orden: f.orden || "numero"` de `consultaDeLaRuta`: **sin ella
+el listado volvería a arrancar por GUT con el desplegable diciendo «N° de
+OT»**, sin que nada falle. Está fijada con un test.
+
 **El GUT no se exporta a ninguna planilla.** `prioridad` es la columna S de la
 pestaña `OT`, que es parte del derrame de un `IMPORTRANGE`: un `PUT` ahí bloquea
 el derrame o lo pisa el recálculo. Por eso el puntaje vive en columnas propias

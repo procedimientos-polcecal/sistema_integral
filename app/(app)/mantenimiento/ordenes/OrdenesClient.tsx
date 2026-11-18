@@ -133,9 +133,13 @@ export default function OrdenesClient({
   const [proveedor, setProveedor] = useState(arranque.proveedor);
   const [sector, setSector] = useState(arranque.sector);
   const [equipo, setEquipo] = useState(arranque.equipo);
-  // No es un filtro —no saca filas— pero viaja igual que ellos: va a la URL y
-  // a la consulta, porque el orden lo resuelve la base. Por eso queda afuera de
-  // `hayAlgunFiltro` y de «Limpiar»: no es algo que esconda órdenes.
+  // No es un filtro —no saca filas— pero viaja igual que ellos, porque el
+  // orden lo resuelve la base. Por eso queda afuera de `hayAlgunFiltro` y de
+  // «Limpiar»: no es algo que esconda órdenes.
+  //
+  // A la consulta va siempre y a la barra de direcciones sólo cuando no es el
+  // de siempre —desde el 18/11/2026, el número—, que son dos reglas distintas
+  // a propósito: el porqué está en `ORDENES_DEL_LISTADO`.
   const [orden, setOrden] = useState(arranque.orden);
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);

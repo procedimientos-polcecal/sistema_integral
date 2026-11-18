@@ -129,6 +129,20 @@ export async function GET(request: Request) {
   // de las cerradas y dentro de eso ordena por puntaje, y el número desempata
   // para que el orden sea estable. Por número sirve para lo otro que se hace
   // con este listado, que es buscar una orden puntual — ver `ordenDelListado`.
+  //
+  // ACÁ EL QUE NO DICE NADA SIGUE RECIBIENDO EL SUGERIDO, aunque desde el
+  // 18/11/2026 la pantalla de órdenes arranque por número: lo pide explícito y
+  // esta rama no cambió. Son cuatro los que no lo piden —el tablero kanban, el
+  // historial de un equipo, la pantalla de mantenimientos y `?pendientes=1`— y
+  // los cuatro quieren lo urgente arriba. El porqué largo de que el default sea
+  // de cada lado y no de la función está en `ORDENES_DEL_LISTADO`.
+  //
+  // Lo que había que mirar antes de volverla la rama que ve todo el mundo: un
+  // `desc` en Postgres pone los nulos PRIMERO, así que una orden sin número
+  // encabezaría la pantalla. No puede pasar —`ot_number` es `integer not null
+  // unique` desde la 005, y medido el 18/11/2026 hay 0 de 2.516—, y ese mismo
+  // `unique` es el índice con el que la base resuelve este orden sin ordenar la
+  // tabla a mano.
   query = ordenDelListado(searchParams.get("orden")) === "numero"
     ? query.order("ot_number", { ascending: false })
     : query.order("gut_orden", { ascending: false })
