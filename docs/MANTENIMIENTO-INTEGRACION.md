@@ -2391,6 +2391,103 @@ movimiento de una orden llegue a la planilla no lo probó nadie todavía.
   taparla: hoy no tiene ni un caso (0 órdenes en `SUSPENDIDA`) y arbitrarla
   desde el servidor sería elegir por el listado sin que nadie lo haya pedido.
 
+### Asignar operarios desde el mes (19/11/2026)
+
+El mes de «Asignación RR.HH» lleva, arriba de cada semana, la rotación del
+taller —quién está en qué turno, y quién falta algún día—, y desde el panel de
+un día se le **ponen y sacan operarios** a una orden. El diseño está en el
+[spec](superpowers/specs/2026-11-19-mantenimiento-asignar-operarios-desde-el-mes-design.md)
+y el plan en
+[docs/superpowers/plans/2026-11-19-mantenimiento-asignar-operarios-desde-el-mes.md](superpowers/plans/2026-11-19-mantenimiento-asignar-operarios-desde-el-mes.md).
+
+**No hizo falta ninguna migración.** `operario_1/2/3` ya existían, ya están en
+`EN_LOS_DOS_LADOS` de `repartirRegistroDeOT` y ya viajan a las columnas **P, Q y
+R** del master. Lo que cambió es *cuándo* se escriben: hasta ahora sólo al
+cerrar la orden, con «Registrar el trabajo».
+
+**Lo pedido era un conteo, y el conteo no servía.** El pedido fue «los operarios
+disponibles en cada semana del mes», y medido contra producción ese número sale
+**constante**: 4 mecánicos · 3 electricistas · 1 lubricador las **nueve** semanas
+de noviembre y diciembre, y tampoco varía de lunes a domingo —las dos ausencias
+y el único franco de esa gente son anteriores al 09/11, el día en que se cargó
+el padrón—. Una franja que repite el mismo número nueve semanas seguidas deja de
+mirarse, que es la lección que ya costó el resumen diario de avisos. Lo que sí
+cambia todas las semanas es la rotación, y es además lo que hace falta para
+decidir a quién ponerle una orden.
+
+Seis cosas que no se deducen del código:
+
+- **El vocabulario sale del catálogo `operarios`, con sus posiciones, y se
+  escribe tal cual.** Las tres columnas tienen cada una su propia lista —quién
+  puede ir primero no es quién puede ir tercero—, y eso no es una preferencia
+  del formulario: medido el 19/11/2026 sobre las últimas 1.000 OT, **1.223
+  menciones de 1.223 están en la columna que el catálogo les asigna, cero
+  fuera**. Una versión anterior del diseño inventaba un formato propio
+  —`Aguirre, Gabriel`— para desambiguar apellidos contra los 71 empleados; se
+  descartó porque el desplegable del cierre no habría ofrecido después lo que el
+  panel asignó, y dos vocabularios para las mismas tres celdas es como se pudre
+  uno.
+- **Para saber si alguien viene hay que saber quién es, y 8 de los 10 nombres
+  resuelven contra el padrón** (`resolverElCatalogo`, por `norm` + `includes`,
+  con exactamente una persona). Los otros tres se dicen en vez de adivinarse:
+  «Ambos» no es una persona; «Lopez» es **Raúl Argentino López**, que todavía no
+  está en `mant_personal_taller`; y «Lucas» cae en GALLASTEGUI y en MENDIZABAL,
+  los dos del taller. Los tres se ofrecen igual —si no, no se podría asignar a
+  López, que es el tercer nombre más cargado con 220 menciones— y la pantalla
+  dice por qué no sabe si vienen. **Los dos últimos se cierran con datos y no
+  con código**: cargar a López en el padrón, y desambiguar «Lucas» en el
+  catálogo. El día que eso pase la función los resuelve sola, y hay un test que
+  lo fija.
+- **Los nombres NO viajan por `/api/mantenimiento/calendario`**, y por eso hay
+  una ruta aparte, `/api/mantenimiento/taller-del-mes`, guardada con
+  `esAdminMantenimiento`. Esa primera la abre cualquiera que vea Mantenimiento
+  —la montan tres pantallas, el alta de una OT incluida— y manda sólo **cuántas**
+  personas hay por oficio. Sumarle los nombres se los habría entregado a los
+  catorce niveles del módulo de una sola vez y sin que se note. Por lo mismo
+  `franjaDeLaSemana` es una **prop de render** de `CalendarioDeOT` y no un
+  `boolean`: quien tiene los nombres los dibuja, y en el componente compartido no
+  entra ni la ruta que los trae ni el permiso que los guarda.
+- **La franja es el ciclo y el día es la verdad.** Una pisada
+  (`mant_programacion_pisadas`) mueve a alguien de turno **un día**, y la franja
+  habla de **una semana**: ubicar a alguien por su pisada diría de los siete días
+  algo que vale uno solo. Así que la franja sólo **cuenta** cuántos días tienen
+  gente movida, y el turno de un día concreto lo resuelve `turnoDelDia`, que es
+  lo que mira el panel al asignar. Eso también fija contra qué se comprueba:
+  `scripts/comparar-franja-con-la-semana.mts` contrasta la franja contra **el
+  ciclo** que calcula la pestaña «Semana», no contra su grilla final —comparar
+  contra la grilla haría «fallar» a la franja justo donde hace lo correcto—. Da
+  cero diferencias sobre cuatro semanas seguidas.
+- **A una orden cerrada no se le asigna, y a una de arrastre sí.** Esos campos
+  no son «a quién le toca» sino **quién lo hizo**, que es lo que pregunta
+  «Registrar el trabajo»: **643 de las últimas 1.000 OT** tienen al menos uno
+  cargado, y están ahí porque alguien cerró la orden. Lo único que decide si una
+  orden admite gente es el estado, así que una atrasada se asigna igual — y su
+  turno y su falta se calculan **contra el día que se está mirando** y nunca
+  contra el inicio de la orden. Una orden del 12 vista el 19 tiene que ofrecer a
+  quien viene el 19.
+- **Sacar un operario sólo pega si la escritura en la planilla anduvo.** Poner y
+  sacar son el mismo PATCH, pero no tienen la misma red: si Sheets falla, la OT
+  queda con `sheets_pendiente` y la cola se rearma **desde la fila**, donde una
+  celda vacía es indistinguible de una que nunca se llenó. Para un nombre puesto
+  alcanza; para un vaciado no, y la próxima sincronización trae de vuelta el
+  nombre viejo. Arreglarlo de verdad pide una columna que recuerde qué campos se
+  vaciaron —lo que ya hace `sheets_pendiente_campos` en los avisos—, o sea una
+  migración. Mientras tanto el modal dice **lo que contestó Google, sin
+  traducir**, y que hay que sacarlo también allá.
+
+Y dos más, chicas: **el orden lo da el oficio que pide la orden** cuando se sabe
+(`oficioDeLaEspecialidad`: MECANICO → mecánico, ELECTRICO → electricista,
+LUBRICACION → lubricador), y con `null` —CIVIL, INSTRUMENTACIÓN y OTRO— **no se
+sugiere a nadie**, porque inventarles un oficio sería enlazar al que se le
+parece; y **de una falta se dice sólo que no viene**, nunca el `tipo` de la
+ausencia, que la ruta ni siquiera manda.
+
+**Lo que no se comprobó**: ninguna de las dos pantallas se abrió en un navegador
+con una sesión real. `tsc`, los 7.600 tests, el build y los cuatro escaneos
+pasan, y la franja se contrastó contra producción con el script — pero poner un
+operario de verdad, y ver qué contesta la planilla al sacarlo, lo hace la
+primera persona que lo use.
+
 ## El cuaderno de Piparo: leer una foto y sacar las OT (01–02/11/2026)
 
 Piparo entrega su mes en un **cuaderno manuscrito** y no con partes preimpresos
