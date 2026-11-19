@@ -677,6 +677,7 @@ export default function DashboardClient({
           <Acceso href="/mantenimiento/planificacion" label="Programación" />
           <Acceso href="/mantenimiento/produccion" label="Producción" />
           <Acceso href="/mantenimiento/historial" label="Historial" />
+          <Acceso href="/mantenimiento/sectores/historial" label="Historial de sectores" />
           {esAdmin && <Acceso href="/mantenimiento/configuracion" label="Configuración" />}
         </div>
       </div>
@@ -743,13 +744,24 @@ export default function DashboardClient({
 
             {sectoresStatusLog.length > 0 && (
               <div>
-                <button onClick={() => setShowLog((v) => !v)}
-                  className="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition-colors">
-                  <svg className={`w-3 h-3 transition-transform ${showLog ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                  {showLog ? "Ocultar" : "Ver"} historial de cambios de sector
-                </button>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <button onClick={() => setShowLog((v) => !v)}
+                    className="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition-colors">
+                    <svg className={`w-3 h-3 transition-transform ${showLog ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    {showLog ? "Ocultar" : "Ver"} historial de cambios de sector
+                  </button>
+                  {/* Esto son los últimos 20 de los sectores de planta. El
+                      archivo completo —con filtros, duración de cada parada y
+                      los sectores que ya no están— vive en su propia pantalla. */}
+                  <Link
+                    href="/mantenimiento/sectores/historial"
+                    className="text-xs font-semibold text-[var(--primary)] hover:underline"
+                  >
+                    Ver el historial completo →
+                  </Link>
+                </div>
                 {showLog && (
                   <div className="mt-2 card overflow-hidden">
                     {sectoresStatusLog.map((log: any, i: number) => {
