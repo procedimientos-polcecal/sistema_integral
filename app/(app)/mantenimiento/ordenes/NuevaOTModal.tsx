@@ -23,6 +23,9 @@ import FallaDeLaOT, { FALLA_VACIA, type LaFalla } from "@/components/FallaDeLaOT
 import type { LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { CartelDelResultado } from "@/app/cargar/envio";
 import { mandarOEncolar, type Resultado } from "@/lib/core/mandarOEncolar";
+import {
+  sembradoDesdeElAviso, extrasDelAviso, loQueElAvisoNoTrae, type AvisoParaLaOT,
+} from "@/lib/mantenimiento/otDesdeAviso";
 import CalendarioDeFecha from "./CalendarioDeFecha";
 
 /**
@@ -82,12 +85,20 @@ const VOCABULARIO: Vocabulario = {
   prioridades: PRIORIDADES,
 };
 
-export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: {
+export default function NuevaOTModal({ sectores, equipos, aviso, onClose, onCreated }: {
   sectores: any[];
   equipos: any[];
+  /**
+   * El aviso del que nace la orden, si nace de uno. Sin él el modal es el de
+   * siempre. **Vive en la prop y no en el estado del formulario**: «Traer» una
+   * OT vieja pisa `form` entero, y si el enlace estuviera ahí reciclar un
+   * número desenlazaría el aviso sin decir nada —la orden nacería huérfana y el
+   * aviso volvería a la lista de pendientes, invitando a generar una segunda—.
+   */
+  aviso?: AvisoParaLaOT | null;
   onClose: () => void;
-  /** Se creó. `aviso` es lo que no salió del todo, para que se muestre. */
-  onCreated: (aviso?: string | null) => void;
+  /** Se creó. `advertencia` es lo que no salió del todo, para que se muestre. */
+  onCreated: (advertencia: string | null, numero?: string) => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState("");
@@ -205,6 +216,9 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
         gut_urgencia:   "",
         gut_tendencia:  "",
         requiere_parada_sector: false,
+        // Después de los valores por defecto y nunca antes: el sembrado trae
+        // sólo las diez claves que el aviso sabe, y lo demás se queda como está.
+        ...(aviso ? sembradoDesdeElAviso(aviso, hoyEnArgentina()) : {}),
       },
       // Arranca con un renglón vacío para que el formulario se vea como antes
       // —un campo listo para escribir— y no como una lista que hay que estrenar.
@@ -316,6 +330,8 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
         sector_raw:  sec?.nombre ?? null,
         equipment_id: form.equipment_id || null,
         sector_id:   form.sector_id || null,
+        // Recién acá, y no en el estado: ver la prop `aviso`.
+        ...(aviso ? extrasDelAviso(aviso) : {}),
     });
     setSaving(false);
 
@@ -340,7 +356,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     // esperando o se rechazó salió por el `return` de arriba, con el modal
     // abierto y lo cargado en su lugar.
     tirar();
-    onCreated(salida.advertencia);
+    onCreated(salida.advertencia, salida.numero);
   }
 
   return (
@@ -351,6 +367,18 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           submit. */}
       <Modal titulo="Nueva Orden de Trabajo" alSalir={onClose} tocado={tocado} ancho="ancho">
         <form onSubmit={submit} className="space-y-5">
+          {aviso && (
+            <>
+              <p className="text-sm text-slate-600">
+                Del aviso {aviso.oa_number}. Viene con lo que el aviso dice; todo se puede corregir antes de crearla, y el aviso no se toca.
+              </p>
+              {loQueElAvisoNoTrae(aviso).length > 0 && (
+                <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  El aviso llegó sin {loQueElAvisoNoTrae(aviso).join(" y ")}: lo de abajo no viene de nadie, lo estás eligiendo vos.
+                </p>
+              )}
+            </>
+          )}
           {/* Arriba de todo y no escondido entre los campos: es lo primero que
               se hace cuando se carga una tanda de órdenes del mismo día. */}
           <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-2">
