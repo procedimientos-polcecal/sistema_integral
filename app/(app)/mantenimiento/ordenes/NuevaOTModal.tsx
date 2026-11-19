@@ -105,6 +105,27 @@ export default function NuevaOTModal({ sectores, equipos, aviso, onClose, onCrea
   /** Cómo salió el envío. El `error` de arriba es sólo lo que se valida acá adentro. */
   const [resultado, setResultado] = useState<Resultado | null>(null);
 
+  /**
+   * Esta carga **ya está en la cola del teléfono**, así que este formulario no
+   * la puede volver a mandar.
+   *
+   * No es prolijidad: `mandarOEncolar` genera una clave nueva en cada llamada y
+   * la ruta no mira si el aviso ya tiene `work_order_id`, así que apretar de
+   * nuevo **crea una segunda OT con el mismo `aviso_id`** —dos órdenes para el
+   * mismo problema y el aviso apuntando a la última—. Y con el modal tal como
+   * quedaba, el botón habilitado al lado de un cartel ámbar es justamente una
+   * invitación a apretarlo.
+   *
+   * **No se tira el borrador ni se cierra el modal**, a propósito: el cuerpo ya
+   * viajó a la cola, y si el reenvío termina rechazado la corrección se hace en
+   * `/cargar`, que es donde está esa carga. Tirarlo acá agregaría un camino de
+   * pérdida en vez de cerrar uno.
+   *
+   * Un rechazo **sí** deja el botón: ahí no quedó nada encolado y lo que
+   * corresponde es corregir el campo que la ruta nombró y volver a mandar.
+   */
+  const yaQuedoEnLaCola = resultado?.estado === "encolada";
+
   /* ── Reutilizar una OT vieja ──────────────────────────────────────────
    * Se cargan trabajos ya hechos en tanda, varios del mismo día y con la
    * misma gente. `vieneDe` queda puesto hasta que se guarda: es lo que
@@ -293,6 +314,9 @@ export default function NuevaOTModal({ sectores, equipos, aviso, onClose, onCrea
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    // Y acá también, no sólo en el `disabled` del botón: dentro de un `<form>`
+    // un Enter en cualquier campo de texto lo manda sin pasar por el botón.
+    if (yaQuedoEnLaCola) return;
     // Todo lo que falta, de una sola vez: los obligatorios de siempre y, si
     // viene con fecha de cierre, también las horas y quién la hizo. Un solo
     // mensaje — que un campo sea obligatorio siempre o sólo al cerrar es una
@@ -697,9 +721,13 @@ export default function NuevaOTModal({ sectores, equipos, aviso, onClose, onCrea
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <PieDeModal className="flex gap-2">
-            <button type="submit" disabled={saving}
+            {/* El texto cambia con el botón y no sólo el `disabled`: un «Crear
+                OT» gris no dice por qué está gris, y acá el porqué es
+                exactamente lo que hay que entender —la carga ya salió—. El
+                cartel de arriba cuenta el resto. */}
+            <button type="submit" disabled={saving || yaQuedoEnLaCola}
               className="btn-primary">
-              {saving ? "Guardando..." : "Crear OT"}
+              {saving ? "Guardando..." : yaQuedoEnLaCola ? "Ya quedó para mandarse" : "Crear OT"}
             </button>
             {/* El único que tira. */}
             <button type="button" onClick={() => { tirar(); onClose(); }}
