@@ -1743,13 +1743,24 @@ lo que lo hace una prueba de qué se reportó y cuándo, y editar la orden no lo
 reescribe.
 
 **3. `aviso_id` vive en la prop y no en el estado del formulario.** Es lo más
-importante de la sección. El formulario completo tiene arriba un botón «Traer»
-que recicla una OT vieja y **pisa el estado entero**. Si el enlace viviera ahí
-adentro, reciclar un número **desenlazaría el aviso en silencio**: la orden
-quedaría huérfana y el aviso volvería a la lista de pendientes invitando a que
-alguien genere una segunda para el mismo problema, que es lo que ya cuida
-`loQueImpideDesenlazar`. Nada lo avisa: la orden se crea bien. Por eso el enlace
-sale siempre de la prop.
+importante de la sección, y es el porqué de una decisión: el formulario completo
+tiene arriba un botón «Traer» que recicla una OT vieja y **pisa los campos que
+copia** (sector, equipo, descripción, especialidad, tipo, quién, estado,
+prioridad, contratista, operarios, horas y parada), con un merge sobre el estado.
+En el diseño descartado el enlace hubiera vivido dentro de ese estado, y un
+reciclado que lo arrastrara habría **desenlazado el aviso en silencio**: la orden
+huérfana y el aviso de vuelta en la lista de pendientes, invitando a que alguien
+genere una segunda para el mismo problema, que es lo que ya cuida
+`loQueImpideDesenlazar`. Eso **no pasa hoy**, justamente porque el enlace sale
+siempre de la prop.
+
+Lo que sí pasa hoy y no se deduce leyendo el archivo: abrir el formulario desde
+un aviso y después apretar «Traer» **reemplaza la descripción, el sector y el
+equipo que sembró el aviso por los de la OT vieja, y el `aviso_id` queda**. La
+orden se crea con los datos de una OT y enlazada al aviso. **No es un error**:
+quien tipea un número y aprieta «Traer» está eligiendo reciclar, y la barra
+ámbar avisa que esos campos no los escribió quien mira. Esa es la diferencia con
+el problema del borrador del punto siguiente, que era silencioso.
 
 **4. La clave del borrador lleva el aviso de origen.** Esto apareció
 implementando y no estaba en el diseño. El formulario guarda borrador, y con la
@@ -2056,7 +2067,7 @@ Cómo queda el resto:
 
 - **Se puntúa sólo desde el SdG**, nunca en el formulario de Google: de 2.227
   órdenes, 2.209 entraron por ahí y llegan sin puntuar. Se puntúa al crear
-  (`NuevaOTModal`, `GenerarOTModal`), y sobre una orden ya cargada desde el
+  (`NuevaOTModal`, que es también el que se abre desde un aviso), y sobre una orden ya cargada desde el
   listado y el detalle, por `PATCH /api/mantenimiento/ordenes/[id]/gut`. No
   audita: un puntaje se deshace escribiendo otro. Los tres desplegables arrancan
   **vacíos** y no son obligatorios.
