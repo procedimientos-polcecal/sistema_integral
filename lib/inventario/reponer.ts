@@ -17,7 +17,7 @@
  * las dos cosas se nota mirando la pantalla.
  */
 
-import { norm } from "@/lib/core/texto";
+import { norm, coincide } from "@/lib/core/texto";
 
 /**
  * La ventana de consumo, en días. Medido el 02/10/2026 sobre los 497 faltantes
@@ -366,6 +366,34 @@ export function ordenarParaReponer<T extends Candidato>(
 ): T[] {
   const criterio = COMPARADORES[orden] ?? COMPARADORES[ORDEN_POR_DEFECTO];
   return [...lista].sort((a, b) => criterio(a, b) || porCodigo(a, b));
+}
+
+/**
+ * Contra qué texto busca el buscador: lo mismo que la fila muestra.
+ *
+ * Son la descripción y el código, que es lo que se ve. Meter acá algo que no
+ * está en pantalla —el id, por ejemplo— da una fila que aparece sin que se
+ * pueda explicar por qué; es el mismo criterio que `coincide` deja escrito.
+ */
+const dondeSeBusca = (c: Candidato) =>
+  `${c.articulo.descripcion} ${c.articulo.codigo}`;
+
+/**
+ * Las filas que responden a lo que se escribió.
+ *
+ * Usa el `coincide` del núcleo, el mismo de los desplegables y del listado de
+ * órdenes de servicio: ignora acentos y acepta las palabras en cualquier
+ * orden, así que «bronce buje» encuentra lo mismo que «buje bronce». Que los
+ * buscadores del sistema busquen igual es lo que permite contestar por qué uno
+ * encuentra algo y otro no.
+ *
+ * Con la consulta vacía devuelve **la misma lista**, no una copia: la pantalla
+ * la pasa por `useMemo` y un arreglo nuevo en cada tecla haría redibujar las
+ * 92 filas sin que haya cambiado nada.
+ */
+export function filtrarParaReponer<T extends Candidato>(lista: T[], consulta: string): T[] {
+  if (!consulta.trim()) return lista;
+  return lista.filter((c) => coincide(dondeSeBusca(c), consulta));
 }
 
 /**

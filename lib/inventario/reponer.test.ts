@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   clasificarParaReponer, estaAbierto, altaDeReposicion, pedidosAbiertosPorCodigo,
-  avisoDePedidoAbierto, ordenarParaReponer, cuantoFalta,
+  avisoDePedidoAbierto, ordenarParaReponer, filtrarParaReponer, cuantoFalta,
   ORDENES_DE_REPOSICION, ORDEN_POR_DEFECTO,
   DIAS_DE_CONSUMO,
 } from "./reponer";
@@ -561,5 +561,62 @@ describe("ordenar la lista", () => {
     ];
     const { paraPedir } = clasificarParaReponer(articulos, movimientos, [], HOY);
     expect(paraPedir.map((c) => c.articulo.codigo)).toEqual(["00002", "00001"]);
+  });
+});
+
+describe("buscar en la lista", () => {
+  const cand = (p: Partial<ArticuloConFaltante> = {}): Candidato =>
+    ({ articulo: art(p), salidas: 1, diasDesdeLaUltima: 10 });
+
+  const codigos = (lista: Candidato[]) => lista.map((c) => c.articulo.codigo);
+
+  const lista: Candidato[] = [
+    cand({ codigo: "00018", descripcion: "BUJE DE BRONCE 40MM" }),
+    cand({ codigo: "00345", descripcion: "CORREA TRAPEZOIDAL B-75" }),
+    cand({ codigo: "00733", descripcion: "VALVULA ESFERICA 1/2" }),
+  ];
+
+  it("encuentra por descripcion", () => {
+    expect(codigos(filtrarParaReponer(lista, "bronce"))).toEqual(["00018"]);
+  });
+
+  it("encuentra por codigo, que es el otro dato que la fila muestra", () => {
+    expect(codigos(filtrarParaReponer(lista, "00345"))).toEqual(["00345"]);
+  });
+
+  it("acepta las palabras en cualquier orden", () => {
+    // Quien busca se acuerda de dos pedazos del nombre, no de como estaban
+    // ordenados. Es lo que ya hacen los desplegables y el listado de OS.
+    expect(codigos(filtrarParaReponer(lista, "bronce buje")))
+      .toEqual(codigos(filtrarParaReponer(lista, "buje bronce")));
+  });
+
+  it("ignora los acentos y las mayusculas, porque nadie los escribe", () => {
+    const con = [cand({ codigo: "00900", descripcion: "Válvula de alivio" })];
+    expect(codigos(filtrarParaReponer(con, "valvula"))).toEqual(["00900"]);
+    expect(codigos(filtrarParaReponer(con, "VÁLVULA"))).toEqual(["00900"]);
+  });
+
+  it("lo que no esta devuelve vacio y no la lista entera", () => {
+    // El caso que convierte un buscador en un adorno: filtrar mal y mostrar
+    // todo es indistinguible de no filtrar.
+    expect(filtrarParaReponer(lista, "turbina")).toHaveLength(0);
+  });
+
+  it("sin consulta devuelve la misma lista, no una copia", () => {
+    // La pantalla la pasa por `useMemo`: un arreglo nuevo en cada tecla
+    // redibuja las 92 filas sin que haya cambiado nada.
+    expect(filtrarParaReponer(lista, "")).toBe(lista);
+    expect(filtrarParaReponer(lista, "   ")).toBe(lista);
+  });
+
+  it("filtrar y ordenar se combinan sin pisarse", () => {
+    const dos = [
+      cand({ codigo: "00002", descripcion: "BUJE DE BRONCE 40MM" }),
+      cand({ codigo: "00001", descripcion: "BUJE DE BRONCE 20MM" }),
+      cand({ codigo: "00003", descripcion: "CORREA B-75" }),
+    ];
+    expect(codigos(ordenarParaReponer(filtrarParaReponer(dos, "buje"), "descripcion")))
+      .toEqual(["00001", "00002"]);
   });
 });
