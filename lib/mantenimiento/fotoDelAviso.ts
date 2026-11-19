@@ -14,19 +14,20 @@
  *   formulario y escribe en la columna K de la planilla un
  *   `drive.google.com/open?id=…`, que `filaAAviso()` copia tal cual.
  *
- * **Un link de Drive no se puede mostrar como imagen, y eso está medido**, no
- * supuesto: el 19/11/2026, contra la única foto que existe hoy (la del OA
- * A244), las tres formas que suelen servir —`thumbnail?id=`, `uc?export=view`
- * e `lh3.googleusercontent.com/d/`— devolvieron las tres el login de Google, y
- * la cuenta de servicio del SdG contestó **404** sobre ese archivo: tampoco lo
- * puede traer el servidor para servirlo de vuelta. O sea que esa carpeta de
- * Drive no está compartida con nadie más que su dueño. Por eso un `<img>` ahí
- * no mostraría una foto sino un cuadro roto, y lo honesto es el enlace: lo
- * abre quien tenga permiso, que hoy es quien recibe las respuestas.
+ * **Un link de Drive no se puede poner en un `<img>` tal como viene**, y eso
+ * está medido: el 19/11/2026, contra la foto del OA A244, las tres formas que
+ * suelen servir —`thumbnail?id=`, `uc?export=view` e
+ * `lh3.googleusercontent.com/d/`— devolvieron las tres el login de Google.
+ * Esa carpeta es privada y lo sigue siendo: lo que cambió ese mismo día es que
+ * **se compartió con la cuenta de servicio del SdG** (el 404 de la API pasó a
+ * 200), así que ahora el sistema la trae con su credencial y la sirve a quien
+ * tenga sesión. Por eso una foto de Drive sale como `imagen` apuntando a
+ * `/api/mantenimiento/avisos/foto`, y no al link de Google.
  *
- * El día que alguien comparta esa carpeta con la cuenta de servicio, esto se
- * puede dar vuelta sin tocar la pantalla: el caso `enlace` de Drive pasa a ser
- * `imagen` apuntando a una ruta propia que la traiga.
+ * **Eso necesita el id del aviso**, porque la ruta no acepta un id de Drive de
+ * quien llama —ver el porqué en `fotoDeDrive.ts`— sino que lo saca de la fila.
+ * Sin `avisoId` la foto vuelve a salir como enlace, que es exactamente lo que
+ * se mostraba antes de compartir la carpeta: sirve de respaldo y no de error.
  *
  * ── POR QUÉ SE FILTRA LO QUE NO ES http(s) ────────────────────────────────
  *
@@ -39,11 +40,22 @@
 
 /** Una foto del aviso, ya clasificada para la pantalla. */
 export type FotoDelAviso =
-  | { tipo: "imagen"; url: string }
+  | {
+      tipo: "imagen";
+      /** Qué dibujar, y adónde lleva el clic. */
+      url: string;
+      /**
+       * Adónde mandar a la persona si el `<img>` falla. Lo llevan sólo las de
+       * Drive: si el SdG no pudiera traerla —porque dejaron de compartir la
+       * carpeta—, queda el link original, que al menos abre el dueño.
+       */
+      respaldo?: string;
+    }
   /** No se puede mostrar acá: se abre aparte. `porQue` es lo que ve la persona. */
   | { tipo: "enlace"; url: string; porQue: string };
 
-const DRIVE = /^(.+\.)?(drive|docs)\.google\.com$|googleusercontent\.com$/i;
+// El `(^|\.)` de cada alternativa, y no un `$` suelto: ver `fotoDeDrive.ts`.
+const DRIVE = /(^|\.)((drive|docs)\.google|googleusercontent)\.com$/i;
 
 /**
  * Lo que un navegador intenta dibujar en un `<img>`.
@@ -56,12 +68,22 @@ const DRIVE = /^(.+\.)?(drive|docs)\.google\.com$|googleusercontent\.com$/i;
 const EXTENSIONES = /\.(jpe?g|png|webp|gif|avif|heics?|heif)$/i;
 
 export function fotosDelAviso(
-  fotos: readonly (string | null | undefined)[] | null | undefined
+  fotos: readonly (string | null | undefined)[] | null | undefined,
+  /**
+   * El id del aviso. Con él, una foto de Drive se sirve desde el SdG y se ve
+   * como cualquier otra; sin él queda como enlace, que es lo que se mostraba
+   * antes de que la carpeta estuviera compartida.
+   */
+  avisoId?: string | null
 ): FotoDelAviso[] {
   const salida: FotoDelAviso[] = [];
+  const lista = fotos ?? [];
 
-  for (const cruda of fotos ?? []) {
-    const texto = (cruda ?? "").trim();
+  // El índice es el de `reference_photos` **sin filtrar**, porque es el que
+  // viaja a la ruta y con el que ella vuelve a entrar al arreglo. Contar sobre
+  // la salida ya filtrada le haría servir otra foto.
+  for (let i = 0; i < lista.length; i++) {
+    const texto = (lista[i] ?? "").trim();
     if (!texto) continue;
 
     let url: URL;
@@ -73,11 +95,19 @@ export function fotosDelAviso(
     if (url.protocol !== "http:" && url.protocol !== "https:") continue;
 
     if (DRIVE.test(url.hostname)) {
-      salida.push({
-        tipo: "enlace",
-        url: texto,
-        porQue: "Está en Drive: la abre quien tenga permiso sobre esa carpeta.",
-      });
+      if (avisoId) {
+        salida.push({
+          tipo: "imagen",
+          url: `/api/mantenimiento/avisos/foto?aviso=${encodeURIComponent(avisoId)}&n=${i}`,
+          respaldo: texto,
+        });
+      } else {
+        salida.push({
+          tipo: "enlace",
+          url: texto,
+          porQue: "Está en Drive: la abre quien tenga permiso sobre esa carpeta.",
+        });
+      }
       continue;
     }
 

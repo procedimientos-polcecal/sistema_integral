@@ -15,16 +15,23 @@ import { fotosDelAviso } from "@/lib/mantenimiento/fotoDelAviso";
  * Qué se puede dibujar y qué sólo se puede enlazar lo decide
  * `fotosDelAviso()`, con el porqué medido. Acá queda la otra mitad: **si el
  * navegador no puede con la imagen, se cae al enlace.** Es una red y no un
- * adorno — cubre el HEIC que Chrome no dibuja, el link firmado que venció y el
- * archivo que ya no está en el bucket—, y es lo que permite que la función de
- * arriba sea generosa sin arriesgar un cuadro roto.
+ * adorno — cubre el HEIC que Chrome no dibuja, el link firmado que venció, el
+ * archivo que ya no está en el bucket y el día que dejen de compartir la
+ * carpeta de Drive con la cuenta de servicio—, y es lo que permite que la
+ * función de arriba sea generosa sin arriesgar un cuadro roto.
  */
 export default function FotosDelAviso({
   fotos,
+  avisoId,
   oa,
   className = "",
 }: {
   fotos: string[] | null | undefined;
+  /**
+   * El id del aviso. Sin él, una foto de Drive sale como enlace en vez de
+   * mostrarse: la ruta que la trae necesita saber de qué fila sacar el id.
+   */
+  avisoId?: string | null;
   /** El N° de OA, sólo para el texto alternativo de la imagen. */
   oa?: string | null;
   className?: string;
@@ -32,7 +39,7 @@ export default function FotosDelAviso({
   /** Las que el navegador no pudo dibujar: pasan a mostrarse como enlace. */
   const [fallaron, setFallaron] = useState<string[]>([]);
 
-  const lista = fotosDelAviso(fotos);
+  const lista = fotosDelAviso(fotos, avisoId);
   if (lista.length === 0) return null;
 
   return (
@@ -61,10 +68,14 @@ export default function FotosDelAviso({
             ? foto.porQue
             : "";
 
+        // Si lo que falló fue la ruta que trae la de Drive, el enlace tiene
+        // que ir al link original y no a la ruta que acaba de fallar.
+        const adonde = (foto.tipo === "imagen" && foto.respaldo) || foto.url;
+
         return (
           <span key={foto.url} className="inline-flex items-center gap-1.5">
             <a
-              href={foto.url}
+              href={adonde}
               target="_blank"
               rel="noreferrer"
               className="text-xs font-medium text-slate-700 underline"
