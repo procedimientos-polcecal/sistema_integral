@@ -291,10 +291,25 @@ el `estado` siempre viaja—, pero **el reintento no lleva el vaciado**: escribe
 el estado, la celda conserva el nombre viejo y la sincronización siguiente lo
 devuelve. O sea que sacar a alguien sólo pega si la escritura en vivo anduvo.
 
-El arreglo es chico y acotado: esa función necesita poder distinguir **«vacío
-porque no hay dato»** de **«vacío porque se borró»**. Es una función pura con
-tests; los dos generadores que la llaman nunca vacían nada, así que no cambian.
-Va como tarea propia del plan, con sus tests.
+**Y no se puede arreglar sin migración**, que es lo que descubrió escribir el
+plan. El reintento no lo arma el PATCH: lo arma **la sincronización, desde la
+fila de la base**, y en la fila un `operario_2` vaciado es indistinguible de uno
+que nunca se llenó. Para que el vaciado sobreviva hay que guardar *qué columna*
+se vació — que es exactamente lo que los avisos ya hacen con
+`sheets_pendiente_campos`, y es una columna nueva.
+
+Hacerlo «sin migración» tiene una trampa peor: si `loQueHayQueExportar` mandara
+`null` para toda columna de operario vacía de una orden abierta, vaciaría la
+celda de cualquier OT a la que alguien le escribió el operario a mano en la
+planilla y el SdG todavía no importó. Es el mismo caso por el que la cola de los
+avisos guarda el campo.
+
+**Entonces, en esta entrega: sacar funciona, y cuando falla lo dice.** La
+escritura en vivo vacía la celda; si Google la rechaza, el panel avisa con lo
+que dijo Google, sin traducir, y agrega que **hay que sacarlo también en la
+planilla porque la sincronización lo va a devolver**. No se promete una garantía
+que no existe. La cola de columnas, como la de los avisos, queda anotada acá
+como el arreglo de verdad para cuando haga falta.
 
 ### 10. A qué órdenes se les puede asignar
 
