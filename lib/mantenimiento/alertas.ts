@@ -10,10 +10,11 @@ import { esGutAlto, type NotasGut } from "./gut";
  * La primera la decide una persona; la segunda, el calendario.
  *
  * **La fecha es la de la ejecución y no `proxima_fecha`.** Esa columna está en
- * null en las 2.531 filas (medido el 19/11/2026): la sincronización la lee de la
+ * null en las 2.531 filas (medido el 19/11/2026; una foto y no un
+ * invariante: al cierre de la rama eran 2.532, 19 marcadas y 32 atrasadas): la sincronización la lee de la
  * planilla —es la pareja de `frecuencia` en el master— pero nadie la llena, así
  * que decidir con ella reducía esta función a `estado === "ATRASADO"` y contaba
- * 21 donde las fechas dicen 34. Se sigue sincronizando; sólo se dejó de usar
+ * 21 donde las fechas dicen 34 (cifras de esa primera foto). Se sigue sincronizando; sólo se dejó de usar
  * para decidir.
  *
  * El inicio es el que ve el calendario (`fechaParaElCalendario`: la pendiente

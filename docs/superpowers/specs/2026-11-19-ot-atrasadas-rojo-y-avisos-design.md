@@ -482,9 +482,9 @@ pasa a tener seis emisores.
   repo —`avisos-diarios`, `avisos-al-instante` y `remises-notificaciones`— **no
   escriben en `sincronizaciones`**, así que ninguno está en el `REGISTRO` de
   salud. Éste sigue la convención en vez de monitorearse solo, que sería
-  arreglar un quinto del problema y dejar la inconsistencia. Lo que amortigua:
+  arreglar un cuarto del problema y dejar la inconsistencia. Lo que amortigua:
   el aviso de atrasadas sigue en la campana y en los lunes. **Monitorear los
-  cinco es trabajo aparte y queda anotado.**
+  cuatro es trabajo aparte y queda anotado.**
 - **El día del cambio, el badge «atrasada» aparece en trece filas más y el
   tablero sube de 21 a 34.** Es el objetivo, pero alguien lo va a notar: el id
   nuevo del aviso evita que además salga como un push de «13 más».

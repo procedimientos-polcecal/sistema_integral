@@ -48,10 +48,12 @@ import { MAXIMO_DE_DIAS } from "./postergar";
  * Estados en los que la orden ya no espera nada de nadie, así que correrle la
  * fecha no quiere decir nada.
  *
- * Es la tercera lista con estos dos valores —las otras son `ESTADOS_CERRADOS` en
- * `alertas.ts` y `CERRADAS_GUT` en `gut.ts`— y **tampoco se unifica**, por el
- * mismo motivo que aquellas dos no se unifican entre sí: cada una tiene su
- * dueño y decide otra cosa. Si aparece un estado nuevo hay que mirar las tres.
+ * Es la tercera lista de estados cerrados —las otras son `ESTADOS_CERRADOS` en
+ * `alertas.ts` y `CERRADAS_GUT` en `gut.ts`, las dos con `REALIZADO` y
+ * `CANCELADA`— y **no es igual a ellas**: ésta todavía dice `SUSPENDIDA`, un
+ * estado que salió del vocabulario el 13/11/2026 (0 filas) y que `CANCELADA`
+ * reemplazó, así que una orden cancelada hoy no la frena. Tampoco se unifica
+ * a ciegas: cada una tiene su dueño y decide otra cosa. Si aparece un estado nuevo hay que mirar las tres.
  */
 const YA_NO_ESPERA = ["REALIZADO", "SUSPENDIDA"];
 

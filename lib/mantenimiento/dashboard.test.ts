@@ -82,6 +82,19 @@ describe("paradasExigidas", () => {
     expect(paradas.a.map((o) => [o.ot_number, o.atrasada])).toEqual([[2, true], [1, false]]);
   });
 
+  it("una POR_HACER vencida por fecha y una marcada ATRASADO: las dos son atrasadas y desempata el número", () => {
+    const paradas = paradasExigidas([
+      { sector_id: "a", requiere_parada_sector: true, ot_number: 9, estado: "EN_PROCESO" },
+      {
+        sector_id: "a", requiere_parada_sector: true, ot_number: 8, estado: "POR_HACER",
+        fecha_ejecucion: "2026-11-10",
+      },
+      { sector_id: "a", requiere_parada_sector: true, ot_number: 7, estado: "ATRASADO" },
+    ], HOY);
+    // Las dos atrasadas van antes que la EN_PROCESO, y entre ellas manda el número.
+    expect(paradas.a.map((o) => [o.ot_number, o.atrasada])).toEqual([[7, true], [8, true], [9, false]]);
+  });
+
   it("un estado que no conoce va al final y no rompe el orden", () => {
     const paradas = paradasExigidas([
       { sector_id: "a", requiere_parada_sector: true, ot_number: 1, estado: "INVENTADO" },
