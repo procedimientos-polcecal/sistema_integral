@@ -221,9 +221,20 @@ Antes de escribir una, leer las ocho trampas del
 
 ## Hay un segundo despliegue escribiendo en esta base
 
-**Dos despliegues de este repo escriben en la base de producción.** El de verdad
-es el proyecto `sistema-integral` de la cuenta `sistemapolcecalpolysan`, que
-sirve `www.polcecalpolysan.app`. El otro es `sistemaintegral`, en la cuenta
+**Lo primero: ese segundo despliegue se borró el 19/11/2026.** Lo que sigue
+queda escrito porque sus 112 filas siguen en `sincronizaciones`, porque los
+filtros que lo esquivan siguen vivos y hacen falta, y porque **la próxima copia
+se detecta y se frena igual que ésta**. La prueba de que se fue es que no
+aparezcan filas nuevas con `canonico = false`: **la última suya es
+`2026-11-19T10:02:12`** y escribía ocho por día, así que un solo día sin
+ninguna ya lo dice. El título se dejó como estaba porque lo nombran por su
+texto `docs/AGENDA.md`, el spec de la salud del sistema y un párrafo de más
+abajo.
+
+**Hasta ese día, dos despliegues de este repo escribían en la base de
+producción.** El de verdad es el proyecto `sistema-integral` de la cuenta
+`sistemapolcecalpolysan`, que sirve `www.polcecalpolysan.app`. El otro era
+`sistemaintegral`, en la cuenta
 **`soportemantenimiento-4821s-projects`**; el usuario confirmó el 05/11/2026 que
 es suyo o de un colaborador, así que no es una filtración. Tiene las credenciales
 de Supabase y **no las de Google**: medido ese día, **53 corridas y 51 fallidas**
@@ -265,6 +276,34 @@ encima:
   estaba recalculando— multiplicado por dos escritores que no se ven. La
   migración arregla **la pantalla, no la concurrencia**: la defensa de verdad es
   apagar ese despliegue, y eso se hace desde esa cuenta de Vercel.
+- **Por qué hubo que apagarlo desde Vercel y no desde acá, que es lo que hay que
+  saber si alguna vez aparece otro.** Una copia así queda **congelada**: los
+  deploys de ésta fallaban desde `1db21173` (05/11/2026, el commit que puso los
+  crons cada 10 minutos, que Hobby rechaza), así que lo vivo allá era el último
+  build que sí entró —uno con la columna `canonico` ya adentro (`24f10787`, del
+  mismo día) y nada posterior—. **Todo lo que se escriba en este repo se despliega
+  sólo en el canónico**, de modo que un portón del tipo «si `esLaCorridaCanonica()`
+  es falso no corro» nunca llega a quien tendría que obedecerlo, y encima deja
+  mudo al bueno el día que a *él* le falte la variable. El freno siempre está
+  afuera: borrar el proyecto en su cuenta de Vercel, que es lo que se hizo, o
+  —si no se puede entrar ahí— rotar la `SUPABASE_SERVICE_ROLE_KEY`
+  desde Supabase, cargándola después en el proyecto canónico y en cada
+  `.env.local`; **los dos respaldos de Actions no la usan** (van con
+  `SUPABASE_DB_URL`), así que no se rompen.
+- **Cómo se nota que apareció otro, sin esperar a que rompa algo:** cualquier fila
+  de `sincronizaciones` con `canonico = false`. Medido el 19/11/2026 sobre las
+  últimas 1000 corridas, cuando todavía estaba prendido: **992 del canónico, las
+  992 con `canonico = true`, y 8 de la copia, las 8 con `false`** — cero nulos y
+  cero mal clasificadas, así que esa columna separa los dos despliegues sin un
+  solo error y alcanza como detector. Hoy lo correcto es que ese conteo dé **cero**:
+
+  ```sql
+  select host, count(*), min(created_at), max(created_at)
+    from public.sincronizaciones
+   where canonico is false
+     and created_at > now() - interval '1 day'
+   group by host;
+  ```
 
 ## Los crons corren desde Vercel
 
