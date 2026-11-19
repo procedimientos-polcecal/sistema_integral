@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   cuerpoDeLaOT, loQuePropone, loQueFaltaDelAviso, loQueHayQuePreguntar,
-  loQueElAvisoNoTrae, RESPUESTAS_VACIAS, type AvisoParaLaOT,
+  loQueElAvisoNoTrae, RESPUESTAS_VACIAS, sembradoDesdeElAviso, extrasDelAviso,
+  type AvisoParaLaOT,
 } from "./otDesdeAviso";
+import { prioridadDeUrgencia } from "./avisos";
 
 /**
  * Un aviso como los que entraron el 20/10/2026: con equipo y sector
@@ -253,5 +255,60 @@ describe("el puntaje GUT no sale del aviso", () => {
 
   it("no es obligatorio: sin notas la orden se puede crear", () => {
     expect(loQueFaltaDelAviso(AVISO, completo())).toEqual([]);
+  });
+});
+
+describe("lo que el aviso siembra", () => {
+  const AVISO: AvisoParaLaOT = {
+    id: "av-1", oa_number: "A123", descripcion: "TRANSMISION HORNO 4 SALTA LA CADENA",
+    urgencia: "ALTA", sector_id: "sec-1", sector_raw: "Molienda",
+    equipment_id: "eq-1", equipo_raw: "M2 – Molino 2", equipo_code: "M2",
+    repuesto: "cadena",
+  };
+
+  it("siembra lo que el aviso sabe y nada más", () => {
+    const s = sembradoDesdeElAviso(AVISO, "2026-11-19");
+    expect(s.descripcion).toBe("TRANSMISION HORNO 4 SALTA LA CADENA");
+    expect(s.sector_id).toBe("sec-1");
+    expect(s.equipment_id).toBe("eq-1");
+    expect(s.tipo).toBe("CORRECTIVO");
+    expect(s.quien).toBe("INTERNO");
+    expect(s.fecha_ejecucion).toBe("2026-11-19");
+    // Lo que el aviso no sabe NO viaja: pisaría el valor por defecto del
+    // formulario con un vacío que nadie eligió. (Review Focus 4)
+    expect(s).not.toHaveProperty("especialidad");
+    expect(s).not.toHaveProperty("fecha_fin");
+    expect(s).not.toHaveProperty("gut_gravedad");
+    expect(s).not.toHaveProperty("estado");
+    expect(s).not.toHaveProperty("contratista");
+  });
+
+  // Review Focus 2
+  it("sin descripción cae en el número del aviso y nunca en vacío", () => {
+    const s = sembradoDesdeElAviso({ ...AVISO, descripcion: "   " }, "2026-11-19");
+    expect(s.descripcion).toBe("Aviso A123");
+  });
+
+  // Review Focus 3
+  it("una urgencia que no conoce no inventa una prioridad ni rompe", () => {
+    for (const u of [null, "", "URGENTÍSIMO"]) {
+      const s = sembradoDesdeElAviso({ ...AVISO, urgencia: u }, "2026-11-19");
+      expect(typeof s.prioridad).toBe("string");
+      expect(s.prioridad).toBe(prioridadDeUrgencia(u));
+    }
+  });
+
+  // Review Focus 1
+  it("un aviso sin sector ni equipo nombra los dos", () => {
+    const sinNada = { ...AVISO, sector_id: null, equipment_id: null };
+    expect(loQueElAvisoNoTrae(sinNada)).toEqual(["el sector", "el equipo"]);
+    const s = sembradoDesdeElAviso(sinNada, "2026-11-19");
+    expect(s.sector_id).toBe("");
+    expect(s.equipment_id).toBe("");
+  });
+
+  // Review Focus 5: el enlace no vive en el estado del formulario.
+  it("los extras llevan el aviso y su repuesto", () => {
+    expect(extrasDelAviso(AVISO)).toEqual({ aviso_id: "av-1", repuesto: "cadena" });
   });
 });

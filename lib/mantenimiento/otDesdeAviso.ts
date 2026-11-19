@@ -158,6 +158,55 @@ export function loQuePropone(
   };
 }
 
+/**
+ * Un equipo como lo necesita el desplegable del formulario. Vive acá y no en
+ * el modal porque ese archivo se borra al unificar los formularios, y la
+ * página de avisos lo importa.
+ */
+export interface EquipoDelAviso {
+  id: string; name: string; code: string | null; sector_id: string | null;
+}
+
+/**
+ * Lo que el aviso le propone al formulario completo: **sólo las claves que
+ * llena**, para que se extiendan sobre los valores por defecto del formulario.
+ *
+ * Sale de `loQuePropone` y no de una segunda regla: dos reglas de sembrado
+ * fueron el bug de octubre. No devuelve `especialidad`, `fecha_fin` ni las
+ * notas GUT porque el aviso no las sabe, y devolverlas en "" pisaría el
+ * valor por defecto con un vacío que nadie eligió.
+ */
+export function sembradoDesdeElAviso(
+  aviso: AvisoParaLaOT,
+  hoy: string
+): Record<string, string> {
+  const p = loQuePropone(aviso, { quien: "INTERNO", fecha_ejecucion: hoy });
+  return {
+    descripcion: p.descripcion,
+    tipo: p.tipo,
+    prioridad: p.prioridad,
+    sector_id: p.sector_id,
+    sector_raw: p.sector_raw,
+    equipment_id: p.equipment_id,
+    equipo_raw: p.equipo_raw,
+    equipo_code: p.equipo_code,
+    quien: p.quien,
+    fecha_ejecucion: p.fecha_ejecucion,
+  };
+}
+
+/**
+ * Lo que viaja en el cuerpo además de los campos del formulario: a cuál
+ * aviso pertenece la orden —para que el aviso quede apuntando a ella y nadie
+ * genere una segunda— y su repuesto. Ninguno de los dos vive en el estado del
+ * formulario.
+ */
+export function extrasDelAviso(
+  aviso: AvisoParaLaOT
+): { aviso_id: string; repuesto: string | null } {
+  return { aviso_id: aviso.id, repuesto: aviso.repuesto };
+}
+
 /** El valor del desplegable de una nota: "" es null, y lo demás es el número. */
 const notaOnull = (v: string) => (v.trim() === "" ? null : Number(v));
 
