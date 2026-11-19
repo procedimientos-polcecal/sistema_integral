@@ -54,6 +54,34 @@ export function cadenaDeFechas(
 }
 
 /**
+ * La cadena partida como se dibuja en la fila: las fechas que ya no rigen y la
+ * que rige hoy.
+ *
+ * Las tachadas van sin año —«06/11»— porque con tres o más el renglón tiene que
+ * entrar en el teléfono, y la vigente lleva el año entero. Una tachada de OTRO
+ * año que la vigente sí lo lleva: sin él, un corrimiento de diciembre a enero se
+ * leería como «20/12 → 10/01/2027» y parecería que la orden retrocedió.
+ *
+ * Con menos de dos fechas no hay cadena que dibujar: devuelve null.
+ */
+export function partesDeLaCadena(
+  cadena: readonly string[],
+): { tachadas: string[]; vigente: string } | null {
+  if (cadena.length < 2) return null;
+  const vigente = cadena[cadena.length - 1];
+  const anioVigente = vigente.slice(0, 4);
+  const dm = (iso: string) => {
+    const [a, m, d] = iso.split("-");
+    return a === anioVigente ? `${d}/${m}` : `${d}/${m}/${a}`;
+  };
+  const [a, m, d] = vigente.split("-");
+  return {
+    tachadas: cadena.slice(0, -1).map(dm),
+    vigente: `${d}/${m}/${a}`,
+  };
+}
+
+/**
  * Días entre la primera fecha de la cadena y la vigente. Negativo si la orden
  * terminó adelantada; 0 si nunca se movió.
  */

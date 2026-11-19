@@ -42,6 +42,7 @@ import { hoyEnArgentina } from "@/lib/core/fechas";
 import { esquemaGut } from "@/lib/mantenimiento/gut";
 import { esquemaFalla } from "@/lib/mantenimiento/fallas";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
+import type { Reprogramacion } from "@/lib/mantenimiento/reprogramaciones";
 import { alNacerLaOT } from "@/lib/agenda/alNacerLaOT";
 
 /**
@@ -223,7 +224,32 @@ export async function GET(request: Request) {
     after(() => exportarLoPendiente(createAdminClient(), { conFreno: true }));
   }
 
-  return NextResponse.json({ data, count });
+  // ── Los movimientos de fecha de las reprogramadas de esta página ──
+  //
+  // Una segunda consulta y no un embebido: la fila sólo necesita la cadena, y
+  // pedirla sólo de las que dicen haberse movido (`reprogramada_veces`) la
+  // deja en cero consultas para casi toda la página. Va de a 200 ids porque un
+  // `.in()` más largo arma una URL que PostgREST rechaza; la página es de 50,
+  // pero `?pendientes=1` trae hasta 300.
+  //
+  // Si la consulta falla —por ejemplo la migración todavía no corrió— el listado
+  // sale igual, sin cadenas: perder un renglón de la fila es mejor que perder la
+  // pantalla entera.
+  const movimientos: Record<string, Reprogramacion[]> = {};
+  const idsReprogramadas = (data ?? [])
+    .filter((o) => ((o as { reprogramada_veces?: number }).reprogramada_veces ?? 0) > 0)
+    .map((o) => o.id as string);
+  for (let i = 0; i < idsReprogramadas.length; i += 200) {
+    const { data: filas, error: errMov } = await supabase
+      .from("mant_reprogramaciones_ot")
+      .select("*")
+      .in("ot_id", idsReprogramadas.slice(i, i + 200))
+      .order("creado_en", { ascending: true });
+    if (errMov) break;
+    for (const f of (filas ?? []) as Reprogramacion[]) (movimientos[f.ot_id] ??= []).push(f);
+  }
+
+  return NextResponse.json({ data, count, movimientos });
 }
 
 /** Qué estados valen, dicho en el error: adivinarlos es la parte lenta. */

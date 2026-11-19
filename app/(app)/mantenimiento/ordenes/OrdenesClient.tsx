@@ -39,6 +39,8 @@ import { ESTADO_CANCELADA, SE_CANCELA_DESDE } from "@/lib/mantenimiento/cancelac
 import InfoTip from "@/components/InfoTip";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import CadenaDeFechas from "@/components/mantenimiento/CadenaDeFechas";
+import { cadenaDeFechas, type Reprogramacion } from "@/lib/mantenimiento/reprogramaciones";
 
 const ESTADOS = [
   { value: "",           label: "Todos",      color: "#64748B", bg: "#F8FAFC", dot: "#94A3B8" },
@@ -90,6 +92,8 @@ export default function OrdenesClient({
   const confirm = useConfirm();
   const [orders, setOrders]     = useState<any[]>([]);
   const [count, setCount]       = useState(0);
+  // Los movimientos de fecha de las reprogramadas de la página, por OT.
+  const [movimientos, setMovimientos] = useState<Record<string, Reprogramacion[]>>({});
   const [loading, setLoading]   = useState(true);
   // Los filtros vienen en la URL: así el tablero manda directo a "las
   // atrasadas" en vez de dejar a alguien filtrando a mano, y así se puede pasar
@@ -301,6 +305,7 @@ export default function OrdenesClient({
     const data = json.data ?? [];
     setOrders(data);
     setCount(json.count ?? 0);
+    setMovimientos(json.movimientos ?? {});
     setLoading(false);
     void cargarJustificadas(data);
   }, [page, filtros, cargarJustificadas]);
@@ -778,6 +783,15 @@ export default function OrdenesClient({
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-900 truncate">{o.descripcion ?? "—"}</p>
                           <p className="text-xs text-slate-900 truncate">{o.sector_raw}{o.equipo_raw ? ` · ${o.equipo_raw}` : ""}</p>
+                          {/* La cadena va acá y no en la columna de fechas de la
+                              derecha: esa no se encoge y lo que crece ahí se lo
+                              come la descripción. Sin recorte: con seis fechas se
+                              parte en dos renglones y se ven todas. */}
+                          {(o.reprogramada_veces ?? 0) > 0 && (
+                            <CadenaDeFechas
+                              fechas={cadenaDeFechas(movimientos[o.id] ?? [], o.fecha_ejecucion)}
+                            />
+                          )}
                         </div>
                         {/* El recuadro abre el modal de puntuar. Va dentro del
                             botón que despliega la fila, así que no puede ser otro
@@ -820,6 +834,17 @@ export default function OrdenesClient({
                             className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700"
                           >
                             Sin justificar
+                          </span>
+                        )}
+                        {/* Cuántas veces se corrió. No cambia de color por
+                            cantidad: «a partir de tres es grave» sería un umbral
+                            inventado, el número ya es la señal. */}
+                        {(o.reprogramada_veces ?? 0) > 0 && (
+                          <span
+                            title={`Se reprogramó ${o.reprogramada_veces} ${o.reprogramada_veces === 1 ? "vez" : "veces"}`}
+                            className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700"
+                          >
+                            Reprog. ×{o.reprogramada_veces}
                           </span>
                         )}
                         {/* Las dos fechas que se miran de un vistazo: cuándo se
