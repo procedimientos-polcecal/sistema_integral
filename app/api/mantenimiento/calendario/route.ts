@@ -96,7 +96,7 @@ export async function GET(request: Request) {
         // `postergar` sin otro viaje. No son dato sensible: quien llega acá ya
         // ve las órdenes enteras en el listado.
         .select(
-          "id, ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, especialidad, tipo, quien, descripcion, sector_raw, equipo_raw, app_created, estado"
+          "id, ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, especialidad, tipo, quien, descripcion, sector_raw, equipo_raw, app_created, estado, operario_1, operario_2, operario_3"
         )
         .or(`fecha_ejecucion.lte.${hasta},fecha_ejecucion_pendiente.lte.${hasta}`)
         .or(

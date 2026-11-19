@@ -23,6 +23,9 @@ const orden = (
   descripcion: "Cambiar rodamiento",
   sector_raw: "Molienda",
   equipo_raw: "Molino 1",
+  operario_1: null,
+  operario_2: null,
+  operario_3: "Piparo",
   ...extra,
 });
 
@@ -186,6 +189,11 @@ describe("armar el calendario", () => {
       app_created: true,
       estado: "POR_HACER",
       fecha_ejecucion: "2026-11-02",
+      // Los tres viajan, los puestos y los vacíos: el panel de asignar necesita
+      // saber qué posiciones están libres sin pedir la orden de nuevo.
+      operario_1: null,
+      operario_2: null,
+      operario_3: "Piparo",
     });
   });
 

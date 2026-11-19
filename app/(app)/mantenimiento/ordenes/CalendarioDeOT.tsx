@@ -11,6 +11,7 @@ import { TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { oficioDeLaEspecialidad } from "@/lib/mantenimiento/genteDelDia";
 import type { DiaDelCalendario } from "@/lib/mantenimiento/calendarioDeOT";
 import { porQueNoSePuedeMover, porQueNoSePuedeMoverA } from "@/lib/mantenimiento/moverLaOT";
+import { porQueNoSePuedeAsignar } from "@/lib/mantenimiento/asignarOperario";
 import type { Oficio } from "@/lib/mantenimiento/programacion";
 import { colorDeEspecialidad, textoSobreLaEspecialidad, LEYENDA_DE_ESPECIALIDADES } from "./coloresDeEspecialidad";
 
@@ -63,7 +64,8 @@ const MESES = [
 const DIAS_DE_LA_SEMANA = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const ENCABEZADOS = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"];
 
-const OFICIOS: Record<Oficio, { uno: string; varios: string }> = {
+/** Cómo se nombra cada oficio en pantalla. Lo comparte el panel de asignar. */
+export const OFICIOS: Record<Oficio, { uno: string; varios: string }> = {
   mecanico: { uno: "mecánico", varios: "mecánicos" },
   electricista: { uno: "electricista", varios: "electricistas" },
   lubricador: { uno: "lubricador", varios: "lubricadores" },
@@ -113,6 +115,13 @@ export type ModoDelCalendario =
       onEmpezarAMover: (orden: OrdenDelDia) => void;
       onCancelarElMovimiento: () => void;
       onElegirElDestino: (dia: string) => void;
+      /**
+       * Abrir el panel de asignar operarios a esa orden, en ese día. `null`
+       * cuando quien mira no puede: es un permiso más alto que `puedeMover`
+       * —ahí salen los nombres del taller— y por eso es una función aparte y no
+       * otro `boolean`.
+       */
+      onAsignar: ((orden: OrdenDelDia, dia: string) => void) | null;
     };
 
 function pasaElFiltro(o: OrdenDelDia, f: Filtros): boolean {
@@ -135,6 +144,13 @@ function ordenadas(ordenes: OrdenDelDia[]): OrdenDelDia[] {
 }
 
 /** Cuántas órdenes cae en cada sector ese día, de más a menos. */
+/** Los nombres que esa orden ya tiene puestos, en el orden de las posiciones. */
+function quienesEstan(o: OrdenDelDia): string[] {
+  return [o.operario_1, o.operario_2, o.operario_3]
+    .map((n) => n?.trim())
+    .filter((n): n is string => Boolean(n));
+}
+
 function cuentaPorSector(ordenes: OrdenDelDia[]): { sector: string; cantidad: number }[] {
   const cuenta = new Map<string, { sector: string; cantidad: number }>();
   for (const o of ordenes) {
@@ -517,6 +533,7 @@ export default function CalendarioDeOT({
               filtros={filtros}
               elegirElDia={modo.tipo === "elegir" ? modo.onElegir : null}
               onMover={modo.tipo === "programar" && modo.puedeMover ? empezarAMover : null}
+              onAsignar={modo.tipo === "programar" ? modo.onAsignar : null}
               onCerrar={() => setDiaAbierto(null)}
             />
           </div>
@@ -624,7 +641,7 @@ function CeldaDelDia({
 // ─── El panel del día ───────────────────────────────────────────────────────
 
 function PanelDelDia({
-  dia, diaIso, filtros, elegirElDia, onMover, onCerrar,
+  dia, diaIso, filtros, elegirElDia, onMover, onAsignar, onCerrar,
 }: {
   dia: DiaDelCalendario | null;
   diaIso: string;
@@ -633,6 +650,8 @@ function PanelDelDia({
   elegirElDia: ((dia: string) => void) | null;
   /** Empezar a mover una orden, en el modo `programar`. */
   onMover: ((orden: OrdenDelDia) => void) | null;
+  /** Abrir el panel de asignar operarios, sólo para quien ve el taller. */
+  onAsignar: ((orden: OrdenDelDia, dia: string) => void) | null;
   onCerrar: () => void;
 }) {
   const todas = dia?.ordenes ?? [];
@@ -718,6 +737,7 @@ function PanelDelDia({
           {ordenes.map((o) => {
             const color = colorDeEspecialidad(o.especialidad);
             const noSeMueve = onMover ? porQueNoSePuedeMover(o) : null;
+            const noSeAsigna = onAsignar ? porQueNoSePuedeAsignar(o) : null;
             return (
               <li key={o.ot_number} className="rounded-lg bg-white p-2 space-y-1 border border-slate-200">
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -763,6 +783,25 @@ function PanelDelDia({
                       className="btn-secondary w-full justify-center"
                     >
                       Mover a otro día
+                    </button>
+                  )
+                )}
+
+                {/* Asignar, sólo para quien ve el taller con nombre. Como
+                    arriba: la cerrada **dice por qué** en vez de quedarse sin
+                    botón, porque ahí sus tres columnas ya dicen quién lo hizo. */}
+                {onAsignar && (
+                  noSeAsigna ? (
+                    <p className="text-[11px] text-slate-500 break-words pt-0.5">{noSeAsigna}</p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onAsignar(o, diaIso)}
+                      className="btn-secondary w-full justify-center"
+                    >
+                      {quienesEstan(o).length === 0
+                        ? "Asignar operarios"
+                        : `Operarios: ${quienesEstan(o).join(", ")}`}
                     </button>
                   )
                 )}

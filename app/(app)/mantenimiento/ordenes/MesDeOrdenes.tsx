@@ -5,6 +5,7 @@ import { comoSeLee } from "@/lib/core/fechas";
 import CalendarioDeOT, { type OrdenDelDia } from "./CalendarioDeOT";
 import FranjaDelTaller from "./FranjaDelTaller";
 import PostergarOTModal from "./PostergarOTModal";
+import AsignarOperariosModal from "./AsignarOperariosModal";
 import type { FranjaDeLaSemana } from "@/lib/mantenimiento/rotacionDeLaSemana";
 import type { OperarioDelCatalogo } from "@/lib/mantenimiento/operarioDelCatalogo";
 import type { Turno } from "@/lib/mantenimiento/programacion";
@@ -79,6 +80,7 @@ export default function MesDeOrdenes({ puedeMover, puedeAsignar }: {
   const [destino, setDestino] = useState<string | null>(null);
   const [recarga, setRecarga] = useState(0);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [asignando, setAsignando] = useState<{ orden: OrdenDelDia; dia: string } | null>(null);
   const [rango, setRango] = useState<{ desde: string; hasta: string } | null>(null);
   const [taller, setTaller] = useState<TallerDelMes | null>(null);
   const [falloDelTaller, setFalloDelTaller] = useState<string | null>(null);
@@ -171,8 +173,26 @@ export default function MesDeOrdenes({ puedeMover, puedeAsignar }: {
           onEmpezarAMover: (o) => { setMoviendo(o); setDestino(null); },
           onCancelarElMovimiento: cancelar,
           onElegirElDestino: (dia) => setDestino(dia),
+          onAsignar: puedeAsignar ? (orden, dia) => setAsignando({ orden, dia }) : null,
         }}
       />
+
+      {asignando && (
+        <AsignarOperariosModal
+          orden={asignando.orden}
+          dia={asignando.dia}
+          catalogo={taller?.catalogo ?? []}
+          noVienenEseDia={taller?.noVienen[asignando.dia] ?? []}
+          turnos={taller?.turnos ?? {}}
+          onCerrar={() => setAsignando(null)}
+          onAsignada={() => {
+            setAsignando(null);
+            // La grilla la dibuja el servidor: sin esto la orden seguiría
+            // mostrando los operarios de antes hasta que alguien cambie de mes.
+            setRecarga((n) => n + 1);
+          }}
+        />
+      )}
 
       {moviendo && destino && (
         <PostergarOTModal
