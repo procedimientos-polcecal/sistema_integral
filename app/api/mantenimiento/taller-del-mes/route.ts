@@ -111,14 +111,41 @@ export async function GET(request: Request) {
 
   const db = createAdminClient();
 
+  /*
+   * ── LAS CUATRO LECTURAS VAN CON `traerTodo()`, Y NO ES CEREMONIA ──────────
+   *
+   * PostgREST corta en 1.000 filas y no avisa. «Esta tabla es chica» es
+   * justamente el razonamiento que la regla de la casa prohíbe, y acá hay dos
+   * que pueden llegar: `mant_programacion_pisadas` es por persona y por día, o
+   * sea ~16 personas × 62 días = 992 en el rango máximo; y
+   * `mant_programacion_referencia` crece una fila por semana y se pide
+   * **ascendente**, así que al cortar se perderían las anclas **más nuevas** y
+   * `laQueRige` elegiría una vieja: la franja entera mostraría la rotación
+   * equivocada, sin un solo error.
+   */
   // ── El padrón que rige algún día del rango, con el nombre de cada uno ──
-  const { data: filasPadron, error: errPadron } = await db
-    .from("mant_personal_taller")
-    .select("empleado_id, oficio, grupo, desde, hasta, empleados(nombre, apellido)")
-    .lte("desde", ultimoDia)
-    .or(`hasta.is.null,hasta.gte.${primerDia}`)
-    .order("desde");
-  if (errPadron) return NextResponse.json({ error: errPadron.message }, { status: 500 });
+  let filasPadron: {
+    empleado_id: string;
+    oficio: string;
+    grupo: string | null;
+    desde: string;
+    hasta: string | null;
+    empleados: { nombre: string; apellido: string } | { nombre: string; apellido: string }[] | null;
+  }[];
+  try {
+    filasPadron = await traerTodo((a, b) =>
+      db
+        .from("mant_personal_taller")
+        .select("empleado_id, oficio, grupo, desde, hasta, empleados(nombre, apellido)")
+        .lte("desde", ultimoDia)
+        .or(`hasta.is.null,hasta.gte.${primerDia}`)
+        .order("desde")
+        .order("empleado_id")
+        .range(a, b)
+    );
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
 
   const padron: PersonaDelTaller[] = (filasPadron ?? []).map((f) => ({
     empleadoId: f.empleado_id,
@@ -135,15 +162,19 @@ export async function GET(request: Request) {
   }
 
   // ── La referencia: todas las filas, y la que rige cada semana la elige `laQueRige` ──
-  const { data: filasRef, error: errRef } = await db
-    .from("mant_programacion_referencia")
-    .select("lunes, grupo_en_4a12, electricista_4a12_id, electricista_8a16_id, electricista_12a20_id")
-    .order("lunes");
-  if (errRef) return NextResponse.json({ error: errRef.message }, { status: 500 });
-  const referencias: FilaDeReferencia[] = (filasRef ?? []).map((f) => ({
-    ...f,
-    lunes: soloElDia(f.lunes),
-  }));
+  let referencias: FilaDeReferencia[];
+  try {
+    const filasRef = await traerTodo<FilaDeReferencia>((a, b) =>
+      db
+        .from("mant_programacion_referencia")
+        .select("lunes, grupo_en_4a12, electricista_4a12_id, electricista_8a16_id, electricista_12a20_id")
+        .order("lunes")
+        .range(a, b)
+    );
+    referencias = filasRef.map((f) => ({ ...f, lunes: soloElDia(f.lunes) }));
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
 
   const idsDelPadron = new Set(padron.map((p) => p.empleadoId));
 
@@ -191,26 +222,34 @@ export async function GET(request: Request) {
   }
 
   // ── Las pisadas: un turno que alguien escribió a mano para un día ──
-  const { data: filasPisadas, error: errPisadas } = await db
-    .from("mant_programacion_pisadas")
-    .select("empleado_id, dia, turno")
-    .gte("dia", primerDia)
-    .lte("dia", ultimoDia);
-  if (errPisadas) return NextResponse.json({ error: errPisadas.message }, { status: 500 });
-  const pisadas = (filasPisadas ?? []).map((p) => ({
-    empleado_id: p.empleado_id,
-    dia: soloElDia(p.dia),
-    turno: p.turno as Turno,
-  }));
+  let pisadas: { empleado_id: string; dia: string; turno: Turno }[];
+  let catalogo: ReturnType<typeof resolverElCatalogo>;
+  try {
+    const filasPisadas = await traerTodo<{ empleado_id: string; dia: string; turno: string }>(
+      (a, b) =>
+        db
+          .from("mant_programacion_pisadas")
+          .select("empleado_id, dia, turno")
+          .gte("dia", primerDia)
+          .lte("dia", ultimoDia)
+          .order("dia")
+          .order("empleado_id")
+          .range(a, b)
+    );
+    pisadas = filasPisadas.map((p) => ({
+      empleado_id: p.empleado_id,
+      dia: soloElDia(p.dia),
+      turno: p.turno as Turno,
+    }));
 
-  // ── El catálogo de operarios, resuelto contra el padrón ──
-  const { data: filasCatalogo, error: errCatalogo } = await db
-    .from("operarios")
-    .select("slot, nombre")
-    .order("slot")
-    .order("nombre");
-  if (errCatalogo) return NextResponse.json({ error: errCatalogo.message }, { status: 500 });
-  const catalogo = resolverElCatalogo(filasCatalogo ?? [], padron, nombres);
+    // ── El catálogo de operarios, resuelto contra el padrón ──
+    const filasCatalogo = await traerTodo<{ slot: number; nombre: string }>((a, b) =>
+      db.from("operarios").select("slot, nombre").order("slot").order("nombre").range(a, b)
+    );
+    catalogo = resolverElCatalogo(filasCatalogo, padron, nombres);
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
 
   // ── Una franja por semana ──
   const franjas: FranjaDeLaSemana[] = lunes.map((l) =>

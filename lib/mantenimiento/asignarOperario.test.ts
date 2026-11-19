@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  elAvisoDeLaPlanilla,
   elCuerpoDeLaAsignacion,
   porQueNoEntra,
+  porQueNoHayAQuienElegir,
   porQueNoSePuedeAsignar,
   turnoDelDia,
   type OrdenQueSeAsigna,
@@ -104,6 +106,70 @@ describe("el cuerpo que se le manda al PATCH", () => {
   it("no manda ninguna otra columna", () => {
     expect(Object.keys(elCuerpoDeLaAsignacion("abc", 1, "Aguirre")).sort())
       .toEqual(["id", "operario_1"]);
+  });
+});
+
+/*
+ * Los dos de abajo salieron de la revisión de la rama (19/11/2026), y son el
+ * mismo síntoma por dos puertas: el panel mostraba **menos de lo que el sistema
+ * sabía**. Son funciones puras porque la regla de la casa es que lo que decide
+ * se saca a `lib/` para poder probarlo — y acá lo que decide es el texto.
+ */
+describe("por que la lista de nombres esta vacia", () => {
+  it("con nombres no dice nada", () => {
+    expect(porQueNoHayAQuienElegir(3, null, false)).toBeNull();
+  });
+
+  /*
+   * Éste es el caso que destapó la revisión: si `/taller-del-mes` contesta 500,
+   * el modal se abría con tres desplegables vacíos y ningún cartel, o sea
+   * indistinguible de «el catálogo está vacío». Un diagnóstico que no se
+   * distingue de otro no es un diagnóstico.
+   */
+  it("un fallo del servidor se dice con lo que contesto, sin traducir", () => {
+    const d = porQueNoHayAQuienElegir(0, "connect ETIMEDOUT 10.0.0.1:443", false);
+    expect(d).toContain("connect ETIMEDOUT 10.0.0.1:443");
+  });
+
+  it("mientras carga lo dice, y no culpa al catalogo", () => {
+    const d = porQueNoHayAQuienElegir(0, null, true)!;
+    expect(d).toContain("Buscando");
+    expect(d).not.toContain("catálogo");
+  });
+
+  it("el catalogo vacio de verdad manda a cargarlo", () => {
+    expect(porQueNoHayAQuienElegir(0, null, false)).toContain("catálogo");
+  });
+
+  it("un fallo gana sobre «todavia no cargo»: el que explica es el error", () => {
+    expect(porQueNoHayAQuienElegir(0, "500", true)).toContain("500");
+  });
+});
+
+describe("que se le dice a la persona cuando la planilla no se dejo escribir", () => {
+  it("sin error no hay nada que decir", () => {
+    expect(elAvisoDeLaPlanilla("Piparo", null)).toBeNull();
+  });
+
+  it("al poner, se dice lo que contesto Google sin traducir", () => {
+    const a = elAvisoDeLaPlanilla("Piparo", "Unable to parse range: OT!P9999")!;
+    expect(a).toContain("Unable to parse range: OT!P9999");
+  });
+
+  /*
+   * Sacar lleva una advertencia de más y es la única defensa que el diseño
+   * aceptó para el vaciado: la cola se rearma desde la fila, donde una celda
+   * vacía no se distingue de una que nunca se llenó, así que la próxima
+   * sincronización devuelve el nombre viejo.
+   */
+  it("al sacar, ademas avisa que la sincronizacion lo va a devolver", () => {
+    const a = elAvisoDeLaPlanilla(null, "403 PERMISSION_DENIED")!;
+    expect(a).toContain("403 PERMISSION_DENIED");
+    expect(a).toContain("devolver");
+  });
+
+  it("y el de sacar nombra a quien hay que sacar a mano", () => {
+    expect(elAvisoDeLaPlanilla(null, "403", "Picart")).toContain("Picart");
   });
 });
 

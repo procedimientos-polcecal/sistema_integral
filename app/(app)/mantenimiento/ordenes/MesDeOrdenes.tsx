@@ -141,7 +141,14 @@ export default function MesDeOrdenes({ puedeMover, puedeAsignar }: {
       <p className="text-sm text-slate-600">
         Qué órdenes tiene cada día y cuánta gente del taller hay
         {puedeAsignar ? ", con la rotación de turnos arriba de cada semana" : ""}. Tocá un día
-        para verlo{puedeMover ? ", y desde ahí podés correrle la fecha a una orden." : "."}
+        para verlo
+        {puedeMover && puedeAsignar
+          ? ", y desde ahí podés correrle la fecha a una orden o ponerle operarios."
+          : puedeMover
+            ? ", y desde ahí podés correrle la fecha a una orden."
+            : puedeAsignar
+              ? ", y desde ahí podés ponerle operarios a una orden."
+              : "."}
       </p>
 
       {aviso && (
@@ -184,6 +191,8 @@ export default function MesDeOrdenes({ puedeMover, puedeAsignar }: {
           catalogo={taller?.catalogo ?? []}
           noVienenEseDia={taller?.noVienen[asignando.dia] ?? []}
           turnos={taller?.turnos ?? {}}
+          falloDelTaller={falloDelTaller}
+          cargandoElTaller={!taller && !falloDelTaller}
           onCerrar={() => setAsignando(null)}
           onAsignada={() => {
             setAsignando(null);

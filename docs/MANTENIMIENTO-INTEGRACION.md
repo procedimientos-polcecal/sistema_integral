@@ -2427,7 +2427,7 @@ Seis cosas que no se deducen del código:
   descartó porque el desplegable del cierre no habría ofrecido después lo que el
   panel asignó, y dos vocabularios para las mismas tres celdas es como se pudre
   uno.
-- **Para saber si alguien viene hay que saber quién es, y 8 de los 10 nombres
+- **Para saber si alguien viene hay que saber quién es, y 7 de los 10 nombres
   resuelven contra el padrón** (`resolverElCatalogo`, por `norm` + `includes`,
   con exactamente una persona). Los otros tres se dicen en vez de adivinarse:
   «Ambos» no es una persona; «Lopez» es **Raúl Argentino López**, que todavía no
@@ -2437,7 +2437,11 @@ Seis cosas que no se deducen del código:
   dice por qué no sabe si vienen. **Los dos últimos se cierran con datos y no
   con código**: cargar a López en el padrón, y desambiguar «Lucas» en el
   catálogo. El día que eso pase la función los resuelve sola, y hay un test que
-  lo fija.
+  lo fija. Y mirado por el otro lado, que es lo que de verdad cuesta: **LUCAS
+  GALLASTEGUI es la única persona del padrón a la que ningún nombre del catálogo
+  alcanza sin ambigüedad**, así que hoy no se le puede asignar nada. (El número
+  decía «8 de los 10» hasta la revisión de la rama, y se contradecía solo: ocho
+  más otros tres dan once. El test siempre dijo siete.)
 - **Los nombres NO viajan por `/api/mantenimiento/calendario`**, y por eso hay
   una ruta aparte, `/api/mantenimiento/taller-del-mes`, guardada con
   `esAdminMantenimiento`. Esa primera la abre cualquiera que vea Mantenimiento

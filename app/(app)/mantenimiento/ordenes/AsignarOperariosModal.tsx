@@ -11,8 +11,10 @@ import {
   type OperarioDelCatalogo,
 } from "@/lib/mantenimiento/operarioDelCatalogo";
 import {
+  elAvisoDeLaPlanilla,
   elCuerpoDeLaAsignacion,
   porQueNoEntra,
+  porQueNoHayAQuienElegir,
   porQueNoSePuedeAsignar,
   type OrdenQueSeAsigna,
 } from "@/lib/mantenimiento/asignarOperario";
@@ -55,7 +57,8 @@ import { OFICIOS, type OrdenDelDia } from "./CalendarioDeOT";
  * en el acto, así que no hay nada a medio cargar que se pueda perder.
  */
 export default function AsignarOperariosModal({
-  orden, dia, catalogo, noVienenEseDia, turnos, onCerrar, onAsignada,
+  orden, dia, catalogo, noVienenEseDia, turnos, falloDelTaller, cargandoElTaller,
+  onCerrar, onAsignada,
 }: {
   orden: OrdenDelDia;
   /** El día que se está mirando, que es contra el que se calculan turno y falta. */
@@ -65,12 +68,28 @@ export default function AsignarOperariosModal({
   noVienenEseDia: string[];
   /** `empleadoId|dia` → el turno real de ese día (la pisada encima del ciclo). */
   turnos: Record<string, Turno>;
+  /**
+   * Por qué no se pudo traer el taller, si falló. Sin esto el modal se abría
+   * con tres desplegables vacíos y ningún cartel, que es indistinguible de un
+   * catálogo de operarios vacío.
+   */
+  falloDelTaller: string | null;
+  /** Si el taller todavía no contestó. */
+  cargandoElTaller: boolean;
   onCerrar: () => void;
   onAsignada: () => void;
 }) {
   const [guardando, setGuardando] = useState<number | null>(null);
   const [error, setError] = useState("");
-  const [avisoDePlanilla, setAvisoDePlanilla] = useState<string | null>(null);
+  /*
+   * **Una lista y no un string.** El aviso de que la planilla no se dejó
+   * escribir es la única defensa que el diseño aceptó para el vaciado, y
+   * mientras fue uno solo la acción siguiente lo borraba: se sacaba a alguien,
+   * Google rechazaba la celda, salía el cartel, se ponía a otro, y el cartel
+   * desaparecía con la columna todavía diciendo el nombre viejo. Un cartel que
+   * se borra solo no es la defensa que se prometió.
+   */
+  const [avisosDePlanilla, setAvisosDePlanilla] = useState<string[]>([]);
 
   /*
    * Lo que se ve es el estado local, no la grilla: la grilla se vuelve a pedir
@@ -117,9 +136,9 @@ export default function AsignarOperariosModal({
   }
 
   async function escribir(slot: number, nombre: string | null) {
+    const queSacaba = puestos[`operario_${slot}` as keyof OrdenQueSeAsigna] as string | null;
     setGuardando(slot);
     setError("");
-    setAvisoDePlanilla(null);
 
     try {
       const res = await fetch("/api/mantenimiento/ordenes", {
@@ -136,22 +155,10 @@ export default function AsignarOperariosModal({
       setPuestos((p) => ({ ...p, [`operario_${slot}`]: nombre }));
       setHuboCambios(true);
 
-      /*
-       * El fallo de la planilla se dice con lo que contestó Google, sin
-       * traducir, y **sacar tiene una advertencia de más**: la cola de
-       * pendientes se rearma desde la fila, donde una celda vacía no se
-       * distingue de una que nunca se llenó, así que la próxima sincronización
-       * devuelve el nombre viejo. El porqué está en el encabezado de
-       * `lib/mantenimiento/asignarOperario.ts`.
-       */
-      if (body.planilla_error) {
-        setAvisoDePlanilla(
-          nombre === null
-            ? `No se pudo escribir la planilla: ${body.planilla_error} — hay que sacarlo también ` +
-              `a mano allá, porque la sincronización lo va a devolver.`
-            : `No se pudo escribir la planilla: ${body.planilla_error}`
-        );
-      }
+      // Lo que se dice lo decide `elAvisoDeLaPlanilla`, que está en `lib/` con
+      // sus tests: acá sólo se acumula, para que no lo borre la acción siguiente.
+      const aviso = elAvisoDeLaPlanilla(nombre, body.planilla_error ?? null, queSacaba);
+      if (aviso) setAvisosDePlanilla((previos) => [...previos, aviso]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -188,6 +195,10 @@ export default function AsignarOperariosModal({
 
             {[1, 2, 3].map((slot) => {
               const puesto = puestos[`operario_${slot}` as keyof OrdenQueSeAsigna] as string | null;
+              const deLaPosicion = losDeLaPosicion(slot);
+              const sinNadie = porQueNoHayAQuienElegir(
+                deLaPosicion.length, falloDelTaller, cargandoElTaller
+              );
               return (
                 <div key={slot}>
                   <label className="mb-1 block text-xs font-medium text-slate-600">
@@ -206,6 +217,10 @@ export default function AsignarOperariosModal({
                         {guardando === slot ? "Sacando…" : "Sacar"}
                       </button>
                     </div>
+                  ) : sinNadie ? (
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900 break-words">
+                      {sinNadie}
+                    </p>
                   ) : (
                     <Select
                       value=""
@@ -216,7 +231,7 @@ export default function AsignarOperariosModal({
                       <option value="">
                         {guardando === slot ? "Guardando…" : "Elegir a alguien…"}
                       </option>
-                      {losDeLaPosicion(slot).map((o) => {
+                      {deLaPosicion.map((o) => {
                         const noEntra = porQueNoEntra(puestos, o);
                         const estado = comoEsta(o);
                         return (
@@ -233,9 +248,16 @@ export default function AsignarOperariosModal({
           </>
         )}
 
-        {avisoDePlanilla && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 break-words">
-            {avisoDePlanilla}
+        {avisosDePlanilla.length > 0 && (
+          <div className="space-y-1">
+            {avisosDePlanilla.map((a, i) => (
+              <div
+                key={i}
+                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 break-words"
+              >
+                {a}
+              </div>
+            ))}
           </div>
         )}
 

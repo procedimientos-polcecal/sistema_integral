@@ -647,7 +647,7 @@ git commit -m "feat(mantenimiento): asignar operarios a una OT desde el mes"
 En `docs/MANTENIMIENTO-INTEGRACION.md`, dentro de
 `## La programación semanal del taller`, una subsección
 `### Asignar operarios desde el mes` con lo que no se deduce del código: el
-catálogo con posiciones y el 1.223 de 1.223; que 8 de 10 nombres resuelven y los
+catálogo con posiciones y el 1.223 de 1.223; que 7 de 10 nombres resuelven y los
 otros tres se cierran con datos; que los nombres no viajan por la ruta del
 calendario y por qué; que la franja es el ciclo y el día es la verdad; y que
 sacar sólo pega si la planilla se dejó escribir.

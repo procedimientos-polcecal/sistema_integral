@@ -82,11 +82,20 @@ export function porQueNoSePuedeAsignar(o: OrdenQueSeAsigna): string | null {
 /**
  * El motivo por el que ese nombre no entra en esa orden, o null si entra.
  *
- * **No pisa nunca**: una posición ocupada se informa con el nombre que tiene,
- * para que quien asigna decida si lo saca. Y el mismo nombre no entra dos
- * veces, aunque sea en otra posición — la planilla las respeta las 1.223 de
- * 1.223, pero el catálogo tiene filas repetidas de nombre en teoría y una OT
- * con la misma persona dos veces no significa nada.
+ * Una posición ocupada se informa con el nombre que tiene, para que quien
+ * asigna decida si lo saca. Y el mismo nombre no entra dos veces, aunque sea en
+ * otra posición — la planilla las respeta las 1.223 de 1.223, pero el catálogo
+ * tiene filas repetidas de nombre en teoría y una OT con la misma persona dos
+ * veces no significa nada.
+ *
+ * **Lo que esto garantiza es que no se pisa lo que la pantalla ve, y no que no
+ * se pise.** La decide sobre la foto que trajo el mes, y el PATCH de
+ * `/api/mantenimiento/ordenes` **no tiene guarda** sobre estas tres columnas
+ * —ni puede tenerla a secas: «Registrar el trabajo» escribe las mismas celdas
+ * al cerrar y ahí pisar es lo correcto—. Así que con dos pestañas abiertas, la
+ * segunda escribe sobre lo que puso la primera, sin error y sin aviso. Vale
+ * saberlo y hoy no se cierra: la pantalla es de admin, la grilla se vuelve a
+ * pedir en cada asignación, y el resultado se ve al recargar.
  */
 export function porQueNoEntra(
   o: OrdenQueSeAsigna,
@@ -133,6 +142,53 @@ export function elCuerpoDeLaAsignacion(
   const columna = columnaDelSlot(slot);
   if (!columna) return { id };
   return { id, [columna]: nombre ?? "" };
+}
+
+/**
+ * Por qué una posición no tiene a nadie para ofrecer, o null si tiene.
+ *
+ * Existe porque el panel se abría con tres desplegables vacíos y **ningún
+ * cartel** cuando `/api/mantenimiento/taller-del-mes` fallaba o todavía no
+ * había contestado: eso es indistinguible de «el catálogo de operarios está
+ * vacío», y es la regla escrita del repo —un diagnóstico que no se distingue
+ * de otro no es un diagnóstico—.
+ *
+ * **El error gana sobre «todavía está cargando»**: si los dos son ciertos, el
+ * que explica algo es el error.
+ */
+export function porQueNoHayAQuienElegir(
+  cuantos: number,
+  error: string | null,
+  cargando: boolean,
+): string | null {
+  if (cuantos > 0) return null;
+  if (error) return `No se pudo traer el taller: ${error}`;
+  if (cargando) return "Buscando a la gente del taller…";
+  return "El catálogo de operarios está vacío. Se carga en Mantenimiento → Configuración.";
+}
+
+/**
+ * Qué se le dice a la persona cuando la planilla no se dejó escribir.
+ *
+ * `null` quiere decir que no hubo fallo. Lo que dijo Google va **sin traducir**,
+ * que es la regla de la casa: un fallo de escritura que no se distingue de otro
+ * costó una tarde entera.
+ *
+ * **Sacar lleva una advertencia de más**, y es la única defensa que el diseño
+ * aceptó para el vaciado: ver el tercer bloque del encabezado.
+ */
+export function elAvisoDeLaPlanilla(
+  nombre: string | null,
+  error: string | null,
+  queSacaba?: string | null,
+): string | null {
+  if (!error) return null;
+  if (nombre !== null) return `No se pudo escribir la planilla: ${error}`;
+  const quien = queSacaba?.trim() ? `a «${queSacaba.trim()}»` : "el nombre";
+  return (
+    `No se pudo escribir la planilla: ${error} — hay que sacar ${quien} también a mano allá, ` +
+    `porque la sincronización lo va a devolver.`
+  );
 }
 
 /**

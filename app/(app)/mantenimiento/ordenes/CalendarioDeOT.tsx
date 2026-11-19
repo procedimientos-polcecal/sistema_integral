@@ -196,6 +196,14 @@ export default function CalendarioDeOT({
    * Qué rango está pidiendo la grilla. El mes es estado de acá —se cambia con
    * las flechas— así que el padre no tiene otra forma de saber para qué
    * semanas traer lo suyo.
+   *
+   * **Tiene que ser estable entre renders**, o sea un `useCallback` y no una
+   * arrow escrita en el JSX: va en las dependencias de un efecto que llama al
+   * padre, así que una identidad nueva por render es un bucle infinito. Y lo
+   * que el padre guarde tiene que conservar su identidad cuando el rango no
+   * cambió (`MesDeOrdenes` devuelve el mismo objeto), por lo mismo. La de al
+   * lado, `franjaDeLaSemana`, **sí** puede ir inline: no está en ninguna
+   * dependencia.
    */
   onRango?: (desde: string, hasta: string) => void;
 }) {
@@ -477,8 +485,14 @@ export default function CalendarioDeOT({
               </div>
               {/* Una grilla por semana, no una sola de 42 celdas: la franja del
                   taller va *entre* las filas, y eso no se puede hacer con una
-                  grilla única sin que el elemento intercalado ocupe celdas. Sin
-                  la prop, las filas quedan pegadas y se ve igual que antes. */}
+                  grilla única sin que el elemento intercalado ocupe celdas.
+                  Sin la prop las filas quedan pegadas por `space-y-px`, pero
+                  **no es idéntico a antes y no se afirma que lo sea**: antes
+                  había una caja con un borde y dos esquinas redondeadas, y
+                  ahora hay una por semana. Eso toca a las dos pantallas que no
+                  reciben franja —el alta de una OT y la pestaña Mes de
+                  `/planificacion`—, y no se pudo mirar en un navegador porque
+                  todo está detrás del login. */}
               <div className="space-y-px">
                 {semanas.map((semana) => (
                   <div key={semana[0]}>

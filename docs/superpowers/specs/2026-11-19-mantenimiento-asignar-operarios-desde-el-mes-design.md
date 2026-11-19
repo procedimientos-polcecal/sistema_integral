@@ -185,8 +185,14 @@ están.
 
 ### 1b. Cómo se sabe la disponibilidad de un nombre del catálogo
 
-Resolviendo cada `nombre` contra el padrón del taller. Medido: **8 de los 10
+Resolviendo cada `nombre` contra el padrón del taller. Medido: **7 de los 10
 resuelven a exactamente una persona**. Los otros tres casos **no se adivinan**:
+
+> **Corregido el 19/11/2026, en la revisión de la rama.** Este número decía «8
+> de los 10», y se contradecía solo: ocho más los otros tres dan once. Son
+> **siete** —Agosta, Aguirre, Echeverria, Garcia, Mendizabal, Picart y Piparo—,
+> vuelto a medir contra producción con la función ya escrita. El test siempre
+> dijo siete; la que estaba mal era la prosa.
 
 | | |
 |---|---|

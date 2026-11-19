@@ -23,7 +23,7 @@
  *
  * Para saber si alguien está disponible hay que saber **quién es**, y eso se
  * resuelve cruzando el nombre del catálogo con el padrón. Medido el mismo día:
- * **8 de los 10 resuelven a exactamente una persona**. Los otros tres casos no
+ * **7 de los 10 resuelven a exactamente una persona**. Los otros tres casos no
  * se adivinan, se dicen:
  *
  * - **«Ambos»** no es una persona, es la palabra «ambos».
@@ -40,6 +40,12 @@
  * `mant_personal_taller`, y desambiguar «Lucas» en el catálogo. El día que eso
  * pase, esta función empieza a resolverlos sola y la pantalla mejora sin que
  * nadie toque nada — hay un test que lo fija.
+ *
+ * Y lo que se ve mirándolo por el otro lado, que es lo que de verdad cuesta:
+ * **LUCAS GALLASTEGUI es la única persona del padrón a la que ningún nombre del
+ * catálogo alcanza sin ambigüedad**, así que hoy no se le puede asignar nada.
+ * Desambiguar «Lucas» no es prolijidad: es la diferencia entre poder darle
+ * trabajo y no.
  */
 
 import { norm } from "@/lib/core/texto";
