@@ -151,12 +151,19 @@ describe("filtrarCambios", () => {
     expect(ids({ ...FILTROS_DEL_HISTORIAL_VACIOS, texto: "ana" })).toEqual(["b"]);
   });
 
-  it("una huérfana no entra cuando se filtra por sector", () => {
+  it("una huérfana no entra cuando se filtra por sector, pero sí por su nombre", () => {
+    // Desde la 20261119104730 una fila cuyo sector se borró conserva el
+    // nombre que tenía: `sector_id` en null es lo único que la delata.
     const conHuerfana = conPermanencia([
-      cambio({ id: "h", sector_id: null, sector: null, changed_at: "2026-11-11T10:00:00.000Z" }),
+      cambio({ id: "h", sector_id: null, sector: "Despacho Cal", changed_at: "2026-11-11T10:00:00.000Z" }),
     ], AHORA);
+
+    // Por sector no hay con qué cruzarla: ya no tiene id.
     expect(filtrarCambios(conHuerfana, { ...FILTROS_DEL_HISTORIAL_VACIOS, sectores: ["s1"] }))
       .toEqual([]);
+    // Por texto sí, que es el único camino que le queda a quien la busque.
+    expect(filtrarCambios(conHuerfana, { ...FILTROS_DEL_HISTORIAL_VACIOS, texto: "despacho" }))
+      .toHaveLength(1);
     expect(filtrarCambios(conHuerfana, FILTROS_DEL_HISTORIAL_VACIOS)).toHaveLength(1);
   });
 });

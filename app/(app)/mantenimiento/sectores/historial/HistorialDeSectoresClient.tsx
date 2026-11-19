@@ -187,10 +187,18 @@ export default function HistorialDeSectoresClient({ cambios, sectores }: {
               {visibles.map((c, i) => (
                 <tr key={c.id} className={i < visibles.length - 1 ? "border-b border-slate-100" : ""}>
                   <td className="whitespace-nowrap px-4 py-2 text-slate-700">{cuando(c.changed_at)}</td>
+                  {/* Que el sector ya no esté lo dice `sector_id` en null y no
+                      el nombre, que sigue estando: lo guardó el trigger el día
+                      del cambio. Por eso el nombre se muestra igual y lo que se
+                      agrega es la aclaración. */}
                   <td className="px-4 py-2 font-medium text-slate-900">
-                    {c.sector ?? (
-                      <span className="italic text-slate-400" title="El sector se borró o se unificó; el cambio queda registrado igual">
-                        sector dado de baja
+                    {c.sector ?? <span className="italic text-slate-400">sin nombre</span>}
+                    {c.sector_id === null && (
+                      <span
+                        className="ml-1.5 whitespace-nowrap text-xs font-normal italic text-slate-400"
+                        title="El sector se borró o se unificó. El nombre es el que tenía el día del cambio."
+                      >
+                        (dado de baja)
                       </span>
                     )}
                   </td>
