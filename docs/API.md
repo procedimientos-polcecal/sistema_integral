@@ -190,7 +190,7 @@ en su documento, enlazado desde [CLAUDE.md](../CLAUDE.md).
 | Carpeta | Rutas | Para qué |
 |---|---|---|
 | `rrhh` | 54 | Legajos, asistencia, liquidaciones, vacaciones, francos y feriados. Incluye el espejo de las marcaciones del reloj Lenox |
-| `mantenimiento` | 54 | Avisos, órdenes de trabajo, ejecuciones, planificación, MTBF, GUT, la programación del taller y los partes de contratista |
+| `mantenimiento` | 64 | Avisos, órdenes de trabajo, ejecuciones, planificación, MTBF, GUT, la programación del taller, los partes de contratista y el análisis semanal de OT |
 | `remises` | 30 | El submódulo de RRHH: hojas de ruta, viajes y la liquidación de los choferes |
 | `compras` | 26 | Requerimientos, aprobaciones por área y órdenes de servicio |
 | `cron` | 18 | Los procesos que corren solos. Ver arriba |

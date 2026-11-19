@@ -20,7 +20,7 @@
 - Un `select()` va literal, no armado en una variable.
 - `traerTodo()` de `lib/core/paginado.ts` en cualquier lectura que pueda crecer; PostgREST corta en 1000 sin avisar.
 - Un desplegable se escribe `<Select>`. Una grilla de tres o más columnas lleva breakpoint: `grid-cols-1 sm:grid-cols-3`. Un ancho al lado de `.input` va en un `div` que lo envuelva, nunca como `w-*` sobre el `input`.
-- **«Abierta» es `estado` fuera de `["REALIZADO", "SUSPENDIDA"]`**, nunca `fecha_cierre is null`, y nunca el valor `ATRASADO`.
+- **«Abierta» es `estado` fuera de `["REALIZADO", "CANCELADA"]`**, nunca `fecha_cierre is null`, y nunca el valor `ATRASADO`.
 - Ningún test afirma un número leído de producción: los fixtures van congelados en el test.
 - Verificación: `npm test`, `npx tsc --noEmit`, `npm run build`, `node scripts/revisar-arbol-commiteado.mjs`, `node scripts/revisar-responsive.mjs`. Si `tsc` se queda sin heap: `node --max-old-space-size=8192 ./node_modules/typescript/bin/tsc --noEmit`.
 
@@ -203,7 +203,7 @@ git commit -m "feat(mantenimiento): postergar deja el movimiento como dato y no 
 **Interfaces:**
 - Consumes: `OrdenDelSistema` de `lib/mantenimiento/contraste.ts`, `OrdenLeida` de `lib/mantenimiento/ordenes.ts`, `Reprogramacion` de la tarea 2.
 - Produces:
-  - `export const CERRADAS_PARA_REPROGRAMAR: readonly string[] = ["REALIZADO", "SUSPENDIDA"]`
+  - `export const CERRADAS_PARA_REPROGRAMAR: readonly string[] = ["REALIZADO", "CANCELADA"]`
   - `export const TOPE_DE_FILAS_POR_CORRIDA: number`
   - `export function lasQueHayQueRegistrar(delSistema: readonly OrdenDelSistema[], deLaPlanilla: readonly OrdenLeida[], ultimaPorOt: ReadonlyMap<number, string>): { filas: { ot_number: number; fecha_anterior: string | null; fecha_nueva: string }[]; freno: string | null }` — `ultimaPorOt` es, por número de OT, el `fecha_nueva` de su última fila de historial.
 
@@ -213,7 +213,7 @@ git commit -m "feat(mantenimiento): postergar deja el movimiento como dato y no 
 describe("lasQueHayQueRegistrar", () => {
   it("registra una OT abierta cuya fecha de inicio cambió");
   it("NO registra una OT cerrada (REALIZADO)");          // la decisión del spec
-  it("NO registra una OT SUSPENDIDA");
+  it("NO registra una OT CANCELADA");
   it("NO registra si la fecha no cambió");
   it("NO registra una OT con sheets_pendiente");
   it("NO registra una OT con fecha_ejecucion_pendiente"); // la ventana del derrame
@@ -304,7 +304,7 @@ Una entrada más en `FiltrosOt`, en `FILTROS_VACIOS` y en `NOMBRES` (nombre de U
 En `app/api/mantenimiento/ordenes/route.ts`, junto a los otros `.in()`. Los dos valores **suman**, que es lo que se pidió cuando se preguntó cuál de las dos cosas significa «reprogramada»:
 
 - `hechas` → `reprogramada_veces > 0`
-- `necesitan` → `estado` fuera de `["REALIZADO","SUSPENDIDA"]` **y** `fecha_ejecucion < hoyEnArgentina()`
+- `necesitan` → `estado` fuera de `["REALIZADO","CANCELADA"]` **y** `fecha_ejecucion < hoyEnArgentina()`
 - los dos → un `.or()` con las dos condiciones
 
 El `hoy` sale de `hoyEnArgentina()` de `lib/core/fechas.ts`, no de `new Date()` en el servidor.
@@ -404,7 +404,7 @@ describe("analizarLaSemana", () => {
 describe("lasQueNecesitanReprogramarse", () => {
   it("son las abiertas con la fecha de inicio anterior a hoy");
   it("NO mira el valor ATRASADO del estado");
-  it("deja afuera REALIZADO y SUSPENDIDA");
+  it("deja afuera REALIZADO y CANCELADA");
   it("deja afuera las que no tienen fecha de inicio");
   it("ordena por días vencida, la más vieja primero");
 });

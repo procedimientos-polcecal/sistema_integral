@@ -59,7 +59,7 @@ abiertas con fecha pasada, sólo **17** lo dicen; las otras doce son 8
 solo. Cualquier conteo de este diseño pregunta **`abierta` y
 `fecha_ejecucion < hoy`**, y **nunca el valor `ATRASADO`**.
 
-**Y «abierta» es `estado` fuera de `REALIZADO` y `SUSPENDIDA`, no
+**Y «abierta» es `estado` fuera de `REALIZADO` y `CANCELADA`, no
 `fecha_cierre is null`.** Las dos definiciones dan números que no se parecen —
 medido el 19/11/2026: **35** vencidas por la primera y **254** por la segunda—
 y la segunda está documentada como poco fiable en
@@ -67,9 +67,19 @@ y la segunda está documentada como poco fiable en
 de cierre, así que «sin fecha = abierta» diría «abierta» sobre una de cada diez
 órdenes ya hechas. Se usa la constante `CERRADAS` que ya comparten
 `lib/mantenimiento/alertas.ts` y `lib/mantenimiento/gut.ts`, para no escribir el
-mismo criterio en un tercer lugar. `SUSPENDIDA` cuenta como cerrada: una orden
-suspendida está parada a propósito y no es trabajo que haya que reprogramar
-(hoy hay 0, así que nada revela la elección hasta que muerda).
+mismo criterio en un tercer lugar. `CANCELADA` cuenta como cerrada: una orden
+cancelada no es trabajo que haya que reprogramar.
+
+**Cuidado con el nombre de ese estado, que este documento tuvo mal.** Hasta acá
+decía `SUSPENDIDA`, y esa palabra **salió del vocabulario de OT el
+16/11/2026**: `esEstadoDeOT("SUSPENDIDA")` da `false` y la migración
+`20261116082742` la reemplazó por `CANCELADA`. Lo detectó, el primer día que
+existió, el test que ata la constante nueva a `CERRADAS_GUT` — escrito
+justamente para que las tres copias de esos dos valores no se separaran en
+silencio. Escrito como decía este documento, el filtro habría dejado entrar
+**toda OT cancelada** y no habría frenado nada. Vale como advertencia de dónde
+salió el error: la constante se leyó del checkout principal, que estaba parado
+en la rama de otra sesión y traía el valor viejo.
 
 Dicho de otro modo, y porque es la trampa de este módulo: **el campo `estado`
 sí se usa; el que no se usa es su valor `ATRASADO`.** Uno dice si la orden

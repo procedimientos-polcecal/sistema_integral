@@ -3881,3 +3881,366 @@ Dos cosas que ningún test ve:
   número en `OT ASIGNADA` entre con `work_order_id` puesto y `ot_resuelta_en`
   sellado. Es la única prueba de que la resolución sigue viva, y es la misma que
   en octubre confirmó que el área se completaba sola.
+
+## La reprogramación de una OT y el Análisis (19/11/2026)
+
+Correrle la fecha a una orden ya se podía: el botón **Postergar** escribe la
+fecha nueva en la planilla, la guarda en `ordenes_trabajo.fecha_ejecucion`, deja
+una nota y escribe una fila de `auditoria`. Lo que no dejaba era **un dato con
+el que se pueda analizar**: cuántas veces se corrió una OT, de qué fecha venía,
+cuáles son las que más se corren. Eso es lo que se agregó, junto con una
+pantalla de **Análisis de OT** (`/mantenimiento/analisis`) que contesta por
+semana las mismas preguntas que la hoja `Analisis de OT` de la planilla
+`1aCMQlLnigQnO32p-IxDGjsFLu-5hv8pnD8_-zTML8Jo`.
+
+El diseño está en
+[el spec](superpowers/specs/2026-11-19-mantenimiento-reprogramacion-y-analisis-de-ot-design.md)
+y el plan en
+[su plan](superpowers/plans/2026-11-19-mantenimiento-reprogramacion-y-analisis-de-ot.md).
+**Donde el spec y esta sección no coincidan, manda ésta**: hay cuatro
+decisiones que se dieron vuelta mientras se escribía el código y están dichas
+abajo una por una.
+
+### Lo primero, para quien despliegue
+
+**La migración `20261119113422_reprogramaciones_de_ot.sql` va antes del
+código, y al 19/11/2026 no está aplicada.** No es la precaución de siempre: la
+ruta del análisis nombra `reprogramada_veces` en un `select()` literal, así que
+sin la columna **la pantalla nueva contesta 500 entera**, y en el listado de OT
+el filtro «Ya reprogramadas» inyecta `reprogramada_veces.gt.0` en el `.or()` y
+rompe la consulta. Lo demás del listado quedó defensivo a propósito —`select("*")`,
+acceso por cast, y la consulta del historial que falla sin voltear la pantalla—,
+y la sincronización no puede fallar por esto: se comprobó camino por camino con
+la tabla ausente, y lo que hace es anotar el motivo en
+`reprogramaciones_sin_registrar` y seguir.
+
+**Y nada del mecanismo se ejercitó con datos reales.** `mant_reprogramaciones_ot`
+tiene **0 filas**, Postergar **nunca se usó** y **nadie abrió la pantalla en un
+navegador** —todo está detrás del login—. Lo que está verificado es la
+aritmética, con tests sobre un juego de órdenes congelado en el archivo de test.
+
+### Lo medido contra producción el 19/11/2026
+
+| | |
+|---|---|
+| OT en total | **2.531** |
+| `REALIZADO` | **2.467** (97,5 %) |
+| `CANCELADA` | **0** |
+| Abiertas | **64** |
+| Abiertas con la fecha de inicio ya vencida | **35** |
+| …de ésas, `app_created` (se postergan desde el sistema) | **11** |
+| …de ésas, entradas por el formulario (se cambian en la planilla) | **24** |
+| Órdenes con `estado` nulo o vacío | **0** |
+| Filas en `mantenimiento_divergencias` | **0** |
+| Filas en `mant_reprogramaciones_ot` | **0** |
+
+Ese **0 de estados vacíos** vale anotarlo porque cierra una duda que se levantó
+sola: `not.in` sobre un NULL no es verdadero, así que una orden sin estado
+quedaría fuera de «necesitan reprogramarse». El hueco existe y **hoy no alcanza
+a ninguna fila**.
+
+### «Reprogramada» son las dos cosas juntas, y por eso es un filtro y no dos
+
+Se preguntó cuál de las dos cosas significa, y la respuesta fue **las dos**: la
+que ya se movió y la que hay que mover. Por eso en `filtrosOt.ts` es **un solo
+filtro con dos valores** —`hechas` y `necesitan`— y no dos filtros: dentro de un
+filtro los valores suman, así que elegir los dos da la unión. Dos filtros
+separados darían la intersección, que es la pregunta que nadie hizo.
+
+### El historial tiene dos orígenes, y el de la planilla deja afuera las cerradas
+
+Una fila de `mant_reprogramaciones_ot` por cada vez que la fecha de inicio se
+movió, con dos escritores:
+
+- **`origen = 'sistema'`** — la ruta `postergar`, con razón, justificación y
+  autor, escrita después de que la planilla aceptó la fecha.
+- **`origen = 'planilla'`** — la sincronización, en el mismo punto donde ya
+  corre el contraste: **antes del upsert**, que es el único momento en que los
+  dos lados todavía dicen cosas distintas. Llega **muda**: sin razón, sin
+  justificación y sin persona, porque la planilla no las guarda.
+
+Registrar las dos puntas fue lo pedido, y no es un detalle de completitud: sólo
+**223 de 2.531** órdenes tienen el botón. A las otras 2.268 la fecha se les
+corre tipeándola en el master, y un análisis de reprogramaciones que ve el 9 %
+del universo no es el análisis.
+
+**Pero un cambio de fecha en la planilla sobre una OT ya cerrada no genera
+fila.** Lo decide `CERRADAS_PARA_REPROGRAMAR = ["REALIZADO", "CANCELADA"]` en
+`reprogramacionesDeLaPlanilla.ts`, y lo pidió el usuario con esas palabras:
+«sólo las abiertas». El argumento medido es la proporción: con el 97,5 % de la
+base cerrada, la edición más probable de esa columna no es correr un trabajo
+futuro sino **corregirle la carga a algo que ya se hizo**, y desde este lado las
+dos llegan iguales —una fecha distinta—. Dejarlas entrar llenaría la pestaña de
+Reprogramaciones de arreglos retroactivos hasta que nadie la mire.
+
+Lo que se pierde, dicho: **la OT que se postergó en la planilla y cerró antes de
+la corrida siguiente**. La sincronización ya no la ve abierta, así que ese
+movimiento no queda registrado en ninguna parte. Es el costo aceptado a cambio
+de que la pestaña diga la verdad.
+
+**Dos cosas más que el spec pedía y no quedaron así:**
+
+- **El estado cerrado es `CANCELADA`, no `SUSPENDIDA`.** El spec y el plan
+  decían `SUSPENDIDA`, que salió del vocabulario de OT el 16/11/2026 (migración
+  `20261116082742`; `esEstadoDeOT("SUSPENDIDA")` da `false`). Escrito así, el
+  filtro habría dejado entrar a toda OT cancelada **y no habría frenado nada**,
+  porque no hay órdenes en un estado que no existe. Lo delató el día que se
+  escribió el test que ata esta constante a `CERRADAS_GUT`, que es la tercera
+  copia de esos dos valores en el módulo y la razón por la que ese test existe.
+- **Que la planilla vacíe una fecha no crea fila.** El spec pedía registrarlo y
+  además que `fecha_nueva` fuera `not null`, y las dos cosas no conviven. Una
+  fecha borrada no es una reprogramación —no hay «a cuál fue»— y la orden además
+  se cae sola de «necesitan reprogramarse», que mira `fecha_ejecucion < hoy`.
+  Tampoco crea fila el caso inverso, que el sistema no tuviera fecha y la
+  planilla traiga una: ésa es la primera fecha de la orden, no un corrimiento.
+
+**Y un duplicado se evita contra la última fila de esa OT, no con un índice
+único.** La clave natural sería `(ot_id, fecha_anterior, fecha_nueva)` y esa
+combinación **se repite de verdad**: una OT que se mueve del 6/11 al 13/11 en
+marzo y otra vez en septiembre son dos reprogramaciones. Hace falta porque hay
+tres caminos por los que la misma transición se detecta de nuevo —dos corridas
+que se pisan, un upsert que falla después de escrito el historial, y el botón
+«Traer de la planilla» apretado encima del cron— y porque, a diferencia de
+`mantenimiento_divergencias`, acá **nada borra**: un duplicado infla el contador
+para siempre y en silencio.
+
+### «Abierta» es el estado, y el que no se usa es el valor `ATRASADO`
+
+Son dos cosas distintas y es la trampa del módulo. **El campo `estado` sí se
+usa** —dice si la orden sigue viva—; **su valor `ATRASADO` no se usa nunca**,
+porque lo calcula la planilla con un `ARRAYFORMULA` contra el `TODAY()` de su
+último recálculo y envejece solo: de 29 abiertas con fecha vencida (18/11/2026)
+sólo 17 lo decían. Todo lo de acá pregunta **abierta y `fecha_ejecucion < hoy`**.
+
+Y **«cerrada» lo decide el estado y jamás la presencia de una fecha**: **220 de
+2.489** órdenes están en `REALIZADO` **sin `fecha_cierre`**, cerca de una de
+cada diez. Leerlo al revés diría «abierta» sobre trabajo terminado. Eso tiene
+una consecuencia concreta en el desglose del análisis, abajo.
+
+### El contador va por trigger, y el candado es el débil a propósito
+
+**`ordenes_trabajo.reprogramada_veces` es una columna que mantiene un trigger**,
+no un `count` en vivo. Existe porque el filtro del listado tiene que correr
+sobre las 2.531 filas **del lado de PostgREST**: con una lista de ids, un
+`.in()` largo arma una URL que PostgREST rechaza con un 400 mudo, y un embebido
+`!inner` no sabe expresar la unión de «ya se movió» con «necesita moverse», que
+es el otro valor del mismo filtro. El upsert de la sincronización no la pisa:
+PostgREST sólo escribe las columnas del payload y `paraLaBase()` no la incluye.
+
+Va **por trigger y no por código de la aplicación**, que es lo contrario de lo
+que hace `auditar()`, y la diferencia importa: un contador que escriben dos
+rutas es un valor en dos lugares que nada ata —la trampa del 27 del GUT, que
+allá se resolvió con un test y que acá ningún test puede atar, porque el otro
+lado del cable es Postgres—. Un trigger no se puede olvidar.
+
+**El trigger toma `for no key update` y no `for update`, y eso no es una
+preferencia.** El INSERT dispara primero el trigger de integridad de la foreign
+key de `ot_id`, que ya tomó `for key share` sobre la fila de la OT —los triggers
+after-row corren en orden de nombre y `RI_ConstraintTrigger_…` va antes—.
+`for update` choca con `for key share`: dos altas simultáneas para la misma OT
+quedarían cada una esperando el candado de la otra, o sea **el mismo deadlock
+(40P01) que el candado venía a evitar**, y un `postergar` abortado.
+`for no key update` no choca con key share pero sí con otro igual y con el
+UPDATE, que es la serialización que hace falta. No «reforzarlo».
+
+Y el candado hace falta: el trigger **recuenta** en vez de sumar uno —así un
+contador torcido se corrige solo con la fila siguiente—, pero recontar sin
+candado no alcanza con dos inserciones simultáneas sobre la misma OT. En READ
+COMMITTED el UPDATE de la segunda espera, y al retomar evalúa el subselect con
+la foto vieja: el contador quedaba en 1 con dos filas.
+
+### El freno de la sincronización descarta para siempre
+
+`TOPE_DE_FILAS_POR_CORRIDA = 10`: si una corrida tendría que escribir más de
+diez filas `planilla`, **no escribe ninguna** y lo dice en el resumen. Existe
+por lo mismo que el de `borradoDeEspejo`: una planilla recalculando devuelve
+`Cargando…` en unas celdas y vacías las demás, y una columna corrida un lugar
+—lo del 21/10/2026— hace que todas las fechas lleguen distintas a la vez. Las
+dos cosas son indistinguibles desde acá de un cambio masivo de verdad.
+
+**Pero no se parece a `borradoDeEspejo` en lo que más importa, y el spec lo cita
+como precedente sin esa salvedad.** Allá frenar corta antes de tocar nada: los
+datos quedan enteros y confirmar después borra lo mismo. **Acá lo que se
+descarta no vuelve.** El freno corre antes del upsert, y el upsert de esa misma
+corrida escribe `fecha_ejecucion` igual —`paraLaBase()` la incluye, y tiene que
+incluirla porque la planilla manda—: en la corrida siguiente los dos lados
+coinciden y no hay nada que registrar. Repetir la sincronización con la
+confirmación puesta encuentra **cero** filas.
+
+Es deliberado y no se arregla ahí. No importar esas fechas contradiría «la
+planilla manda» y podría congelar una fecha indefinidamente; guardar lo
+descartado en otro lado es alcance nuevo. El freno existe para la corrida en que
+la planilla devuelve basura, y ahí perder esas filas **es el resultado
+correcto**. Lo que no se podía era prometer una salida que no hay: el mensaje
+del freno dice que no vuelven y que, si el cambio era de verdad, hay que volver
+a mover las fechas.
+
+**Diez y no doscientos** —el tope de las divergencias—, porque aquél recorta y
+guarda el resto y éste tira todo: tiene que poder dispararse. Hay **64 órdenes
+abiertas** en toda la base, que es el universo entero de candidatas de una
+corrida, así que cualquier número de 64 para arriba sería decorativo y dejaría
+el freno apagado sin que se note.
+
+**Se levanta con su propia llave**, `sinFrenoDeReprogramaciones`, y **no con el
+`sinFreno` del borrado masivo**: si la compartieran, quien confirma un borrado
+estaría aceptando además, sin verlo, cuatrocientas reprogramaciones inventadas
+por una planilla que estaba recalculando. Una confirmación autoriza una cosa. La
+pasa `app/api/mantenimiento/ordenes/sync/route.ts` y **el cron no la pasa
+nunca**. Lo que todavía no hay, y es anterior a este trabajo: **ninguna pantalla
+tiene botón para mandar esa confirmación** —ni la del borrado—, así que las dos
+se repiten a mano.
+
+### Si el historial no se puede escribir, `postergar` contesta 200
+
+**No un error, y el spec decía lo contrario.** Para cuando corre ese insert, la
+fecha ya se escribió en la planilla y ya se guardó en la orden. Un 500 invita a
+reintentar, y reintentar **postergaría de nuevo** —otros siete días—, que es un
+daño peor que el que se evita. Lo que se pierde es el rastro, y eso viaja en
+`reprogramacion_error` con el mensaje crudo de Supabase, como `nota_error`. Se
+nota además porque el contador no sube.
+
+Esa advertencia **se muestra en los dos caminos** que llaman a la ruta —el
+`PostergarOTModal` y la ruta del calendario del plan, que la invoca en
+proceso—. Una advertencia que no se ve es peor que no tenerla, porque el sistema
+cree que avisó.
+
+### La pantalla de Análisis: lo que cambia respecto de la hoja
+
+Se mueve por semana, de lunes a domingo, con flechas. Seis métricas, un cuadro
+de tipo de mantenimiento cerrado con su diagnóstico en una línea, y seis
+pestañas.
+
+**Las listas del análisis no filtran por tipo, aunque la hoja sí lo hace.** Dos
+de los cuatro `FILTER` de la hoja piden además `tipo = PROGRAMADO` y un estado;
+acá se sacan los dos y las listas quedan siendo pura aritmética de fechas. El
+motivo es el mismo que arregla el «10 contra 2» de la hoja: **las pestañas son
+el desglose de los números de arriba, así que tienen que sumar lo que ellos
+dicen**. Con el filtro de tipo puesto, el desglose de las 10 no da 10 y la
+pantalla se contradice sola. Es la departida más grande respecto de la hoja y es
+deliberada. Por lo mismo, «OTs Programadas» se llama acá **«Con inicio en la
+semana»**: ese conteo de la hoja nunca filtró por tipo y el nombre hacía creer
+otra cosa.
+
+**El desglose de las que no cerraron tiene tres partes que suman exacto, y una
+cuarta cuenta que no es una parte.** Se reparte en orden: si la orden sigue
+abierta va a «siguen abiertas» mire lo que mire su fecha de cierre; si no, con
+cierre anterior al lunes va a «cerraron antes»; **todo lo demás es el resto** y
+cae en «cerraron después». Hacer de «después» el resto es lo que vuelve
+imposible que una orden se caiga del desglose. Ahí aterrizan también las
+`REALIZADO` sin fecha de cierre —en la semana 45, **1 de las 10**—, de las que
+lo único que consta es que no cerraron en su semana. Por eso el resultado
+**dice aparte cuántas son** y la pantalla lo aclara en el rótulo: un cuarto
+balde rompería el desglose de tres, y meterlas en silencio le haría afirmar al
+panel que el trabajo terminó tarde cuando lo cierto es que nadie sabe cuándo
+terminó.
+
+**La pestaña «Necesitan reprogramarse (hoy)» no se mueve con las flechas, y lo
+dice en su rótulo.** Una orden vencida lo está ahora, no en noviembre pasado, y
+un número quieto al lado de cuatro que cambian se lee como un error. La de
+Reprogramaciones sí es de la semana, y entra por **`creado_en`**: para una fila
+de origen `planilla` eso es **cuándo lo vio la sincronización, no cuándo alguien
+editó la celda**. La diferencia suele ser de minutos —corre cada diez— pero cae
+en la semana de al lado si el cambio se hizo un domingo a la noche.
+
+**Las que entraron por el formulario se listan igual y dicen por qué no tienen
+botón**: «Entró por el formulario — se cambia en la planilla». Al 19/11/2026 son
+24 de 35. Listarlas y explicar es honesto; esconderlas dejaría fuera de la vista
+a dos de cada tres órdenes vencidas.
+
+#### Los números del spec y los de hoy no coinciden, y ninguno está mal
+
+El spec anotó la semana 45 (02/11 al 08/11/2026) en **55 / 45 / 10 / 47 / 9** el
+18/11. Medida de nuevo el 19/11 —un día después— la misma semana dio
+**61 / 51 / 10 / 53 / 9**. **No es un error de ninguno de los dos**: la planilla
+sigue recibiendo cierres de semanas pasadas, así que los números de una semana
+vieja se mueven solos. Los del spec valen como muestra de la **forma** —las
+correctivas son 9 y las que no cerraron 10 en las dos mediciones— y no como el
+dato. Lo mismo pasa con las vencidas: 29 el 18/11 y 35 el 19/11, porque ese
+número sube solo con cada día que pasa.
+
+Por eso **ningún test de `analisisDeOt.ts` afirma un número leído de
+producción**: el fixture está congelado en el archivo de test, o nacería en
+rojo.
+
+### Los nombres de los autores se leen con el cliente admin, nunca embebidos
+
+La policy de `usuarios` es `id = auth.uid() or es_admin()`, así que un
+`creado_por:usuarios(...)` con la sesión devuelve **null para las filas de todo
+el mundo menos las propias, sin ningún error**. Es la misma trampa ya medida en
+la mensajería y en `/mis-avisos`, y las dos veces se descubrió tarde. Por eso la
+ruta del análisis devuelve `autores`, un mapa id→nombre leído aparte con el
+cliente admin. **No simplificar a un embebido.**
+
+### La razón que no tiene etiqueta, y por qué no es un dato perdido
+
+**`RAZON_DEL_PLAN` no es una fila de `mant_razones_de_postergacion` a
+propósito** (migración `20261104165733`), para que Configuración no la ofrezca
+como opción manual. La consecuencia: toda postergación que venga del calendario
+del plan guarda su `razon` y tiene **`razon_etiqueta` siempre en null**. El
+código queda guardado y alcanza; la etiqueta de reemplazo la pone cada pantalla,
+que es lo que la ruta de postergar ya había dejado escrito. La de Análisis —la
+única del sistema que muestra una razón— la sustituye por **«El plan del día»**.
+
+### Dos trampas mudas que encontró la revisión, y son la misma
+
+Las dos viven en la lectura del historial de la ruta del análisis y las dos se
+arreglaron con `traerTodo`:
+
+- **`select("ot_id")` sobre el historial trae una fila por MOVIMIENTO y no por
+  OT.** Una semana con más de 1.000 movimientos —la primera vez que la
+  sincronización vuelque un lote grande— perdería OT enteras sin error.
+- **Un lote de 200 ids puede devolver más de 1.000 filas.** 200 OT con cinco
+  movimientos de promedio ya son 1.000. Achicar el lote no cierra ese límite,
+  porque una sola OT puede tener muchos movimientos: cada lote se pagina por
+  dentro.
+
+Vale escribirlo porque ese lote queda **atrapado entre dos límites mudos**: un
+`.in()` largo contesta 400 sin explicar por qué —de ahí los 200— y el corte en
+1.000 tampoco dice nada. Si se toca el 200, hay que mirar los dos.
+
+**Y el orden del historial lleva desempate por `id`.** Dos movimientos anotados
+en la misma pasada comparten `creado_en` —`now()` es el mismo dentro de una
+transacción—, así que con `.order("creado_en")` solo el orden queda indefinido:
+en la lectura paginada de la sincronización eso saltea o repite una fila sobre
+el corte de 1.000, que es justo el duplicado que esa lectura existe para evitar,
+y en la pantalla **puede invertir la cadena de fechas**.
+
+### Lo que queda abierto
+
+- **No hay ningún candado contra dos corridas simultáneas en todo el sistema**
+  —ni `pg_advisory_lock` ni `for update skip locked`, verificado el
+  05/11/2026—. No es nuevo de esto, pero este mecanismo **escribe filas de
+  historial** y acá nada borra, así que le toca: dos corridas que lean el mismo
+  estado antes de que ninguna escriba pueden dejar la transición duplicada. La
+  ventana se angosta mucho y no se cierra, y no es acá donde se arregla.
+- **La OT postergada en la planilla que cierra antes de la corrida siguiente**
+  no queda registrada, por la regla de «sólo las abiertas» de más arriba.
+- **`postergar` suma los días sobre `fecha_ejecucion` y no sobre hoy.** Una OT
+  vencida hace dos meses, postergada 7 días, **sigue vencida** y vuelve a
+  aparecer en «Necesitan reprogramarse» apenas se recarga. **No lo introdujo
+  este trabajo** —es el comportamiento establecido del modal, con su
+  `MAXIMO_DE_DIAS = 90` por vez—, pero ésta es la primera lista del sistema
+  definida por «fecha vencida», así que es el primer lugar donde se va a leer
+  como «el botón no hizo nada».
+- **No hay tope de días acumulados, a propósito.** Tres corridas de siete días
+  no tocan nunca el máximo por vez, así que una OT se puede empujar
+  indefinidamente de a poco. Se decidió que el sistema **muestre y no frene**:
+  cualquier número acumulado sería inventado —hay cero reprogramaciones con las
+  que calibrarlo— y un freno empuja a corregir la fecha en la planilla, que es
+  donde el sistema deja de ver. Por lo mismo el cartel `Reprog. ×N` **no cambia
+  de color** por cantidad.
+- **Dos cosas chicas quedaron a decisión del usuario**: la pantalla **no tiene
+  botón para volver a la semana de hoy** —caminar cinco semanas atrás cuesta
+  cinco clics para volver— y **cada flecha relee las 2.531 OT enteras**, con la
+  petición en vuelo sin abortar (el cliente sí se protege de que una respuesta
+  vieja pise a la nueva).
+
+### Y una fila que faltaba en una tabla de CLAUDE.md
+
+Se encontró acá: los tres chips de «Necesitan reprogramarse» salían **gritados
+en mayúsculas**. `.badge` está declarada fuera de toda capa en
+`app/globals.css` y declara `font-size: 11px` **y `text-transform: uppercase`**,
+así que un `text-sm` al lado no hace nada y una oración puesta en un `.badge`
+sale como un rótulo. La fila está ahora en la tabla de la sección
+«Y `className="input w-20"` no mide 20» de CLAUDE.md, que hasta hoy listaba
+`.card` y los cuatro `.btn-*` y no ésta.
