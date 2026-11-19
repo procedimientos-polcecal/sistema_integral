@@ -183,9 +183,12 @@ export default function NuevaOTModal({ sectores, equipos, aviso, onClose, onCrea
    * se le pueda pisar un campo que otro corrigió mientras tanto. Donde sí lo hay
    * —registrar el trabajo, el GUT— los campos van planos, justamente para eso.
    *
-   * La clave no lleva origen: esta pantalla no nace prellenada desde ningún
-   * registro. Lo que copia una OT vieja es el botón «Traer», que es otra cosa
-   * —pasa adentro del mismo formulario— y queda anotado en `vieneDe`.
+   * Sin aviso la clave no lleva origen y es la de siempre. Con aviso lleva el
+   * aviso y su id: un borrador no puede cruzar de un origen a otro, porque el
+   * `aviso_id` sale de la prop y un borrador ajeno restaurado mandaría los
+   * datos de un aviso con el enlace de otro. Lo que copia una OT vieja es el
+   * botón «Traer», que es otra cosa —pasa adentro del mismo formulario— y queda
+   * anotado en `vieneDe`.
    */
   const { valores, cambiar, tocado, tirar } = useBorrador(
     // El origen es el aviso: con la clave fija, un borrador dejado en «Nueva OT»
@@ -374,7 +377,7 @@ export default function NuevaOTModal({ sectores, equipos, aviso, onClose, onCrea
           {aviso && (
             <>
               <p className="text-sm text-slate-600">
-                Del aviso {aviso.oa_number}. Viene con lo que el aviso dice; todo se puede corregir antes de crearla, y el aviso no se toca.
+                Del aviso {aviso.oa_number ?? "sin número"}. Viene con lo que el aviso dice; todo se puede corregir antes de crearla, y el aviso no se toca.
               </p>
               {loQueElAvisoNoTrae(aviso).length > 0 && (
                 <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
