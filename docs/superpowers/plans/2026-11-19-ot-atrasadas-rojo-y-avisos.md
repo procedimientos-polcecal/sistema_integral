@@ -664,7 +664,7 @@ git commit -m "feat(mantenimiento): un push dos dias antes de una OT y otro cuan
 - **El rojo va de relleno y la especialidad al borde**, porque el rojo sobre los cinco rellenos da de 1,20:1 a 2,03:1 (púrpura 1,20, azul 1,25, gris 1,34, verde 1,96, ámbar 2,03), todos bajo el 3:1 de WCAG; la cifra anterior, de 1,00:1 a 1,52:1 con «el mismo tono de luz» contra el gris, estaba mal medida.
 - **El cron corre de lunes a sábado**: por eso el lunes cubre dos días hacia atrás y el sábado dos hacia adelante. Sacar uno de los dos deja un día sin avisar y nada lo dice.
 - **Le llega a dos personas**, medido el 19/11/2026: de los cinco que administran el módulo, sólo los dos `admin_sistema` tienen las notificaciones prendidas.
-- **Si el cron se muere nadie se entera**: como los otros cuatro crons de push, no escribe en `sincronizaciones` y no está en el `REGISTRO` de salud.
+- **Si el cron se muere nadie se entera**: como los otros tres crons de push (`avisos-diarios`, `avisos-al-instante`, `remises-notificaciones`; el de la Agenda no es uno propio, lo manda el cron `agenda`, que sí registra su corrida), no escribe en `sincronizaciones` y no está en el `REGISTRO` de salud.
 
 - [ ] **Step 2: Actualizar `CLAUDE.md`**
 

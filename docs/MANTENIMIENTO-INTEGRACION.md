@@ -3724,7 +3724,7 @@ cosas: pinta de rojo en el calendario del mes las órdenes atrasadas, y manda do
 push a quienes administran Mantenimiento —«se atrasó una orden» y «una orden
 arranca en dos días»—. Seis cosas que no se deducen del código:
 
-- **`proxima_fecha` está en null en las 2.531 filas** (medido el 19/11/2026), y
+- **`proxima_fecha` está en null en las 2.531 filas** (medido el 19/11/2026; **todas las cifras de esta sección son una foto de ese día y no invariantes**: al cierre de la rama la tabla tenía 2.532 filas, `estado = ATRASADO` daba 19 y la definición nueva 32), y
   por eso la `estaAtrasada` anterior contaba **21 donde las fechas dicen 34**: la
   sincronización la lee de la planilla, pero nadie la llena, así que decidir con
   ella reducía la función a `estado === "ATRASADO"`. La consulta del tablero ya
@@ -3742,7 +3742,10 @@ arranca en dos días»—. Seis cosas que no se deducen del código:
   eso la campana cambió de id (`mant-atrasadas-por-fecha`): el número es otro, y
   la regla de siempre es que un conteo distinto pide id nuevo, o el salto aparece
   como novedad falsa. El viejo `mant-atrasadas` queda huérfano en
-  `notificaciones_descartes`, inofensivo.
+  `notificaciones_descartes`, inofensivo. **Y la rama de la pendiente no tiene
+  datos reales detrás**: `fecha_ejecucion_pendiente` está en null en las 2.532
+  filas (19/11/2026), así que «la pendiente le gana a la de la planilla» está
+  sostenida sólo por tests unitarios.
 - **El rojo va de relleno y la especialidad se corre al borde**, y no al revés
   como se eligió primero. El contraste del rojo de la ficha (`#b91c1c`) contra
   los cinco rellenos, con la fórmula de luminancia relativa de WCAG y verificado
@@ -3759,7 +3762,10 @@ arranca en dos días»—. Seis cosas que no se deducen del código:
   miran**. Cada corrida nombra lo que cruzó ayer y lo que arranca pasado mañana,
   pero el **lunes** recoge también sábado y domingo hacia atrás, y el **sábado**
   adelanta lunes y martes hacia adelante: el aviso del martes le tocaría al
-  domingo, que no corre. Sacar uno de los dos corrimientos deja un día sin avisar
+  domingo, que no corre. **«Se atrasó» cruza el fin de la ventana y no el
+  inicio**, porque `estaAtrasada` vence por el fin: cruzar el inicio no nombraba
+  nunca una orden de varios días (la 3137, del 17 al 18/11, cruzó el 19/11 y no
+  salía). Sacar uno de los dos corrimientos deja un día sin avisar
   y nada lo dice; un test prueba que cada día del mes lo miran las dos puntas
   exactamente una vez. Y el título del sábado cuenta algo que el del resto no:
   `textoDeLasQueArrancan` dice «arrancan en dos días», pero el sábado nombra
@@ -3780,7 +3786,11 @@ arranca en dos días»—. Seis cosas que no se deducen del código:
   `remises-notificaciones`), no escribe en `sincronizaciones` y no está
   en el `REGISTRO` de
   [lib/core/saludDeLasSincronizaciones.ts](../lib/core/saludDeLasSincronizaciones.ts),
-  así que el aviso de salud no lo vigila. El aviso de divergencia de la Agenda
+  así que el aviso de salud no lo vigila. **Tampoco tiene idempotencia**: a
+  diferencia de `avisos-diarios` y `avisos-al-instante`, donde `avisos_fotos` y
+  `avisos_vistos` hacen que una segunda corrida calle, acá una doble corrida
+  —el segundo despliegue que escribe en esta base— manda los dos pushes
+  duplicados. El precedente real es `remises-notificaciones`. El aviso de divergencia de la Agenda
   no es un caso aparte: lo manda el cron `agenda`, que sí registra su corrida.
 
 De las atrasadas, **la mayoría no se puede reprogramar desde el SdG**: `postergar`

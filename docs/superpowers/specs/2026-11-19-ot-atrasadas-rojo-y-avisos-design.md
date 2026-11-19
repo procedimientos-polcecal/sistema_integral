@@ -23,10 +23,17 @@ que alguien la corra de fecha.
 Todo contra la base de producción el 19/11/2026, sólo lectura. Está acá porque
 es lo que sostiene cada decisión de abajo.
 
+**Son una foto y no invariantes.** La primera medición dio 2.531 filas, 21
+marcadas `ATRASADO` y 34 atrasadas por la definición nueva. **Al cierre de la
+rama, el mismo 19/11/2026, la tabla tiene 2.532 filas, `estado = ATRASADO` da 19
+y la definición nueva da 32.** La tabla se reescribe cada diez minutos y las
+cifras de abajo (21, 34, 63 abiertas, «24 de 34», etc.) son las de la primera
+foto: sirven para el orden de magnitud, no para comprobar nada contra la base.
+
 ### El hallazgo que cambió el alcance: `proxima_fecha` no tiene datos
 
 `estaAtrasada` de [lib/mantenimiento/alertas.ts](../../../lib/mantenimiento/alertas.ts)
-decide con `proxima_fecha`, y **esa columna está en null en las 2531 filas de
+decide con `proxima_fecha`, y **esa columna está en null en las 2.531 filas (2.532 al cierre de la rama) de
 `ordenes_trabajo`**. La sincronización sí la lee —es la columna 20 del master,
 la pareja de `frecuencia`— pero la planilla nunca la llena, porque el
 preventivo vive en el SdG y no allá.
@@ -37,9 +44,9 @@ marca la planilla. Los dos números:
 
 | Definición | Hoy | Dónde se ve |
 |---|---|---|
-| `estado = ATRASADO` (lo que marca la planilla) | **21** | el tablero, el badge del listado, la campana, el orden por prioridad |
+| `estado = ATRASADO` (lo que marca la planilla) | **21** (19 al cierre) | el tablero, el badge del listado, la campana, el orden por prioridad |
 | Se le pasó la fecha y sigue abierta | **35** | en ningún lado |
-| …y además su ventana entera quedó atrás | **34** | la definición que se adopta |
+| …y además su ventana entera quedó atrás | **34** (32 al cierre) | la definición que se adopta |
 
 **Las 21 están todas adentro de las 34**: ninguna que marque la planilla queda
 afuera. La de fecha no pierde nada — ve trece más, y las ve el día que vencen en
@@ -240,6 +247,13 @@ tiene la fecha nueva ahí y la vieja en la otra: mirar la vieja la daría por
 vencida el mismo día en que alguien la corrió, y contradiría al calendario, que
 pinta la pendiente.
 
+**Esa rama no tiene datos reales detrás.** Medido el 19/11/2026,
+`fecha_ejecucion_pendiente` está en null en las 2.532 filas: nadie ha
+postergado todavía una orden por la ruta nueva. «La pendiente le gana a la de la
+planilla» —decisión repetida en `alertas.ts`, el calendario y el recordatorio—
+está sostenida **sólo por tests unitarios**, no por ningún caso de producción.
+No es un defecto; es lo que hay que saber antes de fiarse de esa rama.
+
 **La ventana y no el inicio**, y esto resuelve dos cosas de un saque. Una orden
 que arrancó ayer y termina el 25 está **en curso**, no vencida: hoy es una sola
 (la OT 3108, `EN_PROCESO` hasta el 30/11). Y como `atrasada` se decide por orden
@@ -258,7 +272,9 @@ etiqueta con un número y entregar una constante.
 
 ### Lo que la unificación toca
 
-Son cinco lugares que hoy dicen 21, más el enlace:
+Son ocho lugares que dicen 21 o usan la marca vieja, más el enlace (los últimos
+tres —la ruta del inicio y las dos del tablero— no estaban en la primera
+enumeración y la revisión final los encontró):
 
 | Dónde | Qué cambia |
 |---|---|
@@ -268,6 +284,8 @@ Son cinco lugares que hoy dicen 21, más el enlace:
 | `lib/mantenimiento/prioridad.ts` | el desempate por atraso, que hereda la definición nueva sin tocarse |
 | `app/(app)/mantenimiento/DashboardClient.tsx` | ahí `diasDeAtraso` empieza a dar un número en vez de `null` |
 | `lib/home/avisosDeUsuario.ts` | el conteo `head("ordenes_trabajo").eq("estado","ATRASADO")` pasa a la condición nueva |
+| `app/api/home/resumen/route.ts` | la tarjeta del inicio contaba `.eq("estado","ATRASADO")` bajo el rótulo «Órdenes atrasadas», en la misma pantalla que la campana: 19 contra 32 con el mismo nombre. Pasa a `condicionDeAtrasada`; los conteos por estado de «pendientes» miden otra cosa y se quedan |
+| `app/(app)/mantenimiento/DashboardClient.tsx` | el enlace «Verlas todas →» apunta a `?atrasada=1` y no a `?estado=ATRASADO`, y la pastilla «atrasada» de las OT que exigen parar el sector sale de `estaAtrasada` y no de `estado` |
 
 **El conteo de la campana necesita id nuevo.** Es la regla de CLAUDE.md: la
 `cantidad` se compara contra la foto del día anterior y contra el vistazo
@@ -319,7 +337,7 @@ lunes es exactamente cómo se pierde el permiso de notificar.
 Saltear un día obliga a que las corridas de los bordes cubran lo que el domingo
 no cubrió. **Las dos reglas siguen saliendo sólo de la fecha, sin memoria:**
 
-| Corrida | «Se atrasó» mira el inicio en | «Arranca en dos días» mira el inicio en |
+| Corrida | «Se atrasó» mira el fin efectivo en | «Arranca en dos días» mira el inicio en |
 |---|---|---|
 | martes a sábado | ayer | hoy + 2 |
 | **lunes** | **sábado y domingo** | hoy + 2 |
@@ -340,9 +358,15 @@ día siguiente a la próxima corrida.
 Las dos se derivan de la misma fecha de inicio efectiva de arriba, sobre órdenes
 **abiertas**.
 
-- **Se atrasó** = su inicio efectivo cae en los días que la tabla de arriba dice,
-  y no tiene `fecha_fin` futura. Una orden de varios días no «se atrasa» el día
-  después de arrancar: se atrasa cuando su ventana termina.
+- **Se atrasó** = está atrasada hoy (`estaAtrasada`) y su **fin efectivo** —su
+  `fecha_fin` si es posterior al inicio, si no el inicio— cae en los días que la
+  tabla de arriba dice. Una orden de varios días no «se atrasa» el día después
+  de arrancar: se atrasa cuando su ventana termina, y **ése** es el día que se
+  cruza con la tabla. (La primera redacción cruzaba el inicio y se contradecía
+  con esta misma frase: para una orden de varios días las dos condiciones nunca
+  eran verdaderas el mismo día y no se anunciaba jamás. Medido el 19/11/2026: la
+  OT 3137, del 17 al 18/11, cruzó ese día y la corrida no la nombraba; la OT
+  3108, del 09 al 30/11, es la misma que este spec usa de ejemplo.)
 - **Arranca en dos días** = su inicio efectivo cae en los días que la tabla dice.
 
 **Lo que esta definición no ve, dicho:** una orden que la planilla marca
@@ -443,13 +467,19 @@ pasa a tener seis emisores.
 
 - **Le llega a dos personas.** Medido arriba. No es un defecto del diseño.
 - **El segundo despliegue programa este cron también**, así que un día puede
-  salir el push dos veces. Es la misma exposición que ya tienen `avisos_fotos` y
-  `avisos_vistos`, y no se frena con `esLaCorridaCanonica()` por lo mismo que
+  salir el push dos veces. **No es la misma exposición que tienen `avisos_fotos`
+  y `avisos_vistos`: es la contraria.** Esas dos tablas *son* la idempotencia del
+  día de sus crons —`avisos-diarios` compara contra la foto de hoy y calla,
+  `avisos-al-instante` contra el vistazo que acaba de escribir—; **este cron no
+  tiene ningún freno equivalente**, así que una segunda corrida produce un
+  duplicado literal de los dos pushes. El precedente real es
+  `remises-notificaciones`, que tampoco tiene guarda. El comportamiento está
+  aceptado, y no se frena con `esLaCorridaCanonica()` por lo mismo que
   decidió el cron de las novedades: un falso negativo ahí lo dejaría mudo para
   siempre y en silencio, que es peor. La defensa de verdad es apagar ese
   despliegue.
-- **Si el cron se muere, nadie se entera.** Los cuatro crons de push de este
-  repo —el semanal, el de las novedades, Remises y novedades de RRHH— **no
+- **Si el cron se muere, nadie se entera.** Los tres crons de push de este
+  repo —`avisos-diarios`, `avisos-al-instante` y `remises-notificaciones`— **no
   escriben en `sincronizaciones`**, así que ninguno está en el `REGISTRO` de
   salud. Éste sigue la convención en vez de monitorearse solo, que sería
   arreglar un quinto del problema y dejar la inconsistencia. Lo que amortigua:
