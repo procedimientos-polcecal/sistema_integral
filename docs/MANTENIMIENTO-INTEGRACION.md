@@ -163,7 +163,7 @@ toque.
 Se llama `ORDEN DE TRABAJO`, la pestaña `OT`, y tenía 1.728 órdenes al portarla.
 Sus columnas coinciden con lo que leía el código de origen:
 
-`A N° OT · B fecha · C sector · D equipo · E especialidad · F tipo · G quién ·
+`A N° OT · B fecha (la de creación) · C sector · D equipo · E especialidad · F tipo · G quién ·
 H descripción · I repuesto · J inicio · K cierre · L (calculada) · M estado ·
 N contratista · O horas · P/Q/R operarios · S prioridad · T frecuencia ·
 U próxima fecha · V fotos · W observaciones · X observación previa ·
@@ -204,10 +204,62 @@ Tres cosas que no se deducen del código:
   `Altas del sistema`—, cargar la fecha en la app no deja nada del otro lado.
   El par está fijado con un test en `formulario.test.ts`.
 
-Y del lado de la planilla, la Y del master **no es derrame todavía**: nació
-vacía, sin fórmula. Para que traiga lo que cargan las dos pestañas necesita su
-propio `QUERY(IMPORTRANGE(...))` en la `Y2`, con la misma forma que la `S2` y
-—esto es lo que las alinea— el mismo `ORDER BY Col1`.
+Y del lado de la planilla, la Y del master **ya es derrame**: la `Y2` tiene su
+`QUERY(IMPORTRANGE(...))` con el mismo `ORDER BY Col1` que las demás, que es lo
+que las alinea fila por fila.
+
+#### La Y trae la mitad: la misma columna está en dos letras distintas
+
+Medido el 18/11/2026 contra las tres pestañas reales. **La fecha de fin no
+quedó en el mismo lugar en las dos pestañas del libro de respuestas**:
+
+| Pestaña | Dónde quedó `FECHA DE FIN` | Qué hay en la AF |
+|---|---|---|
+| `Respuestas de formulario` | **AG** (la 33) | `Columna 31`, vacía en las 2.273 filas |
+| `Altas del sistema` | **AF** (la 32) | la fecha de fin |
+
+La `Y2` pide `Col32` a las dos, así que de la pestaña del formulario trae la
+columna vacía. El resultado medido: de las **100** fechas cargadas desde el
+SdG llegan **100**, y de las **16** cargadas desde el formulario de Google
+llega **0** — son las OT 2952, 2967 a 2971, 3022, 3038, 3040, 3041, 3057,
+3064, 3072, 3073, 3074 y 3084, que tienen su fecha en el libro de respuestas y
+la Y del master en blanco.
+
+**No lo arregla el código**: el alta del SdG busca la columna por el nombre del
+encabezado, así que escribe bien en la AF sin saber que es la AF, y del otro
+lado no hay nada que leer todavía. Es la fórmula, y hay dos maneras:
+
+1. **Cambiar la `Y2`** para pedirle a cada pestaña su propia columna, que es lo
+   que no se rompe si mañana una de las dos suma un campo:
+
+   ```
+   =QUERY({QUERY(IMPORTRANGE("<url del libro de respuestas>", "Respuestas de formulario!A2:AG10000"), "SELECT Col1, Col33", 0);
+           QUERY(IMPORTRANGE("<url del libro de respuestas>", "Altas del sistema!A2:AF10000"), "SELECT Col1, Col32", 0)},
+          "SELECT Col2 WHERE Col1 IS NOT NULL ORDER BY Col1", 0)
+   ```
+
+2. **Borrar la `Columna 31` de `Respuestas de formulario`**, con lo que la
+   fecha de fin pasa a la AF en las dos y la `Y2` de hoy anda sin tocarla. Esa
+   columna está vacía en las 2.273 filas, así que no se pierde nada — pero es
+   la pestaña que maneja Google Forms, donde mover columnas es justamente lo
+   que dejó el registro de la OT 2796 pegado a la 2798 el 16/10/2026.
+
+Lo que no cambia en ninguno de los dos casos: **el encabezado se busca por su
+nombre y con `trim()`**, y hoy las dos pestañas lo tienen escrito
+`"FECHA DE FIN  "`, con dos espacios al final. Por eso el alta funciona.
+
+#### Y los nombres de la pantalla, emparejados el 18/11/2026
+
+La pantalla de órdenes decía «fecha de ejecución» y «fecha de la orden»
+mientras la planilla ya decía otra cosa. Ahora el filtro, las dos fechas de
+cada fila, el detalle, los cuatro formularios y los errores de postergar dicen
+**fecha de creación** (la B, que en la planilla se llama `FECHA` a secas) y
+**fecha de inicio** (la J).
+
+Lo que **no** cambió, y conviene saberlo antes de buscar: la columna de la base
+sigue siendo `fecha_ejecucion`, y los valores del filtro que viajan en la URL
+—`fecha_ejecucion`, `fecha_cierre`— también, para no romper los enlaces
+guardados. O sea que el nombre viejo sigue vivo en el código a propósito.
 
 **La columna L no es el estado.** Se llama "Column 19" y trae un "Atrasado / al
 día" calculado; el estado está en M. Confundirlas daría por atrasada media
@@ -1851,6 +1903,21 @@ la escala (3×3×3). Y **lo cerrado va al final**: el +1000 existe porque, sin �
 una orden realizada de 125 puntos quedaría para siempre arriba de todo, por
 encima de la que entró hoy.
 
+**El listado de órdenes ya no arranca por GUT (18/11/2026).** Se pidió que
+abriera ordenado por N° de OT, y es un cambio de pantalla y no del GUT: el
+sugerido sigue en el desplegable, a un clic, y la pregunta para la que existe
+—en qué orden hacer el trabajo— ya tiene su propia pestaña sin paginar.
+
+Lo que no se deduce del código y conviene saber antes de tocarlo: **la pantalla
+y la ruta leen el mismo `""` al revés, a propósito**. Para la pantalla es el
+número, así que el default no ensucia el enlace; para la ruta sigue siendo el
+sugerido, que es lo que mantiene en su sitio a los **cuatro** lugares que piden
+órdenes sin decir ningún orden —el tablero kanban, el historial de un equipo,
+la pantalla de mantenimientos y `?pendientes=1`—. Lo que las concilia es una
+sola línea, el `orden: f.orden || "numero"` de `consultaDeLaRuta`: **sin ella
+el listado volvería a arrancar por GUT con el desplegable diciendo «N° de
+OT»**, sin que nada falle. Está fijada con un test.
+
 **El GUT no se exporta a ninguna planilla.** `prioridad` es la columna S de la
 pestaña `OT`, que es parte del derrame de un `IMPORTRANGE`: un `PUT` ahí bloquea
 el derrame o lo pisa el recálculo. Por eso el puntaje vive en columnas propias
@@ -2179,6 +2246,75 @@ bug nuevo.
 - **Borrar una ausencia futura deja sus días marcados como ausente** en
   `calculos_diarios` después del recálculo. Es anterior a este trabajo y es de
   RRHH, no de acá.
+
+### Y la otra mitad de programar: el mes de órdenes (17–18/11/2026)
+
+Programar el taller es decidir **el trabajo** y **la gente**, y cada cosa tiene
+su pantalla. Ninguna de las dos sabía nada del calendario de órdenes, así que
+para ubicar un trabajo había que tener la otra mitad en la cabeza. Desde el
+18/11/2026 **las dos llevan una pestaña «Mes»** con el mismo calendario:
+
+| En el menú | La ruta | Sus pestañas |
+|---|---|---|
+| **Programación** | `/mantenimiento/planificacion` | Planes · **Mes** |
+| **Asignación RR.HH** | `/mantenimiento/programacion` | Semana · **Mes** |
+
+(Los dos rótulos no coinciden con su ruta **a propósito** desde el 17/11/2026 —
+el porqué está en `lib/core/nav.ts`—, y eso es lo primero que confunde al leer
+esto. Por eso el componente de la pestaña,
+[`MesDeOrdenes.tsx`](../app/(app)/mantenimiento/ordenes/MesDeOrdenes.tsx), no
+vive en ninguna de las dos carpetas sino al lado del calendario.)
+
+El calendario es el mismo que se abre al cargar una OT —el de «Ver el mes»—,
+que desde este trabajo vive en
+[`CalendarioDeOT.tsx`](../app/(app)/mantenimiento/ordenes/CalendarioDeOT.tsx) y
+lo comparten las tres pantallas. `CalendarioDeFecha` quedó como lo que de
+verdad es de su uso: el `Modal` y su título.
+
+Lo que cambia es **qué se hace con un día**. En el alta de una OT se toca un día
+y esa fecha va al campo; acá se abre el día, se elige una orden y se la corre a
+otro. Es un `modo` y no dos props sueltas, para que no puedan estar los dos
+prendidos.
+
+Cinco cosas que no se deducen del código:
+
+- **Mover una OT no es un update: es `postergar`.** La misma ruta que el botón
+  de la orden, con todo lo que eso trae — la planilla primero, porque es donde
+  manda la fecha; `fecha_ejecucion_pendiente` para que la sincronización del
+  medio no la pise; justificación obligatoria; y auditoría con el par
+  viejo/nuevo. Es **el mismo `PostergarOTModal`** del listado de órdenes, con un
+  `destino` de más: son los dos únicos lugares que lo montan, y que sea uno solo
+  es lo que mantiene la justificación obligatoria en los dos caminos.
+- **El día en el que la grilla pinta una orden NO es el día desde el que esa
+  ruta cuenta.** La grilla usa `fechaParaElCalendario` —la pendiente si la hay—
+  y `postergar` recibe *cuántos días* y los suma siempre a `fecha_ejecucion`. En
+  una orden con pendiente las dos difieren, y contar contra lo que se ve en
+  pantalla la mandaría a un día que nadie eligió, **sin error y sin aviso**. Por
+  eso `diasParaLlegarA` pide `fecha_ejecucion` y la grilla la manda cruda junto
+  a la que pinta; está fijado con un test en `calendarioDeOT.test.ts`.
+- **Sólo hacia adelante y hasta 90 días.** No es una decisión de la pantalla:
+  `loQueFaltaParaPostergar` exige un entero positivo y de hasta
+  `MAXIMO_DE_DIAS`. Adelantar una orden no existe hoy en ninguna punta del
+  sistema, así que el calendario no lo ofrece en vez de ofrecerlo y fallar. El
+  caso real igual entra: la mayoría de las órdenes abiertas tiene la fecha
+  **vencida**, y correrlas a un día de esta semana es ir hacia adelante.
+- **La mayoría de las órdenes no se puede mover, y es lo esperado.** Medido el
+  17/11/2026 contra producción: de las **55 órdenes abiertas** (`ATRASADO`,
+  `POR_HACER`, `EN_PROCESO`), **17 son del sistema** y 38 entraron por el
+  formulario, donde la fecha vive en la pestaña que maneja Google Forms. En el
+  total histórico es peor —222 de 2.490—. Por eso una orden que no se puede
+  mover **dice por qué** en vez de quedarse sin botón: con 38 de 55 mudas, la
+  pantalla parecería rota justo en el caso más común. Lo mismo el día que no
+  puede recibirla: se apaga **y** explica.
+- **La lista de estados cerrados es la tercera con los mismos dos valores**
+  (`REALIZADO`, `SUSPENDIDA`), junto a `CERRADAS` de `alertas.ts` y
+  `CERRADAS_GUT` de `gut.ts`, y **tampoco se unifica**, por el mismo motivo que
+  aquellas dos no se unifican entre sí. Si aparece un estado nuevo hay que mirar
+  las tres.
+
+Lo que **no** se comprobó, y es lo mismo que arrastra toda la pantalla: ningún
+navegador la abrió con una sesión real. Build, `tsc` y los tests pasan; que el
+movimiento de una orden llegue a la planilla no lo probó nadie todavía.
 
 ## El cuaderno de Piparo: leer una foto y sacar las OT (01–02/11/2026)
 

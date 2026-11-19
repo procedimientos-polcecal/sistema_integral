@@ -196,8 +196,8 @@ export default function MandarAlCalendarioModal({
       <div className="space-y-4">
         <p className="-mt-2 text-xs text-slate-500">
           {fecha
-            ? `Va en la fecha de ejecución: ${comoSeLee(fecha)}.`
-            : "Esta orden no tiene fecha de ejecución."}
+            ? `Va en la fecha de inicio: ${comoSeLee(fecha)}.`
+            : "Esta orden no tiene fecha de inicio."}
         </p>
 
         {listo ? (

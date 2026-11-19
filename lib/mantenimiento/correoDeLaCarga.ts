@@ -68,7 +68,7 @@ export interface RechazoDeCarga {
    * El día de la carga, en ISO.
    *
    * Para el aviso es el día en que se cargó. Para la orden **es el que la
-   * persona eligió** en «Fecha creación», que puede ser anterior: por eso el
+   * persona eligió** en «Fecha de creación», que puede ser anterior: por eso el
    * texto dice «la orden del 5/10» y no «la que cargaste el 5/10».
    */
   fecha: string;

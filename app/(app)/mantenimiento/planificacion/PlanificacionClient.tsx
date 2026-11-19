@@ -9,6 +9,7 @@ import { Modal, PieDeModal } from "@/components/Modal";
 import { useBorrador } from "@/lib/core/useBorrador";
 import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import MesDeOrdenes from "@/app/(app)/mantenimiento/ordenes/MesDeOrdenes";
 
 function nombreCompleto(u: { nombre?: string; apellido?: string } | null | undefined): string {
   if (!u) return "—";
@@ -19,6 +20,8 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
   const router = useRouter();
   const confirm = useConfirm();
   const [showNew, setShowNew]   = useState(false);
+  // Qué mitad se está mirando: los planes armados o el mes de órdenes.
+  const [vista, setVista] = useState<"planes" | "mes">("planes");
   /*
    * Los dos campos del plan nuevo, recordados mientras la app esté abierta. Nace
    * con la fecha de hoy puesta, así que abrir y cerrar sin escribir nada no
@@ -64,7 +67,10 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
   }
 
   return (
-    <div className="md:p-6 max-w-3xl mx-auto space-y-6">
+    // El ancho lo decide la pestaña: la lista de planes es una columna y
+    // `max-w-3xl` le sobra, pero el calendario lleva la grilla y el panel del
+    // día al lado, y a 3xl ese panel empuja la grilla a 40 px por columna.
+    <div className={`md:p-6 mx-auto space-y-6 ${vista === "mes" ? "max-w-5xl" : "max-w-3xl"}`}>
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
@@ -73,7 +79,9 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
           </h1>
           <p className="text-sm text-slate-400 mt-0.5">Programá el trabajo del día y generá las órdenes para imprimir</p>
         </div>
-        {canEdit && (
+        {/* Sólo en la lista: en el mes no hay ningún plan que crear, y un botón
+            que no tiene que ver con lo que se está mirando se aprieta igual. */}
+        {canEdit && vista === "planes" && (
           <button onClick={() => setShowNew(true)}
             className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 transition-colors shrink-0">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -84,7 +92,33 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
         )}
       </div>
 
-      {plans.length === 0 ? (
+      {/* Las dos formas de mirar el trabajo: los planes que ya se armaron, y el
+          mes con lo que tiene cada día para armar el próximo. */}
+      <div className="flex gap-1" role="tablist" aria-label="Qué se está mirando">
+        {([
+          ["planes", "Planes"],
+          ["mes", "Mes"],
+        ] as const).map(([clave, texto]) => (
+          <button
+            key={clave}
+            type="button"
+            role="tab"
+            aria-selected={vista === clave}
+            onClick={() => setVista(clave)}
+            className={`min-h-[44px] flex-1 rounded-lg border px-3 py-2 text-sm font-medium ${
+              vista === clave
+                ? "border-[var(--primary)] bg-[var(--primary-light)] text-slate-900"
+                : "border-slate-200 bg-white text-slate-600"
+            }`}
+          >
+            {texto}
+          </button>
+        ))}
+      </div>
+
+      {vista === "mes" && <MesDeOrdenes />}
+
+      {vista === "planes" && (plans.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center">
           <svg className="w-8 h-8 text-slate-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -141,7 +175,7 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
             );
           })}
         </div>
-      )}
+      ))}
 
       {showNew && (
         // El fondo, la X y Escape salen conservando: lo cargado queda y aparece
