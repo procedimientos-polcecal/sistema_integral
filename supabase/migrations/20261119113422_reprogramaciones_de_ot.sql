@@ -52,11 +52,29 @@
 --    comprobar la fila pero evalúa el subselect del `set` con la foto que ya
 --    tenía, que no incluye la fila de la primera: el contador podía quedar en
 --    1 con dos filas. Por eso el trigger toma antes el candado de la fila de
---    la OT (`for update`): la sentencia siguiente arranca con el candado ya
---    tomado y ve lo que la otra transacción confirmó. Si se mueve `ot_id` de
---    una fila (el admin puede, aunque ninguna ruta lo hace) se recuentan las
---    dos OT, bloqueadas en orden de id para que dos movimientos cruzados no
---    se bloqueen entre sí.
+--    la OT: la sentencia siguiente arranca con el candado ya tomado y ve lo
+--    que confirmó la otra transacción.
+--
+--    EL CANDADO ES `for no key update` Y NO `for update`, y no se lo debe
+--    «reforzar». El INSERT dispara antes el trigger de integridad de la foreign
+--    key de `ot_id`, que ya tomó `for key share` sobre la fila de la OT (los
+--    triggers after-row corren en orden de nombre y `RI_ConstraintTrigger_…`
+--    va antes que `mant_reprogramaciones_ot_contar`). `for update` choca con
+--    `for key share`: dos altas simultáneas para la misma OT quedarían cada una
+--    con su key share esperando el `for update` de la otra, o sea deadlock
+--    (40P01) y un `postergar` abortado. `for no key update` no choca con key
+--    share, pero sí con otro `for no key update` y con el UPDATE de abajo, que
+--    es la serialización que hace falta. (El precedente de 046_inventario_schema
+--    toma `for update` sin problema porque lo hace ANTES de insertar la fila
+--    que referencia; acá el key share de la FK se toma sí o sí primero, dentro
+--    de la misma sentencia.)
+--
+--    Si un UPDATE mueve `ot_id` (el admin puede, aunque ninguna ruta lo hace)
+--    se recuentan las dos OT. Se bloquean en orden de id, y eso ordena sólo
+--    los dos ids de UNA ejecución del trigger: un insert de varias filas
+--    dispara el trigger una vez por fila y bloquea en el orden en que vienen,
+--    así que dos cargas masivas simultáneas sobre OT repetidas en distinto
+--    orden aún podrían interbloquearse. Ninguna ruta hace hoy esa carga.
 --
 -- No toca ningún enum, así que no hay 55P04 que esquivar. Se puede correr dos
 -- veces: todo lleva `if not exists`, `create or replace` o `drop ... if
@@ -124,15 +142,19 @@ begin
     v_ids := array[new.ot_id];
   end if;
 
-  -- Candado de fila ANTES del recuento, en orden de id: la sentencia que sigue
-  -- toma su foto con el candado ya tomado y ve lo que confirmó la otra
-  -- transacción (ver el encabezado, punto 2). Si la OT ya no existe (cascade
-  -- de un borrado) no bloquea nada y el update de abajo no toca ninguna fila.
+  -- Candado de fila ANTES del recuento: la sentencia que sigue toma su foto
+  -- con el candado ya tomado y ve lo que confirmó la otra transacción (ver el
+  -- encabezado, punto 2). Es `no key update` y NO `update` a propósito: la FK
+  -- ya tomó `key share` sobre esta fila antes de que corra este trigger, y
+  -- `for update` choca con él y da deadlock entre dos altas de la misma OT.
+  -- El `order by id` ordena sólo los ids de esta ejecución. Si la OT ya no
+  -- existe (cascade de un borrado) no bloquea nada y el update de abajo no
+  -- toca ninguna fila.
   perform 1
      from public.ordenes_trabajo
     where id = any (v_ids)
     order by id
-      for update;
+      for no key update;
 
   update public.ordenes_trabajo o
      set reprogramada_veces = (
