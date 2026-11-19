@@ -3710,3 +3710,76 @@ Dos cosas que ningún test ve:
   número en `OT ASIGNADA` entre con `work_order_id` puesto y `ot_resuelta_en`
   sellado. Es la única prueba de que la resolución sigue viva, y es la misma que
   en octubre confirmó que el área se completaba sola.
+
+## Cuándo una OT está atrasada, y quién se entera (19/11/2026)
+
+Hasta esta rama «atrasada» quería decir dos cosas según quién preguntara: el
+tablero y el listado contaban las que la planilla marcó `ATRASADO` a mano, y el
+calendario del mes no sabía nada. Ahora hay **una sola definición**, en
+[lib/mantenimiento/alertas.ts](../lib/mantenimiento/alertas.ts), que usan el
+calendario, el tablero, el filtro `?atrasada=1` del listado, la campana y los
+avisos nuevos. [spec](superpowers/specs/2026-11-19-ot-atrasadas-rojo-y-avisos-design.md)
+· [plan](superpowers/plans/2026-11-19-ot-atrasadas-rojo-y-avisos.md). Hace dos
+cosas: pinta de rojo en el calendario del mes las órdenes atrasadas, y manda dos
+push a quienes administran Mantenimiento —«se atrasó una orden» y «una orden
+arranca en dos días»—. Seis cosas que no se deducen del código:
+
+- **`proxima_fecha` está en null en las 2.531 filas** (medido el 19/11/2026), y
+  por eso la `estaAtrasada` anterior contaba **21 donde las fechas dicen 34**: la
+  sincronización la lee de la planilla, pero nadie la llena, así que decidir con
+  ella reducía la función a `estado === "ATRASADO"`. La consulta del tablero ya
+  intentaba mirar la fecha con esa misma columna, o sea que unificar fue terminar
+  lo que estaba escrito y no inventar un criterio. Se sigue sincronizando; sólo se
+  dejó de usar para decidir.
+- **«Atrasada» es que la ventana entera quedó atrás, no que el inicio haya
+  pasado.** Una orden que arrancó ayer y termina el 30 está en curso. Y como el
+  dato viaja por orden y no por día, mirar sólo el inicio pintaría de rojo celdas
+  de días futuros de una orden que todavía no venció. Una `fecha_fin` anterior al
+  inicio es un dato sucio y vale «dura un día»: no adelanta el vencimiento. No
+  cuentan ni las realizadas —aunque se hayan hecho tarde— ni las canceladas. Por
+  eso la campana cambió de id (`mant-atrasadas-por-fecha`): el número es otro, y
+  la regla de siempre es que un conteo distinto pide id nuevo, o el salto aparece
+  como novedad falsa. El viejo `mant-atrasadas` queda huérfano en
+  `notificaciones_descartes`, inofensivo.
+- **El rojo va de relleno y la especialidad se corre al borde**, y no al revés
+  como se eligió primero. El contraste del rojo de la ficha (`#b91c1c`) contra
+  los cinco rellenos, con la fórmula de luminancia relativa de WCAG y verificado
+  por dos revisores: púrpura 1,20:1, azul 1,25:1, gris 1,34:1, verde 1,96:1 y
+  ámbar 2,03:1. **El mínimo WCAG para lo que no es texto es 3:1**, así que una
+  franja roja encima del relleno no se distingue en ninguno, y el ámbar —el más
+  alto— es el que más importa: es el color de **20 de las 21 abiertas de
+  noviembre**. Con el rojo de relleno y el texto en blanco son 6,47:1. La primera
+  versión del spec decía de 1,00:1 a 1,52:1 y «el mismo tono de luz» contra el
+  gris; estaba mal medida y se corrigió, pero conviene saberlo porque es todo el
+  argumento de por qué la forma se dio vuelta.
+- **El cron corre de lunes a sábado a las 08:00 de Argentina** (`0 11 * * 1-6`
+  en `vercel.json`) y **no sale los domingos, lo que mueve los días que se
+  miran**. Cada corrida nombra lo que cruzó ayer y lo que arranca pasado mañana,
+  pero el **lunes** recoge también sábado y domingo hacia atrás, y el **sábado**
+  adelanta lunes y martes hacia adelante: el aviso del martes le tocaría al
+  domingo, que no corre. Sacar uno de los dos corrimientos deja un día sin avisar
+  y nada lo dice; un test prueba que cada día del mes lo miran las dos puntas
+  exactamente una vez. Y el título del sábado cuenta algo que el del resto no:
+  `textoDeLasQueArrancan` dice «arrancan en dos días», pero el sábado nombra
+  también las del **martes, que están a tres**, así que cuando la corrida mira
+  más de un día el título dice **«en los próximos días»**.
+  Un cartel que afirma dos cuando son tres enseña a no leer el siguiente.
+- **Medido contra las 2.531 OT el 19/11/2026**, lo que nombraría cada corrida: un
+  jueves, 6 atrasadas y 5 próximas; un sábado, 6 y 3; un lunes, 6 y 0. Los tres
+  conjuntos de atrasadas son **disjuntos** —dieciocho órdenes distintas—, o sea
+  que el 6 es la tasa diaria y no un conjunto repetido: arrancan unas seis por día
+  hábil y casi ninguna se cierra dentro de su ventana.
+- **Le llega a dos personas**, medido el 19/11/2026: de los cinco que administran
+  el módulo, sólo los dos `admin_sistema` tienen las notificaciones prendidas, y
+  el push va por aparato. Y **si el cron se muere nadie se entera**: como los
+  otros cuatro crons que mandan push, no escribe en `sincronizaciones` y no está
+  en el `REGISTRO` de
+  [lib/core/saludDeLasSincronizaciones.ts](../lib/core/saludDeLasSincronizaciones.ts),
+  así que el aviso de salud no lo vigila. Es el mismo lado ciego que el de un
+  cron diario de push: una orden que no se avisa no se nota.
+
+De las atrasadas, **la mayoría no se puede reprogramar desde el SdG**: `postergar`
+sólo mueve las que creó el sistema (`app_created`) y las otras entraron por el
+formulario (24 de 34, medido el 19/11/2026). El aviso las nombra igual —saber que
+vencieron sirve— y quien las corra de fecha lo hace en la planilla. No se
+filtran: callar sobre el 70 % para que el botón siempre esté sería peor.

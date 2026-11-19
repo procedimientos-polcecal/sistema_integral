@@ -93,19 +93,24 @@ sobre el 70 % de las atrasadas para que el botón siempre esté sería peor.
 ### El color
 
 La ficha del calendario se pinta con el relleno de la especialidad. El contraste
-de un rojo `#dc2626` **sobre** esos rellenos, medido:
+del rojo elegido, `#b91c1c`, **contra** esos rellenos, calculado con la fórmula de
+luminancia relativa de WCAG y verificado por dos revisores independientes:
 
 | Especialidad | Relleno | Contraste del rojo |
 |---|---|---|
-| MECÁNICO | `#d97706` | 1,52:1 |
-| ELÉCTRICO | `#2563eb` | 1,07:1 |
-| CIVIL | `#16a34a` | 1,47:1 |
-| LUBRICACIÓN | `#9333ea` | 1,11:1 |
-| sin especialidad | `#6b7280` | **1,00:1** |
+| LUBRICACIÓN | `#9333ea` | 1,20:1 |
+| ELÉCTRICO | `#2563eb` | 1,25:1 |
+| sin especialidad | `#6b7280` | 1,34:1 |
+| CIVIL | `#16a34a` | 1,96:1 |
+| MECÁNICO | `#d97706` | **2,03:1** |
 
-Una franja roja encima del relleno **no se ve**, y contra el gris es exactamente
-el mismo tono de luz. Y no es un caso de borde: de las 21 abiertas de noviembre,
-veinte son MECÁNICO. Esto obligó a dar vuelta la forma elegida (ver
+El mínimo WCAG para lo que no es texto es **3:1**, y los cinco quedan por debajo:
+una franja roja encima del relleno **no se distingue**. El más alto es el
+ámbar, a 2,03:1, y es el que más importa: no es un caso de borde, porque de las 21
+abiertas de noviembre, veinte son MECÁNICO. (Una versión anterior de esta tabla
+decía de 1,00:1 a 1,52:1 y «el mismo tono de luz exacto» contra el gris: estaba
+mal medida, y como es el argumento entero de por qué el rojo va de relleno, se
+corrigió acá.) Esto obligó a dar vuelta la forma elegida (ver
 Aproximaciones).
 
 ## Objetivos
