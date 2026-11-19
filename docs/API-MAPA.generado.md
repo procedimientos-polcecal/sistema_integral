@@ -509,7 +509,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/buscar` | `lib/supabase/server` |
 | `/api/calidad/carbonilleros` | `lib/calidad/auth`, `lib/calidad/consultas`, `lib/calidad/types`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
 | `/api/calidad/conteos` | `lib/calidad/auth`, `lib/calidad/consultas`, `lib/calidad/conteos`, `lib/calidad/espejo`, `lib/calidad/types`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
-| `/api/calidad/ensayos/curva/export` | `lib/calidad/auth`, `lib/calidad/ensayos/consultas`, `lib/calidad/ensayos/hojaDeLaCurva`, `lib/calidad/ensayos/imagenesDeLaHoja`, `lib/core/sesion`, `lib/core/xlsxExport`, `lib/supabase/server` |
+| `/api/calidad/ensayos/curva/export` | `lib/calidad/auth`, `lib/calidad/ensayos/comparacion`, `lib/calidad/ensayos/consultas`, `lib/calidad/ensayos/hojaDeLaCurva`, `lib/calidad/ensayos/imagenesDeLaHoja`, `lib/core/sesion`, `lib/core/xlsxExport`, `lib/supabase/server` |
 | `/api/calidad/ensayos/limites` | `lib/calidad/auth`, `lib/calidad/ensayos/cuerpoDeLaMuestra`, `lib/calidad/ensayos/types`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
 | `/api/calidad/ensayos/muestras/[id]` | `lib/calidad/auth`, `lib/calidad/ensayos/cuerpoDeLaMuestra`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
 | `/api/calidad/ensayos/muestras` | `lib/calidad/auth`, `lib/calidad/ensayos/cuerpoDeLaMuestra`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
