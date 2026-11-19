@@ -25,6 +25,33 @@ export const maxDuration = 300;
 const confirmaElBorrado = (request: Request) =>
   new URL(request.url).searchParams.get("confirmar_borrado") === "1";
 
+/**
+ * El otro freno de mano: el de las reprogramaciones que trajo la planilla.
+ *
+ * Cuando la planilla movió la fecha de inicio de más órdenes que el tope, la
+ * sincronización no registra **ninguna** en el historial y lo dice. Las fechas
+ * se importan igual —la planilla manda—; lo que no queda es el renglón que
+ * cuenta por qué se corrió ese trabajo. Si el movimiento es de verdad —alguien
+ * reprogramó treinta órdenes de una— quien lo miró lo confirma repitiendo la
+ * llamada con `?confirmar_reprogramaciones=1`.
+ *
+ * ── POR QUÉ SON DOS CONFIRMACIONES Y NO UNA ─────────────────────────────────
+ *
+ * Son dos parámetros, dos lectores y dos banderas, y **no se juntan**. Se
+ * parecen tanto que ordenarlos en uno solo se ve como una limpieza, y es lo
+ * contrario: una planilla a medio recalcular devuelve `Cargando…` en unas
+ * celdas y vacías las demás, así que dispara los dos frenos a la vez. Con una
+ * sola llave, quien confirmó un borrado grande estaría aceptando además, sin
+ * verlo y sin que nada se lo nombre, cuatrocientas reprogramaciones inventadas
+ * — que a diferencia del borrado **nada vuelve a borrar**: inflan el contador
+ * de cada OT para siempre y en silencio.
+ *
+ * Una confirmación autoriza una cosa. Quien quiera las dos, manda las dos.
+ * El cron no manda ninguna.
+ */
+const confirmaLasReprogramaciones = (request: Request) =>
+  new URL(request.url).searchParams.get("confirmar_reprogramaciones") === "1";
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -37,7 +64,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const r = await sincronizarOrdenes({ sinFreno: confirmaElBorrado(request) });
+  const r = await sincronizarOrdenes({
+    sinFreno: confirmaElBorrado(request),
+    sinFrenoDeReprogramaciones: confirmaLasReprogramaciones(request),
+  });
 
   return r.ok
     ? NextResponse.json(r.datos)

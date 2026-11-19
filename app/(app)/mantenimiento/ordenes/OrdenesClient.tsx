@@ -316,6 +316,18 @@ export default function OrdenesClient({
           (body.numeros_repetidos?.length
             ? ` Ojo: la planilla tiene dos filas con el N° ${body.numeros_repetidos.join(", ")}` +
               ` — se guardó la de más abajo. Corregilo en la planilla.`
+            : "") +
+          // El freno del historial de reprogramaciones, dicho. La ruta ya lo
+          // devolvía y esta pantalla lo tiraba, que es la peor combinación:
+          // el sistema creyendo que avisó. Las fechas se importaron igual, así
+          // que esto no es un fallo de la corrida — es un renglón que falta y
+          // que sólo se recupera volviendo a apretar con la confirmación.
+          (body.reprogramaciones_freno ? ` ${body.reprogramaciones_freno}` : "") +
+          // Y si no se pudo registrar nada (la migración todavía no corrió, o
+          // la escritura falló), también se dice: un historial que no se
+          // escribe no se distingue de uno vacío.
+          (body.reprogramaciones_sin_registrar
+            ? ` No se pudo registrar lo que la planilla movió: ${body.reprogramaciones_sin_registrar}`
             : "")
         : (body.error ?? "No se pudo sincronizar.")
     );
