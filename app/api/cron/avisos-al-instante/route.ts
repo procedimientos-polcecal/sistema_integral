@@ -218,19 +218,25 @@ export async function GET(request: Request) {
     // que cruza las 1000 filas que PostgREST corta sin avisar.
     const ids = [...porUsuario.keys()];
     if (ids.length > 0) {
-      const [leerUsuarios, leerGrants, leerDescartes] = await Promise.all([
+      const [leerUsuarios, leerGrants, leerDescartes, leerConsultados] = await Promise.all([
         admin.from("usuarios").select("id, rol, activo").in("id", ids),
         admin.from("usuario_modulos").select("id, usuario_id, modulo, nivel").in("usuario_id", ids),
         admin
           .from("notificaciones_descartes")
           .select("usuario_id, notificacion_id, cantidad_vista")
           .in("usuario_id", ids),
+        // La cuarta, y va entera acá por lo mismo que las otras tres: el
+        // equivalente es `esConsultadoDeCompras()`, que pregunta **por
+        // persona**, y en este bucle eso son trece consultas por corrida y 56
+        // corridas por día. Medido el 18/11/2026: la tabla tiene 1 fila.
+        admin.from("compras_consultados").select("usuario_id").in("usuario_id", ids),
       ]);
 
       const queFallo = [
         ["usuarios", leerUsuarios.error],
         ["usuario_modulos", leerGrants.error],
         ["notificaciones_descartes", leerDescartes.error],
+        ["compras_consultados", leerConsultados.error],
       ].find(([, error]) => error);
 
       if (queFallo) {
@@ -250,6 +256,9 @@ export async function GET(request: Request) {
       const descartes = (leerDescartes.data ?? []) as (DescarteNotificacion & {
         usuario_id: string;
       })[];
+      const contestanConsultas = new Set(
+        ((leerConsultados.data ?? []) as { usuario_id: string }[]).map((c) => c.usuario_id)
+      );
 
       for (const usuario of usuarios) {
         // Una cuenta dada de baja no recibe: sigue teniendo suscripciones
@@ -265,6 +274,25 @@ export async function GET(request: Request) {
           // Sin objeto: `compras-por-aprobar` ya se sacó más arriba y es el
           // único aviso que este permiso gobierna.
           apruebaCompras: false,
+          // **`compras-consultas-repuestos` sí entra, al revés que el de
+          // aprobación**, y la diferencia no es de criterio sino de qué queda
+          // si no entra. Los dos tienen su push propio al nacer
+          // (`avisarAQuienDecide()`), así que los dos se duplican acá; lo que
+          // los separa es que desde el 17/11/2026 el resumen de las 8:30 manda
+          // **sólo los lunes**, y este aviso existe justamente como la red de
+          // la pregunta hecha fuera de la ventana de 7:00 a 21:00, que el push
+          // del momento no manda y **no reintenta nunca**. Sacarlo de acá la
+          // dejaría esperando hasta el lunes, que es el silencio que el aviso
+          // vino a tapar.
+          //
+          // **El solapamiento, dicho:** una pregunta hecha dentro de la
+          // ventana manda dos pushes a la misma persona, el del momento y el de
+          // la novedad hasta quince minutos después. Medido el 18/11/2026,
+          // `compras_consultados` tiene **1 persona** y nunca se hizo ninguna
+          // pregunta, así que hoy no le suena a nadie. Si empieza a molestar,
+          // lo que se agrega es el id a `YA_AVISA_SOLO` y lo que se pierde es
+          // la red de arriba — no las dos cosas a la vez.
+          contestaConsultas: contestanConsultas.has(usuario.id),
           evaluaSyh: nivelEnModulo(usuario.rol, suyos, "seguridad_higiene") === "admin",
           administraElSistema: usuario.rol === "admin_sistema",
         });

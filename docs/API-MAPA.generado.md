@@ -4,7 +4,7 @@
 > Lo escrito a mano —para qué sirve cada módulo, cómo está armada una ruta y
 > las trampas— está en [API.md](API.md). Acá sólo hay lo que sale del código.
 
-Al 2026-11-18: **308 rutas** y **478 handlers** en 25 carpetas.
+Al 2026-11-19: **312 rutas** y **487 handlers** en 25 carpetas.
 
 ## Cómo leer la columna «guarda»
 
@@ -42,7 +42,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | secreto del cron | 20 |
 | secreto propio | 3 |
 | token contra la base | 1 |
-| permiso de módulo | 199 |
+| permiso de módulo | 203 |
 | sesión | 29 |
 | el proxy | 56 |
 | **ABIERTA** | 0 |
@@ -124,7 +124,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/cantera/voladuras` | POST | permiso de módulo · `puedeEditarCantera` | `cantera_voladuras` | — |
 | `/api/cantera/yacimientos` | GET, POST, PATCH | permiso de módulo · `tieneAccesoCantera` | `cantera_yacimientos` | — |
 
-## compras (26)
+## compras (28)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
@@ -133,6 +133,8 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/compras/aprobadores` | POST, PUT, DELETE | permiso de módulo · `esAdminCompras` | `compras_aprobadores` | admin |
 | `/api/compras/comparativas` | GET | permiso de módulo · `puedeEditarCompras` | — | — |
 | `/api/compras/comparativas/vincular` | POST | permiso de módulo · `puedeEditarCompras` | `compras_cotizaciones`, `compras_requerimientos`, `proveedores` | admin · 300s |
+| `/api/compras/consultados` | POST, DELETE | permiso de módulo · `esAdminCompras` | `compras_consultados` | admin |
+| `/api/compras/consultas` | GET, POST | permiso de módulo · `tieneAccesoCompras` | `ordenes_trabajo`, `ordenes_trabajo_notas`, `ordenes_trabajo_repuestos` | admin · paginado |
 | `/api/compras/cotizaciones/[id]/elegir` | POST | permiso de módulo · `puedeAprobarLaCompra` | `compras_cotizaciones`, `compras_historial`, `compras_requerimientos`, `usuarios` | admin |
 | `/api/compras/cotizaciones/[id]` | PATCH, DELETE | permiso de módulo · `puedeEditarCompras` | `compras_cotizaciones` | admin |
 | `/api/compras/mi-area` | GET | sesión | `usuario_areas_compras` | — |
@@ -160,7 +162,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
 | `/api/cron/agenda` | GET | secreto del cron | — | admin · 300s |
-| `/api/cron/avisos-al-instante` | GET | secreto del cron | `notificaciones_descartes`, `push_suscripciones`, `usuario_modulos`, `usuarios` | admin · paginado · 300s |
+| `/api/cron/avisos-al-instante` | GET | secreto del cron | `compras_consultados`, `notificaciones_descartes`, `push_suscripciones`, `usuario_modulos`, `usuarios` | admin · paginado · 300s |
 | `/api/cron/avisos-diarios` | GET | secreto del cron | `push_suscripciones`, `usuario_modulos`, `usuarios` | admin · paginado |
 | `/api/cron/calidad-envases-bajada` | GET | secreto del cron | `calidad_envases_movimientos` | admin · 300s |
 | `/api/cron/calidad-envases-sync` | GET | secreto del cron | — | 300s |
@@ -234,7 +236,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/inventario/reservas-taller-vial` | GET | permiso de módulo · `tieneAccesoInventario` | `equipos`, `inventario_articulos`, `taller_vial_reparaciones`, `taller_vial_repuestos_asignados`, `taller_vial_services` | — |
 | `/api/inventario/sync` | POST | permiso de módulo · `tieneAccesoInventario` | — | — |
 
-## mantenimiento (61)
+## mantenimiento (63)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
@@ -271,7 +273,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/mantenimiento/ordenes-servicio/sync` | POST | permiso de módulo · `puedeEditarMantenimiento` | — | 300s |
 | `/api/mantenimiento/ordenes/[id]/calendario` | GET, POST | permiso de módulo · `puedeEditarMantenimiento` | `agenda_eventos`, `agenda_invitados`, `ordenes_trabajo` | admin · zod |
 | `/api/mantenimiento/ordenes/[id]/gut` | PATCH | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_trabajo` | admin · audita · zod |
-| `/api/mantenimiento/ordenes/[id]/notas` | GET, POST, DELETE | permiso de módulo · `puedeVerMantenimiento` | `ordenes_trabajo`, `ordenes_trabajo_notas` | admin · audita |
+| `/api/mantenimiento/ordenes/[id]/notas` | GET, POST, DELETE | permiso de módulo · `puedeVerMantenimiento` | `ordenes_trabajo`, `ordenes_trabajo_notas`, `ordenes_trabajo_repuestos` | admin · audita |
 | `/api/mantenimiento/ordenes/[id]/postergar` | POST | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_trabajo`, `ordenes_trabajo_notas`, `usuarios` | admin · audita |
 | `/api/mantenimiento/ordenes/[id]/repuestos` | GET, POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `compras_requerimientos`, `ordenes_trabajo_repuestos` | admin |
 | `/api/mantenimiento/ordenes/justificadas` | GET | permiso de módulo · `puedeVerMantenimiento` | `ordenes_trabajo_notas` | — |
@@ -294,6 +296,8 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/mantenimiento/proveedores` | GET, POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `proveedores` | admin |
 | `/api/mantenimiento/proveedores/sueltos` | GET, POST | permiso de módulo · `puedeVerMantenimiento` | `proveedores` | admin |
 | `/api/mantenimiento/razones-postergacion` | GET, PATCH | permiso de módulo · `puedeVerMantenimiento` | `mant_razones_de_postergacion` | admin |
+| `/api/mantenimiento/repuestos/[id]/articulo` | PUT, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `inventario_articulos`, `mant_ri_de_repuesto`, `ordenes_trabajo_repuestos` | admin · paginado · zod |
+| `/api/mantenimiento/repuestos/[id]/ri` | GET, POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `compras_requerimientos`, `mant_ri_de_repuesto`, `ordenes_trabajo_repuestos` | admin |
 | `/api/mantenimiento/sectores/status` | PATCH | permiso de módulo · `puedeEditarMantenimiento` | `sectores`, `sectores_status_log` | admin |
 | `/api/mantenimiento/sheets/webhook` | POST | secreto propio · `SHEETS_WEBHOOK_SECRET` | — | 300s |
 | `/api/mantenimiento/tareas-preventivas` | GET, POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `equipos_componentes`, `mant_tareas_preventivas`, `ordenes_trabajo` | admin |
@@ -505,7 +509,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/buscar` | `lib/supabase/server` |
 | `/api/calidad/carbonilleros` | `lib/calidad/auth`, `lib/calidad/consultas`, `lib/calidad/types`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
 | `/api/calidad/conteos` | `lib/calidad/auth`, `lib/calidad/consultas`, `lib/calidad/conteos`, `lib/calidad/espejo`, `lib/calidad/types`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
-| `/api/calidad/ensayos/curva/export` | `lib/calidad/auth`, `lib/calidad/ensayos/consultas`, `lib/calidad/ensayos/hojaDeLaCurva`, `lib/calidad/ensayos/imagenesDeLaHoja`, `lib/core/sesion`, `lib/core/xlsxExport`, `lib/supabase/server` |
+| `/api/calidad/ensayos/curva/export` | `lib/calidad/auth`, `lib/calidad/ensayos/comparacion`, `lib/calidad/ensayos/consultas`, `lib/calidad/ensayos/hojaDeLaCurva`, `lib/calidad/ensayos/imagenesDeLaHoja`, `lib/core/sesion`, `lib/core/xlsxExport`, `lib/supabase/server` |
 | `/api/calidad/ensayos/limites` | `lib/calidad/auth`, `lib/calidad/ensayos/cuerpoDeLaMuestra`, `lib/calidad/ensayos/types`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
 | `/api/calidad/ensayos/muestras/[id]` | `lib/calidad/auth`, `lib/calidad/ensayos/cuerpoDeLaMuestra`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
 | `/api/calidad/ensayos/muestras` | `lib/calidad/auth`, `lib/calidad/ensayos/cuerpoDeLaMuestra`, `lib/core/cuerpo`, `lib/core/sesion`, `lib/supabase/server` |
@@ -539,6 +543,8 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/compras/aprobadores` | `lib/compras/auth`, `lib/compras/bandeja`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/comparativas` | `lib/compras/auth`, `lib/compras/drive`, `lib/supabase/server` |
 | `/api/compras/comparativas/vincular` | `lib/compras/auth`, `lib/compras/comparativa`, `lib/compras/drive`, `lib/compras/sheets`, `lib/compras/vincular`, `lib/core/paginado`, `lib/core/proveedores`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/compras/consultados` | `lib/compras/auth`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/compras/consultas` | `lib/compras/auth`, `lib/compras/consultas`, `lib/core/avisoAUnaPersona`, `lib/core/avisoAlInstante`, `lib/core/paginado`, `lib/mantenimiento/consultaDeRepuesto`, `lib/mantenimiento/notas`, `lib/mantenimiento/planillaDeOT`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/cotizaciones/[id]/elegir` | `lib/compras/aprobarCompra`, `lib/compras/auth`, `lib/compras/comparativa`, `lib/compras/dolar`, `lib/compras/drive`, `lib/compras/sheets`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/cotizaciones/[id]` | `lib/compras/auth`, `lib/compras/comparativa`, `lib/compras/congelada`, `lib/compras/drive`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/mi-area` | `lib/supabase/server` |
@@ -642,7 +648,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/mantenimiento/ordenes-servicio/sync` | `lib/mantenimiento/auth`, `lib/mantenimiento/sincronizar`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/[id]/calendario` | `lib/agenda/duenoDeLaOT`, `lib/agenda/evento`, `lib/agenda/mandarLaOT`, `lib/agenda/pedido`, `lib/agenda/sesion`, `lib/core/calendar`, `lib/core/validar`, `lib/mantenimiento/auth`, `lib/mantenimiento/programacion`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/[id]/gut` | `lib/core/validar`, `lib/mantenimiento/auth`, `lib/mantenimiento/gut`, `lib/supabase/admin`, `lib/supabase/server` |
-| `/api/mantenimiento/ordenes/[id]/notas` | `lib/mantenimiento/auth`, `lib/mantenimiento/cancelacion`, `lib/mantenimiento/notas`, `lib/mantenimiento/planillaDeOT`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/ordenes/[id]/notas` | `lib/core/avisoAlInstante`, `lib/mantenimiento/auth`, `lib/mantenimiento/cancelacion`, `lib/mantenimiento/consultaDeRepuesto`, `lib/mantenimiento/notas`, `lib/mantenimiento/planillaDeOT`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/[id]/postergar` | `lib/core/auditoria`, `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/mantenimiento/formulario`, `lib/mantenimiento/notas`, `lib/mantenimiento/planillaDeOT`, `lib/mantenimiento/postergar`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/[id]/repuestos` | `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/riDelRepuesto`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/justificadas` | `lib/mantenimiento/auth`, `lib/supabase/server` |
@@ -665,6 +671,8 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/mantenimiento/proveedores` | `lib/core/paginado`, `lib/core/proveedores`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/proveedores/sueltos` | `lib/core/paginado`, `lib/core/proveedores`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/razones-postergacion` | `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/mantenimiento/postergar`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/repuestos/[id]/articulo` | `lib/core/paginado`, `lib/core/validar`, `lib/mantenimiento/auth`, `lib/mantenimiento/cuentaDeUnRepuesto`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/repuestos/[id]/ri` | `lib/mantenimiento/auth`, `lib/mantenimiento/cuentaDeUnRepuesto`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/sectores/status` | `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/sheets/webhook` | `lib/mantenimiento/sincronizar` |
 | `/api/mantenimiento/tareas-preventivas` | `lib/core/cuerpo`, `lib/core/fechas`, `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/catalogoConfirmado`, `lib/mantenimiento/tareasPreventivas`, `lib/supabase/admin`, `lib/supabase/server` |

@@ -76,7 +76,13 @@ export function filaDeInsumo(fila: unknown[], idx: IndiceInventario): Insumo | n
  * "No está en el inventario" y "no hay stock" son cosas distintas: una se
  * compra, la otra se busca en otro lado o se pregunta en el pañol.
  */
-export type EstadoDeStock = "hay" | "bajo_minimo" | "no_hay" | "sin_dato" | "no_esta";
+export type EstadoDeStock =
+  | "hay"
+  | "no_alcanza"
+  | "bajo_minimo"
+  | "no_hay"
+  | "sin_dato"
+  | "no_esta";
 
 export interface Disponibilidad {
   codigo: string | null;
@@ -89,6 +95,43 @@ export interface Disponibilidad {
 const MINIMO_PARA_BUSCAR = 4;
 
 /**
+ * El texto de un repuesto, listo para compararlo con `includes`.
+ *
+ * La OT escribe `ø 3 " x 300 mm` y el pañol `3" X 300MM`: el mismo repuesto con
+ * tres diferencias que no significan nada. Se sacan sólo esas tres: el signo
+ * de diámetro, los espacios que rodean a la comilla de pulgada, y —con
+ * `pegar`— el espacio entre un número y su unidad.
+ *
+ * **No se colapsan todos los espacios**, y es a propósito: `BULON 1/2` pasaría
+ * a ser `BULON12` y coincidiría con `BULON 12`. Es el mismo error que en
+ * `riDelRepuesto.ts` costó cambiar un falso negativo por un falso positivo.
+ *
+ * **La lista de unidades es cerrada**: una unidad que no está acá no se pega.
+ *
+ * **Por qué `pegar` es una variante y no la única forma.** Pegar sólo se
+ * puede hacer cuando la unidad termina en un límite de palabra, así que
+ * `2 m` pasa a `2m` pero `2 METROS` no: el pañol tiene 15 artículos así
+ * (`3,05 METROS`, `4 LITROS`) y una OT que escriba `2 m` dejaría de
+ * encontrarlos, cuando antes `2 m` era prefijo de `2 METROS`. Por eso se
+ * compara de las dos maneras (ver `coincide`) y alcanza con que una dé.
+ */
+function paraComparar(v: unknown, pegar: boolean): string {
+  let t = normalizar(v)
+    .replace(/[øØ]/g, " ")
+    .replace(/\s*["”″]\s*/g, '"');
+  if (pegar) t = t.replace(/(\d)\s+(mm|cm|mts?|m|kg|kw|hp|lts?|l|pulg)\b/gi, "$1$2");
+  return t.replace(/\s+/g, " ").trim();
+}
+
+/** Si el nombre del repuesto está en la descripción, de cualquiera de las dos formas. */
+function coincide(descripcion: unknown, nombre: unknown): boolean {
+  return [false, true].some((pegar) => {
+    const n = paraComparar(nombre, pegar);
+    return n.length >= MINIMO_PARA_BUSCAR && paraComparar(descripcion, pegar).includes(n);
+  });
+}
+
+/**
  * Qué hay de cada repuesto que la orden necesita.
  *
  * Se busca por código, después por nombre completo y por último por nombre
@@ -96,7 +139,7 @@ const MINIMO_PARA_BUSCAR = 4;
  * encuentran media planilla.
  */
 export function buscarEnInventario(
-  repuestos: { codigo?: string | null; nombre?: string | null }[],
+  repuestos: { codigo?: string | null; nombre?: string | null; cantidad?: string | null }[],
   inventario: Insumo[]
 ): Disponibilidad[] {
   const porCodigo = new Map<string, Insumo>();
@@ -104,18 +147,18 @@ export function buscarEnInventario(
 
   for (const i of inventario) {
     if (i.codigo) porCodigo.set(normalizar(i.codigo), i);
-    if (i.descripcion) porNombre.set(normalizar(i.descripcion), i);
+    if (i.descripcion) porNombre.set(paraComparar(i.descripcion, true), i);
   }
 
   return repuestos.map((r) => {
     const codigo = normalizar(r.codigo);
-    const nombre = normalizar(r.nombre);
+    const nombre = paraComparar(r.nombre, true);
 
     const insumo =
       (codigo && porCodigo.get(codigo)) ||
       (nombre && porNombre.get(nombre)) ||
-      (nombre.length >= MINIMO_PARA_BUSCAR
-        ? inventario.find((i) => normalizar(i.descripcion).includes(nombre))
+      (nombre
+        ? inventario.find((i) => coincide(i.descripcion, r.nombre))
         : undefined) ||
       null;
 
@@ -123,15 +166,68 @@ export function buscarEnInventario(
       codigo: r.codigo ?? null,
       nombre: r.nombre ?? null,
       insumo,
-      estado: estadoDe(insumo),
+      estado: estadoDe(insumo, r.cantidad),
     };
   });
 }
 
-function estadoDe(insumo: Insumo | null): EstadoDeStock {
+/**
+ * El primer número que aparece en lo anotado, como texto, o null si no hay.
+ *
+ * El campo de cantidad es texto libre —"80", "80 u.", "x3", "un juego"— porque la
+ * planilla lo es. **Ésta es la única lectura de ese texto**: de ella salen
+ * `cuantosPide` (el número, para comparar y repartir) y `cantidadPedida` de
+ * `pedirRepuesto.ts` (el texto, para llenar el formulario). Hubo una tercera,
+ * `cantidadDelRenglon`, que hacía `Number()` de toda la cadena y divergió:
+ * `"80 u."` daba null ahí y 80 acá, así que un renglón decía «No alcanza · 61 en
+ * stock» (leyó 80) sobre «no se puede repartir» (leyó null), y peor, esa orden
+ * no consumía nada del reparto y una más nueva se llevaba el envío entero. Medido el
+ * 17/11/2026: 1 de los 27 renglones diverge, el que dice «23 Grillas de 2mm». No se
+ * agrega otra lectura: se usa ésta.
+ *
+ * Se conserva el `0` ("0 bolsas" → "0"): viaja al formulario de Compras y
+ * convertirlo a número lo haría desaparecer.
+ */
+export function primerNumero(texto: string | null | undefined): string | null {
+  const m = String(texto ?? "").match(/\d+(?:[.,]\d+)?/);
+  return m ? m[0].replace(",", ".") : null;
+}
+
+/**
+ * Cuántos pide la orden, si de lo anotado sale un número **positivo**.
+ *
+ * Lo que no tiene número devuelve `null` y **no se compara**: decir «no
+ * alcanza» sin saber cuánto hace falta es inventar. Es `primerNumero` más la
+ * exigencia de que sea mayor que cero; no tiene lectura propia.
+ */
+export function cuantosPide(texto: string | null | undefined): number | null {
+  const t = primerNumero(texto);
+  if (t === null) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * En qué situación está un repuesto, para **esta** orden.
+ *
+ * El orden de las preguntas no es casual y se decidió el 04/11/2026:
+ *
+ *  - **No estar y no haber ganan**, porque son más graves y porque decir «no
+ *    alcanza» de algo que no existe en el pañol no significa nada.
+ *  - **«No alcanza» le gana a «queda poco»**, que es el más blando de los tres
+ *    y además el que afirma de más: «queda poco» quiere decir *alcanza para
+ *    este trabajo, pero hay que reponer*, y eso es falso justamente cuando no
+ *    alcanza. Hasta hoy ese era el único juicio sobre la cantidad que el
+ *    sistema hacía, y lo hacía sin mirar lo que la orden pide.
+ *  - **Sin cantidad legible no se compara** y queda lo de siempre.
+ */
+function estadoDe(insumo: Insumo | null, cantidad?: string | null): EstadoDeStock {
   if (!insumo) return "no_esta";
   if (insumo.stock === null) return "sin_dato";
   if (insumo.stock <= 0) return "no_hay";
+
+  const pide = cuantosPide(cantidad);
+  if (pide !== null && insumo.stock < pide) return "no_alcanza";
 
   // Al mínimo o por debajo: alcanza para este trabajo, pero hay que reponer.
   if (insumo.seguridad !== null && insumo.stock <= insumo.seguridad) return "bajo_minimo";
@@ -141,6 +237,7 @@ function estadoDe(insumo: Insumo | null): EstadoDeStock {
 /** Cómo se dice cada estado en la pantalla. */
 export const ESTADO_DE_STOCK: Record<EstadoDeStock, { label: string; color: string }> = {
   hay: { label: "Hay", color: "text-emerald-700" },
+  no_alcanza: { label: "No alcanza", color: "text-amber-700" },
   bajo_minimo: { label: "Queda poco", color: "text-amber-700" },
   no_hay: { label: "No hay", color: "text-red-600" },
   sin_dato: { label: "Sin stock informado", color: "text-slate-500" },

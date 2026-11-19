@@ -24,7 +24,9 @@ export async function GET(_request: Request, { params }: Params) {
 
   const { data, error } = await supabase
     .from("ordenes_trabajo_repuestos")
-    .select("*")
+    // El artículo del pañol que una persona eligió para el renglón, si eligió:
+    // de ahí sale qué se busca en el inventario y qué se le pide a Compras.
+    .select("*, articulo:inventario_articulos(id, codigo, descripcion)")
     .eq("work_order_id", id)
     .order("created_at");
 

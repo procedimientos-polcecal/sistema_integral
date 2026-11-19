@@ -83,6 +83,14 @@ const TABLAS_CON_HISTORIAL: { tabla: string; columna: string; motivo?: string }[
     motivo:
       "el usuario es dueño de eventos de la Agenda (calendario). Borrarlo dejaría esos eventos vivos en los calendarios de Google de los invitados, sin forma de sacarlos desde el sistema",
   },
+  {
+    tabla: "mant_ri_de_repuesto",
+    columna: "creado_por",
+    // `creado_por` referencia a `usuarios` sin `on delete` (NO ACTION): sin esta
+    // entrada, borrar a quien pegó un RI da un error crudo de Postgres y un 500.
+    motivo:
+      "el usuario pegó números de RI a repuestos de órdenes de trabajo, y esos vínculos son lo único que dice quién pegó cada RI a cada repuesto",
+  },
 ];
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {

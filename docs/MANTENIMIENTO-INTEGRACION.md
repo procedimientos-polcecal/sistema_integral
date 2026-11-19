@@ -797,6 +797,63 @@ mensajería —cómo se decide quién puede ver un hilo, por qué el aviso es un
 correo— está en [el spec](superpowers/specs/2026-11-11-mensajeria-interna-design.md)
 y resumido en la fila de CLAUDE.md.
 
+## Preguntarle a Compras por un repuesto (31/10/2026)
+
+El diseño está en
+[el spec del 26/10](superpowers/specs/2026-10-26-mantenimiento-preguntar-a-compras-design.md)
+y el plan en
+[el del 29/10](superpowers/plans/2026-10-29-mantenimiento-preguntar-a-compras.md).
+Resumen: «falta el repuesto» era la justificación más común de una OT atrasada y
+**no tenía vuelta**. Quien la escribía no sabía si Compras lo había pedido, y
+Compras no se enteraba de que lo estaban esperando. Ahora desde la OT se
+pregunta, Compras contesta desde su propia bandeja (`/compras/consultas`), y la
+conversación queda en el historial de esa orden.
+
+**Es la misma tabla que las justificaciones**, `ordenes_trabajo_notas`, separada
+por `tipo` — `JUSTIFICACION` (el default y lo único que había antes),
+`PREGUNTA` y `RESPUESTA`. Seis cosas que no se deducen del código:
+
+- **Compras contesta desde Compras, y eso no es comodidad: es lo único que
+  funciona.** Medido el 30/10/2026 contra producción, el encargado de compras
+  tiene `compras`, `inventario`, `facturacion` y `remises` — **nada de
+  Mantenimiento**. Pedirle que abra una OT para contestar es pedirle que entre a
+  un módulo que no tiene.
+- **Eso mismo obliga a que el conteo del resumen diario lea con el cliente
+  admin.** `ordenes_trabajo_notas` y `ordenes_trabajo` están cerradas con
+  `mant_puede_ver()`, así que con la sesión de quien contesta la campana habría
+  dicho **0 sin un solo error** mientras el push decía 3. Es la misma trampa que
+  el valor hora, por otro módulo.
+- **«Pregunta abierta» se calcula en TypeScript y nunca en SQL.** Es una
+  anti-unión —sin `RESPUESTA` que la apunte, sin otra `PREGUNTA` que la supere,
+  la orden no cerrada, el repuesto todavía en la lista— y PostgREST no la sabe
+  expresar. Escribirla en la base sería una **segunda definición** separada de la
+  que tiene los tests. La única es `preguntasAbiertas` de
+  `lib/mantenimiento/consultaDeRepuesto.ts`, y de ahí salen las tres puntas: la
+  OT, la bandeja de Compras y el resumen.
+- **La columna X sigue mostrando la última nota, y ahora una pregunta puede ser
+  la última.** Una respuesta de Compras **es** la justificación vigente de por
+  qué la orden sigue abierta, así que se escribe ahí a propósito. Si consultás la
+  tabla para «por qué sigue abierta», filtrá `tipo = 'JUSTIFICACION'`.
+- **El aviso va a `compras_consultados` y no a `compras_aprobadores`.** Medido el
+  26/10/2026: la de aprobadores tiene cuatro personas y sólo una es quien
+  contesta. Reusarla repetía por el otro lado el error que `compras-por-aprobar`
+  ya pagó —le llegaba a 6 y 3 no podían aprobar—. **Estar en esa lista no es un
+  permiso sino un destinatario**: contestar lo habilita tener Compras, así que
+  quien cubre a alguien de licencia contesta sin que nadie edite la lista, y
+  vaciarla sólo apaga el aviso.
+- **Borrar una pregunta que ya tiene respuesta lo rechaza la base**, con un
+  `23503` que la ruta traduce a un 409. La FK `responde_a` **no** lleva
+  `on delete cascade` justamente por eso: quien preguntó podía borrar su pregunta
+  y llevarse la respuesta de Compras.
+
+**Al desplegar, el orden es obligatorio: primero la migración
+`20261029082249`.** No es que lo nuevo no ande: el GET y el POST de notas nombran
+`tipo`, `repuesto_id` y `responde_a`, así que sin esas columnas **deja de andar
+lo que ya funcionaba** —leer y escribir cualquier justificación de cualquier OT
+sale 500 o 400—. Al revés no rompe nada: con la migración puesta, el código
+viejo no nombra las columnas nuevas y los inserts viven del `default`. Y hasta
+correr `scripts/sembrar-consultados-de-compras.mts` la lista está vacía: el push
+no interrumpe a nadie y la pantalla lo dice.
 ## Cancelar una OT: la que no se va a hacer nunca (16/11/2026)
 
 Una OT sólo sabía terminar haciéndose. La que no se iba a hacer —equipo de baja,
@@ -3461,6 +3518,120 @@ corrida fallida** (`porQueFallaron`), porque si los cuatro fallan al escribir la
 planilla el generador termina perfecto y no nace ninguna orden. Quedan afuera
 los estados que no son errores: `trabados`, `sinArrancar`, `sinEstadoTodavia` y
 `sinCalendario`.
+
+## Pegar un RI a un repuesto y cuánto de lo que viene es de cada OT (13/11/2026)
+
+Mantenimiento escribe el número de un RI sobre el repuesto de una OT, y puede
+elegir a qué artículo del pañol se refiere ese repuesto. Cada OT abierta que
+necesita un artículo lee **su parte** de lo que viene: cuántas de las que pidió
+están cubiertas y cuántas falta pedir. El diseño está en
+[el spec](superpowers/specs/2026-11-13-mantenimiento-linkear-ri-y-descripcion-design.md)
+y el plan en [su plan](superpowers/plans/2026-11-13-mantenimiento-linkear-ri-y-descripcion.md).
+La aritmética vive en `lib/mantenimiento/loQueViene.ts`, las rutas en
+`app/api/mantenimiento/repuestos/[id]/{ri,articulo}` y la pantalla en
+`RepuestosOTModal.tsx`. La migración es `20261116082907_ri_de_repuesto.sql` y **va antes del código**:
+sin la columna `articulo_id`, todo `select` que la nombra falla.
+
+### Lo que no se deduce del código
+
+**1. El reparto no se guarda: se calcula cada vez** con los RI pegados y las
+órdenes abiertas. Es la misma forma que «pregunta abierta» en este módulo —una
+sola definición, con tests— y evita el libro de reservas, que dejaría
+reservas viejas que nadie limpia cuando una orden se cierra o cambia de
+cantidad.
+
+**2. El link es global cuando hay artículo, y de ese renglón mientras no lo
+tiene.** Un RI pegado a un artículo vale para toda OT que lo pida; uno pegado a un
+repuesto sin artículo vale sólo para ese renglón **hasta que el renglón elige
+artículo**: ahí pasa a valer para el grupo, porque el renglón ya es de esa pieza
+(es lo pedido: pegar primero el número y elegir el artículo después). Desde ahí
+**cambiar o soltar el artículo se niegan los dos** mientras ese vínculo siga (punto
+8), porque arrastrarlo a otro grupo lo haría cubrir órdenes que no son suyas — y
+soltar, que por sí solo angosta el alcance y sería inofensivo, es la primera mitad
+de ese mismo viaje: soltar y volver a elegir dejan el vínculo en el grupo nuevo sin
+que nada lo mire. **Agrupar los sueltos por texto parecido se
+descartó a propósito**: «grillas» está escrito de cinco maneras en las órdenes
+(«Grillas de 2mm», «Grillas de 2 mm», «Grillas 4mm», «Grillas 4 mm», «grillas de 4mm»), y el RI de las de 2 mm aparecería en la
+orden que pide las de 4. Es la regla de la casa —*enlazar al que se le parece
+es peor que dejar en null*—. El costo, aceptado: si dos OT piden la misma
+grilla, alguien pega el número dos veces.
+
+**3. El stock del pañol no descuenta.** Una orden que necesita 80 con 61 en el
+estante igual toma 80 de lo que viene: pedir sólo el faltante deja el estante en
+cero apenas se hace el trabajo, y Compras repone después de usarlas.
+
+**4. Lo que viene es lo pedido menos lo recibido**, y un RI sin cantidad legible
+aporta cero. Medido el 13/11/2026: 1.653 de 2.304 RI tienen algo recibido
+(contarlo como «en camino» lo cuenta dos veces) y 90 de 2.304 no tienen cantidad.
+
+**5. La cuenta mira sólo los RI pegados a mano, nunca los que el cruce por
+nombre adivina.** Un falso positivo ahí haría que una orden lea «cubierta» por
+un pedido que no es suyo, que es el anti-objetivo de la función. Lo que el
+cruce encuentra se sigue mostrando aparte («Ya pedido»). Tampoco reclama una OT
+cerrada: 16 de las 20 OT con repuestos están realizadas.
+
+**6. El empate se rompe por número de OT, de menor a mayor.** No es un detalle
+mecánico: la única competencia real en producción es un empate triple —las
+órdenes 2896, 2897 y 2898 tienen las tres `fecha = 2026-10-26`—, y sin regla el
+orden lo decide PostgREST y la misma pantalla diría cosas distintas. Esas tres
+piden el mismo niple y la misma tapa, que desde el arreglo del cruce (punto
+siguiente) resuelven a los códigos 01221 y 01220. **Eso no vuelve global su
+link**: el destino sale del `articulo_id` guardado en el renglón, que sólo
+escribe una persona al elegir el artículo (`PUT /articulo`), y medido el
+16/11/2026 hay 0 de 26 renglones con uno. El arreglo hizo que el artículo se
+pueda **elegir**; el link es global para cada una de las tres cuando alguien lo
+elige en ella.
+
+**7. Arreglar el cruce con el pañol fue parte del trabajo.** La OT dice
+`Niple galvanizado ø 3 " x 300 mm` y el pañol `01221 NIPLE GALVANIZADO 3" X
+300MM`; `normalizar` dejaba pasar el `ø` y los espacios y el `includes` de
+`buscarEnInventario` fallaba. Medido con `scripts/medir-cruce-de-repuestos.mts
+--todas`: **de 7 a 13 de 26 reconocidos, sin perder ninguno**. Es la familia del
+bug de la pulgada del 12/11/2026, en el otro cruce.
+
+**8. Cambiar o soltar el artículo se niega con un 409 que nombra los números que
+bloquean.** Las dos clases de vínculo —los pegados **al artículo viejo** y los
+pegados **a este renglón**— frenan cambiar *y* soltar, por razones distintas. Negar
+es mejor que borrar porque la fila del link
+del artículo no sabe qué renglón la pegó: borrarla se llevaría links que pegó otra
+orden. Y el del renglón tiene que frenar el cambio porque la cuenta lee los
+vínculos de todos los renglones del artículo: sin el freno, pegar el 500 sin
+artículo, elegir A y cambiar a B hacía que el 500 pasara a cubrir todas las
+órdenes abiertas que piden B (reproducido por la revisión de la rama; hoy es
+inalcanzable porque la tabla tiene 0 filas, pero el trío 2896/2897/2898 es el
+grupo donde muerde). El costo si estuviera mal: quien se equivocó de artículo saca
+el RI y lo vuelve a pegar, en vez de que el sistema lo mueva solo. **Y frena también
+el soltar, que mirado solo parece inofensivo**: soltar angosta el alcance y el
+DELETE sigue alcanzando el vínculo por `repuesto_id`, pero soltar y volver a elegir
+**son ese mismo cambio en dos pasos** —con `viejo` en null no se mira nada— y los
+dos botones están uno al lado del otro. La primera versión de este freno frenaba
+sólo el cambio; la puerta de al lado la encontró la revisión de la misma ola de
+arreglos, y está fijada con un test. El 409 nombra los números porque un link cuyo
+RI Compras ya sacó de la planilla sigue bloqueando y no se ve en ningún otro
+lado (`nro_ri` no es una foreign key a propósito). **Quien afloje ese 409 tiene que
+tocar antes la lectura de `cuentaDeUnRepuesto`**, que es la que depende de él.
+
+**9. Sacar un RI que no está pegado a este renglón da 404 y no un «listo».** Puede
+estar pegado a *otro* renglón del mismo artículo —cuenta acá igual—, y entonces hay
+que sacarlo desde ese otro. Un borrado a medias se termina repitiéndolo: el 404
+sólo aparece cuando no había nada que borrar.
+
+**10. «Cuántas pide este renglón» tiene una sola lectura**, `primerNumero` y
+`cuantosPide` en `lib/mantenimiento/stock.ts`. Hubo una tercera, propia de la
+cuenta, que hacía `Number()` de toda la cadena: leía `"80 u."` como null mientras la
+de al lado leía 80, así que un renglón decía «No alcanza · 61 en stock» encima de
+«no se puede repartir» — y peor, esa orden no consumía nada del reparto y una más
+nueva se llevaba el envío entero. Medido el 17/11/2026: **1 de los 27 renglones
+diverge**, el que dice «23 Grillas de 2mm». El `0` se conserva como texto
+(`"0 bolsas"` → `"0"`) porque viaja al formulario de Compras, y el signo no se lee:
+`"-3"` da 3, que es lo que esa lectura ya hacía para el stock y hoy no alcanza a
+ningún renglón.
+
+**11. El comentario de `mant_ri_de_repuesto` en la base quedó viejo.** Dice que un
+vínculo con `repuesto_id` vale «para ese renglón de esa OT y nada más», que era
+cierto cuando se escribió y dejó de serlo con el punto 2. La migración
+`20261116082907` **ya está aplicada y una migración aplicada no se edita**: se
+corrige con un `comment on` en otra. Hasta que eso pase, manda lo que dice acá.
 
 ## Los datos: qué está y qué no
 

@@ -1722,6 +1722,58 @@
         "nuleable": true
       }
     ],
+    "cantera_cubicaciones_material": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "mes",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "material",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "existencia_final",
+        "tipo": "numeric",
+        "nuleable": false
+      },
+      {
+        "columna": "existencia_acopio",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "observaciones",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "cargado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
     "cantera_destape": [
       {
         "columna": "id",
@@ -5117,6 +5169,68 @@
         "nuleable": false
       }
     ],
+    "mant_ciclos_de_ot": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "tarea_madre_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "tarea_hija_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "repeticiones",
+        "tipo": "int2",
+        "nuleable": false
+      },
+      {
+        "columna": "especialidad",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "horas_estimadas",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "desde",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "vuelta_desde",
+        "tipo": "int2",
+        "nuleable": true
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "creado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "creado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      }
+    ],
     "mant_contratista_lugares": [
       {
         "columna": "id",
@@ -5572,6 +5686,90 @@
         "nuleable": false
       }
     ],
+    "mant_ri_de_repuesto": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nro_ri",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "articulo_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "repuesto_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "mant_tareas_preventivas": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "equipment_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "accion",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "componente",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "periodo_dias",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "estado",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "motivo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "decidido_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "decidido_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
     "mantenimiento_divergencias": [
       {
         "columna": "ot_number",
@@ -5801,6 +5999,65 @@
       },
       {
         "columna": "especialidad",
+        "tipo": "text",
+        "nuleable": true
+      }
+    ],
+    "mensajes": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "entidad_tipo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "entidad_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "texto",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "creado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "mensajes_menciones": [
+      {
+        "columna": "mensaje_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "usuario_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "leido_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "avisado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      },
+      {
+        "columna": "aviso_fallo",
         "tipo": "text",
         "nuleable": true
       }
@@ -6256,6 +6513,21 @@
         "columna": "fecha_fin",
         "tipo": "date",
         "nuleable": true
+      },
+      {
+        "columna": "ciclo_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "ciclo_vuelta",
+        "tipo": "int2",
+        "nuleable": true
+      },
+      {
+        "columna": "cierre_justificacion",
+        "tipo": "text",
+        "nuleable": true
       }
     ],
     "ordenes_trabajo_notas": [
@@ -6330,6 +6602,11 @@
         "columna": "created_at",
         "tipo": "timestamptz",
         "nuleable": false
+      },
+      {
+        "columna": "articulo_id",
+        "tipo": "uuid",
+        "nuleable": true
       }
     ],
     "os_aprobadores": [
@@ -6566,6 +6843,38 @@
       },
       {
         "columna": "created_at",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
+    "planificacion_diaria_operarios": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "plan_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "turno",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "empleado_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "creado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_el",
         "tipo": "timestamptz",
         "nuleable": false
       }
@@ -7135,6 +7444,11 @@
         "columna": "modo_de_carga",
         "tipo": "text",
         "nuleable": false
+      },
+      {
+        "columna": "razon_social",
+        "tipo": "text",
+        "nuleable": true
       }
     ],
     "proveedores_odoo": [
@@ -7388,6 +7702,43 @@
         "columna": "activo",
         "tipo": "bool",
         "nuleable": false
+      }
+    ],
+    "rrhh_correo_novedades": [
+      {
+        "columna": "id",
+        "tipo": "int2",
+        "nuleable": false
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "destinatarios",
+        "tipo": "uuid[]",
+        "nuleable": false
+      },
+      {
+        "columna": "encabezado",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "cierre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_por",
+        "tipo": "uuid",
+        "nuleable": true
       }
     ],
     "rrhh_dias_corregidos": [
@@ -8552,6 +8903,346 @@
         "tipo": "timestamptz",
         "nuleable": false
       }
+    ],
+    "ventas_actividades": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "cliente_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "contacto_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "oportunidad_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "tipo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "resumen",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "proximo_paso",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "proximo_paso_el",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "cumplido_el",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "hecha_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "creada_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "ventas_clientes": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "numero",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "razon_social",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre_fantasia",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "cuit",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "estado",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "vendedor_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "localidad",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "provincia",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "rubro",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "telefono",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "email",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "sitio_web",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "origen",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "notas",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "creado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "ventas_clientes_odoo": [
+      {
+        "columna": "cliente_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "empresa_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "odoo_partner_id",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "cuit",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "ventas_contactos": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "cliente_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "nombre",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "cargo",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "telefono",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "email",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "es_principal",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "activo",
+        "tipo": "bool",
+        "nuleable": false
+      },
+      {
+        "columna": "notas",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "creado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
+    ],
+    "ventas_oportunidades": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "numero",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "cliente_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "titulo",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "producto_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "toneladas_estimadas",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "monto_estimado",
+        "tipo": "numeric",
+        "nuleable": true
+      },
+      {
+        "columna": "moneda",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "etapa",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "vendedor_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_estimada_cierre",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "cerrada_el",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "motivo_perdida",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "notas",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "creada_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "creada_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "actualizado_en",
+        "tipo": "timestamptz",
+        "nuleable": true
+      }
     ]
   },
   "enums": {
@@ -8652,7 +9343,8 @@
       "calidad",
       "taller_vial",
       "trituracion",
-      "seguridad_higiene"
+      "seguridad_higiene",
+      "ventas"
     ],
     "nivel_acceso": [
       "lectura",

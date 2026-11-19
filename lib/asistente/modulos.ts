@@ -107,6 +107,7 @@ export const MODULO_DE_TABLA: Record<string, Ambito> = {
   mantenimiento_tarifas_hora: "mantenimiento",
   ordenes_trabajo: "mantenimiento",
   ordenes_trabajo_repuestos: "mantenimiento",
+  mant_ri_de_repuesto: "mantenimiento",
   // Por qué una OT todavía no se hizo, con quién lo escribió y cuándo. Es un
   // historial y no se edita. Tiene nota: no es lo mismo que lo que se encontró
   // **al hacer** el trabajo, que lo escribe el registro de la ejecución.
@@ -133,6 +134,7 @@ export const MODULO_DE_TABLA: Record<string, Ambito> = {
   compras_sincronizaciones: "compras",
   compras_ubicaciones: "compras",
   compras_aprobadores: "compras",
+  compras_consultados: "compras",
   compras_odoo_ordenes: "compras",
   compras_producto_odoo: "compras",
   usuario_areas_compras: "compras",
