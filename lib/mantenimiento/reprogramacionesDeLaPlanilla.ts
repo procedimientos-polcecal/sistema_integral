@@ -3,13 +3,14 @@
  *
  * ── POR QUÉ EXISTE ──────────────────────────────────────────────────────────
  *
- * En Mantenimiento manda la planilla, y sólo 223 de las 2.531 órdenes tienen
- * el botón de Postergar. A las otras 2.268 la fecha de inicio se les corre
+ * En Mantenimiento manda la planilla, y —medido el 19/11/2026— sólo 264 de las
+ * 2.532 órdenes son `app_created`, o sea las que tienen el botón de Postergar.
+ * A las otras 2.268 la fecha de inicio se les corre
  * tipeándola en el master, y hasta hoy eso **se notaba y se tiraba**: el
  * contraste compara los dos lados antes del upsert —es el único momento en que
  * todavía dicen cosas distintas— y después `mantenimiento_divergencias` se
  * rehace entera, a propósito, porque su tamaño es lo que cuenta el aviso. Un
- * análisis de reprogramaciones que ve el 9 % del universo no es el análisis.
+ * análisis de reprogramaciones que ve el 10 % del universo no es el análisis.
  *
  * Esto no detecta nada nuevo: guarda lo que ya se detectaba.
  *

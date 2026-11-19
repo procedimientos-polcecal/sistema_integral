@@ -951,9 +951,10 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   // Y lo mismo, por el mismo motivo y en el mismo punto, con las fechas de
   // inicio que la planilla corrió: el contraste YA las ve y hasta hoy las
   // tiraba, porque `mantenimiento_divergencias` se rehace entera en cada
-  // corrida. Sólo 223 de las 2.531 órdenes tienen el botón de Postergar; a las
-  // otras 2.268 la fecha se les mueve tipeándola allá, y si esto no las
-  // guardara el análisis de reprogramaciones vería el 9 % del universo.
+  // corrida. Medido el 19/11/2026, sólo 264 de las 2.532 órdenes tienen el
+  // botón de Postergar; a las otras 2.268 la fecha se les mueve tipeándola
+  // allá, y si esto no las guardara el análisis de reprogramaciones vería el
+  // 10 % del universo.
   // Va después de las divergencias y antes del upsert, y no tira nunca.
   const reprogramaciones = await registrarLoQueCorrioLaPlanilla(admin, leidasDeLaPlanilla, {
     sinFrenoDeReprogramaciones: opciones.sinFrenoDeReprogramaciones,
