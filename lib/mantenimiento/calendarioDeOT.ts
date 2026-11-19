@@ -13,7 +13,7 @@
 
 import { fechaParaElCalendario } from "@/lib/agenda/evento";
 import { sumarDias } from "@/lib/core/fechas";
-import { estaAtrasada } from "./alertas";
+import { diasDeAtraso as diasDeAtrasoDe, estaAtrasada } from "./alertas";
 import type { GenteDelDia } from "./genteDelDia";
 
 export interface DiaDelCalendario {
@@ -48,6 +48,16 @@ export interface DiaDelCalendario {
      * ninguno futuro se pinta de rojo por error.
      */
     atrasada: boolean;
+    /**
+     * Hace cuántos días venció, o `null` si no está atrasada o está marcada a
+     * mano sin decir desde cuándo. **Viaja calculado y no se recalcula en el
+     * cliente**: `diasDeAtraso` necesita la pendiente y `fecha_fin`, que esta
+     * entrada no lleva —lleva `fecha_ejecucion` cruda por otra razón—, y llamarla
+     * con lo que hay anclaría en la fecha equivocada sin error ni aviso. Además
+     * el día de «hoy» lo decidió el servidor, y el reloj del navegador no es el
+     * de Argentina.
+     */
+    diasDeAtraso: number | null;
   }[];
   gente: GenteDelDia;
 }
@@ -118,6 +128,8 @@ export function armarElCalendario(
     if (!inicio) continue;
     // Antes del recorte y del bucle: contra el inicio verdadero de la orden.
     const atrasada = estaAtrasada(o, hoy);
+    // Sólo si está atrasada: `diasDeAtraso` solo da 0 para una orden futura.
+    const diasDeAtraso = atrasada ? diasDeAtrasoDe(o, hoy) : null;
 
     // Se recorta al rango antes de enumerar: una `fecha_fin` de 2099 en una
     // celda mal tipeada no puede costar treinta mil días. El inicio verdadero
@@ -144,6 +156,7 @@ export function armarElCalendario(
         estado: o.estado,
         fecha_ejecucion: o.fecha_ejecucion,
         atrasada,
+        diasDeAtraso,
       });
     }
   }

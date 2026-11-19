@@ -12,7 +12,10 @@ import { oficioDeLaEspecialidad } from "@/lib/mantenimiento/genteDelDia";
 import type { DiaDelCalendario } from "@/lib/mantenimiento/calendarioDeOT";
 import { porQueNoSePuedeMover, porQueNoSePuedeMoverA } from "@/lib/mantenimiento/moverLaOT";
 import type { Oficio } from "@/lib/mantenimiento/programacion";
-import { colorDeEspecialidad, textoSobreLaEspecialidad, LEYENDA_DE_ESPECIALIDADES } from "./coloresDeEspecialidad";
+import {
+  colorDeEspecialidad, textoSobreLaEspecialidad, LEYENDA_DE_ESPECIALIDADES,
+  COLOR_ATRASADA, TEXTO_SOBRE_ATRASADA,
+} from "./coloresDeEspecialidad";
 
 /**
  * El mes de órdenes de trabajo: qué tiene cada día y cuánta gente del taller
@@ -467,6 +470,10 @@ export default function CalendarioDeOT({
                   </span>
                 ))}
                 <span className="inline-flex items-center gap-1">
+                  <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: COLOR_ATRASADA }} />
+                  Atrasada
+                </span>
+                <span className="inline-flex items-center gap-1">
                   <span
                     className="inline-block h-2.5 w-4 rounded-sm"
                     style={{ border: "1.5px dashed #6b7280" }}
@@ -572,12 +579,22 @@ function CeldaDelDia({
           <span
             key={o.ot_number}
             className="block truncate rounded px-0.5 text-center text-[10px] font-semibold leading-4"
+            title={o.atrasada ? "Atrasada" : undefined}
+            aria-label={o.atrasada ? `OT ${o.ot_number}, atrasada` : undefined}
             style={
-              o.arrastre
-                // Hueca: el color queda en el borde y el número va oscuro, porque
-                // el ámbar y el verde sobre blanco no se leen a 10 px.
-                ? { background: "#ffffff", color: "#0f172a", border: `1.5px dashed ${color}` }
-                : { background: color, color: textoSobreLaEspecialidad(o.especialidad), border: `1.5px solid ${color}` }
+              // El rojo va de relleno y la especialidad queda en el borde: encima
+              // del relleno de especialidad el rojo no se ve (ver
+              // `COLOR_ATRASADA`). El arrastre sigue hueco, con el rojo en el
+              // borde y en el número.
+              o.atrasada && o.arrastre
+                ? { background: "#ffffff", color: COLOR_ATRASADA, border: `1.5px dashed ${COLOR_ATRASADA}` }
+                : o.atrasada
+                  ? { background: COLOR_ATRASADA, color: TEXTO_SOBRE_ATRASADA, border: `1.5px solid ${color}` }
+                  : o.arrastre
+                    // Hueca: el color queda en el borde y el número va oscuro, porque
+                    // el ámbar y el verde sobre blanco no se leen a 10 px.
+                    ? { background: "#ffffff", color: "#0f172a", border: `1.5px dashed ${color}` }
+                    : { background: color, color: textoSobreLaEspecialidad(o.especialidad), border: `1.5px solid ${color}` }
             }
           >
             {o.ot_number}
@@ -699,6 +716,16 @@ function PanelDelDia({
                   >
                     OT {o.ot_number}
                   </span>
+                  {o.atrasada && (
+                    <span
+                      className="rounded px-1.5 text-[11px] font-semibold leading-5"
+                      style={{ background: "#fee2e2", color: "#991b1b" }}
+                    >
+                      {o.diasDeAtraso == null
+                        ? "Atrasada"
+                        : `Atrasada ${o.diasDeAtraso} ${o.diasDeAtraso === 1 ? "día" : "días"}`}
+                    </span>
+                  )}
                   {o.arrastre && (
                     <span className="text-[11px] text-slate-500">continúa de un día anterior</span>
                   )}

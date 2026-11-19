@@ -196,6 +196,7 @@ describe("armar el calendario", () => {
       estado: "POR_HACER",
       fecha_ejecucion: "2026-11-02",
       atrasada: true,
+      diasDeAtraso: 17,
     });
   });
 
@@ -262,5 +263,33 @@ describe("atrasada en el calendario", () => {
       "2026-11-01", "2026-11-30", new Map(), "2026-11-19",
     );
     expect(dias[0].ordenes[0].atrasada).toBe(true);
+  });
+});
+
+describe("los dias de atraso viajan calculados", () => {
+  it("llegan en todos los dias que ocupa la orden, contados desde el inicio", () => {
+    const dias = armarElCalendario(
+      [orden(1, { fecha_ejecucion: "2026-11-16", fecha_fin: "2026-11-17" })],
+      "2026-11-16", "2026-11-20", new Map(), "2026-11-19",
+    );
+    expect(dias[0].ordenes[0].diasDeAtraso).toBe(3);
+    expect(dias[1].ordenes[0].diasDeAtraso).toBe(3);
+  });
+
+  it("cuentan desde la pendiente cuando la hay, que es la que la grilla pinta", () => {
+    const dias = armarElCalendario(
+      [orden(2, { fecha_ejecucion: "2026-11-01", fecha_ejecucion_pendiente: "2026-11-16" })],
+      "2026-11-16", "2026-11-20", new Map(), "2026-11-19",
+    );
+    expect(dias[0].ordenes[0].diasDeAtraso).toBe(3);
+  });
+
+  it("son null cuando la orden no esta atrasada", () => {
+    const dias = armarElCalendario(
+      [orden(3, { fecha_ejecucion: "2026-11-25" })],
+      "2026-11-25", "2026-11-26", new Map(), "2026-11-19",
+    );
+    expect(dias[0].ordenes[0].atrasada).toBe(false);
+    expect(dias[0].ordenes[0].diasDeAtraso).toBeNull();
   });
 });
