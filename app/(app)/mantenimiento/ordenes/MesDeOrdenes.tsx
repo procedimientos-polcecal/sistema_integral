@@ -1,9 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { comoSeLee } from "@/lib/core/fechas";
 import CalendarioDeOT, { type OrdenDelDia } from "./CalendarioDeOT";
+import FranjaDelTaller from "./FranjaDelTaller";
 import PostergarOTModal from "./PostergarOTModal";
+import type { FranjaDeLaSemana } from "@/lib/mantenimiento/rotacionDeLaSemana";
+import type { OperarioDelCatalogo } from "@/lib/mantenimiento/operarioDelCatalogo";
+import type { Turno } from "@/lib/mantenimiento/programacion";
+
+/** Lo que trae `/api/mantenimiento/taller-del-mes`. */
+export interface TallerDelMes {
+  franjas: FranjaDeLaSemana[];
+  catalogo: OperarioDelCatalogo[];
+  noVienen: Record<string, string[]>;
+  turnos: Record<string, Turno>;
+}
 
 /**
  * La pestaña «Mes»: el mismo calendario que se abre al cargar una OT, pero acá
@@ -46,7 +58,7 @@ import PostergarOTModal from "./PostergarOTModal";
  *   servidor, no el estado de acá; sin el `recarga` la orden seguiría pintada
  *   en el día viejo hasta que alguien cambiara de mes.
  */
-export default function MesDeOrdenes({ puedeMover }: {
+export default function MesDeOrdenes({ puedeMover, puedeAsignar }: {
   /**
    * Si quien mira tiene nivel de edición en Mantenimiento. Es obligatoria y no
    * tiene default a propósito: las dos pantallas que montan esto reparten
@@ -55,11 +67,60 @@ export default function MesDeOrdenes({ puedeMover }: {
    * el permiso de la otra sin que nada lo dijera.
    */
   puedeMover: boolean;
+  /**
+   * Si quien mira puede ver el taller con nombre y apellido, o sea si es admin
+   * de Mantenimiento. Obligatoria y sin default por lo mismo que `puedeMover`,
+   * y acá importa más: lo que depende de esto no es un botón sino **quiénes
+   * son**. En `false` no se pide siquiera la ruta.
+   */
+  puedeAsignar: boolean;
 }) {
   const [moviendo, setMoviendo] = useState<OrdenDelDia | null>(null);
   const [destino, setDestino] = useState<string | null>(null);
   const [recarga, setRecarga] = useState(0);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [rango, setRango] = useState<{ desde: string; hasta: string } | null>(null);
+  const [taller, setTaller] = useState<TallerDelMes | null>(null);
+  const [falloDelTaller, setFalloDelTaller] = useState<string | null>(null);
+
+  // El rango lo decide el calendario, que es el que tiene el mes.
+  const anotarElRango = useCallback((desde: string, hasta: string) => {
+    setRango((r) => (r && r.desde === desde && r.hasta === hasta ? r : { desde, hasta }));
+  }, []);
+
+  /*
+   * El taller del mes, para las mismas semanas que la grilla.
+   *
+   * Un fallo acá **no rompe el mes**: la grilla de OT es lo que esta pantalla
+   * vino a mostrar y se sigue viendo entera; lo que falta es la franja, y eso
+   * se dice arriba de cada semana con el error que contestó el servidor.
+   */
+  useEffect(() => {
+    if (!puedeAsignar || !rango) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/mantenimiento/taller-del-mes?desde=${rango.desde}&hasta=${rango.hasta}`
+        );
+        const cuerpo = await res.json().catch(() => ({}));
+        if (cancelado) return;
+        if (!res.ok || !Array.isArray(cuerpo.franjas)) {
+          setFalloDelTaller(cuerpo.error ?? `El servidor contestó ${res.status}.`);
+          setTaller(null);
+          return;
+        }
+        setFalloDelTaller(null);
+        setTaller(cuerpo as TallerDelMes);
+      } catch (e) {
+        if (!cancelado) {
+          setFalloDelTaller(e instanceof Error ? e.message : String(e));
+          setTaller(null);
+        }
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [puedeAsignar, rango, recarga]);
 
   // El aviso de éxito se va solo, como en la semana.
   useEffect(() => {
@@ -76,8 +137,9 @@ export default function MesDeOrdenes({ puedeMover }: {
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-600">
-        Qué órdenes tiene cada día y cuánta gente del taller hay. Tocá un día para verlo
-        {puedeMover ? ", y desde ahí podés correrle la fecha a una orden." : "."}
+        Qué órdenes tiene cada día y cuánta gente del taller hay
+        {puedeAsignar ? ", con la rotación de turnos arriba de cada semana" : ""}. Tocá un día
+        para verlo{puedeMover ? ", y desde ahí podés correrle la fecha a una orden." : "."}
       </p>
 
       {aviso && (
@@ -88,6 +150,20 @@ export default function MesDeOrdenes({ puedeMover }: {
 
       <CalendarioDeOT
         recarga={recarga}
+        onRango={puedeAsignar ? anotarElRango : undefined}
+        franjaDeLaSemana={
+          puedeAsignar
+            ? (lunes) => (
+                <FranjaDelTaller
+                  franja={taller?.franjas.find((f) => f.lunes === lunes) ?? null}
+                  // El error va en la primera semana y no en las seis: es uno
+                  // solo —la ruta trae el mes entero de una— y repetirlo seis
+                  // veces convierte un aviso en un muro.
+                  error={lunes === rango?.desde ? falloDelTaller : null}
+                />
+              )
+            : undefined
+        }
         modo={{
           tipo: "programar",
           puedeMover,

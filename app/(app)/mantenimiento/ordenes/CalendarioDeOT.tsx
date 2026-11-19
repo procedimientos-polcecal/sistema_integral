@@ -159,7 +159,7 @@ function fondoDelDia(n: number): string {
 }
 
 export default function CalendarioDeOT({
-  modo, recarga = 0,
+  modo, recarga = 0, franjaDeLaSemana, onRango,
 }: {
   modo: ModoDelCalendario;
   /**
@@ -168,6 +168,20 @@ export default function CalendarioDeOT({
    * en el día nuevo, y el componente no se desmonta.
    */
   recarga?: number;
+  /**
+   * Qué dibujar arriba de cada semana, por lunes. Opcional y sin default: las
+   * tres pantallas que montan este calendario reparten permisos distintos y
+   * sólo «Asignación RR.HH» tiene los nombres del taller. Por eso esto es una
+   * prop de render y no un `boolean`: quien los tiene los dibuja, y acá no
+   * entra ni la ruta que los trae ni el permiso que los guarda.
+   */
+  franjaDeLaSemana?: (lunes: string) => React.ReactNode;
+  /**
+   * Qué rango está pidiendo la grilla. El mes es estado de acá —se cambia con
+   * las flechas— así que el padre no tiene otra forma de saber para qué
+   * semanas traer lo suyo.
+   */
+  onRango?: (desde: string, hasta: string) => void;
 }) {
   const hoy = hoyEnArgentina();
   const valor = modo.tipo === "elegir" ? modo.valor : "";
@@ -225,6 +239,9 @@ export default function CalendarioDeOT({
     })();
     return () => { cancelado = true; };
   }, [desde, hasta, mes, intento, recarga]);
+
+  // El rango, para quien quiera traer lo suyo para las mismas semanas.
+  useEffect(() => { onRango?.(desde, hasta); }, [desde, hasta, onRango]);
 
   // En el teléfono el panel queda debajo de la grilla: al abrirlo hay que verlo.
   useEffect(() => {
@@ -442,20 +459,31 @@ export default function CalendarioDeOT({
               <div className="grid grid-cols-7 gap-px pb-px text-center text-[10px] font-semibold uppercase text-slate-400">
                 {ENCABEZADOS.map((h) => <div key={h}>{h}</div>)}
               </div>
-              <div className="grid grid-cols-7 gap-px rounded-lg overflow-hidden bg-slate-200 border border-slate-200">
-                {semanas.flat().map((dia) => (
-                  <CeldaDelDia
-                    key={dia}
-                    dia={dia}
-                    delMes={dia.startsWith(mes)}
-                    info={porDia.get(dia)}
-                    filtros={filtros}
-                    esHoy={dia === hoy}
-                    esElValor={dia === valor}
-                    abierto={dia === diaAbierto}
-                    noPuedeRecibir={moviendo ? porQueNoSePuedeMoverA(moviendo, dia) : null}
-                    onTocar={() => tocarElDia(dia)}
-                  />
+              {/* Una grilla por semana, no una sola de 42 celdas: la franja del
+                  taller va *entre* las filas, y eso no se puede hacer con una
+                  grilla única sin que el elemento intercalado ocupe celdas. Sin
+                  la prop, las filas quedan pegadas y se ve igual que antes. */}
+              <div className="space-y-px">
+                {semanas.map((semana) => (
+                  <div key={semana[0]}>
+                    {franjaDeLaSemana?.(semana[0])}
+                    <div className="grid grid-cols-7 gap-px rounded-lg overflow-hidden bg-slate-200 border border-slate-200">
+                      {semana.map((dia) => (
+                        <CeldaDelDia
+                          key={dia}
+                          dia={dia}
+                          delMes={dia.startsWith(mes)}
+                          info={porDia.get(dia)}
+                          filtros={filtros}
+                          esHoy={dia === hoy}
+                          esElValor={dia === valor}
+                          abierto={dia === diaAbierto}
+                          noPuedeRecibir={moviendo ? porQueNoSePuedeMoverA(moviendo, dia) : null}
+                          onTocar={() => tocarElDia(dia)}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
 
