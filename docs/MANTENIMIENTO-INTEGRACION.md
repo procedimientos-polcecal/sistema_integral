@@ -3939,6 +3939,15 @@ sola: `not.in` sobre un NULL no es verdadero, así que una orden sin estado
 quedaría fuera de «necesitan reprogramarse». El hueco existe y **hoy no alcanza
 a ninguna fila**.
 
+**Y una foto más del mismo día, porque la diferencia es la lección.** Al cerrar
+este documento —horas después de la tabla de arriba, el mismo 19/11/2026— el
+recuento dio **2.532 OT**, **2.471 en `REALIZADO`** y **264 `app_created`**: una
+orden entró y cuatro pasaron a `REALIZADO` entre las dos lecturas. Ninguna de
+las dos fotos está mal. Lo que muestra es que en este módulo **la fecha no
+alcanza cuando el número se usa en una cuenta**: dos mediciones del mismo día se
+suman mal, que es justo el error que esta sección tuvo escrito —ver abajo, en
+los 223— antes de que la revisión lo encontrara.
+
 ### «Reprogramada» son las dos cosas juntas, y por eso es un filtro y no dos
 
 Se preguntó cuál de las dos cosas significa, y la respuesta fue **las dos**: la
@@ -3959,10 +3968,25 @@ movió, con dos escritores:
   dos lados todavía dicen cosas distintas. Llega **muda**: sin razón, sin
   justificación y sin persona, porque la planilla no las guarda.
 
-Registrar las dos puntas fue lo pedido, y no es un detalle de completitud: sólo
-**223 de 2.531** órdenes tienen el botón. A las otras 2.268 la fecha se les
-corre tipeándola en el master, y un análisis de reprogramaciones que ve el 9 %
-del universo no es el análisis.
+Registrar las dos puntas fue lo pedido, y no es un detalle de completitud:
+medido el **19/11/2026**, sólo **264 de 2.532** órdenes son `app_created`, o sea
+las que tienen el botón. A las otras **2.268** la fecha se les corre tipeándola
+en el master, y un análisis de reprogramaciones que ve el **10 %** del universo
+no es el análisis. (Ninguna tiene `app_created` en null: 264 + 2.268 = 2.532, y
+la cuenta cierra porque los tres números salen de la misma lectura.)
+
+**Esa frase estuvo mal escrita y vale decir cómo**, porque es el error que la
+regla de la provenencia existe para evitar y estaba en el documento que la
+explica: decía «223 de 2.531 … las otras 2.268», sumando el `app_created` que
+midió el spec el 18/11 con el total del 19/11. 223 + 2.268 da **2.491**, que es
+el total de aquel día y no el de éste. El porcentaje seguía siendo cierto por
+casualidad; la cuenta no. **Dos números de días distintos no se restan.**
+
+Y lo que se ve comparando las dos fotos, dicho como lo que es —dos puntos, no
+una tendencia—: el spec midió **223 de 2.491** y **2.268** del formulario, y
+hoy son **264 de 2.532** y **2.268** del formulario. Las del formulario son
+exactamente las mismas, así que **las 41 órdenes que entraron en el medio
+nacieron todas en el sistema**.
 
 **Pero un cambio de fecha en la planilla sobre una OT ya cerrada no genera
 fila.** Lo decide `CERRADAS_PARA_REPROGRAMAR = ["REALIZADO", "CANCELADA"]` en
@@ -4012,10 +4036,13 @@ porque lo calcula la planilla con un `ARRAYFORMULA` contra el `TODAY()` de su
 último recálculo y envejece solo: de 29 abiertas con fecha vencida (18/11/2026)
 sólo 17 lo decían. Todo lo de acá pregunta **abierta y `fecha_ejecucion < hoy`**.
 
-Y **«cerrada» lo decide el estado y jamás la presencia de una fecha**: **220 de
-2.489** órdenes están en `REALIZADO` **sin `fecha_cierre`**, cerca de una de
-cada diez. Leerlo al revés diría «abierta» sobre trabajo terminado. Eso tiene
-una consecuencia concreta en el desglose del análisis, abajo.
+Y **«cerrada» lo decide el estado y jamás la presencia de una fecha**: medido el
+**19/11/2026**, **220 de 2.532** órdenes están en `REALIZADO` **sin
+`fecha_cierre`** —una de cada once, y 220 de las 2.471 cerradas—. Leerlo al
+revés diría «abierta» sobre trabajo terminado. Eso tiene una consecuencia
+concreta en el desglose del análisis, abajo. (El docstring de `analisisDeOt.ts`
+dice «220 de 2.489» con fecha **17/11/2026**: es el mismo 220 contra el total de
+ese día, no otra medición.)
 
 ### El contador va por trigger, y el candado es el débil a propósito
 
