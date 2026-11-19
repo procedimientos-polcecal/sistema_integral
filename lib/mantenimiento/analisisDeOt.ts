@@ -198,22 +198,42 @@ function porcentajesQueSuman100(cantidades: readonly number[], total: number): n
  * La frase que arma la hoja en su celda «Diagnóstico Semanal», en castellano y
  * sin el emoji —la pantalla pone su propio ícono—.
  *
- * La hoja sólo tiene dos ramas y la de «balance positivo» se queda con el caso
- * en que no cerró nada, donde dice «predominó la ejecución programada (0 OT)
- * sobre imprevistos (0)». Acá esa semana tiene su propia frase: decir «balance
- * positivo» sobre una semana sin un solo cierre es lo contrario de informar.
+ * **Es la única prosa que sale de este módulo**, y la ruta y la pantalla no
+ * llevan lógica propia: lo que diga esta función es literalmente lo que lee
+ * una persona.
+ *
+ * La hoja sólo tiene dos ramas y la de «balance positivo» se queda con todo lo
+ * que no sea «más correctivas que programadas», incluido el caso en que no hay
+ * nada que comparar: ahí dice «predominó la ejecución programada (0 OT) sobre
+ * imprevistos (0)», que es lo contrario de informar.
+ *
+ * **El freno va sobre `programadas + correctivas` y no sobre el total**, y la
+ * diferencia no es teórica: una semana en la que lo único que cerró es de otro
+ * tipo —el cuadro los junta en «Otros», y existen— tiene total mayor que cero
+ * y los dos sumandos en cero, así que con el freno puesto en el total caía en
+ * la rama positiva y volvía a imprimir esa misma frase de los dos ceros. Son
+ * dos semanas distintas y se dicen distinto: una en la que no cerró nada, y
+ * una en la que cerró algo que el cuadro no sabe clasificar.
  */
 function diagnosticoDeLaSemana(programadas: number, correctivas: number, total: number): string {
-  if (total === 0) return "No se cerró ninguna OT en la semana.";
+  if (programadas + correctivas === 0) {
+    if (total === 0) return "No se cerró ninguna OT en la semana.";
+    return total === 1
+      ? "Se cerró 1 OT en la semana y no es ni programada ni correctiva."
+      : `Se cerraron ${total} OT en la semana y ninguna es programada ni correctiva.`;
+  }
+  // Los singulares existen porque son alcanzables: con una sola programada, la
+  // frase decía «contra 1 programadas».
   if (correctivas > programadas) {
     return (
-      `Alta carga correctiva (${correctivas} OT contra ${programadas} programadas): ` +
+      `Alta carga correctiva (${correctivas} OT contra ${programadas} ` +
+      `${programadas === 1 ? "programada" : "programadas"}): ` +
       "redujo la capacidad de cumplir lo planificado."
     );
   }
   return (
-    `Balance positivo: predominó la ejecución programada (${programadas} OT) ` +
-    `sobre los imprevistos (${correctivas}).`
+    `Balance positivo: predominó la ejecución programada (${programadas} OT) sobre ` +
+    `${correctivas === 1 ? "el imprevisto" : "los imprevistos"} (${correctivas}).`
   );
 }
 
