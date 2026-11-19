@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
+import { Modal } from "@/components/Modal";
 import {
   TOPE_DE_MUESTRAS,
   compararMuestras,
@@ -45,19 +46,72 @@ export interface MuestraParaLaLista {
 function PanelDelGrafico({
   titulo,
   nodo,
+  alAmpliar,
   children,
 }: {
   titulo: string;
   nodo: React.Ref<HTMLDivElement>;
+  alAmpliar: () => void;
   children: React.ReactNode;
 }) {
   return (
     <div ref={nodo} style={{ background: "#FFFFFF", padding: 4 }}>
-      <h2 style={{ color: "#334155", fontSize: 14, fontWeight: 600, margin: "0 0 8px" }}>{titulo}</h2>
+      {/*
+        El encabezado es flex, pero el título conserva su `style`: entra en la
+        foto del Excel y las utilidades de Tailwind no siempre llegan al
+        rasterizado (ver el comentario de arriba).
+      */}
+      <div className="flex items-start justify-between gap-2" style={{ margin: "0 0 8px" }}>
+        <h2 style={{ color: "#334155", fontSize: 14, fontWeight: 600, margin: 0 }}>{titulo}</h2>
+        {/*
+          `data-html2canvas-ignore` saca el botón de la foto: es un control de
+          la pantalla y no parte del gráfico, y en el informe sería un cuadrito
+          gris en la esquina que nadie puede apretar.
+        */}
+        <button
+          type="button"
+          data-html2canvas-ignore
+          onClick={alAmpliar}
+          aria-label={`Ampliar ${titulo}`}
+          title="Ampliar"
+          className="shrink-0 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
       <div className="h-64">{children}</div>
     </div>
   );
 }
+
+/**
+ * Los tres gráficos que se pueden ampliar, con su título y su componente.
+ *
+ * **Ampliar abre un modal con una segunda copia del gráfico; los tres paneles
+ * de la grilla siguen montados.** No es casual: el botón del Excel rasteriza
+ * esos paneles por sus `ref`, así que agrandar uno *en su lugar* —escondiendo
+ * los otros dos— dejaría a `html2canvas` apuntando a nodos ocultos y el informe
+ * saldría con la tabla bien y los cuadros vacíos, sin que nada avise. La guarda
+ * del `svg.recharts-surface` tampoco lo atraparía: el nodo existe y su SVG
+ * también, sólo que no se ve.
+ */
+const AMPLIABLES = {
+  retenido: { titulo: "Retenido por tamiz", Componente: CurvaDeRetenido },
+  acumulado: { titulo: "Acumulado", Componente: CurvaDeAcumulado },
+  pasante: { titulo: "Pasante", Componente: CurvaDePasante },
+} as const;
+
+type Ampliable = keyof typeof AMPLIABLES;
+
+/**
+ * El riesgo asumido del acumulado, que se dice en los dos lugares donde se ve
+ * ese gráfico: debajo de su panel y dentro de la vista ampliada.
+ */
+const NOTA_DEL_ACUMULADO =
+  "El acumulado de una malla ya incluye lo que retuvieron las apagadas antes que ella: " +
+  "apagar un tamiz no recalcula nada, sólo saca su punto de la curva.";
 
 /** El fondo del lienzo de la foto; el mismo blanco que lleva cada panel en su `style`. */
 const FONDO_DE_LA_FOTO = "#FFFFFF";
@@ -100,6 +154,7 @@ function enumerarQueFaltan(mallas: number[]): string {
  */
 function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
   const [apagadas, setApagadas] = useState<number[]>([]);
+  const [ampliado, setAmpliado] = useState<Ampliable | null>(null);
   const [bajando, setBajando] = useState(false);
   const [falloLaDescarga, setFalloLaDescarga] = useState<string | null>(null);
   const panelRetenido = useRef<HTMLDivElement>(null);
@@ -261,22 +316,61 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
             </p>
           )}
           <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <PanelDelGrafico titulo="Retenido por tamiz" nodo={panelRetenido}>
+            <PanelDelGrafico
+              titulo={AMPLIABLES.retenido.titulo}
+              nodo={panelRetenido}
+              alAmpliar={() => setAmpliado("retenido")}
+            >
               <CurvaDeRetenido filas={comparacion.filas} series={comparacion.series} />
             </PanelDelGrafico>
             <div className="space-y-2">
-              <PanelDelGrafico titulo="Acumulado" nodo={panelAcumulado}>
+              <PanelDelGrafico
+                titulo={AMPLIABLES.acumulado.titulo}
+                nodo={panelAcumulado}
+                alAmpliar={() => setAmpliado("acumulado")}
+              >
                 <CurvaDeAcumulado filas={comparacion.filas} series={comparacion.series} />
               </PanelDelGrafico>
-              <p className="text-xs text-slate-500">
-                El acumulado de una malla ya incluye lo que retuvieron las apagadas antes que
-                ella: apagar un tamiz no recalcula nada, sólo saca su punto de la curva.
-              </p>
+              <p className="text-xs text-slate-500">{NOTA_DEL_ACUMULADO}</p>
             </div>
-            <PanelDelGrafico titulo="Pasante" nodo={panelPasante}>
+            <PanelDelGrafico
+              titulo={AMPLIABLES.pasante.titulo}
+              nodo={panelPasante}
+              alAmpliar={() => setAmpliado("pasante")}
+            >
               <CurvaDePasante filas={comparacion.filas} series={comparacion.series} />
             </PanelDelGrafico>
           </div>
+
+          {ampliado !== null && (
+            <Modal
+              titulo={AMPLIABLES[ampliado].titulo}
+              alSalir={() => setAmpliado(null)}
+              soloLectura
+              ancho="enorme"
+            >
+              {/*
+                Alto por viewport y no fijo: el modal ya se topea en el alto de
+                la pantalla, y en un teléfono un `h-96` dejaría el gráfico igual
+                de chico que en la grilla, que es lo que se vino a arreglar.
+              */}
+              <div className="h-[60vh] min-h-72">
+                {(() => {
+                  const { Componente } = AMPLIABLES[ampliado];
+                  return (
+                    <Componente
+                      filas={comparacion.filas}
+                      series={comparacion.series}
+                      etiquetasEnteras
+                    />
+                  );
+                })()}
+              </div>
+              {ampliado === "acumulado" && (
+                <p className="mt-3 text-xs text-slate-500">{NOTA_DEL_ACUMULADO}</p>
+              )}
+            </Modal>
+          )}
           {/*
             Un hueco en una curva sólo se entiende si se nombra: una línea que
             se corta sin explicación se lee como un error del sistema.

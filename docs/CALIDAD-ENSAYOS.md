@@ -484,6 +484,34 @@ lo apaga en las tres curvas y en todas las muestras —la razón para apagarlo e
 del tamiz, no de la muestra—; no se dibujan límites; y los dos riesgos de
 lectura del 05/11 y los dos del 11/11 siguen valiendo tal cual.
 
+### Ampliar un gráfico (19/11/2026)
+
+Cada uno de los tres paneles tiene un botón que lo abre en grande, en el
+`Modal` compartido en modo sólo lectura. En la grilla de tres columnas un
+gráfico mide ~287 px de ancho, y ahí una curva de seis muestras no se lee.
+
+Dos cosas que no se deducen del código:
+
+- **El modal dibuja una segunda copia del gráfico, y los tres paneles de la
+  grilla siguen montados.** No es casual ni derroche: el botón del Excel
+  rasteriza esos paneles por sus `ref`, así que agrandar uno *en su lugar*
+  —escondiendo los otros dos— dejaría a `html2canvas` apuntando a nodos
+  ocultos, y el informe saldría con la tabla bien y los tres cuadros vacíos
+  **sin que nada avise**. La guarda del `svg.recharts-surface` tampoco lo
+  atraparía: el nodo existe y su SVG también, sólo que no se ve.
+- **El botón lleva `data-html2canvas-ignore`**, que es el atributo que
+  `html2canvas` respeta al clonar el nodo (verificado contra el paquete
+  instalado: `IGNORE_ATTRIBUTE`, usado en el recorrido de hijos). Sin eso, el
+  control de la pantalla viajaría dentro de la foto y el informe tendría un
+  cuadrito gris en la esquina de cada gráfico que nadie puede apretar.
+
+En la vista ampliada la leyenda muestra la etiqueta entera; en la grilla se
+corta en 26 caracteres, porque seis observaciones de 40 envuelven varias filas
+dentro de un panel de alto fijo y se comen el dibujo.
+
+Lo que **no** hace: no se salta de un gráfico a otro sin cerrar. Son dos clics
+y no se midió que hagan falta menos.
+
 ## La lista de productos no es el catálogo del núcleo
 
 `productos` tiene las cosas físicas que se despachan. Acá *Filler 1* y *Filler 2*
