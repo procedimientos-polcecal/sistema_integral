@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { UsuarioModulo } from "@/lib/core/types";
 import { diaDeLaSemana, sumarDias } from "@/lib/core/fechas";
 import {
   diasQueArrancan,
@@ -6,11 +7,14 @@ import {
   lasQueArrancan,
   lasQueSeAtrasaron,
   textoDeLasAtrasadas,
+  quienesAdministran,
   textoDeLasQueArrancan,
   type OrdenParaRecordar,
 } from "./recordatorioDeOT";
 
 // El 2026-11-19 es jueves; 21 sábado, 22 domingo, 23 lunes.
+const JUEVES = "2026-11-19";
+const SABADO = "2026-11-21";
 
 function ot(
   n: number,
@@ -132,7 +136,7 @@ describe("a quién nombra", () => {
 describe("el texto", () => {
   it("null cuando no hay ninguna", () => {
     expect(textoDeLasAtrasadas([])).toBeNull();
-    expect(textoDeLasQueArrancan([])).toBeNull();
+    expect(textoDeLasQueArrancan([], JUEVES)).toBeNull();
   });
   it("con una sola la nombra entera", () => {
     expect(textoDeLasAtrasadas([ot(2926, "Planta filler 1", "Revisión sinfín de retorno")])).toEqual({
@@ -142,7 +146,7 @@ describe("el texto", () => {
     });
   });
   it("con una sola que arranca, lo dice y lleva al listado", () => {
-    const a = textoDeLasQueArrancan([ot(2926, "Planta filler 1", "Revisión sinfín de retorno")]);
+    const a = textoDeLasQueArrancan([ot(2926, "Planta filler 1", "Revisión sinfín de retorno")], JUEVES);
     expect(a?.title).toBe("Una orden de trabajo arranca en dos días");
     expect(a?.body).toBe("OT 2926 · Planta filler 1 — Revisión sinfín de retorno");
     expect(a?.url).toBe("/mantenimiento/ordenes");
@@ -154,7 +158,7 @@ describe("el texto", () => {
       ot(2486, "Planta filler 1"),
       ot(2825, "Planta filler 1"),
       ot(3122, "Hidratación"),
-    ]);
+    ], JUEVES);
     expect(a?.title).toBe("5 órdenes de trabajo arrancan en dos días");
     expect(a?.body).toBe("OT 3145 (Hidratación), OT 3147 (Planta filler 1), OT 2486 (Planta filler 1) y 2 más");
   });
@@ -177,5 +181,71 @@ describe("el texto", () => {
     expect(textoDeLasAtrasadas([ot(8, "Taller", null)])?.body).toBe("OT 8 · Taller");
     expect(textoDeLasAtrasadas([ot(8, null, "Cambio de correa")])?.body).toBe("OT 8 — Cambio de correa");
     expect(textoDeLasAtrasadas([ot(8, null), ot(9, "")])?.body).toBe("OT 8 y OT 9");
+  });
+});
+
+describe("el texto no afirma «dos días» cuando son tres", () => {
+  it("un día común dice dos días", () => {
+    expect(textoDeLasQueArrancan([ot(1, "A")], JUEVES)?.title).toBe("Una orden de trabajo arranca en dos días");
+    expect(textoDeLasQueArrancan([ot(1, "A"), ot(2, "B")], JUEVES)?.title).toBe(
+      "2 órdenes de trabajo arrancan en dos días"
+    );
+  });
+  it("el sábado nombra también las del martes, a tres días: dice los próximos días", () => {
+    expect(textoDeLasQueArrancan([ot(1, "A")], SABADO)?.title).toBe(
+      "Una orden de trabajo arranca en los próximos días"
+    );
+    expect(textoDeLasQueArrancan([ot(1, "A"), ot(2, "B")], SABADO)?.title).toBe(
+      "2 órdenes de trabajo arrancan en los próximos días"
+    );
+  });
+  it("con exactamente tres las nombra a las tres, sin «y N más»", () => {
+    const a = textoDeLasAtrasadas([ot(1, "A"), ot(2, "B"), ot(3, "C")]);
+    expect(a?.body).toBe("OT 1 (A), OT 2 (B) y OT 3 (C)");
+  });
+});
+
+describe("quién recibe", () => {
+  const usuarios = [
+    { id: "francisco", rol: "encargado" as const, activo: true },
+    { id: "nicolas", rol: "admin_sistema" as const, activo: true },
+    { id: "delfina", rol: "admin_sistema" as const, activo: true },
+    { id: "bernardo", rol: "encargado" as const, activo: true },
+    { id: "rocco", rol: "admin_sistema" as const, activo: true },
+    { id: "enzo", rol: "encargado" as const, activo: true },
+    { id: "dadadebaja", rol: "encargado" as const, activo: false },
+  ];
+  const g = (usuario_id: string, nivel: UsuarioModulo["nivel"]): UsuarioModulo => ({
+    id: `g-${usuario_id}`,
+    usuario_id,
+    modulo: "mantenimiento",
+    nivel,
+  });
+  const grants = [
+    g("francisco", "admin"),
+    g("nicolas", "edicion"),
+    g("delfina", "lectura"),
+    g("bernardo", "admin"),
+    g("enzo", "lectura"),
+    g("dadadebaja", "admin"),
+  ];
+
+  it("son los que tienen admin efectivo en Mantenimiento", () => {
+    expect(quienesAdministran(usuarios, grants)).toEqual(
+      new Set(["francisco", "nicolas", "bernardo", "delfina", "rocco"])
+    );
+  });
+  it("un admin del sistema con lectura explícita entra igual", () => {
+    expect(quienesAdministran(usuarios, grants).has("delfina")).toBe(true);
+  });
+  it("quien tiene lectura y no es admin del sistema no entra", () => {
+    expect(quienesAdministran(usuarios, grants).has("enzo")).toBe(false);
+  });
+  it("una cuenta desactivada no entra aunque tenga el grant", () => {
+    expect(quienesAdministran(usuarios, grants).has("dadadebaja")).toBe(false);
+  });
+  it("el grant de otro módulo no cuenta", () => {
+    const deCompras: UsuarioModulo = { ...g("enzo", "admin"), modulo: "compras" };
+    expect(quienesAdministran(usuarios, [deCompras]).has("enzo")).toBe(false);
   });
 });

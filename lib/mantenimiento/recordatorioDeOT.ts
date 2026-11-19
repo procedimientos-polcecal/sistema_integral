@@ -1,5 +1,10 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { diaDeLaSemana, sumarDias } from "@/lib/core/fechas";
-import type { Aviso } from "@/lib/core/webpush";
+import { enviarPush, type Aviso } from "@/lib/core/webpush";
+import { esHoraDeAvisar, type ResultadoDelAviso } from "@/lib/core/avisoAlInstante";
+import { nivelEnModulo } from "@/lib/core/access";
+import { traerTodo } from "@/lib/core/paginado";
+import type { Rol, UsuarioModulo } from "@/lib/core/types";
 import { fechaParaElCalendario } from "@/lib/agenda/evento";
 import { ESTADOS_CERRADOS, estaAtrasada } from "./alertas";
 
@@ -140,15 +145,139 @@ export function textoDeLasAtrasadas(ordenes: OrdenParaRecordar[]): Aviso | null 
   };
 }
 
-/** El aviso de las que arrancan en dos días. `null` si no hay ninguna. */
-export function textoDeLasQueArrancan(ordenes: OrdenParaRecordar[]): Aviso | null {
+/**
+ * El aviso de las que arrancan. `null` si no hay ninguna.
+ *
+ * El título dice «en dos días» salvo el sábado, cuando la corrida nombra
+ * también las del martes, que están a tres: ahí dice «en los próximos días».
+ * Un título que afirma dos cuando son tres enseña a no leer el siguiente.
+ */
+export function textoDeLasQueArrancan(ordenes: OrdenParaRecordar[], hoy: string): Aviso | null {
   if (ordenes.length === 0) return null;
+  const cuando = diasQueArrancan(hoy).length > 1 ? "en los próximos días" : "en dos días";
   if (ordenes.length === 1) {
-    return { title: "Una orden de trabajo arranca en dos días", body: nombreEntero(ordenes[0]), url: URL_LISTADO };
+    return { title: `Una orden de trabajo arranca ${cuando}`, body: nombreEntero(ordenes[0]), url: URL_LISTADO };
   }
   return {
-    title: `${ordenes.length} órdenes de trabajo arrancan en dos días`,
+    title: `${ordenes.length} órdenes de trabajo arrancan ${cuando}`,
     body: cuerpoDeVarias(ordenes),
     url: URL_LISTADO,
   };
+}
+
+/**
+ * Quiénes reciben: los activos con nivel `admin` efectivo en Mantenimiento.
+ *
+ * Sale de `nivelEnModulo()` y no del grant a secas: le da `admin` a todo
+ * `admin_sistema` aunque su grant explícito diga `lectura`, que es lo correcto
+ * acá —puede reprogramar igual—, y deja afuera a un encargado con `lectura`.
+ */
+export function quienesAdministran(
+  usuarios: { id: string; rol: Rol; activo: boolean }[],
+  grants: UsuarioModulo[]
+): Set<string> {
+  const ids = new Set<string>();
+  for (const u of usuarios) {
+    if (!u.activo) continue;
+    const suyos = grants.filter((g) => g.usuario_id === u.id);
+    if (nivelEnModulo(u.rol, suyos, "mantenimiento") === "admin") ids.add(u.id);
+  }
+  return ids;
+}
+
+/**
+ * Manda los dos avisos de la corrida: las OT que se atrasaron y las que
+ * arrancan. Un push por aparato y por aviso, a los que administran
+ * Mantenimiento.
+ *
+ * ── POR QUÉ ESTO NO PASA POR `avisarAQuienDecide()` ──────────────────────────
+ *
+ * Es la misma excepción que `lib/agenda/avisoDeDivergencia.ts`: de las tres
+ * condiciones del portón de `lib/core/avisoAlInstante.ts` cumple la 1 (hay
+ * gente nombrada: quienes administran el módulo) y la 3 (acaba de pasar o está
+ * por pasar), y **no cumple la 2**: nada se frena hasta que alguien reprograme.
+ * Se manda porque se pidió, y es un precedente y no un permiso.
+ *
+ * ── EL NÚMERO INCÓMODO ───────────────────────────────────────────────────────
+ *
+ * Medido el 19/11/2026, de las cinco personas que administran Mantenimiento
+ * **sólo dos tienen una suscripción push, y son los dos `admin_sistema`**. El
+ * pedido fue push y no correo sabiendo eso: las otras tres no se enteran por
+ * acá hasta que prendan las notificaciones en Mi cuenta.
+ *
+ * El orden es el que no cuesta nada cuando no hay nada que hacer: la hora, las
+ * órdenes, y recién ahí la gente. Fuera de 7:00–21:00 no se manda ni se encola.
+ * **Nunca tira**: un push service caído no puede hacer fallar un cron.
+ */
+export async function avisarDeLasOT(
+  admin: SupabaseClient,
+  hoy: string,
+  /** Sólo para los tests. En producción se llama sin nada. */
+  ahora?: Date
+): Promise<ResultadoDelAviso & { atrasadas: number; proximas: number; error?: string }> {
+  const vacio = { enviadas: 0, personas: 0, atrasadas: 0, proximas: 0 };
+  if (!esHoraDeAvisar(ahora)) return { ...vacio, motivo: "fuera de hora" };
+
+  try {
+    const ordenes = await traerTodo<OrdenParaRecordar>((desde, hasta) =>
+      admin
+        .from("ordenes_trabajo")
+        .select("ot_number, estado, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, sector_raw, descripcion")
+        .range(desde, hasta)
+    );
+    const atrasadas = lasQueSeAtrasaron(ordenes, hoy);
+    const proximas = lasQueArrancan(ordenes, hoy);
+    const cuenta = { atrasadas: atrasadas.length, proximas: proximas.length };
+    const avisos = [textoDeLasAtrasadas(atrasadas), textoDeLasQueArrancan(proximas, hoy)].filter(
+      (a): a is Aviso => a !== null
+    );
+    if (avisos.length === 0) return { ...vacio, ...cuenta, motivo: "nada que avisar" };
+
+    const [leerUsuarios, leerGrants] = await Promise.all([
+      admin.from("usuarios").select("id, rol, activo"),
+      admin.from("usuario_modulos").select("id, usuario_id, modulo, nivel").eq("modulo", "mantenimiento"),
+    ]);
+    if (leerUsuarios.error) throw new Error(leerUsuarios.error.message);
+    if (leerGrants.error) throw new Error(leerGrants.error.message);
+    const destinatarios = quienesAdministran(
+      (leerUsuarios.data ?? []) as { id: string; rol: Rol; activo: boolean }[],
+      (leerGrants.data ?? []) as UsuarioModulo[]
+    );
+    if (destinatarios.size === 0) return { ...vacio, ...cuenta, motivo: "sin destinatarios" };
+
+    const suscripciones = await traerTodo<{
+      usuario_id: string;
+      endpoint: string;
+      p256dh: string;
+      auth: string;
+    }>((desde, hasta) =>
+      admin.from("push_suscripciones").select("usuario_id, endpoint, p256dh, auth").range(desde, hasta)
+    );
+
+    let enviadas = 0;
+    const alcanzados = new Set<string>();
+    for (const aparato of suscripciones) {
+      if (!destinatarios.has(aparato.usuario_id)) continue;
+      for (const aviso of avisos) {
+        const resultado = await enviarPush(aparato, aviso);
+        if (resultado === "enviada") {
+          enviadas++;
+          alcanzados.add(aparato.usuario_id);
+        } else if (resultado === "vencida") {
+          // Ese aparato ya no existe: se borra esa fila y no las otras de la misma persona.
+          await admin
+            .from("push_suscripciones")
+            .delete()
+            .eq("usuario_id", aparato.usuario_id)
+            .eq("endpoint", aparato.endpoint);
+          break;
+        }
+      }
+    }
+    return { enviadas, personas: alcanzados.size, ...cuenta };
+  } catch (e) {
+    const motivo = e instanceof Error ? e.message : String(e);
+    console.error("mantenimiento: no se pudo avisar de las OT:", motivo);
+    return { ...vacio, motivo, error: motivo };
+  }
 }
