@@ -1714,6 +1714,69 @@ máquina sabe dónde está. Y las urgencias se escriben **con su emoji** —"�
 no "ALTA"— porque así están en la planilla, y dos vocabularios para lo mismo es
 cómo la próxima lectura deja de reconocerlas.
 
+## Hay un solo formulario de OT, y el aviso lo abre sembrado (19/11/2026)
+
+Hasta esa fecha había **dos** formularios para crear una orden: el completo
+(`app/(app)/mantenimiento/ordenes/NuevaOTModal.tsx`) y uno recortado que se abría
+desde un aviso, `GenerarOTModal.tsx`, al que le faltaban **once** campos. El
+pedido salió de uno solo: no se podía cargar el contratista, así que había que
+generar la orden y después ir a Órdenes de trabajo a completarla. Ahora la
+pantalla de avisos abre el formulario completo, sembrado con lo que el aviso
+propone, y `GenerarOTModal.tsx` está borrado.
+
+Lo que sigue es lo que no se deduce de ninguno de los dos archivos.
+
+**1. Por qué uno solo, y por qué no bastaba con copiarle los campos al
+recortado.** El 19/10/2026 la regla de qué es obligatorio y el botón de generar
+vivían en archivos distintos y ninguno sabía del otro: la regla creció a siete
+campos, el botón siguió mandando seis, y durante días contestó «falta cargar la
+especialidad» sin generar nada. Nada lo notó, porque no hay un tipo que ate el
+cuerpo de un `fetch` ni un test de pantalla. Copiarle los once campos al
+recortado era la peor de las opciones: dejaba el mismo desfasaje armado para la
+próxima vez que la regla cambie. Con un solo formulario hay una sola
+`loQueFaltaParaCrear`, y una regla nueva alcanza a los dos caminos porque es uno.
+
+**2. El aviso propone y no obliga, y el aviso no se toca.** Todo lo que la orden
+va a decir llega llenado con lo que el aviso sabe y se puede cambiar antes de
+crearla. El aviso sigue diciendo lo que escribió quien reportó la falla: eso es
+lo que lo hace una prueba de qué se reportó y cuándo, y editar la orden no lo
+reescribe.
+
+**3. `aviso_id` vive en la prop y no en el estado del formulario.** Es lo más
+importante de la sección. El formulario completo tiene arriba un botón «Traer»
+que recicla una OT vieja y **pisa el estado entero**. Si el enlace viviera ahí
+adentro, reciclar un número **desenlazaría el aviso en silencio**: la orden
+quedaría huérfana y el aviso volvería a la lista de pendientes invitando a que
+alguien genere una segunda para el mismo problema, que es lo que ya cuida
+`loQueImpideDesenlazar`. Nada lo avisa: la orden se crea bien. Por eso el enlace
+sale siempre de la prop.
+
+**4. La clave del borrador lleva el aviso de origen.** Esto apareció
+implementando y no estaba en el diseño. El formulario guarda borrador, y con la
+clave fija que tenía, un borrador dejado en «Nueva OT» o en otro aviso **le gana
+al sembrado**; al mandar, viajarían la descripción y el equipo de un aviso con el
+`aviso_id` de otro, porque el enlace sale de la prop. Eso **enlaza trabajo
+equivocado al aviso**, la clase de error que no se nota nunca. `claveDelBorrador`
+ya aceptaba un origen; faltaba pasárselo. Sin aviso la clave queda **igual que
+siempre**, así que los borradores ya guardados sobreviven.
+
+**5. Desde un aviso ahora se puede crear una orden ya cerrada, y antes no.** El
+argumento viejo era «se está pidiendo trabajo, no cargando trabajo hecho». Cambió
+porque el pedido fue que el formulario fuera el mismo, y registrar trabajo ya
+hecho contra un aviso es un caso real. No queda sin control: `loQueFaltaParaCrear`
+exige las horas y quién lo hizo cuando hay fecha de cierre.
+
+**6. `FormularioOTOffline` (`app/cargar`) es el tercer formulario de OT y queda
+afuera a propósito.** Vive fuera del grupo `(app)` porque tiene que dibujarse
+**sin servidor**: el layout de `(app)` le pregunta a Supabase quién sos y
+redirige al login, y sin conexión no contesta. Unificarlo es otro trabajo, y
+mientras tanto sigue siendo un lugar donde una regla nueva hay que copiarla.
+
+**7. Lo que el cambio trajo de arriba, sin ser el objetivo.** El camino viejo
+hacía un `fetch` pelado y se colgaba sin señal; el nuevo pasa por la cola. Y el
+error de marcar el aviso en su planilla ahora llega por el mismo texto que todo
+lo demás que queda a medias, en vez de armarse aparte.
+
 ## Los repuestos de una orden, y si los hay
 
 La planilla de OT tiene **una sola columna de repuesto**, texto libre. Eso
