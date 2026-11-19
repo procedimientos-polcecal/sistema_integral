@@ -343,6 +343,80 @@ bajando un archivo y abriéndolo.
   supera el peso de la muestra» queda escrito en la hoja y el archivo se baja:
   bloquearlo escondería justo la muestra que después genera un reclamo.
 
+### Comparar varias muestras (19/11/2026)
+
+La pantalla acepta **hasta seis muestras a la vez** y las superpone en los tres
+gráficos y en el Excel. Spec:
+[2026-11-19-calidad-curva-comparar-muestras-design.md](superpowers/specs/2026-11-19-calidad-curva-comparar-muestras-design.md)
+· plan:
+[2026-11-19-calidad-curva-comparar-muestras.md](superpowers/plans/2026-11-19-calidad-curva-comparar-muestras.md).
+
+**Lo que lo obligó todo, medido el 19/11/2026 contra producción:** de 106
+muestras con granulometría en 8 productos, **4 productos tienen muestras que
+midieron juegos de mallas distintos**. Filler 1 tiene tres juegos entre sus 21
+muestras: 16 con `#20,50,100,200`, 4 con `#50,100,200,325` y 1 con
+`#50,100,200`. Filler 2, Cal y Despacho a Kartonsec tienen dos cada uno. O sea
+que comparar dos muestras del mismo producto **cruza con frecuencia una que
+midió `#20` con otra que midió `#325`**, y el eje X —que era «las mallas que
+midió *esta* muestra»— deja de alcanzar.
+
+**El eje es la unión, y el hueco queda en `null`.** Las tres salidas que no se
+tomaron, cada una por lo que inventa:
+
+- **Interpolar** dibuja un punto en una malla que esa muestra no tamizó, con el
+  mismo aspecto que los medidos. Es la regla de todo el sistema: enlazar al que
+  se le parece es peor que dejar en null.
+- **Poner cero** afirma «no quedó nada retenido ahí», que es una medición y
+  falsa; en el acumulado además haría *bajar* la curva, que es imposible.
+- **Cortar el eje a la intersección** esconde mediciones reales: con un Filler 1
+  de cada juego la intersección es `#50,100,200`, y se perderían `#20` y `#325`,
+  justo los extremos donde se ve si el material se fue a grueso o a fino.
+
+Del lado de recharts eso es **`connectNulls={false}`**, que es la única línea de
+`GraficosDeLaCurva.tsx` que sostiene la decisión entera: con `true` recharts une
+los dos puntos vecinos y dibuja un tramo que cruza por encima de una malla que
+nadie tamizó, indistinguible de un dato.
+
+**Y el hueco se nombra.** Debajo de los gráficos hay una línea —«no todas
+midieron los mismos tamices: … no midió #325»— que aparece sólo cuando las
+elegidas no midieron lo mismo. **Da vuelta a medias la decisión del 05/11** de
+no avisar de las mallas que faltan, y no es una contradicción: allá la malla
+faltante salía de **lo que declara el producto**, un dato que la pantalla ni
+recibe; acá la malla está en el eje **porque la midió otra muestra que está en
+el mismo gráfico**, y una línea que se corta sin explicación se lee como un
+error del sistema. Sigue sin avisarse de las mallas que el producto declara y
+nadie midió.
+
+**El tope es seis**, por dos cosas medidas: el producto más cargado tiene 23
+muestras y superponerlas es ruido, y seis es lo que una paleta distingue
+impresa en gris, que es donde termina el Excel.
+
+**Se pueden cruzar productos, y sale del mismo mecanismo.** El selector de
+producto filtra la lista, pero las muestras elegidas **sobreviven al cambio de
+producto**. Así, armar un conjunto de un solo producto es el camino natural y
+comparar Filler 1 contra Filler 2 —o Emapi contra Kartonsec, que parecen el
+mismo material a dos clientes— no pide ninguna pantalla de más. El eje Y es
+porcentaje del peso tamizado, así que no hay unidades que no se puedan
+comparar. La etiqueta lleva el producto **sólo cuando el conjunto cruza más de
+uno**: con un solo producto, el nombre repetido seis veces no distingue nada.
+
+**El Excel pasó a formato largo: una fila por par (muestra, malla).** El motivo
+es el mismo hueco. En formato ancho, una malla que esa muestra no midió sería
+una celda vacía al lado de números reales, y **una celda vacía en una planilla
+se lee como cero** — exactamente la medición falsa que la pantalla se cuida de
+no dibujar. En largo esa fila no existe, que es lo que pasó. De paso la hoja no
+se ensancha: con seis muestras mide lo mismo que con una.
+
+**La URL acepta las dos formas.** `?muestras=a,b` es la nueva; `?muestra=a`
+—la del 05/11— se sigue leyendo, porque ya hay enlaces de una muestra sola
+dando vueltas y romperlos no tiene ninguna ventaja. Sin repetidos y topeada en
+seis, porque la URL la escribe cualquiera.
+
+Lo que **no** cambió: apagar un tamiz sigue sin recalcular ningún acumulado y
+lo apaga en las tres curvas y en todas las muestras —la razón para apagarlo es
+del tamiz, no de la muestra—; no se dibujan límites; y los dos riesgos de
+lectura del 05/11 y los dos del 11/11 siguen valiendo tal cual.
+
 ## La lista de productos no es el catálogo del núcleo
 
 `productos` tiene las cosas físicas que se despachan. Acá *Filler 1* y *Filler 2*
