@@ -44,17 +44,49 @@ export const TOPE_DE_MUESTRAS = 6;
  * Un color por muestra, el mismo en los tres gráficos.
  *
  * El primero es el verde que ya usaba la pantalla con una sola curva, para que
- * el caso de siempre —una muestra— se siga viendo igual. Los otros cinco se
- * eligieron para separarse también en gris: alternan claro y oscuro en vez de
- * confiar sólo en el tono.
+ * el caso de siempre —una muestra— se siga viendo igual.
+ *
+ * **El tono separa en pantalla; en papel separa el trazo, no el color.** Está
+ * medido, y la primera versión de esta paleta lo afirmaba al revés: tenía el
+ * verde `#1E7D34` y el naranja `#C2410C` con un contraste de luminancia de
+ * **1,004**, o sea exactamente el mismo gris. Dos curvas indistinguibles en la
+ * fotocopia del informe, que es adonde va el Excel.
+ *
+ * Y no se arregla eligiendo mejor los colores: **una línea tiene que verse
+ * contra el fondo blanco**, lo que la deja por debajo de una luminancia de
+ * 0,37, y seis valores dentro de esa banda no pasan de un contraste de ~1,2
+ * entre sí. Por eso la paleta sólo garantiza que ningún par caiga en el mismo
+ * gris —hoy el peor par es 1,21, contra aquel 1,004— y el que de verdad separa
+ * es `TRAZOS_DE_LA_COMPARACION`, que no depende del tóner.
+ *
+ * Las dos propiedades están fijadas con tests en `comparacion.test.ts`.
  */
 export const COLORES_DE_LA_COMPARACION = [
-  "#1E7D34", // verde
+  "#1E7D34", // verde — el de la curva única
+  "#111827", // grafito
+  "#EA580C", // naranja
   "#1D4ED8", // azul
-  "#C2410C", // naranja quemado
-  "#7E22CE", // violeta
-  "#0E7490", // petróleo
-  "#A16207", // ocre
+  "#CA8A04", // ocre
+  "#881337", // vino
+];
+
+/**
+ * El trazo de cada curva, alineado con `COLORES_DE_LA_COMPARACION`.
+ *
+ * Es el `strokeDasharray` de SVG. **El primero es `undefined` —línea llena— a
+ * propósito**: con una sola muestra la pantalla tiene que verse igual que antes
+ * de que la comparación existiera.
+ *
+ * Éste es el mecanismo que separa las curvas en blanco y negro; el color es
+ * para la pantalla. El porqué medido está arriba.
+ */
+export const TRAZOS_DE_LA_COMPARACION: (string | undefined)[] = [
+  undefined,
+  "6 3",
+  "2 3",
+  "10 4 2 4",
+  "1 3",
+  "8 3 2 3 2 3",
 ];
 
 export interface MuestraParaComparar {
@@ -71,6 +103,8 @@ export interface SerieDeLaComparacion {
   id: string;
   etiqueta: string;
   color: string;
+  /** `strokeDasharray` de su línea; `undefined` es llena. Ver `TRAZOS_DE_LA_COMPARACION`. */
+  trazo?: string;
   /** Dónde buscar sus tres valores en cada fila: `r0`, `a0`, `p0` para la serie 0. */
   claves: { retenido: string; acumulado: string; pasante: string };
   problema?: string;
@@ -94,6 +128,19 @@ export interface Comparacion {
   series: SerieDeLaComparacion[];
   /** Quién no midió qué, sobre el eje dibujado. Vacío si todas midieron lo mismo. */
   disparejas: { etiqueta: string; faltan: number[] }[];
+  /**
+   * Las elegidas que no tienen **ninguna** malla cargada, por su etiqueta.
+   *
+   * Van aparte de `disparejas` porque decir «no midió #6, #7, #10, #12, #20,
+   * #50, #100 ni #200» es cierto y una forma rarísima de decir «esta muestra no
+   * tiene granulometría». El listado del producto trae todas sus muestras,
+   * incluidas las cargadas sólo con humedad o peso volumétrico, así que elegir
+   * una es un camino normal y no un caso raro.
+   *
+   * **No es lo mismo que una muestra sin peso tamizado**: ésa sí midió, y
+   * `granulometria()` ya tiene un texto para ella que viaja en `problema`.
+   */
+  sinGranulometria: string[];
 }
 
 /** Hasta dónde se lee una observación en la etiqueta antes de cortarla. */
@@ -141,11 +188,22 @@ export function etiquetasDeMuestras(
   });
 }
 
+/**
+ * Si la etiqueta tiene que llevar el producto adelante.
+ *
+ * Está acá, y no escrito dos veces, porque lo preguntan la pantalla y el Excel:
+ * si los dos dejaran de coincidir, la misma muestra saldría nombrada distinto
+ * en cada lado y nada lo notaría.
+ */
+export function hayVariosProductos(muestras: { producto: string }[]): boolean {
+  return new Set(muestras.map((m) => m.producto)).size > 1;
+}
+
 export function compararMuestras(
   muestras: MuestraParaComparar[],
   apagadas: number[]
 ): Comparacion {
-  const conProducto = new Set(muestras.map((m) => m.producto)).size > 1;
+  const conProducto = hayVariosProductos(muestras);
   const etiquetas = etiquetasDeMuestras(muestras, conProducto);
 
   // Una pasada por muestra: las mallas que midió —sin apagar nada, que son las
@@ -170,6 +228,9 @@ export function compararMuestras(
     id: m.id,
     etiqueta: etiquetas[i],
     color: COLORES_DE_LA_COMPARACION[i % COLORES_DE_LA_COMPARACION.length],
+    ...(TRAZOS_DE_LA_COMPARACION[i % TRAZOS_DE_LA_COMPARACION.length] === undefined
+      ? {}
+      : { trazo: TRAZOS_DE_LA_COMPARACION[i % TRAZOS_DE_LA_COMPARACION.length] }),
     claves: { retenido: `r${i}`, acumulado: `a${i}`, pasante: `p${i}` },
     ...(calculadas[i].problema === undefined ? {} : { problema: calculadas[i].problema }),
   }));
@@ -185,14 +246,25 @@ export function compararMuestras(
     return fila;
   });
 
+  // Sin mallas **y** sin problema. Una muestra a la que le falta el peso
+  // tamizado también llega con cero mallas, pero ésa sí midió y
+  // `granulometria()` ya tiene su texto: meterla acá diría que no cargó nada.
+  const sinGranulometria = series
+    .filter((serie, i) => calculadas[i].medidas.size === 0 && serie.problema === undefined)
+    .map((serie) => serie.etiqueta);
+
   // Se compara contra el eje dibujado y no contra la unión entera: una malla
-  // que nadie ve porque está apagada no es un hueco que haya que explicar.
+  // que nadie ve porque está apagada no es un hueco que haya que explicar. Y
+  // las que no midieron nada quedan afuera: tienen su propia lista.
   const disparejas = series
     .map((serie, i) => ({
       etiqueta: serie.etiqueta,
-      faltan: delEje.filter((malla) => !calculadas[i].medidas.has(malla)),
+      faltan:
+        calculadas[i].medidas.size === 0
+          ? []
+          : delEje.filter((malla) => !calculadas[i].medidas.has(malla)),
     }))
     .filter((d) => d.faltan.length > 0);
 
-  return { mallas, filas, series, disparejas };
+  return { mallas, filas, series, disparejas, sinGranulometria };
 }

@@ -142,6 +142,31 @@ describe("filasDeLaHoja", () => {
     expect(deMalla).toHaveLength(8);
   });
 
+  it("una muestra sin granulometria lo dice, en vez de desaparecer de la tabla", () => {
+    const texto = aTexto(filasDeLaHoja([MUESTRA, { ...FINO, retenidos: [] }], []));
+
+    // Sin esto el encabezado promete dos muestras y la tabla entrega una, sin
+    // que nada diga por que: es la misma celda muda que el formato largo vino
+    // a evitar, por la otra puerta.
+    expect(texto).toContain("Filler 1 · 03/11/2026: sin granulometría cargada.");
+  });
+
+  it("un peso que falta no viaja como celda vacia", () => {
+    const filas = filasDeLaHoja([{ ...MUESTRA, pesoMuestraG: null }], []);
+    const delEncabezado = filas.find((f) => f[1] === "Calcio 0-2")!;
+
+    // Una celda numerica vacia se lee como cero, que es justo lo que el formato
+    // largo existe para no decir.
+    expect(delEncabezado[3]).toBe("—");
+  });
+
+  it("el peso que esta sigue siendo un numero, para poder sumarlo", () => {
+    const filas = filasDeLaHoja([MUESTRA], []);
+    const delEncabezado = filas.find((f) => f[1] === "Calcio 0-2")!;
+
+    expect(delEncabezado[3]).toBe(100);
+  });
+
   it("el encabezado lleva una fila por muestra, con su producto y su peso", () => {
     const filas = filasDeLaHoja([MUESTRA, FINO], []);
 
@@ -153,6 +178,7 @@ describe("filasDeLaHoja", () => {
       100,
       "",
     ]);
+    expect(filas).toContainEqual(["Filler 1 · 03/11/2026", "Filler 1", "03/11/2026", 100, ""]);
     expect(filas).toContainEqual(["Filler 1 · 03/11/2026", "Filler 1", "03/11/2026", 100, ""]);
   });
 

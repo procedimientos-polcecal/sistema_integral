@@ -40,16 +40,39 @@ const num = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
 
 const comoMalla = (v: unknown) => `#${v}`;
 
+/**
+ * Lo que la leyenda muestra de cada etiqueta.
+ *
+ * La etiqueta puede traer una observación de hasta 40 caracteres, y seis de
+ * ésas envuelven varias filas dentro de un panel de alto fijo (`h-64`): la
+ * leyenda se come el dibujo, y en un teléfono lo tapa. El chip de arriba y el
+ * tooltip siguen mostrándola entera.
+ */
+const LARGO_EN_LA_LEYENDA = 26;
+
+const paraLaLeyenda = (v: unknown) => {
+  const texto = String(v);
+  return texto.length > LARGO_EN_LA_LEYENDA ? `${texto.slice(0, LARGO_EN_LA_LEYENDA)}…` : texto;
+};
+
 function Curva({
   filas,
   series,
   campo,
+  nombre,
   tope,
   piso,
 }: {
   filas: FilaDeLaComparacion[];
   series: SerieDeLaComparacion[];
   campo: "retenido" | "acumulado" | "pasante";
+  /**
+   * Cómo se llama la magnitud. Es lo que el tooltip usa **cuando hay una sola
+   * muestra**: ahí la etiqueta sería la fecha, que ya está en el título del
+   * panel, y el hover perdería lo único que aclaraba qué número se está
+   * mirando. Con varias, el tooltip nombra la muestra, que es la pregunta.
+   */
+  nombre: string;
   /**
    * Techo mínimo del eje Y. Sin él, recharts lo ajusta a los datos. Es un piso
    * y no un valor fijo: si lo retenido supera la muestra el acumulado pasa de
@@ -95,15 +118,20 @@ function Curva({
           Con una sola muestra la leyenda repetiría el título del panel y le
           comería alto al dibujo, que en el teléfono ya es poco.
         */}
-        {series.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
+        {series.length > 1 && (
+          <Legend wrapperStyle={{ fontSize: 11 }} formatter={paraLaLeyenda} />
+        )}
         {series.map((serie) => (
           <Line
             key={serie.id}
             type="monotone"
             dataKey={serie.claves[campo]}
-            name={serie.etiqueta}
+            name={series.length > 1 ? serie.etiqueta : nombre}
             stroke={serie.color}
             strokeWidth={2}
+            // El que de verdad separa las curvas fotocopiadas: ver
+            // `TRAZOS_DE_LA_COMPARACION` en `lib/calidad/ensayos/comparacion.ts`.
+            strokeDasharray={serie.trazo}
             dot={{ r: 3 }}
             // El hueco se dibuja como hueco: ver el encabezado del archivo.
             connectNulls={false}
@@ -124,12 +152,12 @@ export interface PropsDeLosGraficos {
 
 /** Lo que quedó retenido en cada tamiz, en % del peso tamizado. */
 export function CurvaDeRetenido({ filas, series }: PropsDeLosGraficos) {
-  return <Curva filas={filas} series={series} campo="retenido" />;
+  return <Curva filas={filas} series={series} campo="retenido" nombre="Retenido" />;
 }
 
 /** El acumulado de cada tamiz: sube de 0 a 100 %, de ahí el techo en 100. */
 export function CurvaDeAcumulado({ filas, series }: PropsDeLosGraficos) {
-  return <Curva filas={filas} series={series} campo="acumulado" tope={100} />;
+  return <Curva filas={filas} series={series} campo="acumulado" nombre="Acumulado" tope={100} />;
 }
 
 /**
@@ -138,5 +166,5 @@ export function CurvaDeAcumulado({ filas, series }: PropsDeLosGraficos) {
  * fijo: un pasante negativo —lo retenido supera al peso— tiene que verse.
  */
 export function CurvaDePasante({ filas, series }: PropsDeLosGraficos) {
-  return <Curva filas={filas} series={series} campo="pasante" tope={100} piso={0} />;
+  return <Curva filas={filas} series={series} campo="pasante" nombre="Pasante" tope={100} piso={0} />;
 }

@@ -412,6 +412,34 @@ se ensancha: con seis muestras mide lo mismo que con una.
 dando vueltas y romperlos no tiene ninguna ventaja. Sin repetidos y topeada en
 seis, porque la URL la escribe cualquiera.
 
+**Y `?producto=` cambió de precedencia, que es la segunda regla del 05/11 que
+esto da vuelta.** Antes mandaba el producto *de la muestra*; ahora manda
+`?producto=` cuando es válido, y si no viene se abre en el de la primera
+muestra elegida. Con varias muestras —y de productos distintos— no hay un
+«producto de la muestra» que pueda mandar, y el selector tiene que poder
+apuntar a otro para agregar una suya. Lo que se asume: mientras el conjunto sea
+de un solo producto y el selector muestre otro, los chips no llevan nombre de
+producto, así que la pantalla puede decir «Filler 2» arriba de un chip que dice
+sólo «03/11/2026» y es de Filler 1. Se corrige en cuanto se agrega la segunda.
+
+**Los seis colores no alcanzan, y eso está medido.** La primera paleta tenía el
+verde y el naranja con un contraste de luminancia de **1,004**: el mismo gris
+exacto, o sea dos curvas indistinguibles en la fotocopia del informe. Y no se
+arregla eligiendo mejor: **una línea tiene que verse contra el fondo blanco**,
+lo que la deja por debajo de una luminancia de 0,37, y seis valores en esa
+banda no pasan de ~1,2 entre sí. Lo que separa de verdad es el **trazo**
+(`TRAZOS_DE_LA_COMPARACION`), que no depende del tóner; el color es para la
+pantalla. Las dos propiedades están fijadas con tests.
+
+**Una muestra elegida que no tiene granulometría lo dice**, en la pantalla y en
+la hoja. Es un camino normal y no un caso raro: el listado del producto trae
+todas sus muestras, incluidas las cargadas sólo con humedad o peso volumétrico.
+Sin ese aviso, el encabezado del Excel promete N muestras, la tabla entrega
+menos y nada explica la diferencia — la misma celda muda que el formato largo
+vino a evitar, por la otra puerta. Por lo mismo, un peso tamizado que falta
+viaja como «—» y no como celda vacía. **No es lo mismo que una muestra sin
+peso**: ésa sí midió y tiene su propio texto.
+
 Lo que **no** cambió: apagar un tamiz sigue sin recalcular ningún acumulado y
 lo apaga en las tres curvas y en todas las muestras —la razón para apagarlo es
 del tamiz, no de la muestra—; no se dibujan límites; y los dos riesgos de

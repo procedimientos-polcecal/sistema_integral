@@ -1,6 +1,6 @@
 import { comoSeLee } from "@/lib/core/fechas";
 import { curvaDeLaMuestra } from "./curva";
-import { etiquetasDeMuestras, type MuestraParaComparar } from "./comparacion";
+import { etiquetasDeMuestras, hayVariosProductos, type MuestraParaComparar } from "./comparacion";
 
 /**
  * Las filas del Excel de la curva granulométrica, tal cual van al `.xlsx`.
@@ -32,6 +32,9 @@ import { etiquetasDeMuestras, type MuestraParaComparar } from "./comparacion";
 
 const DENTRO = "Dentro";
 const FUERA = "Fuera";
+
+/** Lo que va donde no hay número. Ver el porqué donde se usa. */
+const SIN_DATO = "—";
 
 /** «#20», «#20 y #50», «#20, #50 y #100»: la enumeración como se lee, con su «y». */
 function enumerar(mallas: number[]): string {
@@ -79,8 +82,7 @@ export function leerApagadas(crudo: FormDataEntryValue | null): number[] | { pro
 }
 
 export function filasDeLaHoja(muestras: MuestraParaComparar[], apagadas: number[]): unknown[][] {
-  const conProducto = new Set(muestras.map((m) => m.producto)).size > 1;
-  const etiquetas = etiquetasDeMuestras(muestras, conProducto);
+  const etiquetas = etiquetasDeMuestras(muestras, hayVariosProductos(muestras));
 
   // Sin apagar nada, para tener todas las mallas con sus números; `apagadas`
   // sólo sirve para marcar.
@@ -90,7 +92,16 @@ export function filasDeLaHoja(muestras: MuestraParaComparar[], apagadas: number[
     ["Muestra", "Producto", "Fecha", "Peso tamizado (g)", "Observaciones"],
   ];
   muestras.forEach((m, i) => {
-    filas.push([etiquetas[i], m.producto, comoSeLee(m.fecha), m.pesoMuestraG, m.observaciones ?? ""]);
+    // El peso que falta va como raya y no como celda vacía: una celda numérica
+    // en blanco al lado de números reales se lee como cero, que es lo mismo que
+    // el formato largo de abajo existe para no decir.
+    filas.push([
+      etiquetas[i],
+      m.producto,
+      comoSeLee(m.fecha),
+      m.pesoMuestraG ?? SIN_DATO,
+      m.observaciones ?? "",
+    ]);
   });
 
   filas.push([], ["Muestra", "Malla", "Retenido (%)", "Acumulado (%)", "Pasante (%)", "En el gráfico"]);
@@ -108,19 +119,27 @@ export function filasDeLaHoja(muestras: MuestraParaComparar[], apagadas: number[
     filas.push([], [notaDelAcumulado([...apagadasMedidas].sort((a, b) => a - b))]);
   }
 
-  const problemas = curvas
-    .map((curva, i) =>
-      curva.problema === undefined
-        ? null
-        : muestras.length > 1
-          ? `${etiquetas[i]}: ${curva.problema}`
-          : curva.problema
+  // Una muestra elegida que no aportó ni una fila tiene que decirlo. Si no, el
+  // encabezado promete N muestras, la tabla entrega menos, y nada explica la
+  // diferencia: es la misma celda muda que el formato largo vino a evitar, por
+  // la otra puerta. Pasa seguido, porque el listado del producto trae también
+  // las muestras cargadas sólo con humedad o peso volumétrico.
+  //
+  // Una sin peso tamizado no entra acá: ésa sí midió y ya tiene su `problema`.
+  const avisos = curvas
+    .map((curva, i) => {
+      if (curva.problema !== undefined) return curva.problema;
+      if (curva.puntos.length === 0) return "sin granulometría cargada.";
+      return null;
+    })
+    .map((aviso, i) =>
+      aviso === null ? null : muestras.length > 1 ? `${etiquetas[i]}: ${aviso}` : aviso
     )
     .filter((p): p is string => p !== null);
 
-  if (problemas.length > 0) {
+  if (avisos.length > 0) {
     filas.push([]);
-    for (const p of problemas) filas.push([p]);
+    for (const a of avisos) filas.push([a]);
   }
 
   return filas;

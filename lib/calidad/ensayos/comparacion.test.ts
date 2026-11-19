@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { TOPE_DE_MUESTRAS, compararMuestras, etiquetasDeMuestras } from "./comparacion";
+import {
+  COLORES_DE_LA_COMPARACION,
+  TOPE_DE_MUESTRAS,
+  TRAZOS_DE_LA_COMPARACION,
+  compararMuestras,
+  etiquetasDeMuestras,
+} from "./comparacion";
 
 /** Calcio 0-2 del 27/10/2026, el mismo de `curva.test.ts`. Peso 100: los gramos son los %. */
 const CALCIO = {
@@ -108,12 +114,51 @@ describe("compararMuestras", () => {
     expect(c.series.map((s) => s.etiqueta)).toEqual(["27/10/2026", "28/10/2026"]);
   });
 
+  it("un cero medido se guarda como cero y no como hueco", () => {
+    const c = compararMuestras([CALCIO, FINO], []);
+
+    // La #6 de Calcio midio 0 g: es una medicion, no una malla que falte. Es la
+    // distincion que sostiene toda la funcion, y la rompe cualquiera que cambie
+    // el `?? null` por un `|| null`.
+    const enSeis = c.filas.find((f) => f.malla === 6)!;
+    expect(enSeis.r0).toBe(0);
+    expect(enSeis.a0).toBe(0);
+    expect(enSeis.p0).toBe(100);
+    expect(enSeis.r1).toBeNull();
+  });
+
+  it("dice cuales de las elegidas no tienen granulometria, y esas no son disparejas", () => {
+    const vacia = { ...FINO, id: "c", retenidos: [] };
+    const c = compararMuestras([CALCIO, vacia], []);
+
+    expect(c.sinGranulometria).toEqual(["Filler 1 · 03/11/2026"]);
+    // Sin esto diria «no midio #6, #7, #10, #12, #20, #50, #100 ni #200», que es
+    // cierto y una forma rarisima de decir «no tiene granulometria cargada».
+    expect(c.disparejas).toEqual([]);
+  });
+
+  it("una muestra sin peso no es «sin granulometria»: tiene su propio problema", () => {
+    const c = compararMuestras([{ ...CALCIO, id: "f", pesoMuestraG: null }], []);
+
+    expect(c.sinGranulometria).toEqual([]);
+    expect(c.series[0].problema).toBe("Falta el peso de la muestra tamizada.");
+  });
+
   it("cada serie se lleva un color distinto y sus propias claves", () => {
     const c = compararMuestras([CALCIO, FINO], []);
 
     expect(c.series[0].color).not.toBe(c.series[1].color);
     expect(c.series[0].claves).toEqual({ retenido: "r0", acumulado: "a0", pasante: "p0" });
     expect(c.series[1].claves).toEqual({ retenido: "r1", acumulado: "a1", pasante: "p1" });
+    expect(c.series[0].trazo).not.toBe(c.series[1].trazo);
+  });
+
+  it("la primera serie es el verde de siempre y va de linea llena", () => {
+    const c = compararMuestras([CALCIO], []);
+
+    // Una sola muestra tiene que verse como antes de que esto existiera.
+    expect(c.series[0].color).toBe("#1E7D34");
+    expect(c.series[0].trazo).toBeUndefined();
   });
 
   it("el problema de una muestra viaja en su serie", () => {
@@ -165,8 +210,61 @@ describe("etiquetasDeMuestras", () => {
   });
 });
 
+/** La luminancia relativa de WCAG, que es lo que queda de un color fotocopiado. */
+function luminancia(hex: string): number {
+  const canal = (v: number) => {
+    const x = v / 255;
+    return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+  };
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return 0.2126 * canal(r) + 0.7152 * canal(g) + 0.0722 * canal(b);
+}
+
+const contraste = (a: number, b: number) =>
+  (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+/**
+ * El Excel se pega en un informe que se imprime y se fotocopia, así que el
+ * criterio de la paleta no es cómo se ve en pantalla.
+ *
+ * La primera versión tenía verde y naranja con contraste **1,004**: el mismo
+ * gris exacto. Estos tests fijan las dos propiedades que lo arreglan, y la
+ * segunda es la que de verdad separa las curvas — ver el comentario de
+ * `COLORES_DE_LA_COMPARACION`.
+ */
+describe("la paleta sobrevive al blanco y negro", () => {
+  it("todos los colores se ven contra el fondo blanco", () => {
+    for (const color of COLORES_DE_LA_COMPARACION) {
+      expect(contraste(luminancia(color), 1)).toBeGreaterThanOrEqual(2.5);
+    }
+  });
+
+  it("ningun par de colores cae en el mismo gris", () => {
+    for (let i = 0; i < COLORES_DE_LA_COMPARACION.length; i++) {
+      for (let j = i + 1; j < COLORES_DE_LA_COMPARACION.length; j++) {
+        const r = contraste(
+          luminancia(COLORES_DE_LA_COMPARACION[i]),
+          luminancia(COLORES_DE_LA_COMPARACION[j])
+        );
+        expect(r).toBeGreaterThan(1.15);
+      }
+    }
+  });
+
+  it("cada serie lleva un trazo distinto, que es lo que separa de verdad en gris", () => {
+    // La banda de luminancia que deja un fondo blanco llega hasta 0,37, así que
+    // seis colores ahí adentro no pasan de un contraste de ~1,2 entre sí. El
+    // trazo no depende del tóner.
+    expect(TRAZOS_DE_LA_COMPARACION).toHaveLength(COLORES_DE_LA_COMPARACION.length);
+    expect(new Set(TRAZOS_DE_LA_COMPARACION).size).toBe(TRAZOS_DE_LA_COMPARACION.length);
+  });
+});
+
 describe("TOPE_DE_MUESTRAS", () => {
-  it("son seis", () => {
+  it("son seis, y hay un color y un trazo para cada una", () => {
     expect(TOPE_DE_MUESTRAS).toBe(6);
+    expect(COLORES_DE_LA_COMPARACION).toHaveLength(TOPE_DE_MUESTRAS);
   });
 });

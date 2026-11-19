@@ -202,7 +202,9 @@ export async function POST(request: Request) {
     {
       nombre: "Curva",
       filas,
-      anchos: [30, 10, 14, 14, 14, 13, 3],
+      // La B la comparten «Producto» del encabezado y «Malla» de la tabla, y
+      // ahora tiene a la C ocupada: con 10 se recortaba «Despacho a Kartonsec».
+      anchos: [30, 22, 14, 18, 14, 13, 3],
       imagenes: sobreLaHoja,
     },
   ]);

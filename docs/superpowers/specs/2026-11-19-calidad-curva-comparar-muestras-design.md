@@ -133,6 +133,23 @@ Las tres fotos de los gráficos siguen yendo a la derecha de la tabla, como hoy.
 ya hay enlaces de una muestra sola dando vueltas y romperlos no tiene ninguna
 ventaja. `?producto=` queda como lo que es: el filtro del selector.
 
+**Y eso da vuelta la precedencia del 05/11, que conviene decir en voz alta.**
+Aquella pantalla hacía mandar al producto *de la muestra* sobre `?producto=`,
+con el argumento de no mostrar «una combinación que no existe». Con una sola
+muestra era correcto; con varias, que además pueden ser de productos distintos,
+no hay un «producto de la muestra» que pueda mandar, y el selector tiene que
+poder apuntar a otro producto para agregar una suya —que es el único camino a
+una comparación cruzada—. Así que ahora un `?producto=` válido gana, y si no
+viene se abre en el de la primera muestra elegida para que un enlace compartido
+no caiga en una lista vacía.
+
+La consecuencia visible, asumida: mientras el conjunto elegido sea de un solo
+producto y el selector esté mostrando otro, los chips **no** llevan el nombre
+del producto —la etiqueta sólo lo lleva cuando el conjunto cruza más de uno—,
+así que la pantalla puede decir «Filler 2» arriba de un chip que dice sólo
+«03/11/2026» y es de Filler 1. Se corrige solo en cuanto se agrega la segunda:
+ahí el conjunto cruza productos y las dos etiquetas los nombran.
+
 ## Lo que queda afuera
 
 - **Un promedio, una banda o una envolvente** de las muestras elegidas. Es otra
@@ -160,11 +177,18 @@ ventaja. `?producto=` queda como lo que es: el filtro del selector.
 
 ## Lo que decide quien lo construya
 
-- La paleta exacta de los seis colores y el orden en que se asignan.
+- La paleta exacta de los seis colores y el orden en que se asignan. *(Resuelto
+  midiendo, y la primera respuesta estaba mal: seis colores no se separan en
+  una fotocopia —la banda de luminancia que deja un fondo blanco llega hasta
+  0,37 y seis valores ahí adentro no pasan de un contraste de ~1,2—. Lo que
+  separa es el trazo. Ver `COLORES_DE_LA_COMPARACION`.)*
 - Cómo se ve el selector de varias muestras (lista con tildes, chips que se
   sacan, o `MultiSelect` si encaja) y dónde va el cartel del tope.
 - El texto exacto de la línea que nombra las mallas disparejas.
 - Si la leyenda va arriba o abajo de cada gráfico, y qué pasa con el alto en el
-  teléfono cuando son seis entradas.
+  teléfono cuando son seis entradas. *(Resuelto: la leyenda sólo aparece con más
+  de una muestra, y su etiqueta se corta en 26 caracteres —el chip y el tooltip
+  la siguen mostrando entera—, porque una observación de 40 envuelve varias
+  filas dentro de un panel de alto fijo y se come el dibujo.)*
 - El orden de las filas de la tabla larga: por muestra y después por malla, o al
   revés.

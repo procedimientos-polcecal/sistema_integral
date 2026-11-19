@@ -281,18 +281,28 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
             Un hueco en una curva sólo se entiende si se nombra: una línea que
             se corta sin explicación se lee como un error del sistema.
           */}
-          {comparacion.disparejas.length > 0 && (
-            <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              No todas midieron los mismos tamices, así que hay curvas que no llegan de punta a
-              punta:{" "}
-              {comparacion.disparejas.map((d, i) => (
-                <span key={d.etiqueta}>
-                  {i > 0 && "; "}
-                  {d.etiqueta} no midió {enumerarQueFaltan(d.faltan)}
-                </span>
-              ))}
-              .
-            </p>
+          {(comparacion.disparejas.length > 0 || comparacion.sinGranulometria.length > 0) && (
+            <div className="space-y-1 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              {comparacion.sinGranulometria.length > 0 && (
+                <p>
+                  Sin granulometría cargada, así que no dibujan ninguna curva:{" "}
+                  {comparacion.sinGranulometria.join("; ")}.
+                </p>
+              )}
+              {comparacion.disparejas.length > 0 && (
+                <p>
+                  No todas midieron los mismos tamices, así que hay curvas que no llegan de punta
+                  a punta:{" "}
+                  {comparacion.disparejas.map((d, i) => (
+                    <span key={d.etiqueta}>
+                      {i > 0 && "; "}
+                      {d.etiqueta} no midió {enumerarQueFaltan(d.faltan)}
+                    </span>
+                  ))}
+                  .
+                </p>
+              )}
+            </div>
           )}
         </>
       )}
@@ -335,15 +345,29 @@ export default function CurvaClient({
   // el chip y la leyenda del gráfico no puedan decir cosas distintas.
   const series = useMemo(() => compararMuestras(muestras, []).series, [muestras]);
 
-  // Las del selector son todas del mismo producto, así que la etiqueta no lo
-  // repite; y las que ya están elegidas no se vuelven a ofrecer.
+  /**
+   * Lo que ofrece el desplegable: las muestras del producto que todavía no
+   * están elegidas. La etiqueta no repite el producto, porque son todas suyas.
+   *
+   * **Las etiquetas se numeran contra la lista entera del producto y recién
+   * después se sacan las elegidas.** Numerar sobre las que quedan hace que el
+   * «(n de m)» cuente otra cosa: con tres muestras del mismo día, elegir una
+   * dejaría a las otras dos diciendo «(1 de 2)» y «(2 de 2)», y la que ya está
+   * elegida tiene su chip diciendo «(1 de 3)». Acá se elige una muestra por su
+   * etiqueta, así que un número que no cierra hace comparar la que no era.
+   */
   const porAgregar = useMemo(() => {
-    const libres = delSelector.filter((m) => !elegidas.includes(m.id));
     const etiquetas = etiquetasDeMuestras(
-      libres.map((m) => ({ producto: productoNombre, fecha: m.fecha, observaciones: m.observaciones })),
+      delSelector.map((m) => ({
+        producto: productoNombre,
+        fecha: m.fecha,
+        observaciones: m.observaciones,
+      })),
       false
     );
-    return libres.map((m, i) => ({ id: m.id, etiqueta: etiquetas[i] }));
+    return delSelector
+      .map((m, i) => ({ id: m.id, etiqueta: etiquetas[i] }))
+      .filter((m) => !elegidas.includes(m.id));
   }, [delSelector, elegidas, productoNombre]);
 
   const lleno = elegidas.length >= TOPE_DE_MUESTRAS;
