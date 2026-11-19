@@ -4,7 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { auditar, nombreParaAuditoria } from "@/lib/core/auditoria";
-import { laNuevaFecha, loQueFaltaParaPostergar } from "@/lib/mantenimiento/postergar";
+import {
+  laNuevaFecha, loQueFaltaParaPostergar, porQueElEstadoNoDejaPostergar,
+} from "@/lib/mantenimiento/postergar";
 import { corregirLaFechaComprometida } from "@/lib/mantenimiento/formulario";
 import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
 import { celdaDeObservacionPrevia } from "@/lib/mantenimiento/notas";
@@ -72,6 +74,23 @@ export async function POST(request: Request, { params }: Params) {
         "puede mover desde el sistema: vive en la pestaña que maneja Google Forms " +
         "y escribir ahí corre las filas de las demás. Hay que cambiarla allá.",
     }, { status: 400 });
+  }
+
+  /*
+   * Una orden ya hecha no se posterga, y hasta el 19/11/2026 esto faltaba: la
+   * ruta traía `estado` en el `select` y no lo miraba. No se notaba porque las
+   * dos pantallas filtran antes —el listado con `pideJustificacion` y el
+   * calendario con `porQueNoSePuedeMover`—, o sea que la regla vivía entera del
+   * lado del cliente, que es donde las reglas no viven.
+   *
+   * **Sólo `REALIZADO`, que es donde las dos puntas coinciden.** El calendario
+   * además se niega con `SUSPENDIDA` y el listado la deja postergar; esa
+   * diferencia es de pantalla y se decide allá, así que el servidor no la
+   * arbitra — ver `lib/mantenimiento/moverLaOT.ts`.
+   */
+  const porElEstado = porQueElEstadoNoDejaPostergar(orden.estado);
+  if (porElEstado) {
+    return NextResponse.json({ error: porElEstado }, { status: 400 });
   }
 
   const nueva = laNuevaFecha(orden.fecha_ejecucion, Number(body.dias));

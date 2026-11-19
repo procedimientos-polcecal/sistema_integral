@@ -264,7 +264,10 @@ export default function ProgramacionClient({ empleados }: { empleados: EmpleadoE
         ))}
       </div>
 
-      {vista === "mes" && <MesDeOrdenes />}
+      {/* Acá va siempre en `true` y no es un descuido: a esta pantalla
+          `page.tsx` sólo deja entrar al admin de Mantenimiento, que es más que
+          el nivel de edición que pide mover. */}
+      {vista === "mes" && <MesDeOrdenes puedeMover />}
 
       {vista === "semana" && (
       <>

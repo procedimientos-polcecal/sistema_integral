@@ -3,8 +3,23 @@
  *
  * Son las decisiones de `/api/mantenimiento/ordenes/[id]/postergar` contestadas
  * **antes** de llamarla, para que la pantalla no ofrezca un camino que el
- * servidor va a rechazar. El servidor las vuelve a aplicar: una regla que vive
- * sólo acá no es una regla.
+ * servidor va a rechazar.
+ *
+ * ── QUÉ REVALIDA EL SERVIDOR, QUE NO ES TODO ────────────────────────────────
+ *
+ * Esto decía «el servidor las vuelve a aplicar» y era falso en un tercio: la
+ * ruta comprobaba `app_created` y `fecha_ejecucion` y **del estado no sabía
+ * nada** —lo traía en el `select` y no lo miraba—. Desde el 19/11/2026 también
+ * rechaza las `REALIZADO`, así que de las tres reglas el servidor tiene dos y
+ * media.
+ *
+ * La media que falta es **`SUSPENDIDA`, y queda a propósito de este lado**:
+ * acá no se mueve y en el listado sí se posterga (allá el botón sale con
+ * `pideJustificacion`, que es «todo lo que no está realizado»). Son dos
+ * pantallas que contestan distinto la misma pregunta y hoy no tiene ni un caso
+ * —medido el 18/11/2026: 0 órdenes en `SUSPENDIDA`—, así que no se arbitró
+ * desde el servidor: hacerlo sería elegir por el listado sin que nadie lo
+ * haya pedido. Si aparece la primera, es la decisión que hay que tomar.
  *
  * ── LA TRAMPA QUE HAY QUE SABER ANTES DE TOCAR ESTO ─────────────────────────
  *
