@@ -7,7 +7,8 @@ import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import type { Aviso } from "@/lib/mantenimiento/types";
 import NuevoAvisoModal from "./NuevoAvisoModal";
-import GenerarOTModal, { type EquipoDelAviso } from "./GenerarOTModal";
+import NuevaOTModal from "../ordenes/NuevaOTModal";
+import type { EquipoDelAviso } from "@/lib/mantenimiento/otDesdeAviso";
 import DesestimarModal from "./DesestimarModal";
 import EnlazarOTModal from "./EnlazarOTModal";
 import Select from "@/components/Select";
@@ -489,12 +490,15 @@ export default function AvisosClient({
       )}
 
       {generarDe && (
-        <GenerarOTModal
+        <NuevaOTModal
           aviso={generarDe}
           sectores={sectores}
           equipos={equipos}
           onClose={() => setGenerarDe(null)}
-          onCreada={(mensaje) => {
+          onCreated={(advertencia, numero) => {
+            const mensaje =
+              `Se generó la OT #${numero} y el aviso ${generarDe.oa_number} quedó marcado.` +
+              (advertencia ? ` ${advertencia}` : "");
             setGenerarDe(null);
             setResultado(mensaje);
             router.refresh();

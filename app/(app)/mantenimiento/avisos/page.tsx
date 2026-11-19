@@ -7,7 +7,7 @@ import { areaPorDefecto } from "@/lib/compras/areaDelUsuario";
 import { sectoresDePlanta, type SectorDePlanta } from "@/lib/mantenimiento/sectores";
 import AvisosClient from "./AvisosClient";
 import type { Aviso } from "@/lib/mantenimiento/types";
-import type { EquipoDelAviso } from "./GenerarOTModal";
+import type { EquipoDelAviso } from "@/lib/mantenimiento/otDesdeAviso";
 
 export default async function AvisosPage() {
   const supabase = await createClient();
