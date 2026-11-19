@@ -76,8 +76,13 @@ export function diasDelMovimiento(m: Reprogramacion): number | null {
  * La fila que se inserta en `mant_reprogramaciones_ot` cuando una persona usa
  * Postergar. Se arma acá y no en la ruta para poder probarla.
  *
- * La etiqueta se copia además del código: si la razón se desactiva o se
- * renombra después, el movimiento sigue diciendo lo que decía cuando pasó.
+ * La etiqueta se copia además del código, y puede venir en null por DOS causas
+ * y una no es rara: (1) la razón se desactivó o se renombró después, que es
+ * histórico; (2) la razón nunca fue una fila de `mant_razones_de_postergacion`
+ * —`planificacion_del_dia`, la que manda el calendario del plan, a propósito no
+ * lo es—, así que TODA postergación de ese origen queda con la etiqueta en null.
+ * El código siempre queda guardado; la etiqueta de reemplazo la pone cada
+ * pantalla, no los datos.
  * `reprogramada_veces` no se escribe nunca desde acá: lo mantiene un trigger.
  */
 export function filaDeReprogramacionDelSistema(p: {

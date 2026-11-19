@@ -144,7 +144,7 @@ export default function PostergarOTModal({
       window.alert(
         "La fecha se movió, pero la reprogramación no quedó registrada, así que " +
         "no va a aparecer en la pantalla de Análisis. No hace falta volver a " +
-        `postergar. (${body.reprogramacion_error})`
+        `postergar. Detalle: ${body.reprogramacion_error}`
       );
     }
     onPostergada();

@@ -131,26 +131,47 @@ export async function POST(request: Request, { params }: Params) {
   // altura la fecha ya está escrita en la planilla y guardada en la orden: un
   // 500 invita a reintentar, y reintentar posterga la orden OTRA VEZ, otros
   // siete días. Lo que se pierde es el rastro, y eso se dice con todas las
-  // letras en `reprogramacion_error`; lo ya hecho no se puede deshacer.
+  // letras en `reprogramacion_error`, que lleva el mensaje CRUDO (como
+  // `nota_error`) y deja que cada pantalla lo diga en su voz; lo ya hecho no se
+  // puede deshacer.
   // La fila de `auditoria` de más abajo es otro registro, con otro lector
   // (sólo `admin_sistema`), y no se toca.
-  const { data: razonDelMenu } = await admin
-    .from("mant_razones_de_postergacion")
-    .select("etiqueta")
-    .eq("codigo", String(body.razon))
-    .maybeSingle();
+  //
+  // **`razon_etiqueta` queda en null por dos causas, y una no es rara.** (1) La
+  // razón se desactivó o se renombró después: histórico y poco frecuente.
+  // (2) La razón nunca estuvo en `mant_razones_de_postergacion`: la
+  // postergación que maneja el calendario del plan manda `planificacion_del_dia`,
+  // que a propósito no es una fila de esa tabla (migración 20261104165733), así
+  // que TODA postergación de ese origen guarda el código con la etiqueta en
+  // null. No se repara ni se trata aparte: el código queda guardado y es
+  // suficiente; mostrar una etiqueta de reemplazo es cosa de cada pantalla.
+  //
+  // El `try/catch` cierra el otro camino al 500: `postgrest-js` devuelve
+  // `error` y no lanza, pero si algo lanzara igual, el framework contestaría 500
+  // y el reintento posterga la orden otra semana.
+  let errorHistorial: string | null = null;
+  try {
+    const { data: razonDelMenu } = await admin
+      .from("mant_razones_de_postergacion")
+      .select("etiqueta")
+      .eq("codigo", String(body.razon))
+      .maybeSingle();
 
-  const { error: errorHistorial } = await admin
-    .from("mant_reprogramaciones_ot")
-    .insert(filaDeReprogramacionDelSistema({
-      otId: id,
-      fechaAnterior: orden.fecha_ejecucion,
-      fechaNueva: nueva,
-      razon: String(body.razon),
-      razonEtiqueta: razonDelMenu?.etiqueta ?? null,
-      justificacion: String(body.justificacion),
-      usuarioId: user.id,
-    }));
+    const { error } = await admin
+      .from("mant_reprogramaciones_ot")
+      .insert(filaDeReprogramacionDelSistema({
+        otId: id,
+        fechaAnterior: orden.fecha_ejecucion,
+        fechaNueva: nueva,
+        razon: String(body.razon),
+        razonEtiqueta: razonDelMenu?.etiqueta ?? null,
+        justificacion: String(body.justificacion),
+        usuarioId: user.id,
+      }));
+    errorHistorial = error?.message ?? null;
+  } catch (e) {
+    errorHistorial = e instanceof Error ? e.message : String(e);
+  }
 
   // ── 3. La justificación, que es obligatoria y queda como historial ────────
   //
@@ -189,8 +210,6 @@ export async function POST(request: Request, { params }: Params) {
     data: { fecha_ejecucion: nueva },
     nota_error: errorNota?.message ?? null,
     planilla_error: planillaNota,
-    reprogramacion_error: errorHistorial
-      ? `La orden se postergó, pero el movimiento no quedó registrado en el historial (${errorHistorial.message}). No hace falta volver a postergar.`
-      : null,
+    reprogramacion_error: errorHistorial,
   });
 }
