@@ -4,7 +4,7 @@
 > Lo escrito a mano —para qué sirve cada módulo, cómo está armada una ruta y
 > las trampas— está en [API.md](API.md). Acá sólo hay lo que sale del código.
 
-Al 2026-11-19: **312 rutas** y **487 handlers** en 25 carpetas.
+Al 2026-11-19: **313 rutas** y **489 handlers** en 25 carpetas.
 
 ## Cómo leer la columna «guarda»
 
@@ -43,7 +43,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | secreto propio | 3 |
 | token contra la base | 1 |
 | permiso de módulo | 203 |
-| sesión | 29 |
+| sesión | 30 |
 | el proxy | 56 |
 | **ABIERTA** | 0 |
 
@@ -124,7 +124,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/cantera/voladuras` | POST | permiso de módulo · `puedeEditarCantera` | `cantera_voladuras` | — |
 | `/api/cantera/yacimientos` | GET, POST, PATCH | permiso de módulo · `tieneAccesoCantera` | `cantera_yacimientos` | — |
 
-## compras (28)
+## compras (29)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
@@ -148,6 +148,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/compras/requerimientos/[id]/odoo/pdf` | GET | permiso de módulo · `tieneAccesoCompras` | `compras_odoo_ordenes` | admin · 60s |
 | `/api/compras/requerimientos/[id]/odoo` | GET, POST | permiso de módulo · `puedeEditarCompras` | — | admin · 60s |
 | `/api/compras/requerimientos/[id]` | PATCH, DELETE | permiso de módulo · `puedeAprobarLaCompra` | `compras_cotizaciones`, `compras_historial`, `compras_requerimientos`, `usuarios` | admin · audita |
+| `/api/compras/requerimientos/reutilizar` | GET | sesión | `compras_requerimientos` | — |
 | `/api/compras/requerimientos` | POST, GET | permiso de módulo · `puedeEditarCompras` | `compras_historial`, `compras_requerimientos`, `equipos`, `usuarios` | admin · 120s |
 | `/api/compras/sheets/opciones` | GET | sesión | — | — |
 | `/api/compras/sheets/reintentar` | POST | permiso de módulo · `puedeEditarCompras` | — | 300s |
@@ -275,7 +276,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/mantenimiento/ordenes/[id]/gut` | PATCH | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_trabajo` | admin · audita · zod |
 | `/api/mantenimiento/ordenes/[id]/notas` | GET, POST, DELETE | permiso de módulo · `puedeVerMantenimiento` | `ordenes_trabajo`, `ordenes_trabajo_notas`, `ordenes_trabajo_repuestos` | admin · audita |
 | `/api/mantenimiento/ordenes/[id]/postergar` | POST | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_trabajo`, `ordenes_trabajo_notas`, `usuarios` | admin · audita |
-| `/api/mantenimiento/ordenes/[id]/repuestos` | GET, POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `compras_requerimientos`, `ordenes_trabajo_repuestos` | admin |
+| `/api/mantenimiento/ordenes/[id]/repuestos` | GET, POST, PUT, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `compras_requerimientos`, `ordenes_trabajo_repuestos` | admin |
 | `/api/mantenimiento/ordenes/justificadas` | GET | permiso de módulo · `puedeVerMantenimiento` | `ordenes_trabajo_notas` | — |
 | `/api/mantenimiento/ordenes/link` | POST | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_trabajo` | admin |
 | `/api/mantenimiento/ordenes/orden` | POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_trabajo` | admin |
@@ -558,6 +559,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/compras/requerimientos/[id]/odoo/pdf` | `lib/compras/auth`, `lib/core/descarga`, `lib/odoo/client`, `lib/odoo/pdfDeOrden`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/requerimientos/[id]/odoo` | `lib/compras/auth`, `lib/odoo/client`, `lib/odoo/pushOrden`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/requerimientos/[id]` | `lib/compras/aprobarCompra`, `lib/compras/auth`, `lib/compras/comparativa`, `lib/compras/constants`, `lib/compras/denegacion`, `lib/compras/devolucion`, `lib/compras/registrarElPedido`, `lib/compras/seguimientoSheets`, `lib/compras/sheets`, `lib/compras/types`, `lib/core/auditoria`, `lib/core/fechas`, `lib/odoo/client`, `lib/odoo/pushOrden`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/compras/requerimientos/reutilizar` | `lib/supabase/server` |
 | `/api/compras/requerimientos` | `lib/compras/ajustes`, `lib/compras/auth`, `lib/compras/avisoDeAprobacion`, `lib/compras/constants`, `lib/compras/formulario`, `lib/compras/montoAlto`, `lib/compras/serieDeRi`, `lib/core/paginado`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/sheets/opciones` | `lib/compras/sheets`, `lib/supabase/server` |
 | `/api/compras/sheets/reintentar` | `lib/compras/auth`, `lib/compras/sheets`, `lib/supabase/server` |
@@ -650,7 +652,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/mantenimiento/ordenes/[id]/gut` | `lib/core/validar`, `lib/mantenimiento/auth`, `lib/mantenimiento/gut`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/[id]/notas` | `lib/core/avisoAlInstante`, `lib/mantenimiento/auth`, `lib/mantenimiento/cancelacion`, `lib/mantenimiento/consultaDeRepuesto`, `lib/mantenimiento/notas`, `lib/mantenimiento/planillaDeOT`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/[id]/postergar` | `lib/core/auditoria`, `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/mantenimiento/formulario`, `lib/mantenimiento/notas`, `lib/mantenimiento/planillaDeOT`, `lib/mantenimiento/postergar`, `lib/supabase/admin`, `lib/supabase/server` |
-| `/api/mantenimiento/ordenes/[id]/repuestos` | `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/riDelRepuesto`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/ordenes/[id]/repuestos` | `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/repuestosDeLaOT`, `lib/mantenimiento/riDelRepuesto`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/justificadas` | `lib/mantenimiento/auth`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/link` | `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/orden` | `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
