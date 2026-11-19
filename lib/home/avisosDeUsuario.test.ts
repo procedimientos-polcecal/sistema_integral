@@ -71,19 +71,19 @@ describe("sinLoQueNoPuedeAtender", () => {
    */
   const consultas: Notificacion[] = [
     { id: "compras-consultas-repuestos", titulo: "Consultas de repuestos sin responder", cantidad: 3, href: "/c" },
-    { id: "mant-atrasadas", titulo: "Órdenes de trabajo atrasadas", cantidad: 23, href: "/b" },
+    { id: "mant-atrasadas-por-fecha", titulo: "Órdenes de trabajo atrasadas", cantidad: 23, href: "/b" },
   ];
 
   it("a quien no contesta consultas no le llega la de los repuestos", () => {
     expect(
       sinLoQueNoPuedeAtender(consultas, NADA).map((a) => a.id)
-    ).toEqual(["mant-atrasadas"]);
+    ).toEqual(["mant-atrasadas-por-fecha"]);
   });
 
   it("a quien contesta consultas si", () => {
     expect(
       sinLoQueNoPuedeAtender(consultas, { ...NADA, contestaConsultas: true }).map((a) => a.id)
-    ).toEqual(["compras-consultas-repuestos", "mant-atrasadas"]);
+    ).toEqual(["compras-consultas-repuestos", "mant-atrasadas-por-fecha"]);
   });
 
   it("aprobar no es contestar: cada lista reparte lo suyo", () => {
@@ -91,10 +91,10 @@ describe("sinLoQueNoPuedeAtender", () => {
 
     expect(
       sinLoQueNoPuedeAtender(todo, { ...NADA, apruebaCompras: true }).map((a) => a.id)
-    ).toEqual(["compras-por-aprobar", "mant-atrasadas"]);
+    ).toEqual(["compras-por-aprobar", "mant-atrasadas-por-fecha"]);
     expect(
       sinLoQueNoPuedeAtender(todo, { ...NADA, contestaConsultas: true }).map((a) => a.id)
-    ).toEqual(["mant-atrasadas", "compras-consultas-repuestos"]);
+    ).toEqual(["mant-atrasadas-por-fecha", "compras-consultas-repuestos"]);
   });
 
   /*

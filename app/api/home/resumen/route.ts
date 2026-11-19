@@ -4,6 +4,7 @@ import { modulosVisibles } from "@/lib/core/access";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 import { traerTodo } from "@/lib/core/paginado";
 import { comoSeLee, hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
+import { condicionDeAtrasada, CERRADAS } from "@/lib/mantenimiento/alertas";
 import { ritmoPorModulo } from "@/lib/home/ritmo";
 import { traerRitmo, diaDeReferenciaRrhh, equiposTallerVialSinService, traerPresentesDeHoy } from "@/lib/home/consultas";
 import type { ResumenRrhh } from "@/lib/home/tarjetaRrhh";
@@ -39,7 +40,7 @@ export async function GET() {
     await Promise.all([
       modulos.has("rrhh") ? resumenRrhh(supabase, hoyStr) : Promise.resolve(null),
       modulos.has("remises") ? resumenRemises(supabase) : Promise.resolve(null),
-      modulos.has("mantenimiento") ? resumenMantenimiento(supabase) : Promise.resolve(null),
+      modulos.has("mantenimiento") ? resumenMantenimiento(supabase, hoyStr) : Promise.resolve(null),
       modulos.has("compras") ? resumenCompras(supabase) : Promise.resolve(null),
       modulos.has("inventario") ? resumenInventario(supabase, hoyStr) : Promise.resolve(null),
       modulos.has("produccion") ? resumenProduccion(supabase, hoyStr) : Promise.resolve(null),
@@ -146,13 +147,23 @@ async function resumenRemises(supabase: Awaited<ReturnType<typeof createClient>>
  * Los tres de ahora se mueven todas las semanas y los tres piden hacer algo,
  * que es lo único que justifica ocupar la tarjeta del inicio.
  */
-async function resumenMantenimiento(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const [otCounts, avisos] = await Promise.all([
+async function resumenMantenimiento(supabase: Awaited<ReturnType<typeof createClient>>, hoy: string) {
+  const [otCounts, atrasadasPorFecha, avisos] = await Promise.all([
     Promise.all(
       ["POR_HACER", "EN_PROCESO", "ATRASADO"].map((estado) =>
         supabase.from("ordenes_trabajo").select("id", { count: "exact", head: true }).eq("estado", estado)
       )
     ),
+    // «Atrasadas» es la definición única de `alertas.ts` (la marca de la planilla
+    // o la ventana vencida), la misma que cuenta la campana: con el conteo por
+    // `estado = ATRASADO` este hero decía 19 donde la campana decía 32, con el
+    // mismo rótulo y en la misma pantalla. Los tres de arriba miden otra cosa
+    // —cuántas hay en cada estado— y se quedan.
+    supabase
+      .from("ordenes_trabajo")
+      .select("id", { count: "exact", head: true })
+      .not("estado", "in", `(${CERRADAS.join(",")})`)
+      .or(condicionDeAtrasada(hoy)),
     // Los avisos se cuentan en memoria porque "sin orden" son dos columnas: la
     // sincronización guarda el número de la planilla como texto en
     // `ot_asignada`, y `work_order_id` lo llenan los generados desde la app y,
@@ -165,7 +176,8 @@ async function resumenMantenimiento(supabase: Awaited<ReturnType<typeof createCl
     ),
   ]);
 
-  const [porHacer, enProceso, atrasadas] = otCounts.map((r) => r.count ?? 0);
+  const [porHacer, enProceso, marcadasAtrasadas] = otCounts.map((r) => r.count ?? 0);
+  const atrasadas = atrasadasPorFecha.count ?? 0;
 
   // Un guión suelto es cómo se escribe "acá no va nada" en la planilla.
   const tieneOrden = (a: { work_order_id: string | null; ot_asignada: string | null }) =>
@@ -173,7 +185,7 @@ async function resumenMantenimiento(supabase: Awaited<ReturnType<typeof createCl
 
   return {
     atrasadas,
-    otPendientes: porHacer + enProceso + atrasadas,
+    otPendientes: porHacer + enProceso + marcadasAtrasadas,
     avisosSinOrden: avisos.filter((a) => !tieneOrden(a)).length,
   };
 }

@@ -109,6 +109,85 @@ const sóloSabe = (pedido: string, loQueSabe: string) =>
   `Devolver todo haría pasar el test con el filtro sin aplicar, así que revienta: ` +
   `si hace falta esa forma, implementala acá.`;
 
+/**
+ * Un `or=(...)` de PostgREST, evaluado de verdad.
+ *
+ * Existe porque el conteo de OT atrasadas de la campana no se puede escribir
+ * con `.eq()`: son tres alternativas y dos de ellas llevan un `and` con un `or`
+ * adentro (`lib/mantenimiento/alertas.ts`, `condicionDeAtrasada`). La salida
+ * cómoda habría sido que el fake ignore el `.or()` y devuelva todo — y ése es
+ * exactamente el test en verde con el filtro sin aplicar que el resto de este
+ * archivo existe para no tener: ahí el conteo daría **todas** las órdenes y
+ * nadie lo notaría, porque un número más grande no se ve roto.
+ *
+ * Lo que entiende: una lista separada por comas (que es un OR), `and(...)` y
+ * `or(...)` anidados, y las hojas `col.eq.v`, `col.neq.v`, `col.lt.v`,
+ * `col.lte.v`, `col.gt.v`, `col.gte.v`, `col.is.null` y `col.not.is.null`.
+ * Cualquier otro operador revienta, por la misma razón que el `.not` de abajo.
+ *
+ * **Compara como texto**, que es lo que hacen las fechas `aaaa-mm-dd` de este
+ * repo —ordenan igual como texto que como fecha— y no sirve para números: un
+ * `.lt` sobre una columna numérica daría mal, y hay que implementarlo acá
+ * antes de usarlo.
+ */
+export function cumpleElOr(fila: Fila, filtros: string): boolean {
+  return partirPorComas(filtros).some((t) => evaluarFiltro(fila, t));
+}
+
+/** Corta por comas de primer nivel: las de adentro de un paréntesis no cuentan. */
+function partirPorComas(texto: string): string[] {
+  const partes: string[] = [];
+  let hondo = 0;
+  let desde = 0;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i];
+    if (c === "(") hondo++;
+    else if (c === ")") hondo--;
+    else if (c === "," && hondo === 0) {
+      partes.push(texto.slice(desde, i));
+      desde = i + 1;
+    }
+  }
+  partes.push(texto.slice(desde));
+  return partes.map((p) => p.trim()).filter(Boolean);
+}
+
+function evaluarFiltro(fila: Fila, termino: string): boolean {
+  if (termino.startsWith("and(") && termino.endsWith(")")) {
+    return partirPorComas(termino.slice(4, -1)).every((t) => evaluarFiltro(fila, t));
+  }
+  if (termino.startsWith("or(") && termino.endsWith(")")) {
+    return partirPorComas(termino.slice(3, -1)).some((t) => evaluarFiltro(fila, t));
+  }
+
+  const corte = termino.indexOf(".");
+  const columna = termino.slice(0, corte);
+  const resto = termino.slice(corte + 1);
+  const valor = fila[columna];
+
+  if (resto === "is.null") return esNula(valor);
+  if (resto === "not.is.null") return !esNula(valor);
+
+  const corte2 = resto.indexOf(".");
+  const operador = resto.slice(0, corte2);
+  const contra = resto.slice(corte2 + 1);
+
+  if (esNula(valor)) return false;
+  const texto = String(valor);
+  switch (operador) {
+    case "eq": return texto === contra;
+    case "neq": return texto !== contra;
+    case "lt": return texto < contra;
+    case "lte": return texto <= contra;
+    case "gt": return texto > contra;
+    case "gte": return texto >= contra;
+    default:
+      throw new Error(sóloSabe(
+        `el operador "${operador}" en un .or()`,
+        `.or() con eq, neq, lt, lte, gt, gte, is.null y not.is.null`));
+  }
+}
+
 export interface BaseDeMentira {
   estado: EstadoDeLaBase;
   /** Lo que se le pasa a `createAdminClient()` en el `vi.mock`. */
@@ -127,6 +206,8 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
     private enLista: [string, readonly unknown[]] | null = null;
     private nulas: string[] = [];
     private noNulas: string[] = [];
+    private fueraDeLista: [string, string[]][] = [];
+    private alternativas: string[] = [];
     private columnas = "";
     private fila: Fila | null = null;
     private unica: "single" | "maybeSingle" | null = null;
@@ -166,20 +247,31 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
       return this;
     }
     /**
-     * Sólo `.not(columna, "is", null)`, que es la única forma que usa el repo
-     * —los tres lugares que hay: las divergencias de la Agenda, los ciclos de
-     * OT y los pendientes de planilla—. Cualquier otro operador **revienta**, y
-     * eso es lo contrario de lo cómodo a propósito: devolver todo sería un test
-     * en verde con el filtro sin aplicar, que es el modo de fallar que este
-     * archivo entero existe para no tener.
+     * Dos formas: `.not(columna, "is", null)` —las divergencias de la Agenda,
+     * los ciclos de OT, los pendientes de planilla— y `.not(columna, "in",
+     * "(A,B)")`, que es como la campana y el listado sacan las órdenes cerradas
+     * del conteo de atrasadas. Cualquier otra **revienta**, y eso es lo
+     * contrario de lo cómodo a propósito: devolver todo sería un test en verde
+     * con el filtro sin aplicar, que es el modo de fallar que este archivo
+     * entero existe para no tener.
      */
     not(columna: string, operador: string, valor: unknown) {
-      if (operador !== "is" || valor !== null) {
-        throw new Error(sóloSabe(`.not("${columna}", "${operador}", ${JSON.stringify(valor)})`, `.not(columna, "is", null)`));
+      if (operador === "is" && valor === null) {
+        this.noNulas.push(columna);
+        return this;
       }
-      this.noNulas.push(columna);
-      return this;
+      if (operador === "in" && typeof valor === "string" && /^\(.*\)$/.test(valor)) {
+        // Se compara como texto, igual que el `in` de PostgREST sobre una
+        // columna de texto. Una fila sin la columna no está en la lista.
+        this.fueraDeLista.push([columna, valor.slice(1, -1).split(",").map((v) => v.trim())]);
+        return this;
+      }
+      throw new Error(sóloSabe(
+        `.not("${columna}", "${operador}", ${JSON.stringify(valor)})`,
+        `.not(columna, "is", null) y .not(columna, "in", "(A,B)")`));
     }
+    /** El `or=(...)` de PostgREST. Lo evalúa `cumpleElOr`, definida más arriba. */
+    or(filtros: string) { this.alternativas.push(filtros); return this; }
     range(desde: number, hasta: number) { this.rango = [desde, hasta]; return this; }
     /** El orden no se simula: ninguna ruta depende de él para decidir. */
     order() { return this; }
@@ -261,6 +353,8 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
         this.igualdades.every(([c, v]) => f[c] === v) &&
         this.nulas.every((c) => esNula(f[c])) &&
         this.noNulas.every((c) => !esNula(f[c])) &&
+        this.fueraDeLista.every(([c, vs]) => !vs.includes(String(f[c] ?? ""))) &&
+        this.alternativas.every((filtros) => cumpleElOr(f, filtros)) &&
         (!this.enLista || this.enLista[1].includes(f[this.enLista[0]]));
 
       if (this.accion === "update") {

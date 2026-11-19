@@ -86,8 +86,14 @@ import type { Rol, UsuarioModulo } from "@/lib/core/types";
  *   por semana y es el precio de conservar la red semanal.
  */
 
-/** Los avisos que ya tienen su propio push y llegarían dos veces. Ver arriba. */
-const YA_AVISA_SOLO = new Set(["compras-por-aprobar"]);
+/**
+ * Los avisos que ya tienen su propio push y llegarían dos veces. Ver arriba.
+ *
+ * `mant-atrasadas-por-fecha` lo nombra orden por orden el cron de recordatorios
+ * de Mantenimiento; dejarlo también acá haría que el mismo hecho avise dos
+ * veces con números distintos. Sigue en la campana y en los totales de los lunes.
+ */
+const YA_AVISA_SOLO = new Set(["compras-por-aprobar", "mant-atrasadas-por-fecha"]);
 
 /**
  * El mismo tope que las dieciséis rutas de cron de este repo.

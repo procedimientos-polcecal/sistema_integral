@@ -13,6 +13,7 @@ import DesestimarModal from "./DesestimarModal";
 import EnlazarOTModal from "./EnlazarOTModal";
 import Select from "@/components/Select";
 import FotosDelAviso from "@/components/FotosDelAviso";
+import { ordenarAvisos, type OrdenDeAvisos } from "@/lib/mantenimiento/ordenDeAvisos";
 import { finalDelAviso, estaDesestimado } from "@/lib/mantenimiento/desestimarAviso";
 import { comoSeMuestraElTrabajo, estadoDelTrabajo } from "@/lib/mantenimiento/trabajoDelAviso";
 import { sePuedeDesenlazar } from "@/lib/mantenimiento/enlazarOtAlAviso";
@@ -44,6 +45,11 @@ export default function AvisosClient({
   const [busqueda, setBusqueda] = useState("");
   const [urgencia, setUrgencia] = useState("");
   const [soloSinOt, setSoloSinOt] = useState(false);
+  /**
+   * El orden arranca en “fecha”, que es como los pide el servidor: agregar
+   * una forma de ordenar no cambia con qué se encuentra la gente al entrar.
+   */
+  const [orden, setOrden] = useState<OrdenDeAvisos>("fecha");
   const [sincronizando, setSincronizando] = useState(false);
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState<string | null>(null);
@@ -91,7 +97,7 @@ export default function AvisosClient({
 
   const visibles = useMemo(() => {
     const q = busqueda.toLowerCase().trim();
-    return avisos.filter((a) => {
+    const filtrados = avisos.filter((a) => {
       if (urgencia && a.urgencia !== urgencia) return false;
       // "Sin OT" quiere decir PENDIENTE: un aviso desestimado tampoco tiene
       // orden, pero ya se decidio que no la va a tener, asi que mostrarlo aca
@@ -101,7 +107,10 @@ export default function AvisosClient({
       return [a.oa_number, a.descripcion, a.equipo_raw, a.sector_raw, a.quien_aviso]
         .some((v) => v?.toLowerCase().includes(q));
     });
-  }, [avisos, busqueda, urgencia, soloSinOt]);
+    // Ordenar después de filtrar y no antes: es el mismo trabajo sobre menos
+    // filas, y el orden de lo que no se muestra no le importa a nadie.
+    return ordenarAvisos(filtrados, orden);
+  }, [avisos, busqueda, urgencia, soloSinOt, orden]);
 
   async function sincronizar() {
     setSincronizando(true);
@@ -275,6 +284,15 @@ export default function AvisosClient({
         >
           <option value="">Cualquier urgencia</option>
           {urgencias.map((u) => <option key={u} value={u}>{u}</option>)}
+        </Select>
+        <Select
+          value={orden}
+          onChange={(e) => setOrden(e.target.value as OrdenDeAvisos)}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        >
+          <option value="fecha">Más nuevos primero</option>
+          <option value="numero-desc">N° de aviso, del más alto</option>
+          <option value="numero-asc">N° de aviso, del más bajo</option>
         </Select>
         <label className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
           <input

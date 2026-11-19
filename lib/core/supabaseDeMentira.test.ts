@@ -20,7 +20,7 @@
  * afuera**, que es lo único que un no-op no puede fingir.
  */
 import { describe, it, expect, beforeEach } from "vitest";
-import { supabaseDeMentira, type BaseDeMentira } from "./supabaseDeMentira";
+import { supabaseDeMentira, cumpleElOr, type BaseDeMentira } from "./supabaseDeMentira";
 
 /** Lo que de la consulta usa este archivo. El fake devuelve `unknown`. */
 interface Consultable extends PromiseLike<{ data: Record<string, unknown>[] | null }> {
@@ -141,5 +141,74 @@ describe("el `update` y el `alInsertar` del Supabase de mentira", () => {
     const r = await t.insert({ x: 1 });
     expect(r.error?.code).toBe("23505");
     expect(b.estado.tablas.t).toEqual([]);
+  });
+});
+
+/**
+ * Las dos formas que trajo el conteo de OT atrasadas, por la misma razón que
+ * todo lo de arriba: un `.or()` que devolviera todo, o un `.not(… "in" …)` que
+ * no sacara nada, dejan el test en verde con el filtro sin aplicar — y acá eso
+ * no se ve, porque un conteo **más grande** no parece roto.
+ */
+describe("los filtros que trajo el conteo de atrasadas", () => {
+  /** Una consulta de lectura del fake, con lo que hace falta encadenar acá. */
+  interface Lectura extends PromiseLike<{ data: { id: string }[] | null }> {
+    not(c: string, op: string, v: unknown): Lectura;
+    or(filtros: string): Lectura;
+  }
+  const leer = (b: BaseDeMentira, tabla: string) =>
+    (b.admin.from(tabla) as unknown as { select(c: string): Lectura }).select("id");
+
+  const conFilas = (filas: object[]) => {
+    const b = supabaseDeMentira();
+    b.reiniciar({ ot: filas as Record<string, unknown>[] });
+    return b;
+  };
+
+  it('`.not(columna, "in", "(A,B)")` deja afuera las que están en la lista', async () => {
+    const b = conFilas([
+      { id: "a", estado: "POR_HACER" },
+      { id: "b", estado: "REALIZADO" },
+      { id: "c", estado: "CANCELADA" },
+      { id: "d", estado: "EN_PROCESO" },
+    ]);
+    const r = await leer(b, "ot").not("estado", "in", "(REALIZADO,CANCELADA)");
+    expect(r.data?.map((f) => f.id)).toEqual(["a", "d"]);
+  });
+
+  it("un `.or()` de alternativas sueltas deja afuera la que no cumple ninguna", async () => {
+    const b = conFilas([
+      { id: "a", estado: "ATRASADO", fecha: "2026-12-01" },
+      { id: "b", estado: "POR_HACER", fecha: "2026-11-01" },
+      { id: "c", estado: "POR_HACER", fecha: "2026-12-01" },
+    ]);
+    const r = await leer(b, "ot").or("estado.eq.ATRASADO,fecha.lt.2026-11-19");
+    expect(r.data?.map((f) => f.id)).toEqual(["a", "b"]);
+  });
+
+  it("entiende un `and(...)` con un `or(...)` adentro, que es la forma real", async () => {
+    const b = conFilas([
+      // Vencida y sin ventana: entra.
+      { id: "a", fecha: "2026-11-01", fin: null },
+      // Vencida pero la ventana llega hasta diciembre: no entra.
+      { id: "b", fecha: "2026-11-01", fin: "2026-12-01" },
+      // Vencida y la ventana también terminó: entra.
+      { id: "c", fecha: "2026-11-01", fin: "2026-11-10" },
+      // Todavía no arrancó: no entra.
+      { id: "d", fecha: "2026-12-01", fin: null },
+    ]);
+    const r = await leer(b, "ot")
+      .or("and(fecha.lt.2026-11-19,or(fin.is.null,fin.lt.2026-11-19))");
+    expect(r.data?.map((f) => f.id)).toEqual(["a", "c"]);
+  });
+
+  it("una columna nula no cumple una comparación, y `is.null` sí", () => {
+    expect(cumpleElOr({ fecha: null }, "fecha.lt.2026-11-19")).toBe(false);
+    expect(cumpleElOr({ fecha: null }, "fecha.is.null")).toBe(true);
+    expect(cumpleElOr({}, "fecha.not.is.null")).toBe(false);
+  });
+
+  it("un operador que no simula revienta en vez de dejar pasar la fila", () => {
+    expect(() => cumpleElOr({ x: "1" }, "x.like.*hola*")).toThrow(/sólo sabe/);
   });
 });

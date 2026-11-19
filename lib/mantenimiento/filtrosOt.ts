@@ -17,7 +17,7 @@
  */
 
 import {
-  losQueEstanEnLaLista, escribirEnLaUrl, conLaPagina, hayAlgunFiltro as hayAlguno,
+  losQueEstanEnLaLista, escribirEnLaUrl, conLaPagina, elSiONo, hayAlgunFiltro as hayAlguno,
 } from "@/lib/core/filtrosUrl";
 import { fechaDeTexto } from "@/lib/core/fechas";
 import { ESPECIALIDADES, ESTADOS_DE_OT } from "./ordenes";
@@ -294,12 +294,29 @@ export interface FiltrosOt {
   equipo: string[];
   /** `hechas` y/o `necesitan`. Ver `VALORES_DE_REPROGRAMACION`. */
   reprogramacion: string[];
+  /**
+   * «Se le pasó la fecha», el mismo criterio que `estaAtrasada` de `alertas.ts`
+   * (abierta y con la fecha de inicio —o la pendiente— anterior a hoy).
+   *
+   * **No es un valor más de `estado`**: ese vocabulario espeja el de la
+   * planilla y `ATRASADO` ahí es lo que alguien escribió en la celda, que no
+   * es lo mismo. Meterle un valor inventado rompería la validación contra
+   * `ESTADOS_DE_OT`. Es un sí o un no, y viaja como `atrasada=1`.
+   *
+   * **Se parece a `reprogramacion=necesitan` y no es lo mismo**, que es lo que
+   * hay que saber antes de tocar cualquiera de los dos: éste cuenta además el
+   * `ATRASADO` que escribió una persona en la planilla y respeta la ventana de
+   * `fecha_fin`, mientras que el otro pregunta por lo que hay que correr de
+   * fecha y mira sólo las fechas. Ver `condicionDeReprogramacion`.
+   */
+  atrasada: boolean;
 }
 
 export const FILTROS_VACIOS: FiltrosOt = {
   busqueda: "", campoFecha: "", orden: "", desde: "", hasta: "",
   estado: [], especialidad: [], tipo: [], quien: [],
   prioridad: [], proveedor: [], sector: [], equipo: [], reprogramacion: [],
+  atrasada: false,
 };
 
 /** Las listas contra las que se validan los filtros que son referencias. */
@@ -337,6 +354,7 @@ export function leerFiltrosDeLaUrl(
     sector: losQueEstanEnLaLista(params, "sector", catalogos.sectores),
     equipo: losQueEstanEnLaLista(params, "equipo", catalogos.equipos),
     reprogramacion: losQueEstanEnLaLista(params, "reprogramacion", VALORES_DE_REPROGRAMACION),
+    atrasada: elSiONo(params, "atrasada"),
   };
 }
 
@@ -366,6 +384,7 @@ const NOMBRES: readonly [keyof FiltrosOt, string][] = [
   ["sector", "sector"],
   ["equipo", "equipo"],
   ["reprogramacion", "reprogramacion"],
+  ["atrasada", "atrasada"],
 ];
 
 /**

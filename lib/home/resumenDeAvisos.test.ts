@@ -18,12 +18,12 @@ describe("resumirParaPush", () => {
    */
   it("con un solo aviso, el título es ése y el link va directo ahí", () => {
     const r = resumirParaPush([
-      conteo("mant-atrasadas", "Órdenes de trabajo atrasadas", 20, "/mantenimiento/ordenes?estado=ATRASADO"),
+      conteo("mant-atrasadas", "Órdenes de trabajo atrasadas", 20, "/mantenimiento/ordenes?atrasada=1"),
     ]);
     expect(r).toEqual({
       title: "Órdenes de trabajo atrasadas",
       body: "20",
-      url: "/mantenimiento/ordenes?estado=ATRASADO",
+      url: "/mantenimiento/ordenes?atrasada=1",
     });
   });
 

@@ -13,6 +13,7 @@
 
 import { fechaParaElCalendario } from "@/lib/agenda/evento";
 import { sumarDias } from "@/lib/core/fechas";
+import { diasDeAtraso as diasDeAtrasoDe, estaAtrasada } from "./alertas";
 import type { GenteDelDia } from "./genteDelDia";
 
 export interface DiaDelCalendario {
@@ -41,6 +42,22 @@ export interface DiaDelCalendario {
     app_created: boolean | null;
     estado: string | null;
     fecha_ejecucion: string | null;
+    /**
+     * Se decide una vez por orden, contra su ventana entera y no contra el día
+     * de la celda: así una orden vencida es roja en todos los días que ocupa y
+     * ninguno futuro se pinta de rojo por error.
+     */
+    atrasada: boolean;
+    /**
+     * Hace cuántos días venció, o `null` si no está atrasada o está marcada a
+     * mano sin decir desde cuándo. **Viaja calculado y no se recalcula en el
+     * cliente**: `diasDeAtraso` necesita la pendiente y `fecha_fin`, que esta
+     * entrada no lleva —lleva `fecha_ejecucion` cruda por otra razón—, y llamarla
+     * con lo que hay anclaría en la fecha equivocada sin error ni aviso. Además
+     * el día de «hoy» lo decidió el servidor, y el reloj del navegador no es el
+     * de Argentina.
+     */
+    diasDeAtraso: number | null;
     /**
      * Quién está puesto en cada una de las tres posiciones, para que el panel
      * de asignar sepa cuáles están ocupadas sin otro viaje.
@@ -106,12 +123,15 @@ export function diasQueOcupa(fechaInicio: string, fechaFin: string | null): stri
  * planilla todavía no devolvió, y si no, la de la planilla. Una orden sin
  * ninguna fecha no aparece. Un día que no está en `gentePorDia` queda como «no
  * sé», nunca como cero.
+ *
+ * `hoy` (AAAA-MM-DD, hora de Argentina) decide `atrasada` con `estaAtrasada`.
  */
 export function armarElCalendario(
   ordenes: OrdenDelCalendario[],
   desde: string,
   hasta: string,
   gentePorDia: Map<string, GenteDelDia>,
+  hoy: string,
 ): DiaDelCalendario[] {
   const dias = new Map<string, DiaDelCalendario>();
   for (let d = desde; d <= hasta; d = sumarDias(d, 1)) {
@@ -121,6 +141,10 @@ export function armarElCalendario(
   for (const o of ordenes) {
     const inicio = fechaParaElCalendario(o);
     if (!inicio) continue;
+    // Antes del recorte y del bucle: contra el inicio verdadero de la orden.
+    const atrasada = estaAtrasada(o, hoy);
+    // Sólo si está atrasada: `diasDeAtraso` solo da 0 para una orden futura.
+    const diasDeAtraso = atrasada ? diasDeAtrasoDe(o, hoy) : null;
 
     // Se recorta al rango antes de enumerar: una `fecha_fin` de 2099 en una
     // celda mal tipeada no puede costar treinta mil días. El inicio verdadero
@@ -146,6 +170,8 @@ export function armarElCalendario(
         app_created: o.app_created,
         estado: o.estado,
         fecha_ejecucion: o.fecha_ejecucion,
+        atrasada,
+        diasDeAtraso,
         operario_1: o.operario_1,
         operario_2: o.operario_2,
         operario_3: o.operario_3,

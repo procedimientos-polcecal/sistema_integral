@@ -8,6 +8,7 @@ import {
   sospechasDeCambio, type CicloVigilado, type Sospecha,
 } from "@/lib/mantenimiento/sospechaDeCambio";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import { condicionDeAtrasada, CERRADAS } from "@/lib/mantenimiento/alertas";
 import { filtrarDescartadas, type Notificacion } from "./notificaciones";
 import { avisosDeCiclos, avisosDeConteos, avisosDeRitmo, avisosDeSalud, type ConteosParaAvisos } from "./avisos";
 import { contarDivergenciasSinVer } from "@/lib/agenda/avisosDeLaAgenda";
@@ -123,7 +124,13 @@ async function avisosDeLosModulos(
     agendaDivergencias, salud, mensajesMencionesSinLeer,
   ] = await Promise.all([
     tiene("rrhh") ? sinClasificarDelUltimoDiaHabil(supabase, hoy) : Promise.resolve(0),
-    contarSiTiene("mantenimiento", () => head("ordenes_trabajo").eq("estado", "ATRASADO")),
+    contarSiTiene("mantenimiento", () => head("ordenes_trabajo")
+      // Atrasada es que se pasó la fecha, no lo que marca la planilla. El
+      // `.not` no es redundante: la condición no excluye las cerradas, y sin él
+      // entrarían las 2.467 REALIZADO con fecha pasada. Es la misma pareja que
+      // usa el listado con `?atrasada=1`.
+      .not("estado", "in", `(${CERRADAS.join(",")})`)
+      .or(condicionDeAtrasada(hoy))),
     // La tabla se rehace entera en cada sincronización, así que su tamaño ES
     // la divergencia de hoy. Su PK es `(ot_number, campo)` y no `id`, así que
     // el conteo va por una de esas columnas.

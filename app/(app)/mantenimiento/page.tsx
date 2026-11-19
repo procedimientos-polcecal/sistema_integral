@@ -5,7 +5,7 @@ import { lunesDe } from "@/lib/mantenimiento/produccion";
 import {
   ultimosMeses, paradasExigidas, ventanasDeReparacion, nombreDelMes,
 } from "@/lib/mantenimiento/dashboard";
-import { resumirAtrasadas, hoyISO } from "@/lib/mantenimiento/alertas";
+import { resumirAtrasadas, hoyISO, condicionDeAtrasada, CERRADAS } from "@/lib/mantenimiento/alertas";
 import { sumarDias } from "@/lib/core/fechas";
 import DashboardClient from "./DashboardClient";
 import { sectoresDePlanta, empresaDelSector } from "@/lib/mantenimiento/sectores";
@@ -140,7 +140,7 @@ export default async function MantenimientoDashboardPage() {
       // esto crezca, va `traerTodo()`.
       supabase
         .from("ordenes_trabajo")
-        .select("sector_id, requiere_parada_sector, ot_number, estado, descripcion, equipo_raw")
+        .select("sector_id, requiere_parada_sector, ot_number, estado, descripcion, equipo_raw, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin")
         .in("estado", ["POR_HACER", "EN_PROCESO", "ATRASADO"])
         .not("sector_id", "is", null),
       supabase
@@ -164,17 +164,18 @@ export default async function MantenimientoDashboardPage() {
 
   const ventanas = ventanasDeReparacion(conEmpresa, planes ?? [], pendientes);
 
-  // Las que podrían estar atrasadas: la marca de la planilla o una fecha
-  // vencida. El filtro fino lo hace `resumirAtrasadas`, que sabe que una
-  // realizada tarde ya no está atrasada.
+  // Las atrasadas: la marca de la planilla o una fecha vencida, con la misma
+  // definición que `estaAtrasada` (`condicionDeAtrasada`). `resumirAtrasadas`
+  // vuelve a filtrar por si las dos se separaran.
   const { data: candidatas } = await supabase
     .from("ordenes_trabajo")
-    .select("ot_number, estado, proxima_fecha, sector_raw, descripcion, equipo_raw, quien, gut_gravedad, gut_urgencia, gut_tendencia")
-    .or(`estado.eq.ATRASADO,proxima_fecha.lt.${hoy}`)
+    .select("ot_number, estado, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, sector_raw, descripcion, equipo_raw, quien, gut_gravedad, gut_urgencia, gut_tendencia")
+    .not("estado", "in", `(${CERRADAS.join(",")})`)
+    .or(condicionDeAtrasada(hoy))
     .limit(500);
 
   const atrasadas = resumirAtrasadas(candidatas ?? [], hoy);
-  const paradas = paradasExigidas(pendientes);
+  const paradas = paradasExigidas(pendientes, hoy);
 
   const nivel = await nivelMantenimientoDe(supabase, user.id);
   const canEdit = nivel === "edicion" || nivel === "admin";

@@ -139,6 +139,8 @@ export default function OrdenesClient({
   const [sector, setSector] = useState(arranque.sector);
   const [equipo, setEquipo] = useState(arranque.equipo);
   const [reprogramacion, setReprogramacion] = useState(arranque.reprogramacion);
+  // Un sí o un no y no un valor de `estado`: ver `FiltrosOt.atrasada`.
+  const [atrasada, setAtrasada] = useState(arranque.atrasada);
   // No es un filtro —no saca filas— pero viaja igual que ellos, porque el
   // orden lo resuelve la base. Por eso queda afuera de `hayAlgunFiltro` y de
   // «Limpiar»: no es algo que esconda órdenes.
@@ -215,10 +217,10 @@ export default function OrdenesClient({
   const filtros: FiltrosOt = useMemo(() => ({
     busqueda: busquedaAplicada, campoFecha, orden, desde, hasta,
     estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo,
-    reprogramacion,
+    reprogramacion, atrasada,
   }), [busquedaAplicada, campoFecha, orden, desde, hasta,
        estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo,
-       reprogramacion]);
+       reprogramacion, atrasada]);
 
   const hayFiltros = hayAlgunFiltro(filtros);
 
@@ -230,6 +232,7 @@ export default function OrdenesClient({
     setEstado([]); setEspecialidad([]); setTipo([]); setQuien([]);
     setPrioridad([]); setProveedor([]); setSector([]); setEquipo([]);
     setReprogramacion([]);
+    setAtrasada(false);
   }
 
   // La búsqueda espera un momento para no consultar en cada tecla.
@@ -601,12 +604,31 @@ export default function OrdenesClient({
               );
             })}
 
+            {/* «Sólo atrasadas» es otra pregunta que los estados: es que se le
+                pasó la fecha, no lo que dice la columna de la planilla. Por eso
+                es un interruptor aparte y no un quinto botón de arriba, y el
+                enlace de la campana y del push cae acá con `?atrasada=1`. */}
+            <button
+              type="button"
+              aria-pressed={atrasada}
+              onClick={() => setAtrasada(!atrasada)}
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition-all"
+              style={{
+                color:       atrasada ? "#B91C1C" : "#64748B",
+                background:  atrasada ? "#FEE2E2" : "#fff",
+                borderColor: atrasada ? "#B91C1C" : "#E2E8F0",
+              }}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: atrasada ? "#DC2626" : "#CBD5E1" }} />
+              Sólo atrasadas
+            </button>
+
             <input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar equipo, sector, descripción..."
               className="w-full sm:w-60 sm:ml-auto rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
 
-            {/* En teléfono el resto arranca cerrado: siete desplegables más
-                empujarían la tabla fuera de la pantalla. */}
+            {/* En teléfono el resto arranca cerrado: ocho desplegables más
+                empujarían la tabla fuera de la pantalla. Eran siete hasta que
+                entró el de reprogramación, el 19/11/2026. */}
             <button
               onClick={() => setFiltrosAbiertos((v) => !v)}
               className="sm:hidden rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600"

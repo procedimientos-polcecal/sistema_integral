@@ -1855,17 +1855,56 @@ modal con la X o con Escape después de encolar y lo vuelve a abrir, `resultado`
 arranca en `null`, el botón vuelve a estar habilitado y el borrador sigue ahí
 —la X y Escape conservan a propósito—, así que se puede mandar una **segunda OT
 con el mismo `aviso_id`**: `mandarOEncolar` genera una clave nueva por llamada y
-la ruta no mira si el aviso ya tiene `work_order_id`.
+la ruta no miraba si el aviso ya tiene `work_order_id`.
 
 Es **más angosto todavía** que el del punto 8, porque pide perder la señal en
 una pantalla a la que no se llega sin señal —`/mantenimiento/avisos` la dibuja
 el servidor—, encolar, cerrar y reabrir. **No se arregla con más estado en el
-modal**, y por eso se deja escrito en vez de parchearlo: cualquier memoria que
-viva adentro del componente se pierde al desmontarlo, y una que viva en el
-borrador haría falta tirarla a mano con cada aviso. **El cierre de verdad es
-que `POST /api/mantenimiento/ordenes` se niegue cuando el aviso ya tiene
-`work_order_id`** —una comprobación, del lado que las dos puertas comparten—, y
-esa ruta queda fuera de este plan.
+modal**: cualquier memoria que viva adentro del componente se pierde al
+desmontarlo, y una que viva en el borrador haría falta tirarla a mano con cada
+aviso.
+
+### Cerrado el 19/11/2026, del lado que las dos puertas comparten
+
+`POST /api/mantenimiento/ordenes` **se niega con un 409 cuando el aviso ya
+tiene `work_order_id`**, y el mensaje nombra la orden que ya existe: *«El
+aviso A22 ya tiene la orden de trabajo #949. Si hace falta más trabajo sobre
+lo mismo, cargalo desde Órdenes de trabajo.»* La regla pura vive en
+[lib/mantenimiento/avisoYaTieneOrden.ts](../lib/mantenimiento/avisoYaTieneOrden.ts).
+Eso cierra los dos caminos de arriba y cualquier otro que postee a la ruta sin
+pasar por la pantalla.
+
+Tres cosas que no se deducen del código:
+
+- **El rechazo sale de dos lugares distintos, y el motivo es la clave.**
+  Contestar 409 después de `reservarClave` dejaría esa clave reservada y sin
+  resolver para una orden que nunca se va a crear, y el próximo reintento
+  recibiría `en-duda` —«mirá la planilla»— por algo que no tiene que ver con
+  la planilla. Así que sin clave se rechaza antes de reservar, y con clave se
+  espera a que la reserva diga `seguir` y se la suelta con `soltarLaClave`
+  antes de contestar. La consulta al aviso es **una sola** en los dos casos.
+- **No reemplaza al veredicto `ya-esta`, y nunca corre antes que él.** Son
+  cosas distintas: `ya-esta` reconoce *la misma carga* reintentada y contesta
+  200 con su número —que es lo que la cola necesita para darla por hecha—,
+  mientras que esto reconoce *otra carga* apuntando a un aviso ya atendido.
+  Ponerlo primero convertiría un reintento legítimo en un 409 definitivo y
+  dejaría la carga parada en el teléfono para siempre.
+- **El 409 es definitivo para la cola, y eso es lo buscado.** La carga queda
+  parada y la mira una persona, en vez de reintentarse contra una regla que no
+  va a cambiar sola.
+
+Lo que **queda abierto**, dicho: entre la consulta y el insert hay una ventana
+de carrera. Dos cargas simultáneas para el mismo aviso pueden pasar las dos el
+control. Es mucho más angosto que lo que cerró —pide simultaneidad real, no
+sólo repetición— y cerrarlo del todo pide una restricción en la base, que es
+otra tarea: hoy `work_order_id` admite cualquier valor, así que la segunda
+escritura pisa en vez de fallar.
+
+Medido el 19/11/2026 contra producción, con la consulta exacta de la ruta: de
+**254 avisos, 235 ya tienen orden** y 0 tienen el enlace puesto apuntando a una
+orden que no existe. El aviso A22 devuelve el 409 con el #949; el A1, que no
+tiene orden, pasa; y un `aviso_id` que no existe en la tabla **no** se convierte
+en un rechazo —sigue el camino de siempre, como antes—.
 
 ## Los repuestos de una orden, y si los hay
 
@@ -4571,3 +4610,91 @@ así que un `text-sm` al lado no hace nada y una oración puesta en un `.badge`
 sale como un rótulo. La fila está ahora en la tabla de la sección
 «Y `className="input w-20"` no mide 20» de CLAUDE.md, que hasta hoy listaba
 `.card` y los cuatro `.btn-*` y no ésta.
+
+## Cuándo una OT está atrasada, y quién se entera (19/11/2026)
+
+Hasta esta rama «atrasada» quería decir dos cosas según quién preguntara: el
+tablero y el listado contaban las que la planilla marcó `ATRASADO` a mano, y el
+calendario del mes no sabía nada. Ahora hay **una sola definición**, en
+[lib/mantenimiento/alertas.ts](../lib/mantenimiento/alertas.ts), que usan el
+calendario, el tablero, el filtro `?atrasada=1` del listado, la campana y los
+avisos nuevos. [spec](superpowers/specs/2026-11-19-ot-atrasadas-rojo-y-avisos-design.md)
+· [plan](superpowers/plans/2026-11-19-ot-atrasadas-rojo-y-avisos.md). Hace dos
+cosas: pinta de rojo en el calendario del mes las órdenes atrasadas, y manda dos
+push a quienes administran Mantenimiento —«se atrasó una orden» y «una orden
+arranca en dos días»—. Seis cosas que no se deducen del código:
+
+- **`proxima_fecha` está en null en las 2.531 filas** (medido el 19/11/2026; **todas las cifras de esta sección son una foto de ese día y no invariantes**: al cierre de la rama la tabla tenía 2.532 filas, `estado = ATRASADO` daba 19 y la definición nueva 32), y
+  por eso la `estaAtrasada` anterior contaba **21 donde las fechas dicen 34**: la
+  sincronización la lee de la planilla, pero nadie la llena, así que decidir con
+  ella reducía la función a `estado === "ATRASADO"`. La consulta del tablero ya
+  intentaba mirar la fecha con esa misma columna
+  (`.or(estado.eq.ATRASADO,proxima_fecha.lt.${hoy})` en
+  `app/(app)/mantenimiento/page.tsx`, línea 173 de `origin/main`), o sea que unificar fue terminar
+  lo que estaba escrito y no inventar un criterio. Se sigue sincronizando; sólo se
+  dejó de usar para decidir.
+- **«Atrasada» es que la ventana entera quedó atrás, no que el inicio haya
+  pasado.** Una orden que arrancó ayer y termina el 30 está en curso. Y como el
+  dato viaja por orden y no por día, mirar sólo el inicio pintaría de rojo celdas
+  de días futuros de una orden que todavía no venció. Una `fecha_fin` anterior al
+  inicio es un dato sucio y vale «dura un día»: no adelanta el vencimiento. No
+  cuentan ni las realizadas —aunque se hayan hecho tarde— ni las canceladas. Por
+  eso la campana cambió de id (`mant-atrasadas-por-fecha`): el número es otro, y
+  la regla de siempre es que un conteo distinto pide id nuevo, o el salto aparece
+  como novedad falsa. El viejo `mant-atrasadas` queda huérfano en
+  `notificaciones_descartes`, inofensivo. **Y la rama de la pendiente no tiene
+  datos reales detrás**: `fecha_ejecucion_pendiente` está en null en las 2.532
+  filas (19/11/2026), así que «la pendiente le gana a la de la planilla» está
+  sostenida sólo por tests unitarios.
+- **El rojo va de relleno y la especialidad se corre al borde**, y no al revés
+  como se eligió primero. El contraste del rojo de la ficha (`#b91c1c`) contra
+  los cinco rellenos, con la fórmula de luminancia relativa de WCAG y verificado
+  por dos revisores: púrpura 1,20:1, azul 1,25:1, gris 1,34:1, verde 1,96:1 y
+  ámbar 2,03:1. **El mínimo WCAG para lo que no es texto es 3:1**, así que una
+  franja roja encima del relleno no se distingue en ninguno, y el ámbar —el más
+  alto— es el que más importa: es el color de **20 de las 21 abiertas de
+  noviembre**. Con el rojo de relleno y el texto en blanco son 6,47:1. La primera
+  versión del spec decía de 1,00:1 a 1,52:1 y «el mismo tono de luz» contra el
+  gris; estaba mal medida y se corrigió, pero conviene saberlo porque es todo el
+  argumento de por qué la forma se dio vuelta.
+- **El cron corre de lunes a sábado a las 08:00 de Argentina** (`0 11 * * 1-6`
+  en `vercel.json`) y **no sale los domingos, lo que mueve los días que se
+  miran**. Cada corrida nombra lo que cruzó ayer y lo que arranca pasado mañana,
+  pero el **lunes** recoge también sábado y domingo hacia atrás, y el **sábado**
+  adelanta lunes y martes hacia adelante: el aviso del martes le tocaría al
+  domingo, que no corre. **«Se atrasó» cruza el fin de la ventana y no el
+  inicio**, porque `estaAtrasada` vence por el fin: cruzar el inicio no nombraba
+  nunca una orden de varios días (la 3137, del 17 al 18/11, cruzó el 19/11 y no
+  salía). Sacar uno de los dos corrimientos deja un día sin avisar
+  y nada lo dice; un test prueba que cada día del mes lo miran las dos puntas
+  exactamente una vez. Y el título del sábado cuenta algo que el del resto no:
+  `textoDeLasQueArrancan` dice «arrancan en dos días», pero el sábado nombra
+  también las del **martes, que están a tres**, así que cuando la corrida mira
+  más de un día el título dice **«en los próximos días»**.
+  Un cartel que afirma dos cuando son tres enseña a no leer el siguiente.
+- **Medido contra las 2.531 OT el 19/11/2026**, lo que nombraría cada corrida: un
+  jueves, 6 atrasadas y 5 próximas; un sábado, 6 y 3; un lunes, 6 y 0. Los tres
+  conjuntos de atrasadas son **disjuntos** —dieciocho órdenes distintas—, lo
+  que prueba que el 6 repetido no era un mismo conjunto pegado. Son tres corridas
+  puntuales: **no se midió una tasa diaria**, y no se midió cuántas se cierran
+  dentro de su ventana (el spec, que sí midió los cruces por día, dice entre 1 y 7
+  y casi siempre 1 o 2).
+- **Le llega a dos personas**, medido el 19/11/2026: de los cinco que administran
+  el módulo, sólo los dos `admin_sistema` tienen las notificaciones prendidas, y
+  el push va por aparato. Y **si el cron se muere nadie se entera**: como los
+  otros tres crons de push (`avisos-diarios`, `avisos-al-instante` y
+  `remises-notificaciones`), no escribe en `sincronizaciones` y no está
+  en el `REGISTRO` de
+  [lib/core/saludDeLasSincronizaciones.ts](../lib/core/saludDeLasSincronizaciones.ts),
+  así que el aviso de salud no lo vigila. **Tampoco tiene idempotencia**: a
+  diferencia de `avisos-diarios` y `avisos-al-instante`, donde `avisos_fotos` y
+  `avisos_vistos` hacen que una segunda corrida calle, acá una doble corrida
+  —el segundo despliegue que escribe en esta base— manda los dos pushes
+  duplicados. El precedente real es `remises-notificaciones`. El aviso de divergencia de la Agenda
+  no es un caso aparte: lo manda el cron `agenda`, que sí registra su corrida.
+
+De las atrasadas, **la mayoría no se puede reprogramar desde el SdG**: `postergar`
+sólo mueve las que creó el sistema (`app_created`) y las otras entraron por el
+formulario (24 de 34, medido el 19/11/2026). El aviso las nombra igual —saber que
+vencieron sirve— y quien las corra de fecha lo hace en la planilla. No se
+filtran: callar sobre el 70 % para que el botón siempre esté sería peor.
