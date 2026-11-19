@@ -74,7 +74,7 @@ describe("los recursos que se sincronizan", () => {
    * `generarLasEncadenadas()` empezara a tirar en cada corrida, el único
    * síntoma habría sido que no nacen OT, en silencio — que es exactamente el
    * modo de falla que el ciclo entero existe para evitar: una OT que no nace
-   * no se atrasa, así que `mant-atrasadas` tampoco puede verla.
+   * no se atrasa, así que `mant-atrasadas-por-fecha` tampoco puede verla.
    *
    * Este test cierra el círculo por el otro lado: va **del código a la tabla**
    * en vez de de la tabla al código.

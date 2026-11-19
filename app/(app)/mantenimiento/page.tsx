@@ -140,7 +140,7 @@ export default async function MantenimientoDashboardPage() {
       // esto crezca, va `traerTodo()`.
       supabase
         .from("ordenes_trabajo")
-        .select("sector_id, requiere_parada_sector, ot_number, estado, descripcion, equipo_raw")
+        .select("sector_id, requiere_parada_sector, ot_number, estado, descripcion, equipo_raw, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin")
         .in("estado", ["POR_HACER", "EN_PROCESO", "ATRASADO"])
         .not("sector_id", "is", null),
       supabase
@@ -175,7 +175,7 @@ export default async function MantenimientoDashboardPage() {
     .limit(500);
 
   const atrasadas = resumirAtrasadas(candidatas ?? [], hoy);
-  const paradas = paradasExigidas(pendientes);
+  const paradas = paradasExigidas(pendientes, hoy);
 
   const nivel = await nivelMantenimientoDe(supabase, user.id);
   const canEdit = nivel === "edicion" || nivel === "admin";

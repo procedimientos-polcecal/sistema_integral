@@ -122,7 +122,7 @@ export const EMPUJON_ABIERTA = 1000;
  * migración `20261116082742_gut_orden_cuenta_la_cancelada_como_cerrada.sql`,
  * que cambió SUSPENDIDA por CANCELADA (y no la 20261021104750 que la creó): si
  * cambia, hay que escribir una migración nueva. Tiene una gemela con los mismos
- * valores, `CERRADAS` en `alertas.ts`, que NO espeja la migración —sólo decide
+ * valores, `ESTADOS_CERRADOS` en `alertas.ts`, que NO espeja la migración —sólo decide
  * qué orden está atrasada—. No se unifican: tienen dueños distintos y un estado
  * nuevo se decide en cada una.
  */

@@ -215,7 +215,7 @@ export const REGISTRO: readonly EntradaDelRegistro[] = [
   // sola fila y `recursosSinDeclarar` —que nombra lo que la vista trae— no
   // podía verlas. El porqué de que eso importe está en `generarYAnotar`, en
   // `lib/mantenimiento/sincronizar.ts`: una orden que no nace no se atrasa, de
-  // modo que `mant-atrasadas` tampoco la nombra, y las dos juntas dejaban la
+  // modo que `mant-atrasadas-por-fecha` tampoco la nombra, y las dos juntas dejaban la
   // generación sin ningún testigo.
   //
   // 24 h, el mismo número que sus cuatro vecinas, y por el motivo más simple:

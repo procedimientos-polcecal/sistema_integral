@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { avisosDeCiclos, avisosDeConteos, avisosDeRitmo, avisosDeSalud, ES_POR_PERSONA } from "./avisos";
 import { CRECE_CON_EL_DIA, filtrarDescartadas } from "./notificaciones";
+import { URL_ATRASADAS } from "@/lib/mantenimiento/recordatorioDeOT";
 import type { EntradaCaida } from "@/lib/core/saludDeLasSincronizaciones";
 
 const caida = (clave: string): EntradaCaida =>
@@ -408,5 +409,14 @@ describe("avisosDeCiclos", () => {
 
   it("sin sospechas no hay avisos", () => {
     expect(avisosDeCiclos([])).toEqual([]);
+  });
+});
+
+describe("el aviso de las OT atrasadas lleva al mismo lugar en la campana y en el push", () => {
+  // Son dos literales escritos a propósito en dos archivos (`avisos.ts` tiene
+  // todos sus href inline); este test es lo que los ata.
+  it("el href de la campana es la URL que manda el recordatorio", () => {
+    const aviso = avisosDeConteos({ mantenimientoAtrasadas: 3 }).find((a) => a.id === "mant-atrasadas-por-fecha");
+    expect(aviso?.href).toBe(URL_ATRASADAS);
   });
 });

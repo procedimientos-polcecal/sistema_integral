@@ -1442,7 +1442,7 @@ export function porQueFallaron(fallaron: readonly { error: string }[]): string |
  *
  * Lo que eso costaba: si `generarLasEncadenadas()` empezara a tirar en cada
  * corrida, el único síntoma sería que no nacen OT, en silencio. Y una OT que no
- * nace no se atrasa, así que `mant-atrasadas` tampoco puede verla. Es el mismo
+ * nace no se atrasa, así que `mant-atrasadas-por-fecha` tampoco puede verla. Es el mismo
  * agujero que el de un ciclo sin arrancar, por la puerta de al lado.
  *
  * Qué cuenta como corrida fallida lo decide `porQueFallaron`, acá arriba.
@@ -1537,7 +1537,7 @@ export const SINCRONIZACIONES = [
         ...(r.arrancados.length > 0 ? { arrancados: r.arrancados } : {}),
         // Los que todavía esperan el cambio que los arranque. Se informan en
         // cada corrida porque un ciclo sin arrancar no genera ninguna OT, así
-        // que `mant-atrasadas` no tiene cómo verlo.
+        // que `mant-atrasadas-por-fecha` no tiene cómo verlo.
         sin_arrancar: r.sinArrancar,
         trabados: r.trabados,
         fallaron: r.fallaron,

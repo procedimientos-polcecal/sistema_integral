@@ -189,7 +189,7 @@ export async function generarLasEncadenadas(
     // ── EL ARRANQUE, QUE VIENE DE UN CAMBIO DE PIEZA ──────────────────────
     //
     // Un ciclo sin arrancar no genera nada, y eso lo vuelve invisible: no hay
-    // orden que se atrase, así que `mant-atrasadas` no puede avisarlo. Pedir
+    // orden que se atrase, así que `mant-atrasadas-por-fecha` no puede avisarlo. Pedir
     // la fecha tipeada equipo por equipo es lo que ya falló con el preventivo
     // —pantalla, botón y cero OT en toda la historia—, así que arranca solo
     // con el primer cambio de la pieza **posterior a su configuración**.

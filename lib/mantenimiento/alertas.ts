@@ -111,6 +111,12 @@ export function diasDeAtraso(orden: Atrasable, hoy: string): number | null {
  * `fecha_fin <= inicio` no se escribe a propósito: junto con `inicio < hoy` ya
  * implica `fecha_fin < hoy`, y la rama `or(fecha_fin.is.null, fecha_fin.lt.hoy)`
  * lo cubre.
+ *
+ * **Supone `estado` not null**, y es la última divergencia entre las dos
+ * escrituras: `estaAtrasada` trata un estado null como «no cerrada» y sigue a
+ * las fechas, pero `.not("estado","in",...)` evalúa `NOT (NULL IN (...))` →
+ * NULL y descarta la fila. Hoy no muerde: hay 0 filas con `estado` null
+ * (medido el 19/11/2026).
  */
 export function condicionDeAtrasada(hoy: string): string {
   const sinVentana = `or(fecha_fin.is.null,fecha_fin.lt.${hoy})`;

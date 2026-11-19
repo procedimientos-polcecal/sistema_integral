@@ -31,13 +31,15 @@ describe("ultimosMeses", () => {
 });
 
 describe("paradasExigidas", () => {
+  const HOY = "2026-11-19";
+
   it("junta los sectores con una OT pendiente que obliga a parar", () => {
     const paradas = paradasExigidas([
       { sector_id: "a", requiere_parada_sector: true, ot_number: 10 },
       { sector_id: "a", requiere_parada_sector: true, ot_number: 11 },
       { sector_id: "b", requiere_parada_sector: false, ot_number: 12 },
       { sector_id: "c", requiere_parada_sector: null, ot_number: 13 },
-    ]);
+    ], HOY);
     expect(Object.keys(paradas)).toEqual(["a"]);
     expect(paradas.a).toHaveLength(2);
   });
@@ -49,12 +51,13 @@ describe("paradasExigidas", () => {
         estado: "EN_PROCESO", descripcion: "Rellenar espira de sin fin",
         equipo_raw: "Sin fin 1",
       },
-    ]);
+    ], HOY);
     expect(paradas.a[0]).toEqual({
       ot_number: 2822,
       estado: "EN_PROCESO",
       descripcion: "Rellenar espira de sin fin",
       equipo_raw: "Sin fin 1",
+      atrasada: false,
     });
   });
 
@@ -64,20 +67,31 @@ describe("paradasExigidas", () => {
       { sector_id: "a", requiere_parada_sector: true, ot_number: 100, estado: "POR_HACER" },
       { sector_id: "a", requiere_parada_sector: true, ot_number: 500, estado: "ATRASADO" },
       { sector_id: "a", requiere_parada_sector: true, ot_number: 200, estado: "EN_PROCESO" },
-    ]);
+    ], HOY);
     expect(paradas.a.map((o) => o.ot_number)).toEqual([500, 200, 100, 300]);
+  });
+
+  it("una vencida por fecha cuenta como atrasada aunque la planilla no la marque", () => {
+    const paradas = paradasExigidas([
+      { sector_id: "a", requiere_parada_sector: true, ot_number: 1, estado: "POR_HACER" },
+      {
+        sector_id: "a", requiere_parada_sector: true, ot_number: 2, estado: "POR_HACER",
+        fecha_ejecucion: "2026-11-10",
+      },
+    ], HOY);
+    expect(paradas.a.map((o) => [o.ot_number, o.atrasada])).toEqual([[2, true], [1, false]]);
   });
 
   it("un estado que no conoce va al final y no rompe el orden", () => {
     const paradas = paradasExigidas([
       { sector_id: "a", requiere_parada_sector: true, ot_number: 1, estado: "INVENTADO" },
       { sector_id: "a", requiere_parada_sector: true, ot_number: 2, estado: "ATRASADO" },
-    ]);
+    ], HOY);
     expect(paradas.a.map((o) => o.ot_number)).toEqual([2, 1]);
   });
 
   it("sin ninguna que lo exija, no hay sectores", () => {
-    expect(paradasExigidas([{ sector_id: "a", requiere_parada_sector: false }])).toEqual({});
+    expect(paradasExigidas([{ sector_id: "a", requiere_parada_sector: false }], HOY)).toEqual({});
   });
 });
 
