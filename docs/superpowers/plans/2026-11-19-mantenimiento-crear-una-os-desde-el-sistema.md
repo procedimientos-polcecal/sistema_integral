@@ -110,7 +110,7 @@ no se puede probar contra Google sin esto.
 
 ---
 
-### Tarea 1: Lo puro del alta de OS
+### Task 1: Lo puro del alta de OS
 
 **Files:**
 - Create: `lib/mantenimiento/formularioDeOS.ts`
@@ -194,7 +194,7 @@ EOF
 
 ---
 
-### Tarea 2: La escritura en la planilla
+### Task 2: La escritura en la planilla
 
 **Files:**
 - Create: `lib/mantenimiento/altaDeOS.ts`
@@ -229,7 +229,7 @@ it("devuelve lo que dijo Google sin traducir", async () => { /* el mensaje del t
 
 ---
 
-### Tarea 3: La columna `os_id`
+### Task 3: La columna `os_id`
 
 **Files:**
 - Create: `supabase/migrations/<timestamp>_ot_apunta_a_su_os.sql`
@@ -256,7 +256,7 @@ No hace falta policy nueva: es una columna de una tabla que ya tiene las suyas.
 
 ---
 
-### Tarea 4: Probar las tres f贸rmulas del master
+### Task 4: Probar las tres f贸rmulas del master
 
 **Files:**
 - Create: `scripts/probar-las-formulas-del-master-de-os.mts`
@@ -283,10 +283,12 @@ del libro de respuestas, creadas y borradas en la misma pasada:
 
 ---
 
-### Tarea 5: El `POST` de la ruta, con el aviso y el drenaje
+### Task 5: El `POST` de la ruta, con el aviso y el drenaje
 
 **Files:**
 - Modify: `app/api/mantenimiento/ordenes-servicio/route.ts`
+- Modify: `lib/mantenimiento/altaDeOS.ts` (suma `celdasDelSeguimiento`, Step 4)
+- Modify: `lib/mantenimiento/altaDeOS.test.ts` (sus tres casos, Step 4b)
 
 **Interfaces:**
 - Consumes: `altaDeOSEnLaPlanilla()` (Tarea 2); `puedeEditarMantenimiento()`;
@@ -335,7 +337,7 @@ it("si el IMPORTRANGE no derramo, no inventa una fila", () => { /* fila vacia 鈫
 
 ---
 
-### Tarea 6: La pantalla del alta
+### Task 6: La pantalla del alta
 
 **Files:**
 - Create: `app/(app)/mantenimiento/ordenes-servicio/NuevaOS.tsx`
@@ -353,12 +355,16 @@ it("si el IMPORTRANGE no derramo, no inventa una fila", () => { /* fila vacia 鈫
 
 ---
 
-### Tarea 7: El enlace, en las dos direcciones
+### Task 7: El enlace, en las dos direcciones
 
 **Files:**
 - Create: `app/api/mantenimiento/ordenes-servicio/[id]/ot/route.ts`
 - Modify: `app/(app)/mantenimiento/ordenes-servicio/DetalleOS.tsx`
 - Modify: la ficha de la OT
+
+**Depende de P6.** Esta tarea nombra `os_id` en cadenas `select()`, y nombrar
+una columna que todav铆a no existe rompe lo que ya andaba. No empieza hasta que
+la migraci贸n de la Tarea 3 est茅 aplicada.
 
 - [ ] **Step 1: La ruta.** `PATCH` enlaza (`{ ot_id }` o `{ os_id }`), `DELETE`
       desenlaza. Pide nivel de edici贸n. **El enlace no se exporta a ninguna
@@ -375,7 +381,7 @@ it("si el IMPORTRANGE no derramo, no inventa una fila", () => { /* fila vacia 鈫
 
 ---
 
-### Tarea 8: La documentaci贸n
+### Task 8: La documentaci贸n
 
 **Files:**
 - Modify: `docs/MANTENIMIENTO-INTEGRACION.md`, `docs/VARIABLES-VERCEL.md`, `CLAUDE.md`
@@ -392,7 +398,7 @@ it("si el IMPORTRANGE no derramo, no inventa una fila", () => { /* fila vacia 鈫
 
 ---
 
-### Tarea 9: La primera alta de verdad
+### Task 9: La primera alta de verdad
 
 - [ ] **Step 1:** Crear una OS desde el sistema.
 - [ ] **Step 2:** Verificar que la fila cay贸 en `Altas del sistema` con su
