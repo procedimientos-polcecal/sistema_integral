@@ -188,7 +188,11 @@ export default function NuevaOTModal({ sectores, equipos, aviso, onClose, onCrea
    * —pasa adentro del mismo formulario— y queda anotado en `vieneDe`.
    */
   const { valores, cambiar, tocado, tirar } = useBorrador(
-    claveDelBorrador("mantenimiento-nueva-ot"),
+    // El origen es el aviso: con la clave fija, un borrador dejado en «Nueva OT»
+    // o en otro aviso le ganaría al sembrado, y se mandaría con la descripción y
+    // el equipo de uno pero con el `aviso_id` de éste —que sale de la prop—.
+    // Eso enlaza trabajo equivocado al aviso y no se nota nunca.
+    claveDelBorrador("mantenimiento-nueva-ot", aviso ? { tipo: "aviso", id: aviso.id } : null),
     {
       campos: {
         equipment_id:   "",
