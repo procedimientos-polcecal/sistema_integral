@@ -1745,6 +1745,51 @@ o no se puede leer, la pantalla lo dice y sigue andando sin disponibilidad:
 anotar qué hace falta no depende de saber si lo hay. Para conectarlo:
 `GOOGLE_SHEETS_INVENTARIO_ID` y `GOOGLE_SHEETS_INVENTARIO_TAB`.
 
+### Y se cargan también al registrar el trabajo (19/11/2026)
+
+Hasta ese día «Registrar el trabajo» era el único formulario de OT que no
+pedía repuestos, y es justo el momento en que se sabe cuáles salieron del
+pañol: al crear la orden todavía no se usó nada. Se pidió **para que quede
+registrado qué se gastó en cada OT**. El diseño está en
+[el spec](superpowers/specs/2026-11-19-mantenimiento-repuestos-al-registrar-design.md).
+
+Tres cosas que no se deducen del código:
+
+- **Es una sola lista y no distingue previsto de usado.** Son los mismos
+  renglones de «Repuestos que hacen falta»: el modal abre con lo que la orden
+  ya tenía y lo que quede al cerrar es lo que se gastó. Se eligió así contra
+  una columna `usado` porque en una OT **terminada** las dos contestan lo
+  mismo, y ésta además contesta por las 2.530 que ya estaban cerradas, que con
+  una columna nueva dirían todas que no se gastó nada. Lo que se paga, dicho:
+  en una OT cerrada, «Repuestos que hacen falta» muestra lo que se usó y puede
+  ofrecer «Pedir a Compras» por algo ya consumido.
+- **No va a la planilla, y no es un olvido**: la celda `REPUESTO UTILIZADO`
+  del master es la columna **I**, que es derrame —ver «El repuesto es una
+  celda, y está en dos lugares»—, y la **Z** de «Altas del sistema» sólo
+  existe para las órdenes que creó el sistema: 262 de 2.530. Las otras 2.268
+  entraron por el formulario de Google y no tienen dónde. La lista por
+  renglones nunca se exportó, así que esto no abre ninguna deuda de
+  exportación.
+- **No se valúa en pesos.** `inventario_articulos` no tiene columna de precio
+  y ninguna OT tiene `costo` cargado, así que lo que queda registrado es qué
+  piezas y cuántas. El costo por máquina sigue saliendo de Compras, de las
+  órdenes de servicio y de las horas × tarifa — ver «El costo total de una
+  máquina».
+
+**Y lo que hay que saber antes de tocar el guardado**: el `PUT` que manda ese
+modal **no borra la lista y la vuelve a insertar**. De la fila de un repuesto
+cuelgan dos cosas que no se ven desde ahí —`mant_ri_de_repuesto.repuesto_id`
+es `on delete cascade`, así que los RI pegados a ese renglón mueren con él, y
+`ordenes_trabajo_notas.repuesto_id` es `on delete set null`, así que la
+pregunta que se le hizo a Compras se suelta y deja de estar abierta—, y un
+reemplazo a lo bruto se las lleva **de todos los renglones, incluidos los que
+nadie tocó**, sin fallar ni avisar. Qué insertar, qué actualizar y qué borrar
+lo decide `loQueCambiaDeLaLista()` de
+[lib/mantenimiento/repuestosDeLaOT.ts](../lib/mantenimiento/repuestosDeLaOT.ts),
+con sus tests. Un renglón **cuyo nombre cambió sí se borra**: un RI pegado a
+«rodamiento 6206» no vale para «6207», y heredarle el enlace es enlazar al que
+se le parece. Mayúsculas y espacios de más no cuentan.
+
 ## La sincronización, sola
 
 Había que acordarse de apretar el botón en cada pantalla, y lo que se veía en el
