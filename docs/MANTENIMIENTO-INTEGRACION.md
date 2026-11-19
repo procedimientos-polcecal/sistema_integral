@@ -1855,17 +1855,56 @@ modal con la X o con Escape después de encolar y lo vuelve a abrir, `resultado`
 arranca en `null`, el botón vuelve a estar habilitado y el borrador sigue ahí
 —la X y Escape conservan a propósito—, así que se puede mandar una **segunda OT
 con el mismo `aviso_id`**: `mandarOEncolar` genera una clave nueva por llamada y
-la ruta no mira si el aviso ya tiene `work_order_id`.
+la ruta no miraba si el aviso ya tiene `work_order_id`.
 
 Es **más angosto todavía** que el del punto 8, porque pide perder la señal en
 una pantalla a la que no se llega sin señal —`/mantenimiento/avisos` la dibuja
 el servidor—, encolar, cerrar y reabrir. **No se arregla con más estado en el
-modal**, y por eso se deja escrito en vez de parchearlo: cualquier memoria que
-viva adentro del componente se pierde al desmontarlo, y una que viva en el
-borrador haría falta tirarla a mano con cada aviso. **El cierre de verdad es
-que `POST /api/mantenimiento/ordenes` se niegue cuando el aviso ya tiene
-`work_order_id`** —una comprobación, del lado que las dos puertas comparten—, y
-esa ruta queda fuera de este plan.
+modal**: cualquier memoria que viva adentro del componente se pierde al
+desmontarlo, y una que viva en el borrador haría falta tirarla a mano con cada
+aviso.
+
+### Cerrado el 19/11/2026, del lado que las dos puertas comparten
+
+`POST /api/mantenimiento/ordenes` **se niega con un 409 cuando el aviso ya
+tiene `work_order_id`**, y el mensaje nombra la orden que ya existe: *«El
+aviso A22 ya tiene la orden de trabajo #949. Si hace falta más trabajo sobre
+lo mismo, cargalo desde Órdenes de trabajo.»* La regla pura vive en
+[lib/mantenimiento/avisoYaTieneOrden.ts](../lib/mantenimiento/avisoYaTieneOrden.ts).
+Eso cierra los dos caminos de arriba y cualquier otro que postee a la ruta sin
+pasar por la pantalla.
+
+Tres cosas que no se deducen del código:
+
+- **El rechazo sale de dos lugares distintos, y el motivo es la clave.**
+  Contestar 409 después de `reservarClave` dejaría esa clave reservada y sin
+  resolver para una orden que nunca se va a crear, y el próximo reintento
+  recibiría `en-duda` —«mirá la planilla»— por algo que no tiene que ver con
+  la planilla. Así que sin clave se rechaza antes de reservar, y con clave se
+  espera a que la reserva diga `seguir` y se la suelta con `soltarLaClave`
+  antes de contestar. La consulta al aviso es **una sola** en los dos casos.
+- **No reemplaza al veredicto `ya-esta`, y nunca corre antes que él.** Son
+  cosas distintas: `ya-esta` reconoce *la misma carga* reintentada y contesta
+  200 con su número —que es lo que la cola necesita para darla por hecha—,
+  mientras que esto reconoce *otra carga* apuntando a un aviso ya atendido.
+  Ponerlo primero convertiría un reintento legítimo en un 409 definitivo y
+  dejaría la carga parada en el teléfono para siempre.
+- **El 409 es definitivo para la cola, y eso es lo buscado.** La carga queda
+  parada y la mira una persona, en vez de reintentarse contra una regla que no
+  va a cambiar sola.
+
+Lo que **queda abierto**, dicho: entre la consulta y el insert hay una ventana
+de carrera. Dos cargas simultáneas para el mismo aviso pueden pasar las dos el
+control. Es mucho más angosto que lo que cerró —pide simultaneidad real, no
+sólo repetición— y cerrarlo del todo pide una restricción en la base, que es
+otra tarea: hoy `work_order_id` admite cualquier valor, así que la segunda
+escritura pisa en vez de fallar.
+
+Medido el 19/11/2026 contra producción, con la consulta exacta de la ruta: de
+**254 avisos, 235 ya tienen orden** y 0 tienen el enlace puesto apuntando a una
+orden que no existe. El aviso A22 devuelve el 409 con el #949; el A1, que no
+tiene orden, pasa; y un `aviso_id` que no existe en la tabla **no** se convierte
+en un rechazo —sigue el camino de siempre, como antes—.
 
 ## Los repuestos de una orden, y si los hay
 
