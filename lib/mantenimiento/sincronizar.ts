@@ -46,6 +46,9 @@ import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 import { lasQueLesFaltaLaFormula } from "@/lib/mantenimiento/formulaDelEstado";
 import { contrastar, type OrdenDelSistema } from "@/lib/mantenimiento/contraste";
 import { loQueSeGuardaDelContraste } from "@/lib/mantenimiento/divergencias";
+import {
+  lasQueHayQueRegistrar, type OrdenParaReprogramar,
+} from "@/lib/mantenimiento/reprogramacionesDeLaPlanilla";
 import { generarLasPeriodicas } from "@/lib/mantenimiento/generarPeriodicas";
 import { generarLasEncadenadas } from "@/lib/mantenimiento/generarEncadenadas";
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
@@ -99,9 +102,17 @@ const ESPEJO_DE_OS = {
  * `sinFreno` levanta el tope del borrado masivo. Lo pasa la ruta cuando una
  * persona confirmó el número; **el cron no lo pasa nunca**, y ésa es toda la
  * diferencia: un borrado grande de verdad lo autoriza alguien que lo miró.
+ *
+ * `sinFrenoDeReprogramaciones` levanta el otro tope, el de cuántas filas de
+ * historial puede dejar una corrida. **Es una llave aparte a propósito y no se
+ * unifica con la anterior**: si la compartieran, quien confirma un borrado
+ * estaría aceptando además, sin verlo, cuatrocientas reprogramaciones
+ * inventadas por una planilla que estaba recalculando. Una confirmación
+ * autoriza una cosa. El cron tampoco lo pasa nunca.
  */
 export interface OpcionesDeCorrida {
   sinFreno?: boolean;
+  sinFrenoDeReprogramaciones?: boolean;
   actor?: "sincronizacion" | "cron";
 }
 
@@ -641,6 +652,93 @@ async function anotarLasDivergencias(
 }
 
 /**
+ * Deja como dato las fechas que la planilla corrió, antes de pisarlas.
+ *
+ * Gemela de `anotarLasDivergencias` y por eso corre en el mismo punto: **antes
+ * del upsert**, el único momento en que los dos lados todavía dicen cosas
+ * distintas. No cuesta ninguna lectura de Google —la planilla ya está leída—;
+ * lo que suma son dos lecturas de la base.
+ *
+ * Qué fila sale y cuál no lo decide `lasQueHayQueRegistrar`, que es puro y
+ * tiene los tests. Acá no hay ningún juicio: se lee, se llama y se inserta.
+ *
+ * **Nunca tira.** Si la tabla todavía no existe —la migración la corre una
+ * persona a mano y puede no estar aplicada la primera vez que esto corra— o el
+ * insert falla, se devuelve el motivo y la sincronización sigue. Importar las
+ * órdenes es lo que no puede fallar.
+ *
+ * **La lectura del sistema se hace de nuevo** en vez de reusar la de
+ * `anotarLasDivergencias`, a propósito: así un fallo de una no ciega a la
+ * otra. Son columnas pocas de una tabla que esa función ya recorre entera.
+ */
+async function registrarLoQueCorrioLaPlanilla(
+  admin: ReturnType<typeof createAdminClient>,
+  deLaPlanilla: readonly OrdenLeida[],
+  opciones: { sinFreno?: boolean }
+): Promise<{ cuantas: number; freno: string | null; error: string | null }> {
+  const vacio = { cuantas: 0, freno: null };
+  try {
+    // `traerTodo` porque son 2.500 y PostgREST corta en 1.000 sin avisar.
+    const delSistema = await traerTodo<OrdenParaReprogramar & { id: string }>((desde, hasta) =>
+      admin
+        .from("ordenes_trabajo")
+        .select("id, ot_number, estado, fecha_ejecucion, sheets_pendiente, fecha_ejecucion_pendiente")
+        .order("ot_number")
+        .range(desde, hasta)
+    );
+    const idDe = new Map(delSistema.map((o) => [o.ot_number, o.id]));
+
+    // La última fila de historial de cada OT, que es contra lo que se compara
+    // para no escribir dos veces la misma transición. Se trae entera y no con
+    // un `.in()` de los ids candidatos: un `.in()` con muchos ids arma una URL
+    // que PostgREST rechaza con un 400 mudo. El `.order()` no es decorativo —
+    // un `.range()` sin orden deja que la base devuelva las filas como quiera y
+    // dos tandas con órdenes distintos pueden saltearse una; acá eso sería un
+    // duplicado escrito, que es lo único que esta lectura existe para evitar.
+    const historial = await traerTodo<{ ot_id: string; fecha_nueva: string }>((desde, hasta) =>
+      admin
+        .from("mant_reprogramaciones_ot")
+        .select("ot_id, fecha_nueva")
+        .order("ot_id")
+        .order("creado_en")
+        .range(desde, hasta)
+    );
+    const ultimaPorId = new Map<string, string>();
+    for (const h of historial) ultimaPorId.set(h.ot_id, String(h.fecha_nueva));
+
+    const ultimaPorOt = new Map<number, string>();
+    for (const o of delSistema) {
+      const ultima = ultimaPorId.get(o.id);
+      if (ultima) ultimaPorOt.set(o.ot_number, ultima);
+    }
+
+    // El freno sólo lo levanta su propia llave, que llega hasta acá desde
+    // `sinFrenoDeReprogramaciones`. Compartir el `sinFreno` del borrado haría
+    // que confirmar un borrado autorizara además esto, que es otra cosa.
+    const { filas, freno } = lasQueHayQueRegistrar(
+      delSistema, deLaPlanilla, ultimaPorOt, { sinFreno: opciones.sinFreno }
+    );
+    if (freno) return { cuantas: 0, freno, error: null };
+    if (filas.length === 0) return { cuantas: 0, freno: null, error: null };
+
+    // `reprogramada_veces` no va en el payload: lo mantiene un trigger.
+    const alta = await admin.from("mant_reprogramaciones_ot").insert(
+      filas.map((f) => ({
+        ot_id: idDe.get(f.ot_number),
+        fecha_anterior: f.fecha_anterior,
+        fecha_nueva: f.fecha_nueva,
+        origen: "planilla",
+      }))
+    );
+    if (alta.error) return { ...vacio, error: alta.error.message };
+
+    return { cuantas: filas.length, freno: null, error: null };
+  } catch (e) {
+    return { ...vacio, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
  * Les escribe la fórmula del ESTADO a las órdenes que nacieron sin ella.
  *
  * Qué celdas son lo decide `lasQueLesFaltaLaFormula`, en `lib/` y con tests; lo
@@ -827,6 +925,17 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   // necesita del otro lado.
   const divergencias = await anotarLasDivergencias(admin, leidasDeLaPlanilla);
 
+  // Y lo mismo, por el mismo motivo y en el mismo punto, con las fechas de
+  // inicio que la planilla corrió: el contraste YA las ve y hasta hoy las
+  // tiraba, porque `mantenimiento_divergencias` se rehace entera en cada
+  // corrida. Sólo 223 de las 2.531 órdenes tienen el botón de Postergar; a las
+  // otras 2.268 la fecha se les mueve tipeándola allá, y si esto no las
+  // guardara el análisis de reprogramaciones vería el 9 % del universo.
+  // Va después de las divergencias y antes del upsert, y no tira nunca.
+  const reprogramaciones = await registrarLoQueCorrioLaPlanilla(admin, leidasDeLaPlanilla, {
+    sinFreno: opciones.sinFrenoDeReprogramaciones,
+  });
+
   let guardadas = 0;
   const { unicos, repetidos } = unaPorNumero(registros, "ot_number");
 
@@ -963,6 +1072,17 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
     // las canceladas sin motivo. Si aparece, ese detector está apagado.
     ...(divergencias.sinRevisarCanceladas
       ? { canceladas_sin_revisar: divergencias.sinRevisarCanceladas }
+      : {}),
+    // Cuántas fechas corridas en la planilla quedaron como historial. Va en el
+    // resultado por lo mismo que las divergencias: quien corre la
+    // sincronización a mano lo ve en el momento.
+    reprogramaciones_de_la_planilla: reprogramaciones.cuantas,
+    // Si frenó, las fechas se importaron igual: lo que no quedó es el renglón
+    // del historial. Mientras la migración no esté corrida, `sin_registrar`
+    // dice por qué.
+    ...(reprogramaciones.freno ? { reprogramaciones_freno: reprogramaciones.freno } : {}),
+    ...(reprogramaciones.error
+      ? { reprogramaciones_sin_registrar: reprogramaciones.error }
       : {}),
     // Las órdenes entraron, pero esta corrida no trajo `fecha_fin`: la lectura
     // falló por algo que no es la migración sin correr.
