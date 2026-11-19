@@ -8,6 +8,10 @@ import Select from "@/components/Select";
 import { Modal, PieDeModal } from "@/components/Modal";
 import { instanteDeArgentina } from "@/lib/core/fechas";
 import FallaDeLaOT from "@/components/FallaDeLaOT";
+import RepuestosDeLaOT from "@/components/RepuestosDeLaOT";
+import {
+  lineasDesdeLasFilas, type LineaDeRepuesto,
+} from "@/lib/mantenimiento/repuestosDeLaOT";
 import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
 import { loQueImpideCerrar } from "@/lib/mantenimiento/cierreDeOT";
 import { comoSeLee } from "@/lib/core/fechas";
@@ -164,6 +168,88 @@ export default function RegistrarOTModal({
   // que evita que "Candia" y "CANDIA" terminen siendo dos personas distintas.
   const [operarios, setOperarios] = useState<{ id: string; slot: number; nombre: string }[]>([]);
   const [contratistas, setContratistas] = useState<{ id: string; nombre: string }[]>([]);
+
+  /*
+   * Los repuestos que se usaron, que es para lo que existe este campo: que
+   * quede registrado qué se gastó en cada OT. Arrancan con los que la orden ya
+   * tenía anotados —lo que hacía falta suele ser lo que se usó— y se corrigen.
+   *
+   * **Fuera del borrador, a propósito y aunque sea lo que la persona escribió.**
+   * Dos razones, y la segunda es la que decide: el borrador congela su
+   * `inicial` en el primer render y esta lista llega después, del servidor, así
+   * que meterla ahí marcaría el formulario como «tocado» en cada apertura y
+   * preguntaría si se quiere salir sin guardar a quien no tocó nada. Y además
+   * esta lista **la escriben otras pantallas** —«Repuestos que hacen falta», y
+   * cualquiera con la OT abierta—: recordar una copia vieja entre aperturas
+   * volvería a insertar un renglón que otro acaba de sacar. Lo que cuesta,
+   * dicho: salir por la X y volver a entrar pierde los renglones tipeados y no
+   * guardados, mientras el resto del formulario sí se recuerda.
+   */
+  const [repuestos, setRepuestos] = useState<LineaDeRepuesto[]>([{ cantidad: "", nombre: "" }]);
+  /*
+   * Y en qué estado está esa lista, que **no es lo mismo que si está vacía**.
+   * «No se pudieron traer» y «esta OT no tenía ninguno» se ven igual en
+   * pantalla, y mandar la primera como lista vacía borraría los repuestos que
+   * la orden sí tenía. Por eso el guardado mira esto y no el largo.
+   */
+  const [estadoDeLaLista, setEstadoDeLaLista] = useState<"cargando" | "lista" | "falla">("cargando");
+
+  useCargar(async (vigente) => {
+    /*
+     * El `catch` no es de más: un `fetch` que **rechaza** —la red que se corta
+     * en la planta, que es donde se usa esto— no es lo mismo que uno que
+     * contesta mal, y `useCargar` no atrapa nada. Sin esto la función cortaba
+     * en el `await` y el estado se quedaba en «cargando» para siempre: el campo
+     * gris, sin cartel y sin nada que explique por qué.
+     */
+    const cuerpo = await fetch(`/api/mantenimiento/ordenes/${orden.id}/repuestos`)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    if (!vigente()) return;
+    if (!cuerpo) { setEstadoDeLaLista("falla"); return; }
+    setRepuestos(lineasDesdeLasFilas(cuerpo.data));
+    setEstadoDeLaLista("lista");
+  }, [orden.id]);
+
+  /**
+   * Los repuestos, al final de todo y sin tirar nada si no salen.
+   *
+   * Devuelve el aviso para la pantalla, o `""` si no hay nada que decir. El
+   * trabajo ya quedó registrado y la OT cerrada cuando esto corre: la lista es
+   * accesoria y se puede volver a cargar desde «Repuestos que hacen falta»,
+   * así que un fallo acá no puede deshacer lo otro ni esconderse.
+   */
+  async function guardarLosRepuestos(): Promise<string> {
+    if (estadoDeLaLista !== "lista") return "";
+
+    const noSalio = (porque: string) =>
+      `Los repuestos no se guardaron: ${porque} ` +
+      "Se pueden cargar desde «Repuestos que hacen falta».";
+
+    try {
+      const r = await fetch(`/api/mantenimiento/ordenes/${orden.id}/repuestos`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repuestos }),
+      });
+      if (r.ok) return "";
+
+      const cuerpo = await r.json().catch(() => ({}));
+      // Un 502 contesta HTML y deja `error` en undefined: sin esto el cartel
+      // salía con los dos puntos colgando y sin ningún motivo.
+      return noSalio(cuerpo.error ?? "no contestó el servidor.");
+    } catch (e) {
+      /*
+       * Y si el `fetch` rechaza, el aviso sale igual. Dejarlo propagar cortaba
+       * `guardar()` acá: nunca corrían `setGuardando(false)`, `tirar()` ni el
+       * cartel, así que el modal quedaba congelado **con la OT ya cerrada** y
+       * sin forma de saber que el trabajo sí quedó registrado — lo más probable
+       * es que alguien lo registre de nuevo. Es la tercera escritura y la que
+       * más chance tiene de encontrar la red caída.
+       */
+      return noSalio(e instanceof Error ? e.message : String(e));
+    }
+  }
 
   const traerListas = useCargar(async (vigente) => {
     const [o, c] = await Promise.all([
@@ -342,12 +428,17 @@ export default function RegistrarOTModal({
       }),
     });
     const body = await res.json().catch(() => ({}));
-    setGuardando(false);
 
     if (!res.ok) {
+      setGuardando(false);
       setError(`El trabajo quedó registrado, pero no se pudo cerrar la OT: ${body.error ?? ""}`);
       return;
     }
+
+    // Y al final los repuestos, que es la tercera escritura. Van últimos
+    // porque son los únicos que se pueden volver a cargar después.
+    const errorDeRepuestos = await guardarLosRepuestos();
+    setGuardando(false);
 
     // El borrador se tira acá y no al apretar «Registrar»: son dos escrituras, y
     // si la segunda falla el modal queda abierto con el error y lo cargado tiene
@@ -361,8 +452,17 @@ export default function RegistrarOTModal({
     const avisoDeLaPlanilla = avisoDelPendiente(
       body.planilla_error, Boolean(body.planilla_reintentando)
     );
-    if (avisoDeLaPlanilla) {
-      setAviso(`Se registró todo. ${avisoDeLaPlanilla}`);
+
+    // «Se registró todo» sólo cuando de verdad salió todo: decirlo y al lado
+    // que algo no se guardó son dos frases que se contradicen en el mismo
+    // cartel. Y los dos avisos pueden darse juntos, así que van juntos: hasta
+    // acá el de la planilla cortaba con un `return` y se habría comido al otro.
+    const avisos = [avisoDeLaPlanilla, errorDeRepuestos].filter(Boolean);
+    if (avisos.length > 0) {
+      const cabecera = errorDeRepuestos
+        ? "El trabajo quedó registrado y la OT cerrada."
+        : "Se registró todo.";
+      setAviso([cabecera, ...avisos].join(" "));
       return;
     }
     onRegistrada();
@@ -538,6 +638,29 @@ export default function RegistrarOTModal({
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
         </Campo>
+
+        {/* Los repuestos usados. **No va adentro de `Campo`**, que es un
+            `<label>` que envuelve a sus hijos: con varios inputs adentro, el
+            clic en cualquier parte del rótulo se lo lleva el primero. */}
+        <div className="space-y-1">
+          <span className="block text-xs font-medium text-slate-600">Repuestos utilizados</span>
+          {estadoDeLaLista === "falla" && (
+            <p className="text-xs text-amber-700">
+              No se pudieron traer los repuestos de esta orden, así que no se van a
+              guardar. El resto del registro se guarda igual.
+            </p>
+          )}
+          {/* Buscando contra el inventario, como en el alta: esta pantalla ya
+              depende del servidor para dibujarse. Y deshabilitado mientras la
+              lista viaja, para que nadie escriba en renglones que el `fetch`
+              está por reemplazar. */}
+          <RepuestosDeLaOT
+            lineas={repuestos}
+            onCambiar={setRepuestos}
+            deshabilitado={guardando || estadoDeLaLista !== "lista"}
+            buscarEnInventario
+          />
+        </div>
 
         <FallaDeLaOT
           falla={{

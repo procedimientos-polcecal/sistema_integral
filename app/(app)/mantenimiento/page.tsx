@@ -5,7 +5,7 @@ import { lunesDe } from "@/lib/mantenimiento/produccion";
 import {
   ultimosMeses, paradasExigidas, ventanasDeReparacion, nombreDelMes,
 } from "@/lib/mantenimiento/dashboard";
-import { resumirAtrasadas, hoyISO, condicionDeAtrasada, ESTADOS_CERRADOS } from "@/lib/mantenimiento/alertas";
+import { resumirAtrasadas, hoyISO, condicionDeAtrasada, CERRADAS } from "@/lib/mantenimiento/alertas";
 import { sumarDias } from "@/lib/core/fechas";
 import DashboardClient from "./DashboardClient";
 import { sectoresDePlanta, empresaDelSector } from "@/lib/mantenimiento/sectores";
@@ -170,7 +170,7 @@ export default async function MantenimientoDashboardPage() {
   const { data: candidatas } = await supabase
     .from("ordenes_trabajo")
     .select("ot_number, estado, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, sector_raw, descripcion, equipo_raw, quien, gut_gravedad, gut_urgencia, gut_tendencia")
-    .not("estado", "in", `(${ESTADOS_CERRADOS.join(",")})`)
+    .not("estado", "in", `(${CERRADAS.join(",")})`)
     .or(condicionDeAtrasada(hoy))
     .limit(500);
 

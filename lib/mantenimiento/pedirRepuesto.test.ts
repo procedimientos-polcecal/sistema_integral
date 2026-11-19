@@ -49,6 +49,15 @@ describe("cuando conviene ofrecer un pedido", () => {
     expect(convienePedir("bajo_minimo")).toBe(true);
   });
 
+  /**
+   * Y cuando hay pero no alcanza para lo que esta orden pide, que es el caso
+   * que mas se parece a no tener: el dia del trabajo falta igual. Reportado el
+   * 04/11/2026 con 80 tuercas pedidas y 61 en el pañol.
+   */
+  it("cuando hay pero no alcanza para esta orden", () => {
+    expect(convienePedir("no_alcanza")).toBe(true);
+  });
+
   it("cuando hay, no", () => {
     expect(convienePedir("hay")).toBe(false);
   });

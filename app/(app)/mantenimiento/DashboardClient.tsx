@@ -677,252 +677,295 @@ export default function DashboardClient({
           <Acceso href="/mantenimiento/planificacion" label="Programación" />
           <Acceso href="/mantenimiento/produccion" label="Producción" />
           <Acceso href="/mantenimiento/historial" label="Historial" />
+          <Acceso href="/mantenimiento/sectores/historial" label="Historial de sectores" />
           {esAdmin && <Acceso href="/mantenimiento/configuracion" label="Configuración" />}
         </div>
       </div>
 
-      {(() => {
-        const visibleSectors = plantFilter === "TODAS"
-          ? sectores
-          : sectores.filter((s: any) => empresaDe(s) === plantFilter);
-        return (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {visibleSectors.map((sector: any) => {
-                const meta = PLANT_STATUS_META[sector.status ?? "ACTIVA"] ?? PLANT_STATUS_META.ACTIVA;
-                const lastChange = sectoresStatusLog.find((l: any) => l.sector_id === sector.id);
-                // Las OT que piden pararlo mandan sobre el color del estado.
-                const exigenParar = paradas[sector.id] ?? [];
-                const pinta = exigenParar.length > 0 ? ALERTA_PARAR : meta;
-                return (
-                  <div key={sector.id} className="rounded-xl border p-4 flex items-start justify-between gap-3"
-                    style={{ background: pinta.bg, borderColor: pinta.border }}>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: meta.color }} />
-                        <span className="font-semibold text-slate-900 text-sm">
-                          {sector.nombre}
-                        </span>
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full border"
-                          style={{ color: meta.color, borderColor: meta.border, background: "white" }}>
-                          {meta.label}
-                        </span>
-                        {/* Hay OT pendientes que necesitan el sector parado.
-                            Cuáles son se listan abajo, en la tarjeta. */}
-                        {exigenParar.length > 0 && (
-                          <span
-                            className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-red-300 bg-red-100 text-red-700"
-                            title={`${exigenParar.length} OT pendiente${exigenParar.length === 1 ? "" : "s"} que requiere${exigenParar.length === 1 ? "" : "n"} parar este sector`}
-                          >Parar</span>
-                        )}
-                      </div>
-                      {plantFilter === "TODAS" && (
-                        <p className="text-xs text-slate-400 mt-0.5">{empresaDe(sector) === "TRANSVERSAL" ? "Transversal" : empresaDe(sector)}</p>
-                      )}
-                      {exigenParar.length > 0 && (
-                        <OtsQueExigenParar ots={exigenParar} sectorId={sector.id} />
-                      )}
-                      {lastChange && (
-                        <p className="text-xs text-slate-500 mt-1.5 leading-snug">
-                          <span className="font-medium">{nombreCompleto(lastChange.changed_by_user)}</span>
-                          {" · "}{new Date(lastChange.changed_at).toLocaleDateString("es-AR", { day:"2-digit", month:"2-digit" })}
-                          {lastChange.reason && <> · <span className="italic">“{lastChange.reason}”</span></>}
-                        </p>
-                      )}
-                    </div>
-                    {canEdit && (
-                      <button onClick={() => openStatusModal(sector)}
-                        className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-                        Cambiar estado
-                      </button>
-                    )}
+      <section>
+        {/* Cómo está la planta ahora. Los repartos —la torta de estados, la
+            criticidad, tipo y ejecución del trabajo— son parte de esto y no de
+            la evolución: contestan la misma pregunta que un número grande, sólo
+            que abiertos por categoría. */}
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Indicadores</h2>
+        <div className="space-y-5">
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCard label="Total equipos"    value={total}           color="var(--text-primary)" />
+            <KpiCard label="Operativos"       value={operativos}      color="var(--status-op)" sub={`${pctOperativo}% del total`} />
+            <KpiCard label="Vencidos"         value={overdue.length}  color={overdue.length > 0 ? "var(--status-rep)" : "var(--status-op)"} />
+            <KpiCard label="Próximos 7 días"  value={upcoming.length} color="var(--accent)" />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <KpiCard label="Avisos sin OT"      value={avisosSinOT}  color={avisosSinOT > 0 ? "var(--accent)" : "var(--status-op)"} />
+            <KpiCard label="OS sin terminar"    value={osPendientes} color="var(--status-mant)" />
+            <KpiCard
+              label="Sectores a parar"
+              value={sectoresParados.length}
+              color={sectoresParados.length > 0 ? "var(--status-rep)" : "var(--status-op)"}
+              sub={
+                sectoresParados.length > 0
+                  ? `${nombresDeSectores(sectores, sectoresParados)} · ${cuantasExigenParar} OT`
+                  : undefined
+              }
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="card p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-slate-700">Estado de equipos</h2>
+                {filterLabel && <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{filterLabel}</span>}
+              </div>
+              {statusData.length === 0 ? (
+                <div className="h-48 flex items-center justify-center text-sm text-slate-400">Sin datos</div>
+              ) : (
+                <div className="flex items-center gap-4">
+                  <div className="w-44 h-44 shrink-0">
+                    <EstadoDeEquipos datos={statusData} />
                   </div>
+                  <div className="space-y-2 flex-1 min-w-0">
+                    {statusData.map((d) => (
+                      <div key={d.key} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                          <span className="text-xs text-slate-600 truncate">{d.name}</span>
+                        </div>
+                        <span className="text-xs font-semibold text-slate-900 shrink-0">{d.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="card p-5">
+              <h2 className="text-sm font-semibold text-slate-700 mb-4">
+                {sectorFilter !== "TODOS" ? `Criticidad — ${sectorFilter}` : plantFilter !== "TODAS" ? `Criticidad por sector — ${plantFilter}` : "Criticidad por empresa"}
+              </h2>
+              <Criticidad datos={criticalityData} claves={criticalityKeys} colores={criticalityColors} />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <h2 className="text-sm font-semibold text-slate-700">
+                Órdenes de trabajo por estado
+              </h2>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-slate-400">Total: <span className="font-semibold text-slate-700">{otTotal}</span></span>
+                <span className="text-slate-200">·</span>
+                <span className="text-amber-600 font-semibold">{otPendientes} pendientes</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {otStats.map((s) => {
+                const meta = OT_ESTADO_META[s.estado] ?? { label: s.estado, color: "var(--text-muted)" };
+                const pct = otTotal > 0 ? Math.round((s.count / otTotal) * 100) : 0;
+                return (
+                  <Link
+                    key={s.estado}
+                    href={`/mantenimiento/ordenes?estado=${s.estado}`}
+                    className="card p-4 relative overflow-hidden block transition hover:-translate-y-0.5 hover:shadow-lg"
+                  >
+                    <div className="absolute top-0 left-0 right-0 h-1" style={{ background: meta.color }} />
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: meta.color }} />
+                      <span className="text-xs font-medium text-slate-500 truncate">{meta.label}</span>
+                    </div>
+                    <div className="text-3xl font-bold text-slate-900">{s.count}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">{pct}% del total</div>
+                  </Link>
                 );
               })}
             </div>
-
-            {sectoresStatusLog.length > 0 && (
-              <div>
-                <button onClick={() => setShowLog((v) => !v)}
-                  className="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition-colors">
-                  <svg className={`w-3 h-3 transition-transform ${showLog ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                  {showLog ? "Ocultar" : "Ver"} historial de cambios de sector
-                </button>
-                {showLog && (
-                  <div className="mt-2 card overflow-hidden">
-                    {sectoresStatusLog.map((log: any, i: number) => {
-                      const meta = PLANT_STATUS_META[log.new_status] ?? PLANT_STATUS_META.ACTIVA;
-                      return (
-                        <div key={log.id} className={`px-4 py-3 text-sm ${i < sectoresStatusLog.length - 1 ? "border-b border-slate-100" : ""}`}>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-slate-800">{log.sector?.nombre}</span>
-                            <span className="text-xs text-slate-400">{empresaDe(log.sector)}</span>
-                            <span className="text-slate-400">→</span>
-                            <span className="font-semibold text-xs px-2 py-0.5 rounded-full" style={{ color: meta.color, background: meta.bg }}>
-                              {meta.label}
-                            </span>
-                            <span className="text-xs text-slate-400 ml-auto">
-                              {nombreCompleto(log.changed_by_user)} · {new Date(log.changed_at).toLocaleDateString("es-AR", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}
-                            </span>
-                          </div>
-                          {log.reason && <p className="text-xs text-slate-500 mt-0.5 italic">“{log.reason}”</p>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        );
-      })()}
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Total equipos"    value={total}           color="var(--text-primary)" />
-        <KpiCard label="Operativos"       value={operativos}      color="var(--status-op)" sub={`${pctOperativo}% del total`} />
-        <KpiCard label="Vencidos"         value={overdue.length}  color={overdue.length > 0 ? "var(--status-rep)" : "var(--status-op)"} />
-        <KpiCard label="Próximos 7 días"  value={upcoming.length} color="var(--accent)" />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <KpiCard label="Avisos sin OT"      value={avisosSinOT}  color={avisosSinOT > 0 ? "var(--accent)" : "var(--status-op)"} />
-        <KpiCard label="OS sin terminar"    value={osPendientes} color="var(--status-mant)" />
-        <KpiCard
-          label="Sectores a parar"
-          value={sectoresParados.length}
-          color={sectoresParados.length > 0 ? "var(--status-rep)" : "var(--status-op)"}
-          sub={
-            sectoresParados.length > 0
-              ? `${nombresDeSectores(sectores, sectoresParados)} · ${cuantasExigenParar} OT`
-              : undefined
-          }
-        />
-      </div>
-
-      <OrdenesAtrasadas resumen={atrasadas} hoy={hoy} />
-
-      <VentanasDeReparacion ventanas={ventanas} semana={semanaQueViene} />
-
-      <PeoresPorMtbf />
-
-      <OrdenesPorMes datos={otPorMes} delMes={otMes} mes={mesActual} />
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-slate-700">Estado de equipos</h2>
-            {filterLabel && <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{filterLabel}</span>}
           </div>
-          {statusData.length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-sm text-slate-400">Sin datos</div>
-          ) : (
-            <div className="flex items-center gap-4">
-              <div className="w-44 h-44 shrink-0">
-                <EstadoDeEquipos datos={statusData} />
-              </div>
-              <div className="space-y-2 flex-1 min-w-0">
-                {statusData.map((d) => (
-                  <div key={d.key} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
-                      <span className="text-xs text-slate-600 truncate">{d.name}</span>
-                    </div>
-                    <span className="text-xs font-semibold text-slate-900 shrink-0">{d.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
 
-        <div className="card p-5">
-          <h2 className="text-sm font-semibold text-slate-700 mb-4">
-            {sectorFilter !== "TODOS" ? `Criticidad — ${sectorFilter}` : plantFilter !== "TODAS" ? `Criticidad por sector — ${plantFilter}` : "Criticidad por empresa"}
-          </h2>
-          <Criticidad datos={criticalityData} claves={criticalityKeys} colores={criticalityColors} />
-        </div>
-      </div>
-
-      <div>
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h2 className="text-sm font-semibold text-slate-700">
-            Órdenes de trabajo por estado
-          </h2>
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-400">Total: <span className="font-semibold text-slate-700">{otTotal}</span></span>
-            <span className="text-slate-200">·</span>
-            <span className="text-amber-600 font-semibold">{otPendientes} pendientes</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <IndicatorGroup title="Tipo de trabajo" tally={tipoTally} colors={TIPO_COLORS} />
+            <IndicatorGroup title="Ejecución del trabajo" tally={quienTally} colors={QUIEN_COLORS} />
           </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          {otStats.map((s) => {
-            const meta = OT_ESTADO_META[s.estado] ?? { label: s.estado, color: "var(--text-muted)" };
-            const pct = otTotal > 0 ? Math.round((s.count / otTotal) * 100) : 0;
-            return (
-              <Link
-                key={s.estado}
-                href={`/mantenimiento/ordenes?estado=${s.estado}`}
-                className="card p-4 relative overflow-hidden block transition hover:-translate-y-0.5 hover:shadow-lg"
-              >
-                <div className="absolute top-0 left-0 right-0 h-1" style={{ background: meta.color }} />
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: meta.color }} />
-                  <span className="text-xs font-medium text-slate-500 truncate">{meta.label}</span>
-                </div>
-                <div className="text-3xl font-bold text-slate-900">{s.count}</div>
-                <div className="text-xs text-slate-400 mt-0.5">{pct}% del total</div>
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <IndicatorGroup title="Tipo de trabajo" tally={tipoTally} colors={TIPO_COLORS} />
-        <IndicatorGroup title="Ejecución del trabajo" tally={quienTally} colors={QUIEN_COLORS} />
-      </div>
-
-      {executionTrend.length > 0 && (
-        <div className="card p-5">
-          <h2 className="text-sm font-semibold text-slate-700 mb-4">
-            Ejecuciones por semana (últimas 8 semanas)
-          </h2>
-          <EjecucionesPorSemana datos={executionTrend} />
-        </div>
-      )}
-
-      {overdue.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <h2 className="text-xs font-semibold text-red-600 uppercase tracking-wider">
-              Vencidos — {overdue.length}
-            </h2>
-          </div>
-          <div className="rounded-xl border border-red-100 overflow-hidden bg-white">
-            {overdue.map((s: any, i: number) => <ScheduleRow key={s.id} schedule={s} overdue last={i === overdue.length - 1} />)}
-          </div>
-        </section>
-      )}
+      </section>
 
       <section>
-        <div className="flex items-center gap-2 mb-3">
-          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Próximos 7 días — {upcoming.length}
-          </h2>
+        {/* Cómo viene cambiando. Las ejecuciones son por semana y el MTBF es una
+            media móvil, no un mes: entran igual porque lo que agrupa acá es qué
+            pregunta contesta el gráfico —«¿mejora o empeora?»— y no cada cuánto
+            se mide. */}
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Evolución mensual</h2>
+        <div className="space-y-5">
+
+          <OrdenesPorMes datos={otPorMes} delMes={otMes} mes={mesActual} />
+
+          {executionTrend.length > 0 && (
+            <div className="card p-5">
+              <h2 className="text-sm font-semibold text-slate-700 mb-4">
+                Ejecuciones por semana (últimas 8 semanas)
+              </h2>
+              <EjecucionesPorSemana datos={executionTrend} />
+            </div>
+          )}
+
+          <PeoresPorMtbf />
         </div>
-        {upcoming.length > 0 ? (
-          <div className="card overflow-hidden">
-            {upcoming.map((s: any, i: number) => <ScheduleRow key={s.id} schedule={s} last={i === upcoming.length - 1} />)}
-          </div>
-        ) : (
-          <div className="empty-state">
-            Sin mantenimientos programados esta semana.
-          </div>
-        )}
       </section>
+
+      <section>
+        {/* Lo que hay que hacer, en orden de urgencia: primero lo vencido, después
+            el estado de los sectores —que es donde se para una planta— y al final
+            lo que viene. Las tarjetas de sector están acá y no arriba porque
+            tienen un botón que cambia algo: no son un indicador. */}
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Gestión operativa</h2>
+        <div className="space-y-5">
+
+          <OrdenesAtrasadas resumen={atrasadas} hoy={hoy} />
+
+          {overdue.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <h2 className="text-xs font-semibold text-red-600 uppercase tracking-wider">
+                  Vencidos — {overdue.length}
+                </h2>
+              </div>
+              <div className="rounded-xl border border-red-100 overflow-hidden bg-white">
+                {overdue.map((s: any, i: number) => <ScheduleRow key={s.id} schedule={s} overdue last={i === overdue.length - 1} />)}
+              </div>
+            </section>
+          )}
+
+          {(() => {
+            const visibleSectors = plantFilter === "TODAS"
+              ? sectores
+              : sectores.filter((s: any) => empresaDe(s) === plantFilter);
+            return (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {visibleSectors.map((sector: any) => {
+                    const meta = PLANT_STATUS_META[sector.status ?? "ACTIVA"] ?? PLANT_STATUS_META.ACTIVA;
+                    const lastChange = sectoresStatusLog.find((l: any) => l.sector_id === sector.id);
+                    // Las OT que piden pararlo mandan sobre el color del estado.
+                    const exigenParar = paradas[sector.id] ?? [];
+                    const pinta = exigenParar.length > 0 ? ALERTA_PARAR : meta;
+                    return (
+                      <div key={sector.id} className="rounded-xl border p-4 flex items-start justify-between gap-3"
+                        style={{ background: pinta.bg, borderColor: pinta.border }}>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: meta.color }} />
+                            <span className="font-semibold text-slate-900 text-sm">
+                              {sector.nombre}
+                            </span>
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full border"
+                              style={{ color: meta.color, borderColor: meta.border, background: "white" }}>
+                              {meta.label}
+                            </span>
+                            {/* Hay OT pendientes que necesitan el sector parado.
+                                Cuáles son se listan abajo, en la tarjeta. */}
+                            {exigenParar.length > 0 && (
+                              <span
+                                className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-red-300 bg-red-100 text-red-700"
+                                title={`${exigenParar.length} OT pendiente${exigenParar.length === 1 ? "" : "s"} que requiere${exigenParar.length === 1 ? "" : "n"} parar este sector`}
+                              >Parar</span>
+                            )}
+                          </div>
+                          {plantFilter === "TODAS" && (
+                            <p className="text-xs text-slate-400 mt-0.5">{empresaDe(sector) === "TRANSVERSAL" ? "Transversal" : empresaDe(sector)}</p>
+                          )}
+                          {exigenParar.length > 0 && (
+                            <OtsQueExigenParar ots={exigenParar} sectorId={sector.id} />
+                          )}
+                          {lastChange && (
+                            <p className="text-xs text-slate-500 mt-1.5 leading-snug">
+                              <span className="font-medium">{nombreCompleto(lastChange.changed_by_user)}</span>
+                              {" · "}{new Date(lastChange.changed_at).toLocaleDateString("es-AR", { day:"2-digit", month:"2-digit" })}
+                              {lastChange.reason && <> · <span className="italic">“{lastChange.reason}”</span></>}
+                            </p>
+                          )}
+                        </div>
+                        {canEdit && (
+                          <button onClick={() => openStatusModal(sector)}
+                            className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+                            Cambiar estado
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {sectoresStatusLog.length > 0 && (
+                  <div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <button onClick={() => setShowLog((v) => !v)}
+                        className="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition-colors">
+                        <svg className={`w-3 h-3 transition-transform ${showLog ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        {showLog ? "Ocultar" : "Ver"} historial de cambios de sector
+                      </button>
+                      {/* Esto son los últimos 20 de los sectores de planta. El
+                          archivo completo —con filtros, duración de cada parada y
+                          los sectores que ya no están— vive en su propia pantalla. */}
+                      <Link
+                        href="/mantenimiento/sectores/historial"
+                        className="text-xs font-semibold text-[var(--primary)] hover:underline"
+                      >
+                        Ver el historial completo →
+                      </Link>
+                    </div>
+                    {showLog && (
+                      <div className="mt-2 card overflow-hidden">
+                        {sectoresStatusLog.map((log: any, i: number) => {
+                          const meta = PLANT_STATUS_META[log.new_status] ?? PLANT_STATUS_META.ACTIVA;
+                          return (
+                            <div key={log.id} className={`px-4 py-3 text-sm ${i < sectoresStatusLog.length - 1 ? "border-b border-slate-100" : ""}`}>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-slate-800">{log.sector?.nombre}</span>
+                                <span className="text-xs text-slate-400">{empresaDe(log.sector)}</span>
+                                <span className="text-slate-400">→</span>
+                                <span className="font-semibold text-xs px-2 py-0.5 rounded-full" style={{ color: meta.color, background: meta.bg }}>
+                                  {meta.label}
+                                </span>
+                                <span className="text-xs text-slate-400 ml-auto">
+                                  {nombreCompleto(log.changed_by_user)} · {new Date(log.changed_at).toLocaleDateString("es-AR", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}
+                                </span>
+                              </div>
+                              {log.reason && <p className="text-xs text-slate-500 mt-0.5 italic">“{log.reason}”</p>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Próximos 7 días — {upcoming.length}
+              </h2>
+            </div>
+            {upcoming.length > 0 ? (
+              <div className="card overflow-hidden">
+                {upcoming.map((s: any, i: number) => <ScheduleRow key={s.id} schedule={s} last={i === upcoming.length - 1} />)}
+              </div>
+            ) : (
+              <div className="empty-state">
+                Sin mantenimientos programados esta semana.
+              </div>
+            )}
+          </section>
+
+          <VentanasDeReparacion ventanas={ventanas} semana={semanaQueViene} />
+        </div>
+      </section>
+
 
       {statusModal && (
         // ── SIN BORRADOR, Y NO POR DESCUIDO ───────────────────────────────

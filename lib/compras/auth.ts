@@ -97,6 +97,35 @@ export async function puedeAprobarOS(
   return Boolean(data);
 }
 
+/**
+ * Si a esta persona le toca contestar lo que Mantenimiento pregunta por un
+ * repuesto: está en `compras_consultados`.
+ *
+ * Es la gemela de `puedeAprobarCompras`, y la lista es otra a propósito —medido
+ * el 26/10/2026, `compras_aprobadores` tiene cuatro personas y sólo una es quien
+ * contesta—. Lo que decide no es el nivel en el módulo ni ser admin del sistema:
+ * es estar en la lista.
+ *
+ * **No es un permiso: es un destinatario.** Contestar lo habilita
+ * `puedeResponderConsulta` —acceso a Compras y la pregunta abierta, y nada más—,
+ * así que quien cubre a alguien de licencia contesta sin que nadie edite la
+ * lista. Esto decide a quién se le **avisa**: el push del momento
+ * (`avisarAQuienDecide`) y el aviso `compras-consultas-repuestos` del resumen
+ * diario y la campana.
+ */
+export async function esConsultadoDeCompras(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("compras_consultados")
+    .select("usuario_id")
+    .eq("usuario_id", userId)
+    .maybeSingle();
+
+  return Boolean(data);
+}
+
 /** Administrar el módulo: entre otras cosas, quién está en la lista. */
 export async function esAdminCompras(
   supabase: SupabaseClient,
@@ -148,6 +177,41 @@ export async function aprobadoresDeOS(
 ): Promise<Omit<Aprobador, "alias">[]> {
   const { data } = await supabase
     .from("os_aprobadores")
+    .select("usuarios(id, nombre, apellido, email, activo)");
+
+  type Usuario = { id: string; nombre: string; apellido: string; email: string; activo: boolean };
+
+  return (data ?? [])
+    .map((fila) => fila.usuarios as unknown as Usuario | null)
+    .filter((u): u is Usuario => Boolean(u?.activo))
+    .map((u) => ({ id: u.id, nombre: u.nombre, apellido: u.apellido, email: u.email }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+}
+
+/**
+ * Quiénes contestan cuando Mantenimiento le pregunta a Compras por un repuesto.
+ *
+ * Es la gemela de `aprobadoresDeCompras()`, sin alias, que es lo que la hace
+ * igual a `aprobadoresDeOS()`: esta lista no firma nada en ninguna planilla, así
+ * que `compras_consultados` no tiene `alias_planilla` y no hay nada que traer.
+ *
+ * Pertenecer a la lista ES el destino del aviso: a quien está acá le llega el push
+ * en el momento en que alguien pregunta. Por eso es una lista propia y **no
+ * `compras_aprobadores`**: medido el 26/10/2026, Facundo Ortiz —el encargado de
+ * compras, a quien contesta esto— ya estaba ahí, pero esa lista tiene cuatro
+ * personas y las otras tres no son quien contesta. Reusarla es repetir el error
+ * que `compras-por-aprobar` ya pagó por el otro lado: le llegaba a 6 personas y 3
+ * no podían aprobar. Lo explica el encabezado de la migración 20261029082249.
+ *
+ * Una cuenta dada de baja no figura, igual que en las otras dos: `avisarAQuienDecide`
+ * tampoco le manda. Y estar en la lista no abre el módulo: la bandeja vive bajo
+ * `/compras`, así que sumar a alguien sin darle Compras no le hace nada visible.
+ */
+export async function consultadosDeCompras(
+  supabase: SupabaseClient
+): Promise<Omit<Aprobador, "alias">[]> {
+  const { data } = await supabase
+    .from("compras_consultados")
     .select("usuarios(id, nombre, apellido, email, activo)");
 
   type Usuario = { id: string; nombre: string; apellido: string; email: string; activo: boolean };

@@ -1,14 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import Select from "@/components/Select";
+import type { CuentaDeUnRepuesto } from "@/lib/mantenimiento/cuentaDeUnRepuesto";
 import { ESTADO_DE_STOCK, type Disponibilidad, type Insumo } from "@/lib/mantenimiento/stock";
 import { useCargar } from "@/lib/core/useCargar";
+import { haceCuanto } from "@/lib/core/haceCuanto";
+
 import { Modal } from "@/components/Modal";
 import { useBorrador } from "@/lib/core/useBorrador";
 import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import NuevoRequerimientoModal from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
 import { convienePedir, pedidoSugerido, type PedidoSugerido } from "@/lib/mantenimiento/pedirRepuesto";
+import { MAXIMO_DE_NOTA } from "@/lib/mantenimiento/notas";
+import {
+  preguntaAbiertaDelRepuesto, sePuedePreguntarEn, encabezadoDeLaPregunta, queDecirDelAviso,
+  type NotaDeLaOT,
+} from "@/lib/mantenimiento/consultaDeRepuesto";
+import {
+  abrirCaja, cambiarCaja as cambiarLaCaja, cerrarCaja as cerrarLaCaja, type Caja,
+} from "@/lib/mantenimiento/cajasDePregunta";
 import type { UbicacionEnlazada } from "@/lib/compras/ubicaciones";
 import { COMPRA_LABELS } from "@/lib/compras/constants";
 import type { EstadoCompra } from "@/lib/compras/types";
@@ -34,6 +46,16 @@ import type { EstadoCompra } from "@/lib/compras/types";
  * usuario del SdG, así que ese botón **no depende del permiso de edición de
  * Mantenimiento**: quien mira la orden y ve que falta algo es justamente quien
  * tiene que poder pedirlo, trabaje o no en Compras.
+ *
+ * Y ofrece **preguntar**: «Preguntar a Compras» escribe una pregunta en el
+ * historial de la orden e interrumpe a quien contesta por los repuestos. A
+ * diferencia de pedir, **sí exige el permiso de edición**: es la decisión del
+ * diseño, porque escribe en la orden e interrumpe a una persona nombrada.
+ * Preguntar no pide el repuesto —el requerimiento es el pedido y la pregunta es
+ * por el pedido—, así que los dos botones conviven.
+ *
+ * Cada repuesto tiene **su propia caja** de pregunta: abrir la de uno no pisa lo que
+ * se venía escribiendo en la de otro, y lo escrito sobrevive a un envío que falla.
  */
 
 interface RiEnVuelo {
@@ -51,14 +73,18 @@ interface Repuesto {
   nombre: string;
   codigo: string | null;
   cantidad: string | null;
+  /** El artículo del pañol que una persona eligió para este renglón, si eligió. */
+  articulo?: ArticuloDelPanol | null;
   /** Los requerimientos en curso que podrian ser este mismo repuesto. */
   ris?: { porCodigo: RiEnVuelo[]; porNombre: RiEnVuelo[] };
 }
 
+interface ArticuloDelPanol { id: string; codigo: string; descripcion: string }
+
 type Opcion = { id: string; nombre: string };
 
 export default function RepuestosOTModal({
-  orden, puedeEditar, areas, empresas, ubicaciones, onCerrar,
+  orden, puedeEditar, areas, empresas, ubicaciones, onCerrar, onCambioEnElHistorial,
 }: {
   orden: {
     id: string; ot_number: number | null; descripcion: string | null;
@@ -66,6 +92,9 @@ export default function RepuestosOTModal({
     /** El sector de la OT: de ahí sale dónde se necesita cuando la máquina no
         tiene una ubicación propia, y de la ubicación sale quién paga. */
     sector_id: string | null;
+    /** Si la orden espera algo decide si se ofrece preguntar, y si una pregunta
+        sigue abierta. */
+    estado: string | null;
   };
   puedeEditar: boolean;
   /** Los catálogos del formulario de requerimiento, para poder pedir de acá. */
@@ -73,6 +102,12 @@ export default function RepuestosOTModal({
   empresas: Opcion[];
   ubicaciones: UbicacionEnlazada[];
   onCerrar: () => void;
+  /**
+   * Se escribió o cambió algo que el historial de la orden muestra: una pregunta
+   * nueva, o un repuesto sacado —que cierra la suya—. El historial está en otra
+   * parte de la pantalla, detrás de este modal, y no se entera solo.
+   */
+  onCambioEnElHistorial?: () => void;
 }) {
   const [repuestos, setRepuestos] = useState<Repuesto[]>([]);
   const [disponibilidad, setDisponibilidad] = useState<Record<string, Disponibilidad>>({});
@@ -86,6 +121,55 @@ export default function RepuestosOTModal({
   const [pedido, setPedido] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
+
+  /**
+   * El catálogo del pañol con sus id, para elegir a qué artículo se refiere un
+   * repuesto. Son ~1.200 filas y casi nadie lo usa, así que se pide recién cuando
+   * alguien abre el selector, y una sola vez por modal.
+   */
+  const [articulos, setArticulos] = useState<ArticuloDelPanol[] | null>(null);
+  /**
+   * Sube cada vez que algo cambia la cuenta de un artículo. Un RI pegado en un
+   * renglón vale para todos los renglones del mismo artículo, así que los demás
+   * tienen que volver a calcular; sin esto dos líneas del mismo modal decían
+   * números distintos para las mismas piezas.
+   */
+  const [versionDeLaCuenta, setVersionDeLaCuenta] = useState(0);
+  const pidiendoArticulos = useRef<Promise<ArticuloDelPanol[] | string> | null>(null);
+  /** La lista, o el texto de por qué no se pudo: lo dice el renglón que la pidió. */
+  function traerArticulos(): Promise<ArticuloDelPanol[] | string> {
+    if (articulos) return Promise.resolve(articulos);
+    pidiendoArticulos.current ??= (async () => {
+      try {
+        const res = await fetch("/api/mantenimiento/inventario?articulos=1");
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) return body.error ?? "No se pudo traer el catálogo del pañol.";
+        const lista: ArticuloDelPanol[] = body.data ?? [];
+        setArticulos(lista);
+        return lista;
+      } catch {
+        return "No se pudo traer el catálogo del pañol: no hay conexión con el servidor.";
+      } finally {
+        pidiendoArticulos.current = null;
+      }
+    })();
+    return pidiendoArticulos.current;
+  }
+
+  /** El historial de la orden: de ahí sale qué repuesto ya tiene una pregunta esperando. */
+  const [notas, setNotas] = useState<NotaDeLaOT[]>([]);
+  /**
+   * Las preguntas que se están escribiendo, **una caja por repuesto** (la clave es el
+   * id del repuesto). Una sola caja para toda la lista hacía que abrir «Preguntar» en
+   * otro repuesto tirara en silencio lo que ya se había escrito en el primero.
+   */
+  const [cajas, setCajas] = useState<Record<string, Caja>>({});
+  /** El repuesto cuya pregunta está viajando. Una a la vez: el resto no se puede apretar. */
+  const [enviando, setEnviando] = useState<string | null>(null);
+  /** Lo que se le dice a quien acaba de preguntar: si el aviso llegó, y si la planilla. */
+  const [seEnvio, setSeEnvio] = useState<
+    { llego: boolean; texto: string; planilla: string | null } | null
+  >(null);
 
   /*
    * EL RENGLÓN A MEDIO ESCRIBIR DE «AGREGAR», Y POR QUÉ ESTE MODAL TUVO QUE
@@ -125,7 +209,17 @@ export default function RepuestosOTModal({
     const stock = await fetch("/api/mantenimiento/inventario", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repuestos: lista.map((r) => ({ codigo: r.codigo, nombre: r.nombre })) }),
+      // La cantidad viaja para que el inventario pueda decir «no alcanza»: con
+      // 61 en stock y una OT que pide 80, sin esto la pantalla decía «Hay».
+      body: JSON.stringify({
+        // Con artículo elegido se busca **ése**, no lo que el nombre se parezca:
+        // es lo que hace que el stock y el pedido a Compras sean los de la pieza.
+        repuestos: lista.map((r) => ({
+          codigo: r.articulo?.codigo ?? r.codigo,
+          nombre: r.articulo?.descripcion ?? r.nombre,
+          cantidad: r.cantidad,
+        })),
+      }),
     });
     if (!stock.ok) return;
 
@@ -141,12 +235,112 @@ export default function RepuestosOTModal({
     setDisponibilidad(porClave);
   }, [orden.id]);
 
+  // El historial, aparte de la lista: saber qué hace falta no depende de saber
+  // qué se preguntó. Si no se puede leer, el botón ofrece abrir una pregunta como
+  // si no hubiera ninguna, y la ruta defiende la regla de una abierta por repuesto.
+  const recargarNotas = useCargar(async (vigente) => {
+    const res = await fetch(`/api/mantenimiento/ordenes/${orden.id}/notas`);
+    if (!res.ok) return;
+    const body = await res.json().catch(() => ({}));
+    if (!vigente()) return;
+    setNotas(body.data ?? []);
+  }, [orden.id]);
+
   async function sacar(id: string) {
     const res = await fetch(`/api/mantenimiento/ordenes/${orden.id}/repuestos?repuesto=${id}`, {
       method: "DELETE",
     });
     if (!res.ok) { setError((await res.json().catch(() => ({}))).error ?? "No se pudo sacar."); return; }
     traer();
+    // Sacar un repuesto cierra su pregunta, si tenía una abierta: el historial de
+    // atrás tiene que dejar de mostrarla esperando.
+    onCambioEnElHistorial?.();
+  }
+
+  /**
+   * Abre la caja de la pregunta de un repuesto, escrita hasta donde se sabe.
+   *
+   * Arranca con el repuesto y los RI en curso, y si el repuesto ya tiene una pregunta
+   * esperando es **su seguimiento**: se le suma al mismo hilo en vez de abrir otra, que
+   * son dos entradas en la bandeja de Compras diciendo lo mismo. Las cajas de los demás
+   * repuestos no se tocan.
+   */
+  function abrirPregunta(r: Repuesto, abierta: NotaDeLaOT | null) {
+    const encabezado = encabezadoDeLaPregunta({ nombre: r.nombre, codigo: r.codigo }, r.ris);
+    setError("");
+    setSeEnvio(null);
+    setCajas((actuales) => abrirCaja(actuales, r.id, encabezado, Boolean(abierta)));
+  }
+
+  function cambiarCaja(repuestoId: string, cambios: Partial<Caja>) {
+    setCajas((actuales) => cambiarLaCaja(actuales, repuestoId, cambios));
+  }
+
+  function cerrarCaja(repuestoId: string) {
+    setCajas((actuales) => cerrarLaCaja(actuales, repuestoId));
+  }
+
+  async function enviarPregunta(repuestoId: string) {
+    const caja = cajas[repuestoId];
+    if (!caja) return;
+
+    // La pregunta abierta se mira **ahora** y no cuando se abrió la caja: si mientras
+    // se escribía alguien contestó o siguió el hilo, lo que se manda tiene que apuntar
+    // a lo de hoy. Apunta a LA abierta y no a la primera del hilo: con tres en un hilo,
+    // apuntar a la primera deja dos abiertas.
+    const abierta = preguntaAbiertaDelRepuesto(notas, repuestoId, orden.estado);
+
+    setEnviando(repuestoId);
+    cambiarCaja(repuestoId, { error: "" });
+
+    // El `finally` es lo que devuelve los botones: sin él, un `fetch` que rechaza
+    // —sin conexión— dejaba «Enviando…» para siempre y a la persona sin poder
+    // reintentar.
+    try {
+      const res = await fetch(`/api/mantenimiento/ordenes/${orden.id}/notas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          texto: caja.texto.trim(),
+          tipo: "PREGUNTA",
+          repuesto_id: repuestoId,
+          ...(abierta ? { responde_a: abierta.id } : {}),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        // La caja queda abierta, con lo escrito. Un 409 es que la pantalla estaba
+        // vieja —alguien ya preguntó por esta pieza, o contestó—: se vuelve a leer el
+        // historial, y al mandar de nuevo el texto va como seguimiento de lo de hoy.
+        //
+        // Se refrescan **los dos**: `recargarNotas` son las notas de este modal, y
+        // `onCambioEnElHistorial` es lo único que sube la versión del historial de
+        // atrás. Avisar sólo acá dejaba la pantalla de la OT mostrando la pregunta
+        // que el servidor acaba de rechazar por vieja, que es justo lo que el 409
+        // vino a contar.
+        cambiarCaja(repuestoId, { error: body.error ?? "No se pudo enviar la pregunta." });
+        if (res.status === 409) {
+          recargarNotas();
+          onCambioEnElHistorial?.();
+        }
+        return;
+      }
+
+      cerrarCaja(repuestoId);
+      setError("");
+      setSeEnvio({ ...queDecirDelAviso(body.aviso), planilla: body.planilla_error ?? null });
+      recargarNotas();
+      onCambioEnElHistorial?.();
+    } catch {
+      cambiarCaja(repuestoId, {
+        error:
+          "No se pudo enviar: no hay conexión con el servidor. Revisá la conexión y " +
+          "probá de nuevo; lo que escribiste sigue acá.",
+      });
+    } finally {
+      setEnviando(null);
+    }
   }
 
   return (
@@ -187,7 +381,10 @@ export default function RepuestosOTModal({
           </p>
         )}
 
-        {cargando ? (
+        {/* Sólo se tapa la lista la primera vez: en una recarga el spinner la
+            desmontaba entera y se llevaba lo que cada renglón tenía en pantalla
+            (los avisos de un cambio de artículo, un RI a medio escribir). */}
+        {cargando && repuestos.length === 0 ? (
           <p className="py-6 text-center text-sm text-slate-400">Cargando…</p>
         ) : repuestos.length === 0 ? (
           <p className="py-6 text-center text-sm text-slate-400">
@@ -198,9 +395,20 @@ export default function RepuestosOTModal({
             {repuestos.map((r) => {
               const d = disponibilidad[r.id];
               const estado = d ? ESTADO_DE_STOCK[d.estado] : null;
+
+              // La pregunta que este repuesto ya tiene esperando, si tiene. Decide si
+              // el botón abre una nueva o le suma al hilo.
+              const abierta = preguntaAbiertaDelRepuesto(notas, r.id, orden.estado);
+              // Las condiciones de «Pedir a Compras» —que falte stock— más las de
+              // preguntar: poder editar la orden, y que la orden espere algo.
+              const puedePreguntar =
+                puedeEditar && sePuedePreguntarEn(orden.estado) && Boolean(d && convienePedir(d.estado));
+              // La pregunta que se está escribiendo de este repuesto, si hay una.
+              const caja = cajas[r.id];
+
               return (
                 <li key={r.id} className="flex items-start justify-between gap-2 py-2">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="text-sm text-slate-800">
                       {r.nombre}
                       {r.cantidad && <span className="text-slate-400"> ×{r.cantidad}</span>}
@@ -214,6 +422,17 @@ export default function RepuestosOTModal({
                       </div>
                     )}
 
+                    <ArticuloYRi
+                      repuesto={r}
+                      d={d}
+                      puedeEditar={puedeEditar}
+                      articulos={articulos}
+                      pedirArticulos={traerArticulos}
+                      versionDeLaCuenta={versionDeLaCuenta}
+                      onCambioDeLaCuenta={() => setVersionDeLaCuenta((v) => v + 1)}
+                      onCambioDelArticulo={traer}
+                    />
+
                     {/* Cuando no hay, lo que sigue es pedirlo. El formulario
                         abre con el nombre, el código y la cantidad que ya están
                         acá: volver a escribirlos es donde el código se pierde y
@@ -225,19 +444,88 @@ export default function RepuestosOTModal({
                         veces. Ver `lib/mantenimiento/riDelRepuesto.ts`. */}
                     {d && convienePedir(d.estado) && <YaPedido ris={r.ris} />}
 
+                    {/* La pregunta que ya se hizo, a la vista aunque el stock haya
+                        cambiado o no se pueda editar, y también mientras se escribe
+                        el seguimiento: «una pregunta sin responder se ve» es lo que
+                        esto existe para hacer. */}
+                    {abierta && (
+                      <p className="mt-1 text-xs text-amber-700">
+                        Preguntado {haceCuanto(abierta.creado_en)}, sin respuesta.
+                      </p>
+                    )}
+
                     {d && convienePedir(d.estado) && (
-                      <button
-                        onClick={() => setPidiendo({
-                          pedido: pedidoSugerido(
-                            { nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad },
-                            d, orden, ubicaciones, areas
-                          ),
-                          ris: r.ris,
-                        })}
-                        className="mt-1 block text-xs font-medium text-[var(--primary)] underline hover:opacity-80"
-                      >
-                        Pedir a Compras
-                      </button>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <button
+                          onClick={() => setPidiendo({
+                            pedido: pedidoSugerido(
+                              { nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad },
+                              d, orden, ubicaciones, areas
+                            ),
+                            ris: r.ris,
+                          })}
+                          className="text-xs font-medium text-[var(--primary)] underline hover:opacity-80"
+                        >
+                          Pedir a Compras
+                        </button>
+
+                        {/* Una pregunta abierta por repuesto: si ya hay una, el
+                            botón no abre otra y ofrece sumar al mismo hilo. Dos
+                            preguntas vivas por la misma pieza son dos entradas en
+                            la bandeja de Compras que dicen lo mismo. */}
+                        {puedePreguntar && !caja && (
+                          <button
+                            onClick={() => abrirPregunta(r, abierta)}
+                            className="text-xs font-medium text-[var(--primary)] underline hover:opacity-80"
+                          >
+                            {abierta ? "Sigue sin llegar" : "Preguntar a Compras"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {caja && (
+                      <div className="mt-2 space-y-2">
+                        <textarea
+                          value={caja.texto}
+                          onChange={(e) => cambiarCaja(r.id, { texto: e.target.value, error: "" })}
+                          // Arranca escrita —el repuesto y los RI—, y lo que sigue es lo
+                          // que se agrega a continuación: con el cursor al principio
+                          // quedaría la pregunta antes del encabezado.
+                          autoFocus
+                          onFocus={(e) => {
+                            const area = e.currentTarget;
+                            area.setSelectionRange(area.value.length, area.value.length);
+                          }}
+                          maxLength={MAXIMO_DE_NOTA}
+                          rows={4}
+                          aria-label={`Pregunta para Compras sobre ${r.nombre}`}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
+                        />
+                        {caja.error && <p className="text-xs text-red-600">{caja.error}</p>}
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => enviarPregunta(r.id)}
+                            // Con sólo el encabezado no hay pregunta: es el repuesto
+                            // y nada que preguntar de él. Y una sola viaja a la vez.
+                            disabled={
+                              enviando !== null ||
+                              caja.texto.trim() === "" ||
+                              caja.texto.trim() === caja.encabezado.trim()
+                            }
+                            className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                          >
+                            {enviando === r.id ? "Enviando…" : "Enviar a Compras"}
+                          </button>
+                          <button
+                            onClick={() => cerrarCaja(r.id)}
+                            disabled={enviando === r.id}
+                            className="text-xs text-slate-500 underline hover:text-slate-700 disabled:opacity-40"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
                   {puedeEditar && (
@@ -257,6 +545,26 @@ export default function RepuestosOTModal({
           <p className="rounded-lg bg-green-50 px-3 py-2 text-xs text-green-800">
             {pedido} Lo vas a ver en <a href="/mis-pedidos" className="underline">Mis pedidos</a>.
           </p>
+        )}
+
+        {/* Lo que pasó con la pregunta. Verde sólo si salió el aviso y llegó a la
+            planilla; si no, ámbar, y dice qué: que no haya a quién avisarle no
+            puede quedar callado, porque quien preguntó cree que Compras lo sabe. */}
+        {seEnvio && (
+          <div
+            className={`rounded-lg px-3 py-2 text-xs ${
+              seEnvio.llego && !seEnvio.planilla
+                ? "bg-green-50 text-green-800"
+                : "bg-amber-50 text-amber-800"
+            }`}
+          >
+            <p>{seEnvio.texto}</p>
+            {seEnvio.planilla && (
+              <p className="mt-1">
+                Quedó guardada en el sistema, pero no llegó a la planilla: {seEnvio.planilla}
+              </p>
+            )}
+          </div>
         )}
 
         {puedeEditar && (
@@ -286,6 +594,384 @@ export default function RepuestosOTModal({
         />
       )}
     </>
+  );
+}
+
+const numero = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
+
+/** Lo que dice el servidor, sin traducir; y los RI que bloquean, si los nombra. */
+async function leerFallo(res: Response): Promise<{ error: string; risPegados: number[] }> {
+  const body = await res.json().catch(() => ({}));
+  return {
+    error: body.error ?? "No se pudo completar la acción.",
+    risPegados: Array.isArray(body.ris_pegados) ? body.ris_pegados : [],
+  };
+}
+
+type RespuestaDeCuenta = { cuenta?: CuentaDeUnRepuesto | null; advertencia?: string };
+
+/**
+ * El artículo del pañol de un repuesto, los RI pegados a mano y la cuenta de
+ * cuánto de lo que viene ya tiene dueño.
+ *
+ * Los RI que el cruce por nombre adivina (`YaPedido`) **no entran en esta cuenta**
+ * y se siguen mostrando aparte: un falso positivo ahí haría leer «cubierta» a una
+ * orden por algo que no es suyo. Acá sólo cuentan los que una persona pegó.
+ *
+ * Un RI pegado a un renglón con artículo vale para **todas** las órdenes abiertas
+ * que piden ese artículo, y la pantalla lo dice. Y cambiar o soltar el artículo se
+ * rechaza mientras haya RI pegados, **sean del artículo viejo o de este mismo
+ * renglón**: los del artículo porque la fila no guarda de qué renglón vino y
+ * borrarla se llevaría el trabajo de otra orden, y los del renglón porque se irían
+ * con él al grupo nuevo — soltar incluido, que es ese mismo viaje en dos clics con
+ * los dos botones uno al lado del otro. El rechazo trae los números y acá se ofrece
+ * sacarlos uno por uno, también el de un RI que Compras ya sacó de la planilla, que
+ * bloquea y no se ve en ningún otro lado.
+ */
+function ArticuloYRi({
+  repuesto, d, puedeEditar, articulos, pedirArticulos, versionDeLaCuenta, onCambioDeLaCuenta,
+  onCambioDelArticulo,
+}: {
+  repuesto: Repuesto;
+  d: Disponibilidad | undefined;
+  puedeEditar: boolean;
+  articulos: ArticuloDelPanol[] | null;
+  pedirArticulos: () => Promise<ArticuloDelPanol[] | string>;
+  versionDeLaCuenta: number;
+  /** Se pegó o sacó un RI, o cambió el artículo: los demás renglones recalculan. */
+  onCambioDeLaCuenta: () => void;
+  onCambioDelArticulo: () => void;
+}) {
+  const articulo = repuesto.articulo ?? null;
+  const [cuenta, setCuenta] = useState<CuentaDeUnRepuesto | null>(null);
+  const [advertencia, setAdvertencia] = useState("");
+  const [error, setError] = useState("");
+  /** Los RI que impiden cambiar el artículo: hay que sacarlos antes. */
+  const [bloqueo, setBloqueo] = useState<number[]>([]);
+  const [aviso, setAviso] = useState("");
+  const [eligiendo, setEligiendo] = useState(false);
+  const [nro, setNro] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  /** Por qué no se pudo traer el catálogo, si no se pudo: se dice acá y se puede reintentar. */
+  const [falloElCatalogo, setFalloElCatalogo] = useState("");
+
+  useCargar(async (vigente) => {
+    const res = await fetch(`/api/mantenimiento/repuestos/${repuesto.id}/ri`);
+    const body = await res.json().catch(() => ({}));
+    if (!vigente()) return;
+    if (!res.ok) { setError(body.error ?? "No se pudo calcular lo que viene."); return; }
+    setCuenta(body.cuenta ?? null);
+    setAdvertencia(body.advertencia ?? "");
+  }, [repuesto.id, articulo?.id, versionDeLaCuenta]);
+
+  /** Aplica la respuesta de una escritura: la cuenta nueva, o la advertencia. */
+  function aplicar(body: RespuestaDeCuenta) {
+    setCuenta(body.cuenta ?? null);
+    setAdvertencia(body.advertencia ?? "");
+  }
+
+  async function llamar(
+    url: string, init: RequestInit
+  ): Promise<{ ok: true; body: RespuestaDeCuenta } | { ok: false; status?: number }> {
+    setOcupado(true);
+    setError("");
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) {
+        const f = await leerFallo(res);
+        setError(f.error);
+        setBloqueo(res.status === 409 ? f.risPegados : []);
+        return { ok: false, status: res.status };
+      }
+      setBloqueo([]);
+      return { ok: true, body: await res.json().catch(() => ({})) };
+    } catch {
+      setError("No hay conexión con el servidor. Probá de nuevo.");
+      return { ok: false };
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function pegar() {
+    const r = await llamar(`/api/mantenimiento/repuestos/${repuesto.id}/ri`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nro_ri: nro.trim() }),
+    });
+    if (!r.ok) return;
+    setNro("");
+    setAviso("");
+    aplicar(r.body);
+    onCambioDeLaCuenta();
+  }
+
+  async function sacarRi(n: number) {
+    const r = await llamar(`/api/mantenimiento/repuestos/${repuesto.id}/ri?nro_ri=${n}`, { method: "DELETE" });
+    if (!r.ok) return;
+    setAviso("");
+    aplicar(r.body);
+    onCambioDeLaCuenta();
+  }
+
+  /** Sacar uno de los que bloquean el cambio de artículo: queda la lista que falta. */
+  async function sacarElQueBloquea(n: number) {
+    const faltan = bloqueo.filter((x) => x !== n);
+    const r = await llamar(`/api/mantenimiento/repuestos/${repuesto.id}/ri?nro_ri=${n}`, { method: "DELETE" });
+    if (!r.ok) {
+      // **Un 404 es «ése ya no está»**, no un fallo de esta lista: lo sacó otra persona
+      // entre que se dibujó el panel y se apretó. `llamar` vacía el bloqueo ante
+      // cualquier fallo que no sea un 409, y acá eso se llevaría también los números
+      // que **sí** siguen frenando: el panel quedaría vacío y habría que apretar
+      // «Cambiar» otra vez para recuperarlos. Queda la lista que falta.
+      if (r.status === 404) setBloqueo(faltan);
+      return;
+    }
+    setBloqueo(faltan);
+    aplicar(r.body);
+    onCambioDeLaCuenta();
+    if (faltan.length === 0) setError("");
+  }
+
+  async function elegir(articuloId: string) {
+    // Sin artículo, la cuenta sólo trae los RI que este mismo renglón tenía pegados
+    // a sí mismo: eso sí se sabe antes de elegir.
+    const teniaPropios = !articulo && (cuenta?.ris.length ?? 0) > 0;
+    const r = await llamar(`/api/mantenimiento/repuestos/${repuesto.id}/articulo`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ articulo_id: articuloId }),
+    });
+    if (!r.ok) return;
+    setEligiendo(false);
+    aplicar(r.body);
+    // Callado, esto sería una sorpresa: los RI que cuenta el artículo valen desde ahora
+    // para todas las órdenes que lo piden. **No se dice de dónde vino cada uno**:
+    // `cuenta.ris` no trae la procedencia y pueden ser de otras órdenes o de este
+    // mismo renglón; afirmarlo sería inventarlo.
+    const hay = r.body.cuenta?.ris.length ?? 0;
+    const cuantos = hay === 1 ? "1 RI pegado" : `${hay} RI pegados`;
+    setAviso(
+      hay === 0
+        ? ""
+        : teniaPropios
+          ? `Con este artículo cuentan ${cuantos}, y los que pegaste a este repuesto antes de elegirlo valen ` +
+            "desde ahora para todas las órdenes que piden ese artículo. Para cambiar de artículo hay que sacarlos primero."
+          : `Con este artículo cuentan ${cuantos}: valen también para este repuesto.`
+    );
+    onCambioDeLaCuenta();
+    onCambioDelArticulo();
+  }
+
+  async function soltar() {
+    const r = await llamar(`/api/mantenimiento/repuestos/${repuesto.id}/articulo`, { method: "DELETE" });
+    if (!r.ok) return;
+    setAviso("");
+    aplicar(r.body);
+    onCambioDeLaCuenta();
+    onCambioDelArticulo();
+  }
+
+  async function usarElQueReconocio(codigo: string) {
+    const lista = await pedirArticulos();
+    if (typeof lista === "string") { setError(lista); return; }
+    const encontrado = lista.find((a) => a.codigo === codigo);
+    if (!encontrado) { setError("No se encontró ese artículo en el catálogo activo del pañol."); return; }
+    await elegir(encontrado.id);
+  }
+
+  async function abrirSelector() {
+    setEligiendo(true);
+    setFalloElCatalogo("");
+    const lista = await pedirArticulos();
+    if (typeof lista === "string") setFalloElCatalogo(lista);
+  }
+
+  const reconocido = !articulo && d?.insumo?.codigo ? d.insumo : null;
+  const ris = cuenta?.ris ?? [];
+  const estaOrden = cuenta?.estaOrden ?? null;
+  const otras = cuenta ? cuenta.partes.length - (estaOrden ? 1 : 0) : 0;
+
+  return (
+    <div className="mt-1 space-y-1 text-xs">
+      {/* El artículo. Se elige, nunca se completa por parecido: enlazar al que se
+          le parece es peor que dejar sin enlace. */}
+      <p className="text-slate-600">
+        {articulo ? (
+          <>
+            <span className="font-medium">Artículo del pañol:</span>{" "}
+            <span className="font-mono text-slate-400">{articulo.codigo}</span> {articulo.descripcion}
+          </>
+        ) : (
+          <span className="text-slate-400">Sin artículo del pañol elegido.</span>
+        )}
+        {puedeEditar && !eligiendo && (
+          <>
+            {" "}
+            <button onClick={abrirSelector} disabled={ocupado} className="underline text-[var(--primary)] disabled:opacity-40 disabled:cursor-not-allowed">
+              {articulo ? "Cambiar" : "Elegir artículo"}
+            </button>
+            {articulo && (
+              <>
+                {" · "}
+                <button onClick={soltar} disabled={ocupado} className="underline text-slate-500 enabled:hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed">
+                  Soltar
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </p>
+
+      {/* El inventario lo reconoció por el nombre: se ofrece y la persona acepta. */}
+      {puedeEditar && reconocido && !eligiendo && (
+        <p className="rounded-lg bg-slate-50 px-2 py-1.5 text-slate-600">
+          El inventario lo reconoce como{" "}
+          <span className="font-mono text-slate-400">{reconocido.codigo}</span> {reconocido.descripcion}.{" "}
+          <button
+            onClick={() => usarElQueReconocio(reconocido.codigo!)}
+            disabled={ocupado}
+            className="underline text-[var(--primary)] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Usar este artículo
+          </button>
+        </p>
+      )}
+
+      {puedeEditar && eligiendo && (
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            {articulos ? (
+              <Select
+                value=""
+                onChange={(e) => { if (e.target.value) void elegir(e.target.value); }}
+                disabled={ocupado}
+                className="input"
+                aria-label={`Artículo del pañol para ${repuesto.nombre}`}
+              >
+                <option value="">Buscá por código o descripción…</option>
+                {articulos.map((a) => (
+                  <option key={a.id} value={a.id}>{a.codigo} · {a.descripcion}</option>
+                ))}
+              </Select>
+            ) : (
+              falloElCatalogo ? (
+                <span className="text-red-600">
+                  {falloElCatalogo}{" "}
+                  <button onClick={abrirSelector} className="underline">Reintentar</button>
+                </span>
+              ) : (
+                <span className="text-slate-400">Cargando el catálogo del pañol…</span>
+              )
+            )}
+          </div>
+          <button onClick={() => setEligiendo(false)} className="shrink-0 underline text-slate-500">
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {error && <p className="text-red-600">{error}</p>}
+
+      {/* Lo que impide cambiar el artículo, con cada número para sacarlo de acá. */}
+      {bloqueo.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-900">
+          <p>
+            Estos RI valen para todas las órdenes que piden este artículo.
+            Sacalos para poder cambiarlo o soltarlo:
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {bloqueo.map((n) => (
+              <li key={n}>
+                RI {n}{" "}
+                <button onClick={() => sacarElQueBloquea(n)} disabled={ocupado} className="underline enabled:hover:text-red-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                  Sacar
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {aviso && <p className="text-amber-700">{aviso}</p>}
+      {advertencia && <p className="text-amber-700">{advertencia}</p>}
+
+      {/* Lo que cubre cada RI pegado a mano. Aparte del cruce por nombre. */}
+      {ris.length > 0 && (
+        <div className="rounded-lg border border-slate-200 px-2 py-1.5 text-slate-700">
+          <p className="font-medium">RI pegados</p>
+          <ul className="mt-0.5 space-y-0.5">
+            {ris.map((ri) => (
+              <li key={ri.nro_ri}>
+                <a href={`/compras/requerimientos?q=${ri.nro_ri}`} className="underline">RI {ri.nro_ri}</a>
+                {ri.estado_compra && (
+                  <span className="text-slate-500">
+                    {" "}· {COMPRA_LABELS[ri.estado_compra as EstadoCompra]?.label ?? ri.estado_compra}
+                  </span>
+                )}
+                {ri.cantidad != null && (
+                  <span className="text-slate-500">
+                    {" "}· pidió {numero.format(ri.cantidad)}
+                    {ri.cantidad_recibida ? `, llegaron ${numero.format(ri.cantidad_recibida)}` : ""}
+                  </span>
+                )}
+                {puedeEditar && (
+                  <>
+                    {" "}
+                    <button onClick={() => sacarRi(ri.nro_ri)} disabled={ocupado} className="underline text-slate-400 enabled:hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed">
+                      Sacar
+                    </button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          {ris.length > 1 && (
+            <p className="mt-1 text-amber-700">
+              Hay {ris.length} RI pegados: lo que traen se suma y se reparte entre las órdenes
+              abiertas que piden esto, la más vieja primero.
+            </p>
+          )}
+          {articulo && (
+            <p className="mt-1 text-slate-500">
+              Valen para todas las órdenes abiertas que piden este artículo
+              {otras > 0 ? ` (hay ${otras} más)` : ""}, no sólo para ésta.
+            </p>
+          )}
+          {estaOrden &&
+            (estaOrden.pide == null ? (
+              <p className="mt-1 text-slate-500">
+                Esta orden no tiene una cantidad que se pueda leer, así que no se puede repartir.
+              </p>
+            ) : (
+              <p className="mt-1 font-medium">
+                Esta orden pide {numero.format(estaOrden.pide)}: {numero.format(estaOrden.cubiertas)} cubiertas
+                por RI pegados, falta pedir {numero.format(estaOrden.faltaPedir)}.
+              </p>
+            ))}
+        </div>
+      )}
+
+      {puedeEditar && (
+        <div className="flex items-center gap-2">
+          <div className="w-28">
+            <input
+              value={nro}
+              onChange={(e) => setNro(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && nro.trim() && !ocupado) void pegar(); }}
+              inputMode="numeric"
+              placeholder="N° de RI"
+              aria-label={`Número de RI para ${repuesto.nombre}`}
+              className="input"
+            />
+          </div>
+          <button onClick={pegar} disabled={ocupado || !nro.trim()} className="btn-secondary shrink-0">
+            Pegar RI
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -4,6 +4,7 @@ import {
   textoDeLaInterrupcion,
   aparatosAAvisar,
   avisarAQuienDecide,
+  VERBO_DE_APROBACION,
   type ItemQueEspera,
 } from "./avisoAlInstante";
 import { enviarPush } from "./webpush";
@@ -12,8 +13,31 @@ import { enviarPush } from "./webpush";
 // acá es a quién se le manda y qué pasa cuando falla, no `web-push`.
 vi.mock("./webpush", () => ({ enviarPush: vi.fn() }));
 
-const PEDIDO = { singular: "Un pedido", plural: "pedidos" };
+/*
+ * El verbo es el de verdad —el mismo objeto que mandan los dos emisores que ya
+ * existen—, y por eso los títulos de abajo se comparan contra el texto literal:
+ * si alguien toca la frase, se rompen estos tests y no una notificación.
+ *
+ * Lo que estos tests no ven son los emisores: ningún test llama a
+ * `avisarDeLosPedidosQueEsperan` ni a `sincronizarOrdenesDeServicio`, así que
+ * "Un pedido" y "pedidos" son una copia de lo que ellos escriben, y que cada
+ * uno siga pasando `VERBO_DE_APROBACION` no lo comprueba nadie.
+ */
+const PEDIDO = { singular: "Un pedido", plural: "pedidos", verbo: VERBO_DE_APROBACION };
 const URL = "/compras/aprobaciones";
+
+/*
+ * La segunda frase que tiene que poder decir la función: la de una pregunta de
+ * Mantenimiento a Compras por un repuesto, que espera una respuesta y no una
+ * aprobación (docs/superpowers/specs/2026-10-26-mantenimiento-preguntar-a-compras-design.md).
+ * Con "aprobación" escrito adentro de la función, ese push le habría dicho a
+ * alguien que apruebe algo que no existe.
+ */
+const CONSULTA = {
+  singular: "Una consulta",
+  plural: "consultas",
+  verbo: { singular: "espera tu respuesta", plural: "esperan tu respuesta" },
+};
 
 describe("esHoraDeAvisar", () => {
   /*
@@ -63,7 +87,11 @@ describe("textoDeLaInterrupcion", () => {
     expect(
       textoDeLaInterrupcion(
         [{ etiqueta: "OS 231", descripcion: null }],
-        { singular: "Una orden de servicio", plural: "órdenes de servicio" },
+        {
+          singular: "Una orden de servicio",
+          plural: "órdenes de servicio",
+          verbo: VERBO_DE_APROBACION,
+        },
         URL
       )
     ).toEqual({
@@ -121,6 +149,31 @@ describe("textoDeLaInterrupcion", () => {
       textoDeLaInterrupcion([{ etiqueta: "RI 1", descripcion: "   " }], PEDIDO, URL)!.body
     ).toBe("RI 1");
   });
+
+  it("la frase la pone quien llama, no la funcion", () => {
+    const aviso = textoDeLaInterrupcion(
+      [{ etiqueta: "OT 2885", descripcion: "Rodamiento 6206" }],
+      CONSULTA,
+      "/compras/consultas"
+    );
+    expect(aviso?.title).toBe("Una consulta espera tu respuesta");
+  });
+
+  // El plural es otro `return`: parametrizar sólo el singular dejaría "3
+  // consultas esperan tu aprobación", y el test de arriba seguiría en verde.
+  it("la del plural también", () => {
+    expect(
+      textoDeLaInterrupcion(
+        [2885, 2886, 2887].map((n) => ({ etiqueta: `OT ${n}`, descripcion: "x" })),
+        CONSULTA,
+        "/compras/consultas"
+      )
+    ).toEqual({
+      title: "3 consultas esperan tu respuesta",
+      body: "OT 2885, OT 2886 y OT 2887",
+      url: "/compras/consultas",
+    });
+  });
 });
 
 describe("aparatosAAvisar", () => {
@@ -161,6 +214,8 @@ describe("aparatosAAvisar", () => {
   });
 });
 
+// El texto de las dos notificaciones que ya salen. No puede cambiar: es lo que
+// lee quien aprueba.
 describe("los dos armados reales", () => {
   const unRequerimiento: ItemQueEspera[] = [
     { etiqueta: "RI 1842", descripcion: "Rodamiento SKF 6205 para la cinta 3" },
@@ -180,7 +235,11 @@ describe("los dos armados reales", () => {
     expect(
       textoDeLaInterrupcion(
         [{ etiqueta: "OS 231", descripcion: "Reparación de bomba hidráulica" }],
-        { singular: "Una orden de servicio", plural: "órdenes de servicio" },
+        {
+          singular: "Una orden de servicio",
+          plural: "órdenes de servicio",
+          verbo: VERBO_DE_APROBACION,
+        },
         "/compras/aprobaciones"
       )
     ).toEqual({
@@ -361,6 +420,38 @@ describe("avisarAQuienDecide", () => {
     const { cliente } = clienteFalso({ compras_aprobadores: [] });
     expect(await avisarAQuienDecide(cliente, base)).toEqual({
       enviadas: 0, personas: 0, motivo: "nadie aprueba",
+    });
+  });
+
+  /*
+   * Lo que ningún otro test de este bloque mira: qué le llega a `enviarPush`.
+   * Los de arriba cuentan aparatos; éste mira la notificación misma, con la
+   * lista nueva y un verbo que no es el de aprobar. La comparación del aviso
+   * es exacta a propósito: el payload de un push es plano, `{title, body, url}`
+   * con la `url` en el primer nivel, y una forma anidada es la que ningún
+   * emisor produce.
+   */
+  it("la lista y la frase de quien llama llegan hasta el push", async () => {
+    const { cliente } = clienteFalso({
+      // Sólo en la lista nueva: si leyera otra tabla no habría a quién avisarle.
+      compras_consultados: [{ usuario_id: "facu" }],
+      push_suscripciones: [sub("facu", "f1")],
+      usuarios: [{ id: "facu" }],
+    });
+    const resultado = await avisarAQuienDecide(cliente, {
+      ...base,
+      lista: "compras_consultados",
+      items: [{ etiqueta: "OT 2885", descripcion: "Rodamiento 6206" }],
+      nombre: CONSULTA,
+      url: "/compras/consultas",
+    });
+
+    expect(resultado).toEqual({ enviadas: 1, personas: 1 });
+    expect(enviarPush).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(enviarPush).mock.calls[0][1]).toEqual({
+      title: "Una consulta espera tu respuesta",
+      body: "OT 2885 · Rodamiento 6206",
+      url: "/compras/consultas",
     });
   });
 });

@@ -2,13 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { modulosVisibles, nivelEnModulo, MODULOS_ORDEN } from "@/lib/core/access";
 import { FILTRO_FALTA_ALGO } from "@/lib/seguridadHigiene/condicion";
 import { corteDeFotosAtascadas } from "@/lib/seguridadHigiene/respaldoDeFotos";
-import { puedeAprobarCompras } from "@/lib/compras/auth";
+import { puedeAprobarCompras, esConsultadoDeCompras } from "@/lib/compras/auth";
 import type { Modulo, Rol, UsuarioModulo } from "@/lib/core/types";
 import {
   sospechasDeCambio, type CicloVigilado, type Sospecha,
 } from "@/lib/mantenimiento/sospechaDeCambio";
 import { hoyEnArgentina } from "@/lib/core/fechas";
-import { condicionDeAtrasada, ESTADOS_CERRADOS } from "@/lib/mantenimiento/alertas";
+import { condicionDeAtrasada, CERRADAS } from "@/lib/mantenimiento/alertas";
 import { filtrarDescartadas, type Notificacion } from "./notificaciones";
 import { avisosDeCiclos, avisosDeConteos, avisosDeRitmo, avisosDeSalud, type ConteosParaAvisos } from "./avisos";
 import { contarDivergenciasSinVer } from "@/lib/agenda/avisosDeLaAgenda";
@@ -16,7 +16,10 @@ import { leerLaSalud, type SaludDelSistema } from "@/lib/core/saludDeLasSincroni
 import { contarMencionesSinLeer } from "@/lib/mensajes/menciones";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ritmoPorModulo } from "./ritmo";
-import { traerRitmo, sinClasificarDelUltimoDiaHabil, equiposTallerVialSinService } from "./consultas";
+import {
+  traerRitmo, sinClasificarDelUltimoDiaHabil, equiposTallerVialSinService,
+  consultasDeRepuestosAbiertas,
+} from "./consultas";
 
 /** Lo que hace falta saber de alguien para armarle sus avisos. */
 export interface QuienMira {
@@ -54,6 +57,17 @@ export interface QuienMira {
  * entra (la foto diaria es de todos y no la lleva). `opciones.saludDelSistema`
  * dice si se leen las sincronizaciones, que son del sistema y sólo le llegan a
  * `admin_sistema`: es para no pagar esa lectura por cada persona del cron.
+ *
+ * **Y hay una segunda excepción, por el otro lado: un conteo que no usa este
+ * cliente sino siempre el admin.** Es `consultasDeRepuestosAbiertas`, el de las
+ * consultas de repuestos. La Agenda se cuida del admin porque filtra por fila;
+ * éste lo necesita por lo contrario — su aviso es de Compras y las dos tablas
+ * que lee son de Mantenimiento, cerradas con `mant_puede_ver()`. Con el cliente
+ * de sesión de quien contesta —medido el 31/10/2026: el encargado de compras no
+ * tiene Mantenimiento— la lectura vuelve vacía **sin error** y el conteo da 0,
+ * así que la campana diría que no hay nada mientras el push del cron dice que
+ * hay tres. No amplía lo que alguien ve: el conteo sale sólo con el módulo
+ * Compras, y el aviso sólo para quien está en `compras_consultados`.
  */
 async function avisosDeLosModulos(
   supabase: SupabaseClient,
@@ -102,7 +116,7 @@ async function avisosDeLosModulos(
 
   const [
     rrhhSinClasificar, mantenimientoAtrasadas, mantenimientoDivergencias,
-    comprasEsperandoAprobacion,
+    comprasEsperandoAprobacion, comprasConsultasAbiertas,
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
@@ -115,7 +129,7 @@ async function avisosDeLosModulos(
       // `.not` no es redundante: la condición no excluye las cerradas, y sin él
       // entrarían las 2.467 REALIZADO con fecha pasada. Es la misma pareja que
       // usa el listado con `?atrasada=1`.
-      .not("estado", "in", `(${ESTADOS_CERRADOS.join(",")})`)
+      .not("estado", "in", `(${CERRADAS.join(",")})`)
       .or(condicionDeAtrasada(hoy))),
     // La tabla se rehace entera en cada sincronización, así que su tamaño ES
     // la divergencia de hoy. Su PK es `(ot_number, campo)` y no `id`, así que
@@ -132,6 +146,13 @@ async function avisosDeLosModulos(
           .then(({ count }) => count ?? 0)
       : Promise.resolve(0),
     contarSiTiene("compras", () => head("compras_requerimientos").in("estado_aprobacion", ["PENDIENTE", "EN_REVISION"])),
+    // No es un `count … head`, y es la decisión de ese conteo: «pregunta abierta»
+    // es una anti-unión que PostgREST no sabe expresar, así que las candidatas se
+    // traen y se cuentan con la única función que define «abierta». Y **lee con el
+    // cliente admin y no con éste**, porque las dos tablas que mira son de
+    // Mantenimiento y quien contesta no lo tiene: el porqué, medido, está en su
+    // encabezado.
+    tiene("compras") ? consultasDeRepuestosAbiertas() : Promise.resolve(0),
     contarSiTiene("inventario", () => head("inventario_movimientos").not("sheets_pendiente", "is", null)),
     contarSiTiene("produccion", () => head("produccion_partes").not("sheets_pendiente", "is", null)),
     contarSiTiene("despacho", () => head("despacho_ordenes_carga").lt("fecha", hoy).is("salida_predio", null).not("cargado_por", "is", null)),
@@ -193,7 +214,7 @@ async function avisosDeLosModulos(
 
   const conteos: Partial<ConteosParaAvisos> = {
     rrhhSinClasificar, mantenimientoAtrasadas, mantenimientoDivergencias,
-    comprasEsperandoAprobacion,
+    comprasEsperandoAprobacion, comprasConsultasAbiertas,
     inventarioSinPlanilla, produccionSinPlanilla, despachoAbiertas, despachoSinPlanilla,
     facturacionSinVincular, calidadEnvasesSinPlanilla, calidadCarbonillaBandeja,
     trituracionSinPlanilla,
@@ -297,21 +318,28 @@ export async function avisosDeTodoElSistema(
  * Qué puede atender quien mira: las listas de responsables que integra y los
  * niveles que le habilitan una acción.
  *
- * Hay una lista porque hoy hay un solo aviso con lista. **Falta el de las
- * órdenes de servicio**: `os_aprobadores` existe y el aviso al instante ya la
- * usa, pero la campana no tiene un aviso de OS esperando aprobación. El día que
- * se agregue, va acá con su `apruebaOS` — no se deja preparado porque sería una
- * consulta por persona y por día que hoy no la usa nadie.
+ * **Las dos listas son distintas a propósito**: `compras_aprobadores` decide el
+ * gasto y `compras_consultados` contesta qué pasa con un repuesto, y no es la
+ * misma gente. Medido el 26/10/2026 al acordar el diseño: la de aprobadores
+ * tiene cuatro personas y sólo una es quien contesta.
  *
- * `evaluaSyh` no sale de una lista sino de un **nivel**: evaluar y cerrar una
- * condición insegura lo puede hacer el `admin` de Seguridad e Higiene. Sale sin
- * consulta, porque los grants ya vienen en `QuienMira`.
+ * **Falta el de las órdenes de servicio**: `os_aprobadores` existe y el aviso al
+ * instante ya la usa, pero la campana no tiene un aviso de OS esperando
+ * aprobación. El día que se agregue, va acá con su `apruebaOS` — no se deja
+ * preparado porque sería una consulta por persona y por día que hoy no la usa
+ * nadie.
  *
- * Y `administraElSistema` es el rol pelado: lo piden las fotos sin respaldar y
- * todos los avisos de salud, que se arreglan tocando Vercel y las credenciales.
+ * Y no todo lo de acá es una lista, que es lo que conviene mirar antes de sumar
+ * el próximo: `evaluaSyh` sale de un **nivel** —evaluar y cerrar una condición
+ * insegura lo puede hacer el `admin` de Seguridad e Higiene— y sale sin
+ * consulta, porque los grants ya vienen en `QuienMira`. Y `administraElSistema`
+ * es el rol pelado: lo piden las fotos sin respaldar y todos los avisos de
+ * salud, que se arreglan tocando Vercel y las credenciales.
  */
 export interface QuePuedeAtender {
   apruebaCompras: boolean;
+  /** Está en `compras_consultados`: contesta lo que Mantenimiento pregunta. */
+  contestaConsultas: boolean;
   evaluaSyh: boolean;
   administraElSistema: boolean;
 }
@@ -319,6 +347,7 @@ export interface QuePuedeAtender {
 /** Los avisos que piden algo que no todos pueden hacer, y qué lo habilita. */
 const DE_UNA_LISTA: Record<string, keyof QuePuedeAtender> = {
   "compras-por-aprobar": "apruebaCompras",
+  "compras-consultas-repuestos": "contestaConsultas",
   "syh-vencidas": "evaluaSyh",
   "syh-sin-completar": "evaluaSyh",
   /*
@@ -380,6 +409,7 @@ const POR_PREFIJO: { prefijo: string; puede: keyof QuePuedeAtender }[] = [
  *
  * **Los administradores siguen recibiendo todo lo demás**, decidido a pedido el
  * 18/10/2026: sólo se filtran los avisos que están en `DE_UNA_LISTA`.
+
  */
 export function sinLoQueNoPuedeAtender(
   avisos: Notificacion[],
@@ -399,7 +429,7 @@ export async function avisosDeUsuario(
   supabase: SupabaseClient,
   quien: QuienMira
 ): Promise<Notificacion[]> {
-  const [avisos, descartes, apruebaCompras] = await Promise.all([
+  const [avisos, descartes, apruebaCompras, contestaConsultas] = await Promise.all([
     avisosDeLosModulos(supabase, modulosVisibles(quien.rol, quien.grants), {
       usuarioId: quien.id,
       saludDelSistema: quien.rol === "admin_sistema",
@@ -410,12 +440,17 @@ export async function avisosDeUsuario(
       .eq("usuario_id", quien.id)
       .then((r) => r.data ?? []),
     puedeAprobarCompras(supabase, quien.id),
+    // `compras_consultados` la lee cualquier autenticado —su policy de select es
+    // `using (true)`, como la de los aprobadores—, así que acá sí sirve el cliente
+    // que llegó, tenga sesión o sea el admin del cron.
+    esConsultadoDeCompras(supabase, quien.id),
   ]);
 
   const evaluaSyh = nivelEnModulo(quien.rol, quien.grants, "seguridad_higiene") === "admin";
 
   return sinLoQueNoPuedeAtender(filtrarDescartadas(avisos, descartes), {
     apruebaCompras,
+    contestaConsultas,
     evaluaSyh,
     administraElSistema: quien.rol === "admin_sistema",
   });

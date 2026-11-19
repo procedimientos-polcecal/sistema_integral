@@ -488,6 +488,26 @@ describe("loQueQuedoPendiente", () => {
    * propio texto para la planilla, así que **la misma OT contaba una cosa
    * cargada con la app abierta y otra cuando salía de la cola**.
    */
+  /*
+   * El error de marcar el aviso **lleva su propia oración**, como `clave_error`
+   * y el pendiente de planilla. Iba crudo, y la frase que lo precede dice que
+   * el aviso quedó marcado: pegada a ella, «new row violates row-level security
+   * policy for table "avisos"» afirma lo contrario de lo anterior y no dice de
+   * qué habla. Lo que la oración tiene que dejar claro es la consecuencia —el
+   * aviso sigue pendiente— y el texto del servidor tiene que seguir estando,
+   * sin traducir, para poder ir a mirar.
+   */
+  it("el aviso que no quedó marcado se cuenta, no se pega una línea de Postgres", () => {
+    const dicho = loQueQuedoPendiente({
+      aviso_error: 'new row violates row-level security policy for table "avisos"',
+    });
+    expect(dicho).toContain("el aviso no quedó marcado");
+    expect(dicho).toContain("pendiente");
+    expect(dicho).toContain('row-level security policy for table "avisos"');
+    // Y sin error, ni una palabra: es el mismo "" que ya cuenta como no hay.
+    expect(loQueQuedoPendiente({ aviso_error: "" })).toBe(null);
+  });
+
   it("los repuestos que no entraron se dicen: antes sólo los veía el modal", () => {
     expect(loQueQuedoPendiente({ repuestos_error: "Dos repuestos no entraron." })).toBe(
       "Dos repuestos no entraron.",

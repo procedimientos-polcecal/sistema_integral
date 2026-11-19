@@ -46,7 +46,7 @@ export interface Atrasable {
  * Se exporta para que quien consulta la base arme su `.not("estado", "in", ...)`
  * con la misma lista que usa la decisión.
  */
-export const ESTADOS_CERRADOS: readonly string[] = ["REALIZADO", "CANCELADA"];
+export const CERRADAS: readonly string[] = ["REALIZADO", "CANCELADA"];
 
 /**
  * El día de hoy como `aaaa-mm-dd`, en hora de Argentina.
@@ -75,7 +75,7 @@ function inicioDe(orden: Atrasable): string {
 /** Si la orden está atrasada al día de hoy. */
 export function estaAtrasada(orden: Atrasable, hoy: string): boolean {
   const estado = String(orden.estado ?? "").toUpperCase();
-  if (ESTADOS_CERRADOS.includes(estado)) return false;
+  if (CERRADAS.includes(estado)) return false;
 
   if (estado === "ATRASADO") return true;
 
@@ -108,7 +108,7 @@ export function diasDeAtraso(orden: Atrasable, hoy: string): number | null {
  * para traer de la base sólo las atrasadas. Verificada contra producción el
  * 19/11/2026: devuelve las mismas 34 órdenes que la versión en TypeScript.
  *
- * Se aplica junto con `.not("estado", "in", ...ESTADOS_CERRADOS)`. El caso sucio
+ * Se aplica junto con `.not("estado", "in", ...CERRADAS)`. El caso sucio
  * `fecha_fin <= inicio` no se escribe a propósito: junto con `inicio < hoy` ya
  * implica `fecha_fin < hoy`, y la rama `or(fecha_fin.is.null, fecha_fin.lt.hoy)`
  * lo cubre.

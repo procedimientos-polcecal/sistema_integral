@@ -82,6 +82,42 @@ describe("si dos descripciones son el mismo repuesto", () => {
     expect(mismoRepuesto("Guantes de vaqueta", "00473 GUANTES DE VAQUETA")).toBe(true);
   });
 
+  /*
+   * LA MARCA DE PULGADA NO PARTE LA MEDIDA, Y ÉSTE ES EL CASO QUE LO DESTAPÓ.
+   *
+   * Reportado el 03/11/2026 probando el preview: el RI 2230 («Barra roscada
+   * 5/8"», APROBADA y SIN_INICIAR, o sea en vuelo) no aparecía al cargar la
+   * BARRA ROSCADA 5/8 " del inventario. El RI **no tiene código**, así que el
+   * cruce dependía del nombre, y ahí la comilla iba pegada de un lado y
+   * separada del otro: las palabras quedaban `5/8"` contra `5/8` y la medida
+   * no coincidía. `norm` saca el `°`, el `º` y el punto, pero no la comilla.
+   *
+   * Medido: de 2.244 RI, 302 llevan comilla en la descripción, y de 1.195
+   * artículos activos del inventario, 227. No es de esta pieza.
+   */
+  it("la marca de pulgada da igual pegada que separada", () => {
+    expect(mismoRepuesto('BARRA ROSCADA 5/8 "', 'Barra roscada 5/8"')).toBe(true);
+    expect(mismoRepuesto('TUERCA 5/8 "', 'Tuerca 5/8"')).toBe(true);
+    expect(mismoRepuesto('ANGULO 2 " X 3/16', 'Angulo 2" x 3/16"')).toBe(true);
+  });
+
+  /*
+   * Y LO QUE LA COMILLA VENÍA TAPANDO: un número corto es una medida.
+   *
+   * `palabrasDe` descartaba todo lo de menos de tres letras, así que el `2` de
+   * «BULON 1/2 - 2 "» se perdía y ese bulón coincidía con uno de 3/8 x 1 1/2.
+   * Mientras la comilla bloqueaba el cruce no se veía; al sacarla, cambiar un
+   * falso negativo por un falso positivo habría sido peor —un «ya está pedido»
+   * que no es termina en que la pieza no se pide nunca—.
+   *
+   * Los tres casos de abajo **coincidían de verdad** antes del 03/11/2026.
+   */
+  it("una medida distinta no es el mismo repuesto, aunque lo demas coincida", () => {
+    expect(mismoRepuesto('BULON 1/2 - 2 "', 'BULON 3/8 - 1 1/2 "')).toBe(false);
+    expect(mismoRepuesto('CODO GALVANIZADO H/H 2 "', "CODO GALVANIZADO H/H  3/4")).toBe(false);
+    expect(mismoRepuesto('DISCO DE CORTE 4 1/2 " - 1/16 "', 'DISCO DE CORTE 9 "')).toBe(false);
+  });
+
   it("sin texto de un lado no hay coincidencia", () => {
     expect(mismoRepuesto("", "Rodamiento 6206")).toBe(false);
     expect(mismoRepuesto(null, null)).toBe(false);

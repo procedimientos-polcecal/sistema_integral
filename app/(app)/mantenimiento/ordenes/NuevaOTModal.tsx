@@ -23,6 +23,9 @@ import FallaDeLaOT, { FALLA_VACIA, type LaFalla } from "@/components/FallaDeLaOT
 import type { LineaDeRepuesto } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { CartelDelResultado } from "@/app/cargar/envio";
 import { mandarOEncolar, type Resultado } from "@/lib/core/mandarOEncolar";
+import {
+  sembradoDesdeElAviso, extrasDelAviso, loQueElAvisoNoTrae, type AvisoParaLaOT,
+} from "@/lib/mantenimiento/otDesdeAviso";
 import CalendarioDeFecha from "./CalendarioDeFecha";
 
 /**
@@ -82,17 +85,46 @@ const VOCABULARIO: Vocabulario = {
   prioridades: PRIORIDADES,
 };
 
-export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: {
+export default function NuevaOTModal({ sectores, equipos, aviso, onClose, onCreated }: {
   sectores: any[];
   equipos: any[];
+  /**
+   * El aviso del que nace la orden, si nace de uno. Sin él el modal es el de
+   * siempre. **Vive en la prop y no en el estado del formulario**: «Traer» una
+   * OT vieja pisa `form` entero, y si el enlace estuviera ahí reciclar un
+   * número desenlazaría el aviso sin decir nada —la orden nacería huérfana y el
+   * aviso volvería a la lista de pendientes, invitando a generar una segunda—.
+   */
+  aviso?: AvisoParaLaOT | null;
   onClose: () => void;
-  /** Se creó. `aviso` es lo que no salió del todo, para que se muestre. */
-  onCreated: (aviso?: string | null) => void;
+  /** Se creó. `advertencia` es lo que no salió del todo, para que se muestre. */
+  onCreated: (advertencia: string | null, numero?: string) => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState("");
   /** Cómo salió el envío. El `error` de arriba es sólo lo que se valida acá adentro. */
   const [resultado, setResultado] = useState<Resultado | null>(null);
+
+  /**
+   * Esta carga **ya está en la cola del teléfono**, así que este formulario no
+   * la puede volver a mandar.
+   *
+   * No es prolijidad: `mandarOEncolar` genera una clave nueva en cada llamada y
+   * la ruta no mira si el aviso ya tiene `work_order_id`, así que apretar de
+   * nuevo **crea una segunda OT con el mismo `aviso_id`** —dos órdenes para el
+   * mismo problema y el aviso apuntando a la última—. Y con el modal tal como
+   * quedaba, el botón habilitado al lado de un cartel ámbar es justamente una
+   * invitación a apretarlo.
+   *
+   * **No se tira el borrador ni se cierra el modal**, a propósito: el cuerpo ya
+   * viajó a la cola, y si el reenvío termina rechazado la corrección se hace en
+   * `/cargar`, que es donde está esa carga. Tirarlo acá agregaría un camino de
+   * pérdida en vez de cerrar uno.
+   *
+   * Un rechazo **sí** deja el botón: ahí no quedó nada encolado y lo que
+   * corresponde es corregir el campo que la ruta nombró y volver a mandar.
+   */
+  const yaQuedoEnLaCola = resultado?.estado === "encolada";
 
   /* ── Reutilizar una OT vieja ──────────────────────────────────────────
    * Se cargan trabajos ya hechos en tanda, varios del mismo día y con la
@@ -172,12 +204,19 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
    * se le pueda pisar un campo que otro corrigió mientras tanto. Donde sí lo hay
    * —registrar el trabajo, el GUT— los campos van planos, justamente para eso.
    *
-   * La clave no lleva origen: esta pantalla no nace prellenada desde ningún
-   * registro. Lo que copia una OT vieja es el botón «Traer», que es otra cosa
-   * —pasa adentro del mismo formulario— y queda anotado en `vieneDe`.
+   * Sin aviso la clave no lleva origen y es la de siempre. Con aviso lleva el
+   * aviso y su id: un borrador no puede cruzar de un origen a otro, porque el
+   * `aviso_id` sale de la prop y un borrador ajeno restaurado mandaría los
+   * datos de un aviso con el enlace de otro. Lo que copia una OT vieja es el
+   * botón «Traer», que es otra cosa —pasa adentro del mismo formulario— y queda
+   * anotado en `vieneDe`.
    */
   const { valores, cambiar, tocado, tirar } = useBorrador(
-    claveDelBorrador("mantenimiento-nueva-ot"),
+    // El origen es el aviso: con la clave fija, un borrador dejado en «Nueva OT»
+    // o en otro aviso le ganaría al sembrado, y se mandaría con la descripción y
+    // el equipo de uno pero con el `aviso_id` de éste —que sale de la prop—.
+    // Eso enlaza trabajo equivocado al aviso y no se nota nunca.
+    claveDelBorrador("mantenimiento-nueva-ot", aviso ? { tipo: "aviso", id: aviso.id } : null),
     {
       campos: {
         equipment_id:   "",
@@ -205,6 +244,9 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
         gut_urgencia:   "",
         gut_tendencia:  "",
         requiere_parada_sector: false,
+        // Después de los valores por defecto y nunca antes: el sembrado trae
+        // sólo las diez claves que el aviso sabe, y lo demás se queda como está.
+        ...(aviso ? sembradoDesdeElAviso(aviso, hoyEnArgentina()) : {}),
       },
       // Arranca con un renglón vacío para que el formulario se vea como antes
       // —un campo listo para escribir— y no como una lista que hay que estrenar.
@@ -272,6 +314,9 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    // Y acá también, no sólo en el `disabled` del botón: dentro de un `<form>`
+    // un Enter en cualquier campo de texto lo manda sin pasar por el botón.
+    if (yaQuedoEnLaCola) return;
     // Todo lo que falta, de una sola vez: los obligatorios de siempre y, si
     // viene con fecha de cierre, también las horas y quién la hizo. Un solo
     // mensaje — que un campo sea obligatorio siempre o sólo al cerrar es una
@@ -316,6 +361,8 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
         sector_raw:  sec?.nombre ?? null,
         equipment_id: form.equipment_id || null,
         sector_id:   form.sector_id || null,
+        // Recién acá, y no en el estado: ver la prop `aviso`.
+        ...(aviso ? extrasDelAviso(aviso) : {}),
     });
     setSaving(false);
 
@@ -340,7 +387,7 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
     // esperando o se rechazó salió por el `return` de arriba, con el modal
     // abierto y lo cargado en su lugar.
     tirar();
-    onCreated(salida.advertencia);
+    onCreated(salida.advertencia, salida.numero);
   }
 
   return (
@@ -351,6 +398,18 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           submit. */}
       <Modal titulo="Nueva Orden de Trabajo" alSalir={onClose} tocado={tocado} ancho="ancho">
         <form onSubmit={submit} className="space-y-5">
+          {aviso && (
+            <>
+              <p className="text-sm text-slate-600">
+                Del aviso {aviso.oa_number ?? "sin número"}. Viene con lo que el aviso dice; todo se puede corregir antes de crearla, y el aviso no se toca.
+              </p>
+              {loQueElAvisoNoTrae(aviso).length > 0 && (
+                <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  El aviso llegó sin {loQueElAvisoNoTrae(aviso).join(" y ")}: lo de abajo no viene de nadie, lo estás eligiendo vos.
+                </p>
+              )}
+            </>
+          )}
           {/* Arriba de todo y no escondido entre los campos: es lo primero que
               se hace cuando se carga una tanda de órdenes del mismo día. */}
           <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-2">
@@ -662,9 +721,13 @@ export default function NuevaOTModal({ sectores, equipos, onClose, onCreated }: 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <PieDeModal className="flex gap-2">
-            <button type="submit" disabled={saving}
+            {/* El texto cambia con el botón y no sólo el `disabled`: un «Crear
+                OT» gris no dice por qué está gris, y acá el porqué es
+                exactamente lo que hay que entender —la carga ya salió—. El
+                cartel de arriba cuenta el resto. */}
+            <button type="submit" disabled={saving || yaQuedoEnLaCola}
               className="btn-primary">
-              {saving ? "Guardando..." : "Crear OT"}
+              {saving ? "Guardando..." : yaQuedoEnLaCola ? "Ya quedó para mandarse" : "Crear OT"}
             </button>
             {/* El único que tira. */}
             <button type="button" onClick={() => { tirar(); onClose(); }}

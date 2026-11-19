@@ -39,7 +39,7 @@ import { filtroDePrioridadConGut } from "@/lib/mantenimiento/prioridad";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { repuestosDelCuerpo, filasParaLaBase } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { hoyEnArgentina } from "@/lib/core/fechas";
-import { condicionDeAtrasada, ESTADOS_CERRADOS } from "@/lib/mantenimiento/alertas";
+import { condicionDeAtrasada, CERRADAS } from "@/lib/mantenimiento/alertas";
 import { esquemaGut } from "@/lib/mantenimiento/gut";
 import { esquemaFalla } from "@/lib/mantenimiento/fallas";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
@@ -177,7 +177,7 @@ export async function GET(request: Request) {
   // se quiere es «atrasada Y de esa prioridad», no una u otra.
   if (searchParams.get("atrasada") === "1") {
     query = query
-      .not("estado", "in", `(${ESTADOS_CERRADOS.join(",")})`)
+      .not("estado", "in", `(${CERRADAS.join(",")})`)
       .or(condicionDeAtrasada(hoyEnArgentina()));
   }
 

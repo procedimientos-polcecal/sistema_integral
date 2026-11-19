@@ -53,7 +53,7 @@ Lo que el diseño implica, ninguna tarea ejercita por su cuenta, y muerde a una 
   - `estaAtrasada(orden: Atrasable, hoy: string): boolean`
   - `diasDeAtraso(orden: Atrasable, hoy: string): number | null`
   - `condicionDeAtrasada(hoy: string): string` — la cadena para `.or()` de PostgREST
-  - `ESTADOS_CERRADOS: readonly string[]` — `["REALIZADO", "CANCELADA"]`, para el `.not("estado", "in", ...)` de quien consulte
+  - `CERRADAS: readonly string[]` — `["REALIZADO", "CANCELADA"]`, para el `.not("estado", "in", ...)` de quien consulte
   - `ordenarPorAtraso` y `resumirAtrasadas` conservan su firma
 
 - [ ] **Step 1: Escribir los tests que fallan en `lib/mantenimiento/alertas.test.ts`**
@@ -131,7 +131,7 @@ Expected: FAIL — los campos nuevos no existen en `Atrasable` y `condicionDeAtr
 
 - [ ] **Step 3: Reescribir la decisión en `lib/mantenimiento/alertas.ts`**
 
-`estaAtrasada`: cerrada (`ESTADOS_CERRADOS`) → false; `ATRASADO` → true; si no, `inicio = fechaParaElCalendario(orden)?.slice(0, 10)`, y si no hay inicio → false; `fin = fechaFin && fechaFin > inicio ? fechaFin : inicio`; devuelve `fin < hoy`. Todas las fechas recortadas a 10 antes de comparar.
+`estaAtrasada`: cerrada (`CERRADAS`) → false; `ATRASADO` → true; si no, `inicio = fechaParaElCalendario(orden)?.slice(0, 10)`, y si no hay inicio → false; `fin = fechaFin && fechaFin > inicio ? fechaFin : inicio`; devuelve `fin < hoy`. Todas las fechas recortadas a 10 antes de comparar.
 
 `diasDeAtraso` cuenta contra ese mismo `inicio`.
 
@@ -141,7 +141,7 @@ Expected: FAIL — los campos nuevos no existen en `Atrasable` y `condicionDeAtr
 estado.eq.ATRASADO,and(fecha_ejecucion_pendiente.not.is.null,fecha_ejecucion_pendiente.lt.HOY,or(fecha_fin.is.null,fecha_fin.lt.HOY)),and(fecha_ejecucion_pendiente.is.null,fecha_ejecucion.lt.HOY,or(fecha_fin.is.null,fecha_fin.lt.HOY))
 ```
 
-Actualizar el docstring del archivo: `proxima_fecha` está vacía en las 2531 filas y por eso se dejó de mirar; `CERRADAS` pasa a exportarse como `ESTADOS_CERRADOS`.
+Actualizar el docstring del archivo: `proxima_fecha` está vacía en las 2531 filas y por eso se dejó de mirar; `CERRADAS` pasa a exportarse como `CERRADAS`.
 
 - [ ] **Step 4: Correr y ver que pasan**
 
@@ -150,7 +150,7 @@ Expected: PASS
 
 - [ ] **Step 5: Seguir la definición en los cuatro lugares que la consumen**
 
-- `app/(app)/mantenimiento/page.tsx`: el `select` pasa a traer `fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin` en vez de `proxima_fecha`, y el `.or(...)` pasa a ser `condicionDeAtrasada(hoy)` con `.not("estado", "in", `(${ESTADOS_CERRADOS.join(",")})`)`.
+- `app/(app)/mantenimiento/page.tsx`: el `select` pasa a traer `fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin` en vez de `proxima_fecha`, y el `.or(...)` pasa a ser `condicionDeAtrasada(hoy)` con `.not("estado", "in", `(${CERRADAS.join(",")})`)`.
 - `OrdenarTrabajo.tsx`: sin cambio de código; comprobar que el tipo de `o` trae las tres fechas.
 - `DashboardClient.tsx`: sin cambio de código.
 - `prioridad.ts`: sin cambio de código; sus tests cambian las fixtures de `proxima_fecha` a `fecha_ejecucion`.
@@ -180,7 +180,7 @@ El enlace del aviso y la url del push apuntan acá, así que va antes que ellos.
 - Modify: `app/(app)/mantenimiento/ordenes/OrdenesClient.tsx`
 
 **Interfaces:**
-- Consumes: `condicionDeAtrasada(hoy)` y `ESTADOS_CERRADOS` de la Tarea 1.
+- Consumes: `condicionDeAtrasada(hoy)` y `CERRADAS` de la Tarea 1.
 - Produces: `FiltrosOt` gana `atrasada: boolean`; `FILTROS_VACIOS.atrasada = false`; en la url es `atrasada=1` y nada cuando es `false`.
 
 - [ ] **Step 1: Escribir los tests que fallan en `lib/mantenimiento/filtrosOt.test.ts`**
@@ -221,7 +221,7 @@ Junto a los demás filtros, con `hoyEnArgentina()` como día:
 ```ts
 if (searchParams.get("atrasada") === "1") {
   query = query
-    .not("estado", "in", `(${ESTADOS_CERRADOS.join(",")})`)
+    .not("estado", "in", `(${CERRADAS.join(",")})`)
     .or(condicionDeAtrasada(hoyEnArgentina()));
 }
 ```
@@ -260,7 +260,7 @@ git commit -m "feat(mantenimiento): el listado de OT se puede filtrar por atrasa
 - Modify: `app/api/cron/avisos-al-instante/route.ts` (la constante `YA_AVISA_SOLO`)
 
 **Interfaces:**
-- Consumes: `condicionDeAtrasada`, `ESTADOS_CERRADOS` de la Tarea 1; el filtro `?atrasada=1` de la Tarea 2.
+- Consumes: `condicionDeAtrasada`, `CERRADAS` de la Tarea 1; el filtro `?atrasada=1` de la Tarea 2.
 - Produces: el id del aviso pasa a ser `mant-atrasadas-por-fecha`. La clave de `ConteosParaAvisos` sigue siendo `mantenimientoAtrasadas`.
 
 - [ ] **Step 1: Escribir el test que falla en `lib/home/avisos.test.ts`**
@@ -450,7 +450,7 @@ Todo lógica pura: la parte donde están las decisiones y la única que los test
 - Test: `lib/mantenimiento/recordatorioDeOT.test.ts`
 
 **Interfaces:**
-- Consumes: `estaAtrasada`, `ESTADOS_CERRADOS` de la Tarea 1; `sumarDias` y `diaDeLaSemana` de `lib/core/fechas.ts`; `Aviso` de `lib/core/webpush.ts`.
+- Consumes: `estaAtrasada`, `CERRADAS` de la Tarea 1; `sumarDias` y `diaDeLaSemana` de `lib/core/fechas.ts`; `Aviso` de `lib/core/webpush.ts`.
 - Produces:
   - `interface OrdenParaRecordar { ot_number: number; estado: string | null; fecha_ejecucion: string | null; fecha_ejecucion_pendiente: string | null; fecha_fin: string | null; sector_raw: string | null; descripcion: string | null }`
   - `diasQueCruzaron(hoy: string): string[]` — qué días de inicio cuentan como «se atrasó» en la corrida de `hoy`

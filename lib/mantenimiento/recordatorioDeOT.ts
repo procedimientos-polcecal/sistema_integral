@@ -6,7 +6,7 @@ import { nivelEnModulo } from "@/lib/core/access";
 import { traerTodo } from "@/lib/core/paginado";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 import { fechaParaElCalendario } from "@/lib/agenda/evento";
-import { ESTADOS_CERRADOS, estaAtrasada } from "./alertas";
+import { CERRADAS, estaAtrasada } from "./alertas";
 
 /**
  * Qué órdenes nombra cada corrida del recordatorio de Mantenimiento, y cómo se
@@ -111,7 +111,7 @@ export function lasQueArrancan(ordenes: OrdenParaRecordar[], hoy: string): Orden
   const dias = diasQueArrancan(hoy);
   return ordenes.filter(
     (o) =>
-      !ESTADOS_CERRADOS.includes(String(o.estado ?? "").toUpperCase()) &&
+      !CERRADAS.includes(String(o.estado ?? "").toUpperCase()) &&
       !estaAtrasada(o, hoy) &&
       dias.includes(inicioEfectivo(o))
   );

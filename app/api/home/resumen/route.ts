@@ -4,7 +4,7 @@ import { modulosVisibles } from "@/lib/core/access";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 import { traerTodo } from "@/lib/core/paginado";
 import { comoSeLee, hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
-import { condicionDeAtrasada, ESTADOS_CERRADOS } from "@/lib/mantenimiento/alertas";
+import { condicionDeAtrasada, CERRADAS } from "@/lib/mantenimiento/alertas";
 import { ritmoPorModulo } from "@/lib/home/ritmo";
 import { traerRitmo, diaDeReferenciaRrhh, equiposTallerVialSinService, traerPresentesDeHoy } from "@/lib/home/consultas";
 import type { ResumenRrhh } from "@/lib/home/tarjetaRrhh";
@@ -162,7 +162,7 @@ async function resumenMantenimiento(supabase: Awaited<ReturnType<typeof createCl
     supabase
       .from("ordenes_trabajo")
       .select("id", { count: "exact", head: true })
-      .not("estado", "in", `(${ESTADOS_CERRADOS.join(",")})`)
+      .not("estado", "in", `(${CERRADAS.join(",")})`)
       .or(condicionDeAtrasada(hoy)),
     // Los avisos se cuentan en memoria porque "sin orden" son dos columnas: la
     // sincronización guarda el número de la planilla como texto en

@@ -11,6 +11,7 @@ import { TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { oficioDeLaEspecialidad } from "@/lib/mantenimiento/genteDelDia";
 import type { DiaDelCalendario } from "@/lib/mantenimiento/calendarioDeOT";
 import { porQueNoSePuedeMover, porQueNoSePuedeMoverA } from "@/lib/mantenimiento/moverLaOT";
+import { porQueNoSePuedeAsignar } from "@/lib/mantenimiento/asignarOperario";
 import type { Oficio } from "@/lib/mantenimiento/programacion";
 import {
   colorDeEspecialidad, textoSobreLaEspecialidad, LEYENDA_DE_ESPECIALIDADES,
@@ -66,7 +67,8 @@ const MESES = [
 const DIAS_DE_LA_SEMANA = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const ENCABEZADOS = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"];
 
-const OFICIOS: Record<Oficio, { uno: string; varios: string }> = {
+/** Cómo se nombra cada oficio en pantalla. Lo comparte el panel de asignar. */
+export const OFICIOS: Record<Oficio, { uno: string; varios: string }> = {
   mecanico: { uno: "mecánico", varios: "mecánicos" },
   electricista: { uno: "electricista", varios: "electricistas" },
   lubricador: { uno: "lubricador", varios: "lubricadores" },
@@ -116,6 +118,13 @@ export type ModoDelCalendario =
       onEmpezarAMover: (orden: OrdenDelDia) => void;
       onCancelarElMovimiento: () => void;
       onElegirElDestino: (dia: string) => void;
+      /**
+       * Abrir el panel de asignar operarios a esa orden, en ese día. `null`
+       * cuando quien mira no puede: es un permiso más alto que `puedeMover`
+       * —ahí salen los nombres del taller— y por eso es una función aparte y no
+       * otro `boolean`.
+       */
+      onAsignar: ((orden: OrdenDelDia, dia: string) => void) | null;
     };
 
 function pasaElFiltro(o: OrdenDelDia, f: Filtros): boolean {
@@ -138,6 +147,13 @@ function ordenadas(ordenes: OrdenDelDia[]): OrdenDelDia[] {
 }
 
 /** Cuántas órdenes cae en cada sector ese día, de más a menos. */
+/** Los nombres que esa orden ya tiene puestos, en el orden de las posiciones. */
+function quienesEstan(o: OrdenDelDia): string[] {
+  return [o.operario_1, o.operario_2, o.operario_3]
+    .map((n) => n?.trim())
+    .filter((n): n is string => Boolean(n));
+}
+
 function cuentaPorSector(ordenes: OrdenDelDia[]): { sector: string; cantidad: number }[] {
   const cuenta = new Map<string, { sector: string; cantidad: number }>();
   for (const o of ordenes) {
@@ -162,7 +178,7 @@ function fondoDelDia(n: number): string {
 }
 
 export default function CalendarioDeOT({
-  modo, recarga = 0,
+  modo, recarga = 0, franjaDeLaSemana, onRango,
 }: {
   modo: ModoDelCalendario;
   /**
@@ -171,6 +187,28 @@ export default function CalendarioDeOT({
    * en el día nuevo, y el componente no se desmonta.
    */
   recarga?: number;
+  /**
+   * Qué dibujar arriba de cada semana, por lunes. Opcional y sin default: las
+   * tres pantallas que montan este calendario reparten permisos distintos y
+   * sólo «Asignación RR.HH» tiene los nombres del taller. Por eso esto es una
+   * prop de render y no un `boolean`: quien los tiene los dibuja, y acá no
+   * entra ni la ruta que los trae ni el permiso que los guarda.
+   */
+  franjaDeLaSemana?: (lunes: string) => React.ReactNode;
+  /**
+   * Qué rango está pidiendo la grilla. El mes es estado de acá —se cambia con
+   * las flechas— así que el padre no tiene otra forma de saber para qué
+   * semanas traer lo suyo.
+   *
+   * **Tiene que ser estable entre renders**, o sea un `useCallback` y no una
+   * arrow escrita en el JSX: va en las dependencias de un efecto que llama al
+   * padre, así que una identidad nueva por render es un bucle infinito. Y lo
+   * que el padre guarde tiene que conservar su identidad cuando el rango no
+   * cambió (`MesDeOrdenes` devuelve el mismo objeto), por lo mismo. La de al
+   * lado, `franjaDeLaSemana`, **sí** puede ir inline: no está en ninguna
+   * dependencia.
+   */
+  onRango?: (desde: string, hasta: string) => void;
 }) {
   const hoy = hoyEnArgentina();
   const valor = modo.tipo === "elegir" ? modo.valor : "";
@@ -228,6 +266,9 @@ export default function CalendarioDeOT({
     })();
     return () => { cancelado = true; };
   }, [desde, hasta, mes, intento, recarga]);
+
+  // El rango, para quien quiera traer lo suyo para las mismas semanas.
+  useEffect(() => { onRango?.(desde, hasta); }, [desde, hasta, onRango]);
 
   // En el teléfono el panel queda debajo de la grilla: al abrirlo hay que verlo.
   useEffect(() => {
@@ -445,20 +486,37 @@ export default function CalendarioDeOT({
               <div className="grid grid-cols-7 gap-px pb-px text-center text-[10px] font-semibold uppercase text-slate-400">
                 {ENCABEZADOS.map((h) => <div key={h}>{h}</div>)}
               </div>
-              <div className="grid grid-cols-7 gap-px rounded-lg overflow-hidden bg-slate-200 border border-slate-200">
-                {semanas.flat().map((dia) => (
-                  <CeldaDelDia
-                    key={dia}
-                    dia={dia}
-                    delMes={dia.startsWith(mes)}
-                    info={porDia.get(dia)}
-                    filtros={filtros}
-                    esHoy={dia === hoy}
-                    esElValor={dia === valor}
-                    abierto={dia === diaAbierto}
-                    noPuedeRecibir={moviendo ? porQueNoSePuedeMoverA(moviendo, dia) : null}
-                    onTocar={() => tocarElDia(dia)}
-                  />
+              {/* Una grilla por semana, no una sola de 42 celdas: la franja del
+                  taller va *entre* las filas, y eso no se puede hacer con una
+                  grilla única sin que el elemento intercalado ocupe celdas.
+                  Sin la prop las filas quedan pegadas por `space-y-px`, pero
+                  **no es idéntico a antes y no se afirma que lo sea**: antes
+                  había una caja con un borde y dos esquinas redondeadas, y
+                  ahora hay una por semana. Eso toca a las dos pantallas que no
+                  reciben franja —el alta de una OT y la pestaña Mes de
+                  `/planificacion`—, y no se pudo mirar en un navegador porque
+                  todo está detrás del login. */}
+              <div className="space-y-px">
+                {semanas.map((semana) => (
+                  <div key={semana[0]}>
+                    {franjaDeLaSemana?.(semana[0])}
+                    <div className="grid grid-cols-7 gap-px rounded-lg overflow-hidden bg-slate-200 border border-slate-200">
+                      {semana.map((dia) => (
+                        <CeldaDelDia
+                          key={dia}
+                          dia={dia}
+                          delMes={dia.startsWith(mes)}
+                          info={porDia.get(dia)}
+                          filtros={filtros}
+                          esHoy={dia === hoy}
+                          esElValor={dia === valor}
+                          abierto={dia === diaAbierto}
+                          noPuedeRecibir={moviendo ? porQueNoSePuedeMoverA(moviendo, dia) : null}
+                          onTocar={() => tocarElDia(dia)}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
 
@@ -496,6 +554,7 @@ export default function CalendarioDeOT({
               filtros={filtros}
               elegirElDia={modo.tipo === "elegir" ? modo.onElegir : null}
               onMover={modo.tipo === "programar" && modo.puedeMover ? empezarAMover : null}
+              onAsignar={modo.tipo === "programar" ? modo.onAsignar : null}
               onCerrar={() => setDiaAbierto(null)}
             />
           </div>
@@ -613,7 +672,7 @@ function CeldaDelDia({
 // ─── El panel del día ───────────────────────────────────────────────────────
 
 function PanelDelDia({
-  dia, diaIso, filtros, elegirElDia, onMover, onCerrar,
+  dia, diaIso, filtros, elegirElDia, onMover, onAsignar, onCerrar,
 }: {
   dia: DiaDelCalendario | null;
   diaIso: string;
@@ -622,6 +681,8 @@ function PanelDelDia({
   elegirElDia: ((dia: string) => void) | null;
   /** Empezar a mover una orden, en el modo `programar`. */
   onMover: ((orden: OrdenDelDia) => void) | null;
+  /** Abrir el panel de asignar operarios, sólo para quien ve el taller. */
+  onAsignar: ((orden: OrdenDelDia, dia: string) => void) | null;
   onCerrar: () => void;
 }) {
   const todas = dia?.ordenes ?? [];
@@ -707,6 +768,7 @@ function PanelDelDia({
           {ordenes.map((o) => {
             const color = colorDeEspecialidad(o.especialidad);
             const noSeMueve = onMover ? porQueNoSePuedeMover(o) : null;
+            const noSeAsigna = onAsignar ? porQueNoSePuedeAsignar(o) : null;
             return (
               <li key={o.ot_number} className="rounded-lg bg-white p-2 space-y-1 border border-slate-200">
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -762,6 +824,25 @@ function PanelDelDia({
                       className="btn-secondary w-full justify-center"
                     >
                       Mover a otro día
+                    </button>
+                  )
+                )}
+
+                {/* Asignar, sólo para quien ve el taller con nombre. Como
+                    arriba: la cerrada **dice por qué** en vez de quedarse sin
+                    botón, porque ahí sus tres columnas ya dicen quién lo hizo. */}
+                {onAsignar && (
+                  noSeAsigna ? (
+                    <p className="text-[11px] text-slate-500 break-words pt-0.5">{noSeAsigna}</p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onAsignar(o, diaIso)}
+                      className="btn-secondary w-full justify-center"
+                    >
+                      {quienesEstan(o).length === 0
+                        ? "Asignar operarios"
+                        : `Operarios: ${quienesEstan(o).join(", ")}`}
                     </button>
                   )
                 )}

@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { cumpleElOr } from "@/lib/core/supabaseDeMentira";
 import {
   estaAtrasada, diasDeAtraso, ordenarPorAtraso, resumirAtrasadas,
-  condicionDeAtrasada, ESTADOS_CERRADOS,
+  condicionDeAtrasada, CERRADAS,
 } from "./alertas";
 
 const HOY = "2026-11-19";
@@ -79,9 +80,9 @@ describe("condicionDeAtrasada", () => {
   });
 });
 
-describe("ESTADOS_CERRADOS", () => {
+describe("CERRADAS", () => {
   it("son los dos en los que la orden no espera nada", () => {
-    expect(ESTADOS_CERRADOS).toEqual(["REALIZADO", "CANCELADA"]);
+    expect(CERRADAS).toEqual(["REALIZADO", "CANCELADA"]);
   });
 });
 
@@ -170,5 +171,59 @@ describe("resumirAtrasadas", () => {
     const r = resumirAtrasadas([ordenes[2]], HOY);
     expect(r.total).toBe(0);
     expect(r.masVieja).toBeNull();
+  });
+});
+
+/**
+ * Las dos escrituras de la misma regla, cruzadas.
+ *
+ * `estaAtrasada` decide en TypeScript sobre una fila ya traída y
+ * `condicionDeAtrasada` la escribe como filtro de PostgREST para no traerlas
+ * todas. Son **dos textos distintos que tienen que decidir igual**, y nada en
+ * el repo las ataba: la equivalencia se había comprobado a mano contra
+ * producción el 19/11/2026 —32 y 32, el mismo conjunto sobre 2.532 filas— y esa
+ * comprobación no vuelve a correr sola.
+ *
+ * Acá el `or` se evalúa con el mismo intérprete que usa el Supabase de mentira,
+ * así que lo que se cruza es la cadena literal que viaja a PostgREST. Lo que
+ * **no** cubre: que PostgREST interprete esa cadena como la interpreta
+ * `cumpleElOr`. Eso sólo lo dice la base, y por eso la medición contra
+ * producción sigue siendo la que vale el día que esta función cambie.
+ *
+ * El `.not("estado", "in", ...)` viaja aparte en la consulta real, así que acá
+ * se aplica aparte: sin él la condición deja entrar las cerradas, que es
+ * justamente por lo que no es redundante.
+ */
+describe("la condición de PostgREST decide lo mismo que la función", () => {
+  const comoLaConsulta = (o: Record<string, unknown>) =>
+    !CERRADAS.includes(String(o.estado ?? "").toUpperCase()) &&
+    cumpleElOr(o, condicionDeAtrasada(HOY));
+
+  const casos: Record<string, unknown>[] = [
+    { que: "vencida y abierta", estado: "POR_HACER", fecha_ejecucion: "2026-11-18" },
+    { que: "arranca hoy", estado: "POR_HACER", fecha_ejecucion: HOY },
+    { que: "arranca mañana", estado: "POR_HACER", fecha_ejecucion: "2026-11-20" },
+    { que: "ventana en curso", estado: "EN_PROCESO", fecha_ejecucion: "2026-11-10", fecha_fin: "2026-11-30" },
+    { que: "ventana terminada", estado: "EN_PROCESO", fecha_ejecucion: "2026-11-10", fecha_fin: "2026-11-15" },
+    { que: "realizada y vencida", estado: "REALIZADO", fecha_ejecucion: "2026-01-01" },
+    { que: "cancelada y vencida", estado: "CANCELADA", fecha_ejecucion: "2026-01-01" },
+    { que: "marcada a mano, sin fecha", estado: "ATRASADO", fecha_ejecucion: null },
+    { que: "marcada a mano, con fecha futura", estado: "ATRASADO", fecha_ejecucion: "2026-12-01" },
+    { que: "sin ninguna fecha", estado: "POR_HACER", fecha_ejecucion: null },
+    { que: "la pendiente manda y está vencida", estado: "POR_HACER", fecha_ejecucion: "2026-12-01", fecha_ejecucion_pendiente: "2026-11-01" },
+    { que: "la pendiente manda y es futura", estado: "POR_HACER", fecha_ejecucion: "2026-11-01", fecha_ejecucion_pendiente: "2026-12-01" },
+    { que: "fecha_fin anterior al inicio es dato sucio", estado: "POR_HACER", fecha_ejecucion: "2026-11-18", fecha_fin: "2026-11-01" },
+  ];
+
+  for (const caso of casos) {
+    it(`coinciden: ${caso.que}`, () => {
+      expect(comoLaConsulta(caso)).toBe(estaAtrasada(caso, HOY));
+    });
+  }
+
+  it("y la condición sola, sin el `.not`, deja entrar una cerrada", () => {
+    const realizada = { estado: "REALIZADO", fecha_ejecucion: "2026-01-01" };
+    expect(cumpleElOr(realizada, condicionDeAtrasada(HOY))).toBe(true);
+    expect(estaAtrasada(realizada, HOY)).toBe(false);
   });
 });

@@ -1,14 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 // `altaDeReposicion` vive en el lib y no acá porque la arma también el stock,
 // que desde el 5/10/2026 puede pedir un faltante sin pasar por esta pantalla.
+// `ordenarParaReponer` también: el criterio y su rótulo son la misma decisión.
 import {
-  DIAS_DE_CONSUMO, altaDeReposicion, type Candidato, type ConPedido,
+  DIAS_DE_CONSUMO, altaDeReposicion, ordenarParaReponer, filtrarParaReponer,
+  ORDENES_DE_REPOSICION, ORDEN_POR_DEFECTO,
+  type Candidato, type ConPedido, type OrdenDeReposicion,
 } from "@/lib/inventario/reponer";
 import { COMPRA_LABELS } from "@/lib/compras/constants";
+import Select from "@/components/Select";
 import NuevoRequerimientoModal, {
   type ValoresIniciales,
 } from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
@@ -35,7 +39,38 @@ export default function ReponerClient({
   const router = useRouter();
   const [pidiendo, setPidiendo] = useState<ValoresIniciales | null>(null);
   const [pedido, setPedido] = useState("");
+  const [orden, setOrden] = useState<OrdenDeReposicion>(ORDEN_POR_DEFECTO);
+  const [busqueda, setBusqueda] = useState("");
+  const buscando = busqueda.trim() !== "";
 
+  // Un solo buscador y un solo orden para los dos grupos, a propósito. Son la
+  // misma lista partida por "¿ya está pedido?", y dos controles invitarían a
+  // dejarlos en criterios distintos: buscar un artículo pediría mirar dos
+  // listas ordenadas de dos maneras.
+  //
+  // Primero filtrar y después ordenar, que es el orden barato: ordenar 92
+  // filas para después tirar 90 es trabajo que no se ve pero se hace en cada
+  // tecla.
+  const pedirVisibles = useMemo(
+    () => ordenarParaReponer(filtrarParaReponer(paraPedir, busqueda), orden),
+    [paraPedir, busqueda, orden]
+  );
+  const pedidosVisibles = useMemo(
+    () => ordenarParaReponer(filtrarParaReponer(yaPedidos, busqueda), orden),
+    [yaPedidos, busqueda, orden]
+  );
+
+  // Qué decir cuando arriba no hay nada, que no es siempre lo mismo. «No hay
+  // nada para reponer» con filas debajo es mentira, y «nada coincide» mientras
+  // el grupo de abajo muestra lo que se buscó, también.
+  const nadaParaPedir =
+    pedidosVisibles.length > 0
+      ? buscando
+        ? "Lo que coincide ya está pedido. Mirá abajo cuál es cada pedido."
+        : "Lo que falta ya está pedido. Mirá abajo cuál es cada pedido."
+      : buscando
+        ? `Nada coincide con «${busqueda.trim()}».`
+        : "No hay nada para reponer.";
 
   return (
     // `max-w-4xl` como `ListaClient`, la pantalla vecina con el mismo ritmo de
@@ -54,6 +89,35 @@ export default function ReponerClient({
         </p>
       </div>
 
+      {/* Sólo si hay algo que filtrar: un buscador sobre una lista vacía es un
+          control que promete que la pantalla podría decir otra cosa. */}
+      {paraPedir.length + yaPedidos.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* `w-full` abajo de `sm` y `flex-1` arriba: a 343px el buscador y el
+              selector no entran en la misma línea, y partir el ancho deja dos
+              controles que no se pueden usar en vez de uno que sí. */}
+          <input
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar por descripción o código"
+            aria-label="Buscar en la lista"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm sm:w-auto sm:flex-1"
+          />
+          <Select
+            // No lleva rótulo aparte porque cada opción ya dice «Ordenar
+            // por…», como en el listado de proveedores.
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm sm:w-auto"
+            aria-label="Ordenar la lista"
+            value={orden}
+            onChange={(e) => setOrden(e.target.value as OrdenDeReposicion)}
+          >
+            {ORDENES_DE_REPOSICION.map((o) => (
+              <option key={o.valor} value={o.valor}>{o.etiqueta}</option>
+            ))}
+          </Select>
+        </div>
+      )}
+
       {/* Arriba y no al final de la lista: son 17 filas o más, y quien aprieta
           Pedir en una del medio, parado en el pañol y con el celular en la mano,
           no ve lo que pasa debajo de la última. Sin esto la fila se va y no
@@ -67,21 +131,19 @@ export default function ReponerClient({
 
       <section className="space-y-2">
         <h2 className="section-title">
-          Para pedir <span className="font-normal text-slate-400">· {paraPedir.length}</span>
+          Para pedir <Cuenta visibles={pedirVisibles.length} total={paraPedir.length} />
         </h2>
 
-        {paraPedir.length === 0 ? (
+        {pedirVisibles.length === 0 ? (
           <p className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
-            {/* Dos vacíos distintos. «No hay nada para reponer» con 17 artículos
-                faltando debajo es mentira: lo que falta existe, sólo que ya
-                tiene pedido. */}
-            {yaPedidos.length > 0
-              ? "Lo que falta ya está pedido. Mirá abajo cuál es cada pedido."
-              : "No hay nada para reponer."}
+            {/* Tres vacíos distintos, y el porqué está arriba, donde se arma el
+                texto: «No hay nada para reponer» con 17 artículos faltando
+                debajo es mentira. */}
+            {nadaParaPedir}
           </p>
         ) : (
           <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
-            {paraPedir.map((c) => (
+            {pedirVisibles.map((c) => (
               // Sin `flex-wrap`: acá el botón no compite con nada que valga la
               // pena bajar de línea. `Detalle` tiene base 0 y se queda con lo que
               // sobra al lado del botón (~230px a 375px de ancho).
@@ -101,10 +163,13 @@ export default function ReponerClient({
         )}
       </section>
 
-      {yaPedidos.length > 0 && (
+      {/* Con una búsqueda puesta, el grupo entero desaparece si nada coincide:
+          una sección con su título, su aclaración y ninguna fila se lee como
+          un error. Lo que no coincide ya lo dice el vacío de arriba. */}
+      {pedidosVisibles.length > 0 && (
         <section className="space-y-2">
           <h2 className="section-title">
-            Ya pedidos <span className="font-normal text-slate-400">· {yaPedidos.length}</span>
+            Ya pedidos <Cuenta visibles={pedidosVisibles.length} total={yaPedidos.length} />
           </h2>
           <p className="text-xs text-slate-500">
             Faltan y se usan, pero ya tienen un pedido en curso. No hace falta
@@ -112,7 +177,7 @@ export default function ReponerClient({
           </p>
 
           <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
-            {yaPedidos.map((c) => {
+            {pedidosVisibles.map((c) => {
               // Una sola vez: era la misma búsqueda dos veces en la misma línea,
               // una para el color y otra para el texto.
               const compra = COMPRA_LABELS[c.ri.estado_compra as keyof typeof COMPRA_LABELS];
@@ -174,6 +239,23 @@ export default function ReponerClient({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * El número al lado del título.
+ *
+ * Con una búsqueda puesta dice «3 de 75» y no «3». Es la misma trampa que el
+ * filtro de órdenes de servicio deja anotada: un filtro puesto se vuelve
+ * invisible al scrollear, y entonces una lista corta se lee como una lista
+ * vacía en vez de como una lista filtrada.
+ */
+function Cuenta({ visibles, total }: { visibles: number; total: number }) {
+  return (
+    <span className="font-normal text-slate-400">
+      · {visibles}
+      {visibles !== total && ` de ${total}`}
+    </span>
   );
 }
 

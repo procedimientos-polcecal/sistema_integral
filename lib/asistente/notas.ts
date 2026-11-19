@@ -33,6 +33,16 @@ export const NOTAS: Record<string, string> = {
     "Entradas y salidas del pañol. `fecha` puede faltar: el kardex de la planilla " +
     "no siempre la trae, y se dejó nullable en vez de inventarla.",
 
+  ordenes_trabajo_repuestos:
+    "Los repuestos de una OT, en texto libre. `articulo_id` en null quiere decir " +
+    "que nadie lo vinculó, **nunca** que el artículo no exista en el pañol, y no " +
+    "se completa jamás por parecido de nombre.",
+
+  mant_ri_de_repuesto:
+    "El número de RI que Mantenimiento pegó a mano a un artículo o a un repuesto. " +
+    "`nro_ri` **no es una foreign key** a `compras_requerimientos`: cruzarlas con " +
+    "un join pierde en silencio los RI que la planilla de Compras ya dejó de tener.",
+
   avisos:
     "El primer eslabón de Mantenimiento: alguien vio que algo anda mal. De un aviso " +
     "sale después una orden de trabajo.",
@@ -70,11 +80,18 @@ export const NOTAS: Record<string, string> = {
     "todo esto y se queda con una fila por recurso.",
 
   ordenes_trabajo_notas:
-    "**Por qué una OT todavía no se hizo**, con quién lo escribió y cuándo. Es un " +
-    "historial: no se edita y puede tener varias por orden, así que la última " +
-    "es la que vale. Ojo con confundirla: esto es de ANTES de hacer el " +
-    "trabajo. Lo que se encontró AL hacerlo lo escribe el registro de la " +
-    "ejecución, en otro lado.",
+    "**Por qué una OT todavía no se hizo, y la conversación con Compras por un " +
+    "repuesto que falta.** Son dos cosas en la misma tabla y las separa `tipo`: " +
+    "`JUSTIFICACION` (el default, y lo único que había antes del 31/10/2026), " +
+    "`PREGUNTA` y `RESPUESTA`. **Para 'por qué sigue abierta' filtrá " +
+    "`tipo = 'JUSTIFICACION'`**: sin eso, la última fila de una orden puede ser " +
+    "una pregunta a Compras y la justificación vigente queda tapada. De las " +
+    "justificaciones, la última es la que vale. " +
+    "Una `PREGUNTA` apunta al repuesto por `repuesto_id` y la contesta una " +
+    "`RESPUESTA` con `responde_a`; `responde_a` también lo usa una `PREGUNTA` " +
+    "cuando alguien insiste, y entonces la anterior queda superada. " +
+    "Ojo con confundirla: todo esto es de ANTES de hacer el trabajo. Lo que se " +
+    "encontró AL hacerlo lo escribe el registro de la ejecución, en otro lado.",
 
   ordenes_trabajo:
     "Las OT. Los campos de persona apuntan a `usuarios`, no a `empleados`. " +

@@ -58,6 +58,18 @@ export interface DiaDelCalendario {
      * de Argentina.
      */
     diasDeAtraso: number | null;
+    /**
+     * Quién está puesto en cada una de las tres posiciones, para que el panel
+     * de asignar sepa cuáles están ocupadas sin otro viaje.
+     *
+     * **No son dato sensible**: quien llega hasta acá ya ve las órdenes enteras
+     * en el listado de Mantenimiento, y son los mismos nombres que la planilla
+     * publica en sus columnas P, Q y R. Lo que sí es sensible —quién falta y
+     * por qué— viaja por `/api/mantenimiento/taller-del-mes`, que es de admin.
+     */
+    operario_1: string | null;
+    operario_2: string | null;
+    operario_3: string | null;
   }[];
   gente: GenteDelDia;
 }
@@ -77,6 +89,9 @@ export interface OrdenDelCalendario {
   equipo_raw: string | null;
   app_created: boolean | null;
   estado: string | null;
+  operario_1: string | null;
+  operario_2: string | null;
+  operario_3: string | null;
 }
 
 /**
@@ -157,6 +172,9 @@ export function armarElCalendario(
         fecha_ejecucion: o.fecha_ejecucion,
         atrasada,
         diasDeAtraso,
+        operario_1: o.operario_1,
+        operario_2: o.operario_2,
+        operario_3: o.operario_3,
       });
     }
   }

@@ -162,6 +162,13 @@ export default function OrdenesClient({
   const [puntuando, setPuntuando] = useState<any | null>(null);
   const [sinProveedor, setSinProveedor] = useState<string[]>([]);
   const [verRepuestos, setVerRepuestos] = useState<any | null>(null);
+  /**
+   * Sube cada vez que algo de afuera del historial de una orden escribió en él —el
+   * modal de repuestos, al preguntarle a Compras—. El historial vive en otra parte
+   * de la pantalla, detrás del modal, y no se entera solo: lo lee de nuevo cuando
+   * esto cambia. Sin esto la pregunta quedaba guardada y no se veía.
+   */
+  const [versionDelHistorial, setVersionDelHistorial] = useState(0);
 
   /**
    * Todo lo que está pendiente, con sus notas de GUT, para la línea que
@@ -870,6 +877,7 @@ export default function OrdenesClient({
                         onPuntuar={() => setPuntuando(o)}
                         onCambiarParada={cambiarParada}
                         onJustificacion={() => cargarJustificadas(orders)}
+                        versionDelHistorial={versionDelHistorial}
                         onPostergada={load}
                       />
                     )}
@@ -937,6 +945,12 @@ export default function OrdenesClient({
           empresas={empresas}
           ubicaciones={ubicaciones}
           onCerrar={() => setVerRepuestos(null)}
+          onCambioEnElHistorial={() => {
+            // Una pregunta cuenta como justificación: saca el cartel «Sin justificar»
+            // del listado, y el historial de la orden la tiene que mostrar.
+            setVersionDelHistorial((v) => v + 1);
+            void cargarJustificadas(orders);
+          }}
         />
       )}
 
@@ -1048,6 +1062,7 @@ const NO_SE_CORRIGE_EN_EL_MASTER =
 
 function OTDetail({
   order: o, canEdit, onChangeEstado, onCambiarParada, onVerRepuestos, onPuntuar, onJustificacion,
+  versionDelHistorial,
   onPostergada,
 }: {
   onVerRepuestos?: () => void;
@@ -1058,6 +1073,8 @@ function OTDetail({
   onCambiarParada: (id: string, valor: boolean) => void;
   /** Se agregó o se borró una justificación: el cartel de la fila cambió. */
   onJustificacion?: () => void;
+  /** Cambia cuando algo de afuera escribió en el historial: hay que leerlo de nuevo. */
+  versionDelHistorial?: number;
   /** Se corrió la fecha: el listado tiene que volver a leerse. */
   onPostergada?: () => void;
 }) {
@@ -1254,9 +1271,11 @@ function OTDetail({
       {pideJustificacion(o.estado) && (
         <JustificacionOT
           ordenId={o.id}
+          estado={o.estado}
           puedeEditar={canEdit}
           cancelada={o.estado === ESTADO_CANCELADA}
           onCambio={onJustificacion}
+          version={versionDelHistorial}
         />
       )}
 
