@@ -58,7 +58,7 @@ Cada una tiene su test en la tarea que la posee:
 
 ---
 
-### Tarea 1: lo que el aviso propone, como funciones puras
+### Task 1: lo que el aviso propone, como funciones puras
 
 **Archivos:**
 - Modificar: `lib/mantenimiento/otDesdeAviso.ts`
@@ -167,7 +167,7 @@ git commit -m "feat(mantenimiento): lo que el aviso le propone al formulario com
 
 ---
 
-### Tarea 2: `NuevaOTModal` acepta un aviso
+### Task 2: `NuevaOTModal` acepta un aviso
 
 **Archivos:**
 - Modificar: `app/(app)/mantenimiento/ordenes/NuevaOTModal.tsx`
@@ -230,7 +230,7 @@ git commit -m "feat(mantenimiento): el formulario completo sabe venir de un avis
 
 ---
 
-### Tarea 3: la pantalla de avisos usa el formulario completo
+### Task 3: la pantalla de avisos usa el formulario completo
 
 **Archivos:**
 - Modificar: `app/(app)/mantenimiento/avisos/AvisosClient.tsx:10,472-484`
@@ -270,7 +270,7 @@ git commit -m "feat(mantenimiento): generar una OT desde un aviso abre el formul
 
 ---
 
-### Tarea 4: podar `otDesdeAviso.ts`
+### Task 4: podar `otDesdeAviso.ts`
 
 **Archivos:**
 - Modificar: `lib/mantenimiento/otDesdeAviso.ts`
@@ -318,7 +318,7 @@ git commit -m "refactor(mantenimiento): otDesdeAviso queda con lo que todavia si
 
 ---
 
-### Tarea 5: el documento del módulo
+### Task 5: el documento del módulo
 
 **Archivos:**
 - Modificar: `docs/MANTENIMIENTO-INTEGRACION.md`
