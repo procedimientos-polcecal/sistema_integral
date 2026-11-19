@@ -8,6 +8,7 @@ vi.mock("@/lib/core/sheets", async (importOriginal) => ({
 
 import { escribirCeldas, leerFormulas } from "@/lib/core/sheets";
 import { altaDeOSEnLaPlanilla } from "@/lib/mantenimiento/altaDeOS";
+import { celdasDelAltaDeOS } from "@/lib/mantenimiento/formularioDeOS";
 
 const leer = vi.mocked(leerFormulas);
 const escribir = vi.mocked(escribirCeldas);
@@ -58,7 +59,7 @@ describe("altaDeOSEnLaPlanilla", () => {
     expect(leer).not.toHaveBeenCalled();
   });
 
-  it("distingue una planilla calculando de una hoja vacia", async () => {
+  it("si una lectura trae Cargando... no escribe (red fina: con FORMULA casi no dispara)", async () => {
     planilla(() => [["Cargando..."]]);
     const r = await altaDeOSEnLaPlanilla(datos);
     expect(r.ok).toBe(false);
@@ -76,5 +77,40 @@ describe("altaDeOSEnLaPlanilla", () => {
     const r = await altaDeOSEnLaPlanilla(datos);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain("The caller does not have permission");
+  });
+
+  it("camino feliz: toma el siguiente numero, escribe las celdas en la fila libre y lo confirma", async () => {
+    let escrito = false;
+    planilla((rango) =>
+      esElFormulario(rango) ? [["N"], ["10"]]
+      : esLaColumnaDeAltas(rango) ? [["N"], ["11"]]
+      : escrito ? [["12"]] : []
+    );
+    escribir.mockImplementation(async () => { escrito = true; });
+    const r = await altaDeOSEnLaPlanilla(datos);
+    expect(r).toEqual({ ok: true, os_number: 12, fila: 3 });
+
+    const esperadas = celdasDelAltaDeOS(datos, 12);
+    if (!esperadas.ok) throw new Error("el dato de prueba debia ser valido");
+    expect(escribir).toHaveBeenCalledTimes(1);
+    expect(escribir).toHaveBeenCalledWith(
+      "planilla-de-prueba",
+      esperadas.celdas.map((c) => ({
+        pestana: "Altas del sistema", columna: c.columna, fila: 3, valor: c.valor,
+      }))
+    );
+  });
+
+  it("si despues de escribir la fila quedo con otro numero, lo dice", async () => {
+    let escrito = false;
+    planilla((rango) =>
+      esElFormulario(rango) ? [["N"], ["10"]]
+      : esLaColumnaDeAltas(rango) ? [["N"], ["11"]]
+      : escrito ? [["13"]] : []
+    );
+    escribir.mockImplementation(async () => { escrito = true; });
+    const r = await altaDeOSEnLaPlanilla(datos);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/quedó con el N° "13" en vez de 12/);
   });
 });

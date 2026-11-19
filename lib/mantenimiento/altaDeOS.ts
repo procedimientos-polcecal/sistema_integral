@@ -30,9 +30,13 @@ const COLUMNA_SERIE = "A";
  */
 const serieDeLaPestana = async (planilla: string, pestana: string): Promise<string[][]> => {
   const filas = await leerFormulas(planilla, `${pestana}!${COLUMNA_SERIE}:${COLUMNA_SERIE}`);
-  // Una planilla que está calculando devuelve vacías las celdas que no
-  // resolvieron, y eso es indistinguible de una hoja sin datos: así una OT cayó
-  // encima de la 623 el 13/10/2026. Si se nota, no se lee ni se escribe.
+  // Red fina, y conviene no creerla más gruesa de lo que es: con `FORMULA` una
+  // celda de fórmula vuelve con su texto y nunca con «Cargando…», así que esto
+  // casi no puede disparar. Queda por si alguien pasa esta lectura a
+  // `leerValores`, donde sí importa (así una OT cayó encima de la 623 el
+  // 13/10/2026). Las defensas de verdad son dos: la guarda de la serie sin
+  // congelar, en `loQueSigueEnLaSerieDeOS`, y la relectura de la fila destino
+  // antes de escribir.
   if (estaCalculando(filas)) throw errorDeCalculo(pestana);
   return filas;
 };
