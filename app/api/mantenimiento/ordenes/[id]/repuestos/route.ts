@@ -4,6 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { traerTodo } from "@/lib/core/paginado";
 import { risDelRepuesto, type RiPosible } from "@/lib/mantenimiento/riDelRepuesto";
+import {
+  elReemplazoDelCuerpo, loQueCambiaDeLaLista, filasParaLaBase,
+} from "@/lib/mantenimiento/repuestosDeLaOT";
 
 /**
  * Los repuestos que hacen falta para hacer una orden.
@@ -96,6 +99,85 @@ export async function POST(request: Request, { params }: Params) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ data });
+}
+
+/**
+ * PUT — dejar la lista como la dejó el formulario: `{ repuestos: [...] }`.
+ *
+ * Lo usa «Registrar el trabajo», que muestra la lista entera y la manda de una
+ * vez. **No borra y vuelve a insertar**: lo que hay que hacer con cada renglón
+ * lo decide `loQueCambiaDeLaLista`, y el porqué —los RI pegados a una fila
+ * mueren con ella y la pregunta a Compras se suelta— está en su encabezado.
+ *
+ * El orden es insertar, actualizar y recién después borrar. PostgREST no da
+ * transacción, así que si algo se cae en el medio lo que queda es una lista con
+ * renglones de más —se ven y se sacan— en vez de una lista corta, que es
+ * indistinguible de «no se usó nada».
+ */
+export async function PUT(request: Request, { params }: Params) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  if (!(await puedeEditarMantenimiento(supabase, user.id))) {
+    return NextResponse.json(
+      { error: "Cargar repuestos requiere nivel de edición en Mantenimiento" },
+      { status: 403 }
+    );
+  }
+
+  const reemplazo = elReemplazoDelCuerpo(await request.json().catch(() => null));
+  if (!reemplazo.ok) return NextResponse.json({ error: reemplazo.error }, { status: 400 });
+
+  const admin = createAdminClient();
+
+  const { data: existentes, error: errorDeLectura } = await admin
+    .from("ordenes_trabajo_repuestos")
+    .select("id, nombre")
+    .eq("work_order_id", id);
+
+  // Sin saber qué hay no se puede decidir qué cambia, y seguir sería borrar a
+  // ciegas: la lista de la orden queda como estaba.
+  if (errorDeLectura) {
+    return NextResponse.json({ error: errorDeLectura.message }, { status: 500 });
+  }
+
+  const cambios = loQueCambiaDeLaLista(existentes ?? [], reemplazo.lineas);
+
+  if (cambios.insertar.length > 0) {
+    // `filasParaLaBase` nombra las cuatro columnas, así que el `id` que pueda
+    // traer un renglón cuya fila ya no está no viaja: se inserta uno nuevo.
+    const { error } = await admin
+      .from("ordenes_trabajo_repuestos")
+      .insert(filasParaLaBase(id, cambios.insertar));
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  for (const renglon of cambios.actualizar) {
+    // `nombre` no se toca: si hubiera cambiado, este renglón no estaría acá.
+    // Y atado a la orden de la URL, como el DELETE: un id de otra orden no
+    // escribe nada.
+    const { error } = await admin
+      .from("ordenes_trabajo_repuestos")
+      .update({ codigo: renglon.codigo, cantidad: renglon.cantidad })
+      .eq("id", renglon.id)
+      .eq("work_order_id", id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  if (cambios.borrar.length > 0) {
+    // Un `.in()` con muchos ids arma una URL que PostgREST rechaza, pero acá
+    // son los renglones de una sola orden: el máximo hoy es 4.
+    const { error } = await admin
+      .from("ordenes_trabajo_repuestos")
+      .delete()
+      .in("id", cambios.borrar)
+      .eq("work_order_id", id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  return NextResponse.json({ data: { guardados: reemplazo.lineas.length } });
 }
 
 /** DELETE ?repuesto= — sacarlo de la lista. */

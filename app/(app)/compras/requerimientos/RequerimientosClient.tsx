@@ -834,6 +834,16 @@ export default function RequerimientosClient({
           empresas={empresas}
           ubicaciones={ubicaciones}
           inicial={arranqueDelAlta ?? undefined}
+          /*
+           * Copiar un pedido viejo, pero sólo cuando el formulario nace vacío.
+           * Con `?nuevo=1` alguien llegó desde otra pantalla con la descripción
+           * y el código ya puestos: ahí un «Traer» pisaría justamente eso.
+           *
+           * Sin `recientes` a propósito: acá se copian pedidos de cualquiera y
+           * la lista que está en pantalla son los 50 últimos de toda la
+           * empresa, que no es de donde alguien elige. Queda el número.
+           */
+          reutilizar={arranqueDelAlta ? undefined : {}}
           onClose={() => setModalAbierto(false)}
           onSaved={() => { setModalAbierto(false); cargar(); }}
         />

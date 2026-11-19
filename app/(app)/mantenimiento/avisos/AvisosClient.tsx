@@ -7,10 +7,12 @@ import UltimaSincronizacion from "@/components/UltimaSincronizacion";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import type { Aviso } from "@/lib/mantenimiento/types";
 import NuevoAvisoModal from "./NuevoAvisoModal";
-import GenerarOTModal, { type EquipoDelAviso } from "./GenerarOTModal";
+import NuevaOTModal from "../ordenes/NuevaOTModal";
+import type { EquipoDelAviso } from "@/lib/mantenimiento/otDesdeAviso";
 import DesestimarModal from "./DesestimarModal";
 import EnlazarOTModal from "./EnlazarOTModal";
 import Select from "@/components/Select";
+import FotosDelAviso from "@/components/FotosDelAviso";
 import { finalDelAviso, estaDesestimado } from "@/lib/mantenimiento/desestimarAviso";
 import { comoSeMuestraElTrabajo, estadoDelTrabajo } from "@/lib/mantenimiento/trabajoDelAviso";
 import { sePuedeDesenlazar } from "@/lib/mantenimiento/enlazarOtAlAviso";
@@ -307,6 +309,16 @@ export default function AvisosClient({
 
               <p className="text-sm leading-snug text-slate-700">{a.descripcion ?? "—"}</p>
 
+              {/* La foto va pegada a la descripción porque es parte de lo que
+                  se está reportando, y no una columna aparte: la tiene 1 de
+                  254 avisos, y una columna vacía en 253 filas es ruido. */}
+              <FotosDelAviso
+                fotos={a.reference_photos}
+                avisoId={a.id}
+                oa={a.oa_number}
+                className="mt-1.5"
+              />
+
               <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
                 <span>{a.sectores?.nombre ?? a.sector_raw ?? "Sin sector"}</span>
                 {!a.equipment_id && a.equipo_raw && (
@@ -384,7 +396,15 @@ export default function AvisosClient({
                       {!a.equipment_id && a.equipo_raw && " · sin enlazar"}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-slate-700">{a.descripcion ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-700">
+                    {a.descripcion ?? "—"}
+                    <FotosDelAviso
+                      fotos={a.reference_photos}
+                      avisoId={a.id}
+                      oa={a.oa_number}
+                      className="mt-1.5"
+                    />
+                  </td>
                   <td className="px-3 py-2 text-slate-600">{a.urgencia ?? "—"}</td>
                   <td className="px-3 py-2 text-slate-600">{a.quien_aviso ?? "—"}</td>
                   <td className="px-3 py-2">
@@ -470,12 +490,15 @@ export default function AvisosClient({
       )}
 
       {generarDe && (
-        <GenerarOTModal
+        <NuevaOTModal
           aviso={generarDe}
           sectores={sectores}
           equipos={equipos}
           onClose={() => setGenerarDe(null)}
-          onCreada={(mensaje) => {
+          onCreated={(advertencia, numero) => {
+            const mensaje =
+              `Se generó la OT #${numero} y el aviso ${generarDe.oa_number} quedó marcado.` +
+              (advertencia ? ` ${advertencia}` : "");
             setGenerarDe(null);
             setResultado(mensaje);
             router.refresh();

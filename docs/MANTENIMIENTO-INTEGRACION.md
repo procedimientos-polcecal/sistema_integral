@@ -1714,6 +1714,159 @@ máquina sabe dónde está. Y las urgencias se escriben **con su emoji** —"�
 no "ALTA"— porque así están en la planilla, y dos vocabularios para lo mismo es
 cómo la próxima lectura deja de reconocerlas.
 
+## Un solo formulario de OT para avisos y órdenes, y el aviso lo siembra (19/11/2026)
+
+Hasta esa fecha había **dos** formularios para crear una orden: el completo
+(`app/(app)/mantenimiento/ordenes/NuevaOTModal.tsx`) y uno recortado que se abría
+desde un aviso, `GenerarOTModal.tsx`, al que le faltaban **once** campos. El
+pedido salió de uno solo: no se podía cargar el contratista, así que había que
+generar la orden y después ir a Órdenes de trabajo a completarla. Ahora la
+pantalla de avisos abre el formulario completo, sembrado con lo que el aviso
+propone, y `GenerarOTModal.tsx` está borrado.
+
+Lo que sigue es lo que no se deduce de ninguno de los dos archivos.
+
+**1. Por qué uno solo, y por qué no bastaba con copiarle los campos al
+recortado.** El 19/10/2026 la regla de qué es obligatorio y el botón de generar
+vivían en archivos distintos y ninguno sabía del otro: la regla creció a siete
+campos, el botón siguió mandando seis, y durante días contestó «falta cargar la
+especialidad» sin generar nada. Nada lo notó, porque no hay un tipo que ate el
+cuerpo de un `fetch` ni un test de pantalla. Copiarle los once campos al
+recortado era la peor de las opciones: dejaba el mismo desfasaje armado para la
+próxima vez que la regla cambie. Con un solo formulario hay una sola
+`loQueFaltaParaCrear`, y una regla nueva alcanza a los dos caminos porque es uno.
+
+**2. El aviso propone y no obliga, y el aviso no se toca.** Todo lo que la orden
+va a decir llega llenado con lo que el aviso sabe y se puede cambiar antes de
+crearla. El aviso sigue diciendo lo que escribió quien reportó la falla: eso es
+lo que lo hace una prueba de qué se reportó y cuándo, y editar la orden no lo
+reescribe.
+
+**3. `aviso_id` vive en la prop y no en el estado del formulario.** Es lo más
+importante de la sección, y es el porqué de una decisión: el formulario completo
+tiene arriba un botón «Traer» que recicla una OT vieja y **pisa los campos que
+copia** (sector, equipo, descripción, especialidad, tipo, quién, estado,
+prioridad, contratista, operarios, horas y parada), con un merge sobre el estado.
+En el diseño descartado el enlace hubiera vivido dentro de ese estado, y un
+reciclado que lo arrastrara habría **desenlazado el aviso en silencio**: la orden
+huérfana y el aviso de vuelta en la lista de pendientes, invitando a que alguien
+genere una segunda para el mismo problema, que es lo que ya cuida
+`loQueImpideDesenlazar`. Eso **no pasa hoy**, justamente porque el enlace sale
+siempre de la prop.
+
+Lo que sí pasa hoy y no se deduce leyendo el archivo: abrir el formulario desde
+un aviso y después apretar «Traer» **reemplaza la descripción, el sector y el
+equipo que sembró el aviso por los de la OT vieja, y el `aviso_id` queda**. La
+orden se crea con los datos de una OT y enlazada al aviso. **No es un error**:
+quien tipea un número y aprieta «Traer» está eligiendo reciclar, y la barra
+ámbar avisa que esos campos no los escribió quien mira. Esa es la diferencia con
+el problema del borrador del punto siguiente, que era silencioso.
+
+**4. La clave del borrador lleva el aviso de origen.** Esto apareció
+implementando y no estaba en el diseño. El formulario guarda borrador, y con la
+clave fija que tenía, un borrador dejado en «Nueva OT» o en otro aviso **le gana
+al sembrado**; al mandar, viajarían la descripción y el equipo de un aviso con el
+`aviso_id` de otro, porque el enlace sale de la prop. Eso **enlaza trabajo
+equivocado al aviso**, la clase de error que no se nota nunca. `claveDelBorrador`
+ya aceptaba un origen; faltaba pasárselo. Sin aviso la clave queda **igual que
+siempre**, así que los borradores ya guardados sobreviven.
+
+**5. Desde un aviso ahora se puede crear una orden ya cerrada, y antes no.** El
+argumento viejo era «se está pidiendo trabajo, no cargando trabajo hecho». Cambió
+porque el pedido fue que el formulario fuera el mismo, y registrar trabajo ya
+hecho contra un aviso es un caso real. No queda sin control: `loQueFaltaParaCrear`
+exige las horas y quién lo hizo cuando hay fecha de cierre.
+
+**6. Uno solo quiere decir uno para avisos y órdenes de trabajo, y quedan dos
+afuera.** El título cuenta lo que se unificó y no cuántos archivos crean una OT
+en el repo, que siguen siendo tres. Los otros dos no son un olvido y cada uno
+tiene su razón, que es distinta:
+
+- **`app/cargar/FormularioOTOffline.tsx`** es el mismo formulario de siempre
+  —mismos campos, mismos vocabularios de `lib/`, misma `loQueFaltaParaCrear`—
+  pero vive **fuera del grupo `(app)`** porque tiene que dibujarse **sin
+  servidor**: el layout de `(app)` le pregunta a Supabase quién sos y redirige
+  al login, y sin conexión no contesta. Unificarlo es otro trabajo, y mientras
+  tanto sigue siendo un lugar donde una regla nueva hay que copiarla.
+- **`app/(app)/mantenimiento/mantenimientos/GenerarOTDeMantenimiento.tsx`** es
+  **el pariente más cercano del que se borró**, y por eso conviene mirarlo antes
+  de dar por cerrado este tema. No es un formulario de OT recortado: es la
+  confirmación de las **cuatro cosas que un preventivo programado no dice**
+  —especialidad, quién lo realiza, para cuándo y hasta cuándo—. Las cuatro son
+  obligatorias: `fecha_fin` entró a `IMPRESCINDIBLES` el 04/11/2026 y este
+  formulario la pide como los otros. Todo lo demás lo hereda del mantenimiento
+  y se muestra sin poder editarse, así que no ofrece prioridad, GUT, repuestos,
+  contratista ni los operarios 2 y 3. Tiene su propio `cuerpoDeLaOT`, su
+  `RESPUESTAS_VACIAS`, su `respuestasIniciales` y su `loQueHayQuePreguntar` en
+  [lib/mantenimiento/otDesdeMantenimiento.ts](../lib/mantenimiento/otDesdeMantenimiento.ts).
+  Dos cosas que hay que saber: **la regla de qué falta sí es compartida** —
+  `loQueFaltaDelMantenimiento` corre `loQueFaltaParaCrear` sobre su propio
+  cuerpo, así que el desfasaje de octubre no puede repetirse por ahí—, y
+  **postea con un `fetch` pelado y no pasa por la cola**, que es exactamente lo
+  que este cambio le sacó al camino del aviso: sin señal ese `await fetch`
+  tira, el modal queda con el spinner puesto y lo contestado adentro.
+
+**Y los tres se enlazan a cosas distintas, que es lo que hay que mirar antes de
+decir «éste no enlaza».** `NuevaOTModal` manda **`aviso_id`** cuando la orden
+nace de un aviso, y nada cuando es una OT suelta.
+`GenerarOTDeMantenimiento` manda **`schedule_id`**, el preventivo del que sale.
+`FormularioOTOffline` **no manda ninguno de los dos**, a propósito: ahí se carga
+una orden suelta, parado en la planta, y una que nace de un aviso se carga desde
+el aviso, que es donde está el botón.
+
+**7. Lo que el cambio trajo de arriba, sin ser el objetivo.** El camino viejo
+hacía un `fetch` pelado y se colgaba sin señal; el nuevo pasa por la cola. Y el
+error de marcar el aviso en su planilla ahora llega por el mismo texto que todo
+lo demás que queda a medias, en vez de armarse aparte.
+
+**8. Y lo que ese mismo camino abrió: corregir una OT parada le saca el enlace
+al aviso.** Es la contracara del punto anterior y nadie la había visto. Ahora
+una OT nacida de un aviso puede quedar **encolada**; si el reenvío recibe un
+rechazo definitivo, la carga queda **parada** en `/cargar` y esa pantalla ofrece
+dos salidas que no son equivalentes:
+
+- **«Reintentar igual»** vuelve a mandar `carga.cuerpo`, el cuerpo guardado tal
+  cual, así que **conserva el `aviso_id`** y también las tres notas GUT.
+- **«Corregir y volver a mandar»** rearma el cuerpo desde `FormularioOTOffline`,
+  y ese formulario **no tiene `aviso_id`** ni los campos del GUT: su `vacio()`
+  no los nombra, y `borradorDesdeElCuerpo`
+  ([lib/mantenimiento/borradorDeCarga.ts](../lib/mantenimiento/borradorDeCarga.ts))
+  copia **sólo los campos que `vacio()` tiene** y descarta el resto a propósito.
+  O sea que la OT se crea **sin enlace al aviso**: el aviso queda para siempre
+  en «sin orden de trabajo» con una orden suya dando vueltas, invitando a que
+  alguien genere una segunda — y **nada lo dice**, ni en la pantalla ni en la
+  orden.
+
+Es un agujero **conocido y angosto**: pide que la carga se encole, que después
+la rechacen definitivamente y que quien la corrija elija el segundo botón. No se
+arregla acá a propósito, porque el arreglo vive en `FormularioOTOffline`, que el
+diseño y el plan dejan explícitamente afuera —es el que tiene que dibujarse sin
+servidor y merece su propio trabajo—. **Mientras tanto, la salida es
+«Reintentar igual»** cuando la carga venía de un aviso; si hubo que corregirla,
+el enlace se vuelve a poner a mano desde el aviso, con «Ya tiene OT»
+(`enlazarOtAlAviso`). Lo que corresponde el día que se unifique es que ese
+formulario arrastre los campos del cuerpo que no muestra, en vez de perderlos.
+
+**9. Y hay un segundo camino a dos órdenes para el mismo aviso: cerrar el modal
+y volver a abrirlo.** El modal deshabilita «Crear OT» en cuanto la carga queda
+encolada, y eso cierra el camino de apretar dos veces seguidas — que era el que
+se arregló. Pero **`yaQuedoEnLaCola` sale de `useState`**: si alguien cierra el
+modal con la X o con Escape después de encolar y lo vuelve a abrir, `resultado`
+arranca en `null`, el botón vuelve a estar habilitado y el borrador sigue ahí
+—la X y Escape conservan a propósito—, así que se puede mandar una **segunda OT
+con el mismo `aviso_id`**: `mandarOEncolar` genera una clave nueva por llamada y
+la ruta no mira si el aviso ya tiene `work_order_id`.
+
+Es **más angosto todavía** que el del punto 8, porque pide perder la señal en
+una pantalla a la que no se llega sin señal —`/mantenimiento/avisos` la dibuja
+el servidor—, encolar, cerrar y reabrir. **No se arregla con más estado en el
+modal**, y por eso se deja escrito en vez de parchearlo: cualquier memoria que
+viva adentro del componente se pierde al desmontarlo, y una que viva en el
+borrador haría falta tirarla a mano con cada aviso. **El cierre de verdad es
+que `POST /api/mantenimiento/ordenes` se niegue cuando el aviso ya tiene
+`work_order_id`** —una comprobación, del lado que las dos puertas comparten—, y
+esa ruta queda fuera de este plan.
+
 ## Los repuestos de una orden, y si los hay
 
 La planilla de OT tiene **una sola columna de repuesto**, texto libre. Eso
@@ -1744,6 +1897,51 @@ media planilla.
 o no se puede leer, la pantalla lo dice y sigue andando sin disponibilidad:
 anotar qué hace falta no depende de saber si lo hay. Para conectarlo:
 `GOOGLE_SHEETS_INVENTARIO_ID` y `GOOGLE_SHEETS_INVENTARIO_TAB`.
+
+### Y se cargan también al registrar el trabajo (19/11/2026)
+
+Hasta ese día «Registrar el trabajo» era el único formulario de OT que no
+pedía repuestos, y es justo el momento en que se sabe cuáles salieron del
+pañol: al crear la orden todavía no se usó nada. Se pidió **para que quede
+registrado qué se gastó en cada OT**. El diseño está en
+[el spec](superpowers/specs/2026-11-19-mantenimiento-repuestos-al-registrar-design.md).
+
+Tres cosas que no se deducen del código:
+
+- **Es una sola lista y no distingue previsto de usado.** Son los mismos
+  renglones de «Repuestos que hacen falta»: el modal abre con lo que la orden
+  ya tenía y lo que quede al cerrar es lo que se gastó. Se eligió así contra
+  una columna `usado` porque en una OT **terminada** las dos contestan lo
+  mismo, y ésta además contesta por las 2.530 que ya estaban cerradas, que con
+  una columna nueva dirían todas que no se gastó nada. Lo que se paga, dicho:
+  en una OT cerrada, «Repuestos que hacen falta» muestra lo que se usó y puede
+  ofrecer «Pedir a Compras» por algo ya consumido.
+- **No va a la planilla, y no es un olvido**: la celda `REPUESTO UTILIZADO`
+  del master es la columna **I**, que es derrame —ver «El repuesto es una
+  celda, y está en dos lugares»—, y la **Z** de «Altas del sistema» sólo
+  existe para las órdenes que creó el sistema: 262 de 2.530. Las otras 2.268
+  entraron por el formulario de Google y no tienen dónde. La lista por
+  renglones nunca se exportó, así que esto no abre ninguna deuda de
+  exportación.
+- **No se valúa en pesos.** `inventario_articulos` no tiene columna de precio
+  y ninguna OT tiene `costo` cargado, así que lo que queda registrado es qué
+  piezas y cuántas. El costo por máquina sigue saliendo de Compras, de las
+  órdenes de servicio y de las horas × tarifa — ver «El costo total de una
+  máquina».
+
+**Y lo que hay que saber antes de tocar el guardado**: el `PUT` que manda ese
+modal **no borra la lista y la vuelve a insertar**. De la fila de un repuesto
+cuelgan dos cosas que no se ven desde ahí —`mant_ri_de_repuesto.repuesto_id`
+es `on delete cascade`, así que los RI pegados a ese renglón mueren con él, y
+`ordenes_trabajo_notas.repuesto_id` es `on delete set null`, así que la
+pregunta que se le hizo a Compras se suelta y deja de estar abierta—, y un
+reemplazo a lo bruto se las lleva **de todos los renglones, incluidos los que
+nadie tocó**, sin fallar ni avisar. Qué insertar, qué actualizar y qué borrar
+lo decide `loQueCambiaDeLaLista()` de
+[lib/mantenimiento/repuestosDeLaOT.ts](../lib/mantenimiento/repuestosDeLaOT.ts),
+con sus tests. Un renglón **cuyo nombre cambió sí se borra**: un RI pegado a
+«rodamiento 6206» no vale para «6207», y heredarle el enlace es enlazar al que
+se le parece. Mayúsculas y espacios de más no cuentan.
 
 ## La sincronización, sola
 
@@ -1948,8 +2146,9 @@ Cómo queda el resto:
 
 - **Se puntúa sólo desde el SdG**, nunca en el formulario de Google: de 2.227
   órdenes, 2.209 entraron por ahí y llegan sin puntuar. Se puntúa al crear
-  (`NuevaOTModal`, `GenerarOTModal`), y sobre una orden ya cargada desde el
-  listado y el detalle, por `PATCH /api/mantenimiento/ordenes/[id]/gut`. No
+  (`NuevaOTModal`, que es también el que se abre desde un aviso), y sobre una
+  orden ya cargada desde el listado y el detalle, por
+  `PATCH /api/mantenimiento/ordenes/[id]/gut`. No
   audita: un puntaje se deshace escribiendo otro. Los tres desplegables arrancan
   **vacíos** y no son obligatorios.
 - **Ningún camino de alta hereda un puntaje.** Aviso → OT no siembra
@@ -2345,6 +2544,107 @@ movimiento de una orden llegue a la planilla no lo probó nadie todavía.
   realizado»—. Esa diferencia **queda**, con un test que la fija en vez de
   taparla: hoy no tiene ni un caso (0 órdenes en `SUSPENDIDA`) y arbitrarla
   desde el servidor sería elegir por el listado sin que nadie lo haya pedido.
+
+### Asignar operarios desde el mes (19/11/2026)
+
+El mes de «Asignación RR.HH» lleva, arriba de cada semana, la rotación del
+taller —quién está en qué turno, y quién falta algún día—, y desde el panel de
+un día se le **ponen y sacan operarios** a una orden. El diseño está en el
+[spec](superpowers/specs/2026-11-19-mantenimiento-asignar-operarios-desde-el-mes-design.md)
+y el plan en
+[docs/superpowers/plans/2026-11-19-mantenimiento-asignar-operarios-desde-el-mes.md](superpowers/plans/2026-11-19-mantenimiento-asignar-operarios-desde-el-mes.md).
+
+**No hizo falta ninguna migración.** `operario_1/2/3` ya existían, ya están en
+`EN_LOS_DOS_LADOS` de `repartirRegistroDeOT` y ya viajan a las columnas **P, Q y
+R** del master. Lo que cambió es *cuándo* se escriben: hasta ahora sólo al
+cerrar la orden, con «Registrar el trabajo».
+
+**Lo pedido era un conteo, y el conteo no servía.** El pedido fue «los operarios
+disponibles en cada semana del mes», y medido contra producción ese número sale
+**constante**: 4 mecánicos · 3 electricistas · 1 lubricador las **nueve** semanas
+de noviembre y diciembre, y tampoco varía de lunes a domingo —las dos ausencias
+y el único franco de esa gente son anteriores al 09/11, el día en que se cargó
+el padrón—. Una franja que repite el mismo número nueve semanas seguidas deja de
+mirarse, que es la lección que ya costó el resumen diario de avisos. Lo que sí
+cambia todas las semanas es la rotación, y es además lo que hace falta para
+decidir a quién ponerle una orden.
+
+Seis cosas que no se deducen del código:
+
+- **El vocabulario sale del catálogo `operarios`, con sus posiciones, y se
+  escribe tal cual.** Las tres columnas tienen cada una su propia lista —quién
+  puede ir primero no es quién puede ir tercero—, y eso no es una preferencia
+  del formulario: medido el 19/11/2026 sobre las últimas 1.000 OT, **1.223
+  menciones de 1.223 están en la columna que el catálogo les asigna, cero
+  fuera**. Una versión anterior del diseño inventaba un formato propio
+  —`Aguirre, Gabriel`— para desambiguar apellidos contra los 71 empleados; se
+  descartó porque el desplegable del cierre no habría ofrecido después lo que el
+  panel asignó, y dos vocabularios para las mismas tres celdas es como se pudre
+  uno.
+- **Para saber si alguien viene hay que saber quién es, y 7 de los 10 nombres
+  resuelven contra el padrón** (`resolverElCatalogo`, por `norm` + `includes`,
+  con exactamente una persona). Los otros tres se dicen en vez de adivinarse:
+  «Ambos» no es una persona; «Lopez» es **Raúl Argentino López**, que todavía no
+  está en `mant_personal_taller`; y «Lucas» cae en GALLASTEGUI y en MENDIZABAL,
+  los dos del taller. Los tres se ofrecen igual —si no, no se podría asignar a
+  López, que es el tercer nombre más cargado con 220 menciones— y la pantalla
+  dice por qué no sabe si vienen. **Los dos últimos se cierran con datos y no
+  con código**: cargar a López en el padrón, y desambiguar «Lucas» en el
+  catálogo. El día que eso pase la función los resuelve sola, y hay un test que
+  lo fija. Y mirado por el otro lado, que es lo que de verdad cuesta: **LUCAS
+  GALLASTEGUI es la única persona del padrón a la que ningún nombre del catálogo
+  alcanza sin ambigüedad**, así que hoy no se le puede asignar nada. (El número
+  decía «8 de los 10» hasta la revisión de la rama, y se contradecía solo: ocho
+  más otros tres dan once. El test siempre dijo siete.)
+- **Los nombres NO viajan por `/api/mantenimiento/calendario`**, y por eso hay
+  una ruta aparte, `/api/mantenimiento/taller-del-mes`, guardada con
+  `esAdminMantenimiento`. Esa primera la abre cualquiera que vea Mantenimiento
+  —la montan tres pantallas, el alta de una OT incluida— y manda sólo **cuántas**
+  personas hay por oficio. Sumarle los nombres se los habría entregado a los
+  catorce niveles del módulo de una sola vez y sin que se note. Por lo mismo
+  `franjaDeLaSemana` es una **prop de render** de `CalendarioDeOT` y no un
+  `boolean`: quien tiene los nombres los dibuja, y en el componente compartido no
+  entra ni la ruta que los trae ni el permiso que los guarda.
+- **La franja es el ciclo y el día es la verdad.** Una pisada
+  (`mant_programacion_pisadas`) mueve a alguien de turno **un día**, y la franja
+  habla de **una semana**: ubicar a alguien por su pisada diría de los siete días
+  algo que vale uno solo. Así que la franja sólo **cuenta** cuántos días tienen
+  gente movida, y el turno de un día concreto lo resuelve `turnoDelDia`, que es
+  lo que mira el panel al asignar. Eso también fija contra qué se comprueba:
+  `scripts/comparar-franja-con-la-semana.mts` contrasta la franja contra **el
+  ciclo** que calcula la pestaña «Semana», no contra su grilla final —comparar
+  contra la grilla haría «fallar» a la franja justo donde hace lo correcto—. Da
+  cero diferencias sobre cuatro semanas seguidas.
+- **A una orden cerrada no se le asigna, y a una de arrastre sí.** Esos campos
+  no son «a quién le toca» sino **quién lo hizo**, que es lo que pregunta
+  «Registrar el trabajo»: **643 de las últimas 1.000 OT** tienen al menos uno
+  cargado, y están ahí porque alguien cerró la orden. Lo único que decide si una
+  orden admite gente es el estado, así que una atrasada se asigna igual — y su
+  turno y su falta se calculan **contra el día que se está mirando** y nunca
+  contra el inicio de la orden. Una orden del 12 vista el 19 tiene que ofrecer a
+  quien viene el 19.
+- **Sacar un operario sólo pega si la escritura en la planilla anduvo.** Poner y
+  sacar son el mismo PATCH, pero no tienen la misma red: si Sheets falla, la OT
+  queda con `sheets_pendiente` y la cola se rearma **desde la fila**, donde una
+  celda vacía es indistinguible de una que nunca se llenó. Para un nombre puesto
+  alcanza; para un vaciado no, y la próxima sincronización trae de vuelta el
+  nombre viejo. Arreglarlo de verdad pide una columna que recuerde qué campos se
+  vaciaron —lo que ya hace `sheets_pendiente_campos` en los avisos—, o sea una
+  migración. Mientras tanto el modal dice **lo que contestó Google, sin
+  traducir**, y que hay que sacarlo también allá.
+
+Y dos más, chicas: **el orden lo da el oficio que pide la orden** cuando se sabe
+(`oficioDeLaEspecialidad`: MECANICO → mecánico, ELECTRICO → electricista,
+LUBRICACION → lubricador), y con `null` —CIVIL, INSTRUMENTACIÓN y OTRO— **no se
+sugiere a nadie**, porque inventarles un oficio sería enlazar al que se le
+parece; y **de una falta se dice sólo que no viene**, nunca el `tipo` de la
+ausencia, que la ruta ni siquiera manda.
+
+**Lo que no se comprobó**: ninguna de las dos pantallas se abrió en un navegador
+con una sesión real. `tsc`, los 7.600 tests, el build y los cuatro escaneos
+pasan, y la franja se contrastó contra producción con el script — pero poner un
+operario de verdad, y ver qué contesta la planilla al sacarlo, lo hace la
+primera persona que lo use.
 
 ## El cuaderno de Piparo: leer una foto y sacar las OT (01–02/11/2026)
 

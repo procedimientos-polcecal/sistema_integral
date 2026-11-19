@@ -206,8 +206,16 @@ export interface RespuestasDelMantenimiento {
   quien: string;
   fecha_ejecucion: string;
   /**
-   * Cuándo se estima que termina. **Opcional**: el mantenimiento sabe cuándo
-   * arranca —su próxima fecha— y no cuánto dura.
+   * Cuándo se estima que termina. El mantenimiento sabe cuándo arranca —su
+   * próxima fecha— y no cuánto dura, así que arranca vacía y la estima quien
+   * genera la orden.
+   *
+   * **Nació opcional y dejó de serlo el 04/11/2026**, cuando `fecha_fin` entró
+   * a `IMPRESCINDIBLES` de `altaDeOT.ts` a pedido: lo que se gana al exigirla
+   * es que toda OT cargada a mano tenga ventana. Este comentario siguió
+   * diciendo «Opcional» hasta el 19/11/2026. Quién la exige es
+   * `loQueFaltaParaCrear`, no este tipo — que es también por qué el desfasaje
+   * no se notó: la regla es una sola y la corre el servidor.
    */
   fecha_fin: string;
 }

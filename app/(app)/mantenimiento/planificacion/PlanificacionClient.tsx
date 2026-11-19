@@ -120,7 +120,7 @@ export default function PlanificacionClient({ plans, canEdit }: { plans: any[]; 
           información—, pero mover una orden pide `canEdit`, igual que el botón
           «Postergar» del listado: esta pantalla la ven también los seis que
           tienen Mantenimiento en lectura. */}
-      {vista === "mes" && <MesDeOrdenes puedeMover={canEdit} />}
+      {vista === "mes" && <MesDeOrdenes puedeMover={canEdit} puedeAsignar={false} />}
 
       {vista === "planes" && (plans.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center">
