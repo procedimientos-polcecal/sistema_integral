@@ -9,6 +9,18 @@
 -- `contrastar()` ya decidió que la planilla movió la fecha de verdad (origen
 -- 'planilla'). No hay policy de insert/update/delete a propósito.
 --
+-- EL ORDEN DE LAS SECCIONES NO ES DECORATIVO. El `alter table` sobre
+-- `ordenes_trabajo` va ANTES del `create table` que la referencia. Un `create
+-- table ... references ordenes_trabajo` toma un ShareRowExclusiveLock sobre
+-- ella; un `alter table ... add column` posterior en la misma transacción pide
+-- AccessExclusiveLock sobre la misma tabla, que es subir de nivel un candado
+-- que uno mismo ya tiene y puede terminar en deadlock (40P01) contra cualquier
+-- otra transacción que la esté leyendo. Con el alter primero se toma el
+-- candado fuerte una sola vez y la foreign key lo encuentra ya tomado. Es la
+-- trampa del README de migraciones; el mecanismo completo está en el
+-- encabezado de 20260911103029_facturacion_el_detalle_de_la_factura.sql.
+-- No lo «ordenes» de vuelta tabla-primero.
+--
 -- DOS DECISIONES QUE NO SE DEDUCEN DE LAS COLUMNAS
 --
 -- 1. `razon` NO lleva foreign key a `mant_razones_de_postergacion`, y
@@ -31,14 +43,34 @@
 --    PostgREST sólo escribe las columnas del payload y `paraLaBase()` no la
 --    incluye.
 --
---    El trigger RECUENTA en vez de sumar o restar uno: así un contador que
---    alguna vez quedó torcido se corrige solo con la siguiente fila, y el
---    cascade de un borrado de OT (que dispara el trigger sobre una orden que
---    ya no está) no actualiza ninguna fila y no falla.
+--    El trigger RECUENTA en vez de sumar o restar uno, así un contador torcido
+--    se corrige con la siguiente fila, y el cascade de un borrado de OT (que
+--    dispara el trigger sobre una orden que ya no está) no actualiza ninguna
+--    fila y no falla. Pero recontar solo NO alcanza con dos inserciones
+--    simultáneas sobre la misma OT: el UPDATE de la segunda espera la fila
+--    bloqueada por la primera, y al retomar, en READ COMMITTED, vuelve a
+--    comprobar la fila pero evalúa el subselect del `set` con la foto que ya
+--    tenía, que no incluye la fila de la primera: el contador podía quedar en
+--    1 con dos filas. Por eso el trigger toma antes el candado de la fila de
+--    la OT (`for update`): la sentencia siguiente arranca con el candado ya
+--    tomado y ve lo que la otra transacción confirmó. Si se mueve `ot_id` de
+--    una fila (el admin puede, aunque ninguna ruta lo hace) se recuentan las
+--    dos OT, bloqueadas en orden de id para que dos movimientos cruzados no
+--    se bloqueen entre sí.
 --
--- No toca ningún enum, así que no hay 55P04 que esquivar.
+-- No toca ningún enum, así que no hay 55P04 que esquivar. Se puede correr dos
+-- veces: todo lleva `if not exists`, `create or replace` o `drop ... if
+-- exists`.
 
--- ── 1. LA TABLA ─────────────────────────────────────────────────────────────
+-- ── 1. EL CONTADOR EN LA OT (primero: ver el encabezado) ────────────────────
+alter table public.ordenes_trabajo
+  add column if not exists reprogramada_veces integer not null default 0;
+
+comment on column public.ordenes_trabajo.reprogramada_veces is
+  'Cuántas filas tiene la OT en mant_reprogramaciones_ot. Lo mantiene un '
+  'trigger; no se escribe desde la aplicación.';
+
+-- ── 2. LA TABLA ─────────────────────────────────────────────────────────────
 create table if not exists public.mant_reprogramaciones_ot (
   id             uuid primary key default gen_random_uuid(),
   ot_id          uuid not null references public.ordenes_trabajo(id) on delete cascade,
@@ -72,15 +104,7 @@ create index if not exists mant_reprogramaciones_ot_ot_idx
 create index if not exists mant_reprogramaciones_ot_creado_idx
   on public.mant_reprogramaciones_ot (creado_en);
 
--- ── 2. EL CONTADOR EN LA OT ─────────────────────────────────────────────────
-alter table public.ordenes_trabajo
-  add column if not exists reprogramada_veces integer not null default 0;
-
-comment on column public.ordenes_trabajo.reprogramada_veces is
-  'Cuántas filas tiene la OT en mant_reprogramaciones_ot. Lo mantiene un '
-  'trigger; no se escribe desde la aplicación.';
-
--- ── 3. EL TRIGGER QUE LO MANTIENE ───────────────────────────────────────────
+-- ── 3. EL TRIGGER QUE MANTIENE EL CONTADOR ──────────────────────────────────
 create or replace function public.mant_contar_reprogramaciones()
 returns trigger
 language plpgsql
@@ -88,17 +112,35 @@ security definer
 set search_path = public
 as $$
 declare
-  v_ot uuid;
+  v_ids uuid[];
 begin
-  v_ot := case when tg_op = 'DELETE' then old.ot_id else new.ot_id end;
+  -- Las OT que hay que recontar: la de la fila que entra o sale y, si el
+  -- UPDATE movió `ot_id`, también la de la que se va.
+  if tg_op = 'DELETE' then
+    v_ids := array[old.ot_id];
+  elsif tg_op = 'UPDATE' then
+    v_ids := array[new.ot_id, old.ot_id];
+  else
+    v_ids := array[new.ot_id];
+  end if;
 
-  update public.ordenes_trabajo
+  -- Candado de fila ANTES del recuento, en orden de id: la sentencia que sigue
+  -- toma su foto con el candado ya tomado y ve lo que confirmó la otra
+  -- transacción (ver el encabezado, punto 2). Si la OT ya no existe (cascade
+  -- de un borrado) no bloquea nada y el update de abajo no toca ninguna fila.
+  perform 1
+     from public.ordenes_trabajo
+    where id = any (v_ids)
+    order by id
+      for update;
+
+  update public.ordenes_trabajo o
      set reprogramada_veces = (
        select count(*)::integer
-         from public.mant_reprogramaciones_ot
-        where ot_id = v_ot
+         from public.mant_reprogramaciones_ot r
+        where r.ot_id = o.id
      )
-   where id = v_ot;
+   where o.id = any (v_ids);
 
   return null;
 end;
@@ -108,7 +150,7 @@ drop trigger if exists mant_reprogramaciones_ot_contar
   on public.mant_reprogramaciones_ot;
 
 create trigger mant_reprogramaciones_ot_contar
-  after insert or delete on public.mant_reprogramaciones_ot
+  after insert or delete or update of ot_id on public.mant_reprogramaciones_ot
   for each row execute function public.mant_contar_reprogramaciones();
 
 -- ── 4. PERMISOS ─────────────────────────────────────────────────────────────
@@ -117,7 +159,11 @@ alter table public.mant_reprogramaciones_ot enable row level security;
 -- ENVUELTA: `(select mant_puede_ver())` y no `mant_puede_ver()`. Pelada no
 -- rompe nada y no avisa, y la tabla pasa a costar proporcional a sus filas —
 -- ver 20261014090512. Insert/update/delete: ninguna policy, escribe sólo el
--- cliente admin de las rutas.
+-- cliente admin de las rutas. El `drop` previo es para que una segunda corrida
+-- no aborte con 42710.
+drop policy if exists mant_reprogramaciones_ot_leer
+  on public.mant_reprogramaciones_ot;
+
 create policy mant_reprogramaciones_ot_leer
   on public.mant_reprogramaciones_ot
   for select to authenticated
