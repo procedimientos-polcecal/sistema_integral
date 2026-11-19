@@ -37,7 +37,7 @@ columna `os_id` en `ordenes_trabajo`.
 - Un desplegable se escribe `<Select>`, no `<select>`.
 - Una grilla de tres columnas lleva breakpoint: `grid-cols-1 sm:grid-cols-3`.
 - Un ancho no va suelto al lado de `.input`: va en un `div` que lo envuelva.
-- Verificación: `npm test`, `npm run tipos`, `npm run build`,
+- Verificación: `npm test`, `npx tsc --noEmit`, `npm run build`,
   `node scripts/revisar-arbol-commiteado.mjs`, `node scripts/revisar-responsive.mjs`,
   `node scripts/revisar-exportaciones.mjs`.
 - La migración la aplica **una persona** en el editor SQL de Supabase. Se escribe
@@ -249,7 +249,7 @@ desaparece de la planilla, y eso no es razón para llevarse la OT.
 No hace falta policy nueva: es una columna de una tabla que ya tiene las suyas.
 
 - [ ] **Step 3: Sumar `os_id` al tipo `OrdenTrabajo`.**
-- [ ] **Step 4: `npm run tipos`** → sin errores.
+- [ ] **Step 4: `npx tsc --noEmit`** → sin errores.
 - [ ] **Step 5: Commit** y **avisar al usuario que hay una migración por aplicar**.
       Hasta que la aplique, **ninguna cadena `select()` puede nombrar `os_id`**:
       nombrarla rompe lo que ya andaba.
@@ -330,7 +330,7 @@ it("escribe las dos cuando el master las trae vacias", () => { /* celdas J y K, 
 it("no pisa la prioridad que alguien cargo a mano", () => { /* J ya tiene "URGENTE" → sin celda J, pisadas ["prioridad"] */ });
 it("si el IMPORTRANGE no derramo, no inventa una fila", () => { /* fila vacia → celdas [], y la ruta lo anota como pendiente */ });
 ```
-- [ ] **Step 5: Verificar.** `npm run tipos`, `npm test`,
+- [ ] **Step 5: Verificar.** `npx tsc --noEmit`, `npm test`,
       `node scripts/revisar-exportaciones.mjs` — esta ruta escribe una planilla,
       así que tiene que quedar declarada ahí o sale ROMPE.
 - [ ] **Step 6: Commit.**
