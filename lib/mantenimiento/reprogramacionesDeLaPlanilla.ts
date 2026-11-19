@@ -83,11 +83,33 @@ export const CERRADAS_PARA_REPROGRAMAR: readonly string[] = ["REALIZADO", "CANCE
  * Cuántas filas `planilla` como máximo escribe una corrida. Pasado el tope no
  * se escribe **ninguna** y se dice por qué.
  *
- * Es la misma defensa que `borradoDeEspejo` y que la fórmula del estado, y
+ * Nace de la misma defensa que `borradoDeEspejo` y que la fórmula del estado, y
  * existe por lo mismo: una planilla recalculando devuelve `Cargando…` en unas
  * celdas y vacías las demás, y una columna corrida un lugar —lo del 21/10/2026—
  * hace que todas las fechas lleguen distintas a la vez. Las dos cosas son
  * indistinguibles desde acá de un cambio de fechas masivo de verdad.
+ *
+ * ── PERO NO SE PARECE A `borradoDeEspejo` EN LO QUE MÁS IMPORTA ─────────────
+ *
+ * **Acá frenar PIERDE los movimientos, no los posterga**, y la comparación de
+ * arriba es justamente lo que hace que parezca lo contrario. Allá el freno
+ * corta antes de tocar nada: los datos quedan enteros y confirmar después sigue
+ * borrando lo mismo. Acá el freno corre **antes del upsert**, y el upsert de
+ * esta misma corrida escribe `fecha_ejecucion` igual —`paraLaBase(orden)` la
+ * incluye, y tiene que incluirla porque la planilla manda—. O sea que, para
+ * cuando alguien lee la respuesta, `ordenes_trabajo` ya guarda la fecha nueva:
+ * repetir la llamada con la confirmación encuentra `anterior === nueva` y
+ * escribe **cero** filas.
+ *
+ * Eso es deliberado y no se arregla acá. No importar esas fechas contradiría
+ * «la planilla manda» y podría congelar una fecha indefinidamente; guardar lo
+ * descartado en algún lado es otra cosa, más grande. El freno existe para la
+ * corrida en que la planilla devuelve basura, y ahí perder esas filas **es el
+ * resultado correcto**.
+ *
+ * Lo que no se puede hacer es prometer una salida que no existe: por eso el
+ * mensaje dice que no vuelven. La confirmación sirve **antes**, no después —
+ * sólo si se la manda en la llamada que detecta el movimiento—.
  *
  * **Diez, y no doscientos como `TOPE_DE_DIVERGENCIAS`.** Ese otro recorta y
  * guarda el resto; éste tira todo, así que tiene que poder dispararse. Hoy
@@ -97,9 +119,10 @@ export const CERRADAS_PARA_REPROGRAMAR: readonly string[] = ["REALIZADO", "CANCE
  * apagado sin que se note. Diez es varias veces lo que puede mover una persona
  * en un día y sigue muy por debajo de ese techo.
  *
- * El costo de frenar de más es bajo y conocido: las fechas no se pierden —la
- * planilla manda y el upsert las importa igual—, lo que se pierde es el
- * renglón de historial, y la corrida lo dice en su resumen.
+ * El costo de frenar de más, dicho entero: **las fechas** no se pierden —la
+ * planilla manda y el upsert las importa igual—, pero **los renglones de
+ * historial de esa corrida sí**, para siempre, por lo de arriba. La corrida lo
+ * dice en su resumen, y el mensaje no promete que se recuperen.
  */
 export const TOPE_DE_FILAS_POR_CORRIDA = 10;
 
@@ -128,6 +151,49 @@ export interface FilaDeReprogramacionDeLaPlanilla {
    */
   fecha_anterior: string | null;
   fecha_nueva: string;
+}
+
+/** Una fila del historial, de lo poco que hace falta para saber cuál es la última. */
+export interface FilaDeHistorial {
+  ot_id: string;
+  fecha_nueva: string;
+}
+
+/**
+ * El `fecha_nueva` de la ÚLTIMA fila de historial de cada OT, por número de OT.
+ *
+ * Es lo único contra lo que se compara para no escribir dos veces la misma
+ * transición, así que **es la defensa contra el peor caso de este módulo**: un
+ * duplicado infla `reprogramada_veces` para siempre y en silencio, porque acá
+ * nada borra. Vive en el módulo puro y no en quien llama justamente por eso —
+ * «cuál es la última» es una decisión, y si se rompe no se nota.
+ *
+ * **Las filas llegan YA ORDENADAS** por `(ot_id, creado_en, id)` ascendente y
+ * acá no se reordenan, igual que en `reprogramaciones.ts`: reordenar escondería
+ * un error de quien consulta, y `creado_en` solo no desempata. Lo que hace esta
+ * función es quedarse con la última de cada OT **en el orden en que vienen**,
+ * que es lo que la vuelve probable: pasarle las dos filas al revés tiene que
+ * dar el otro resultado, y eso es un test y no una promesa.
+ *
+ * `idDe` va de número de OT a `ot_id`, que es la forma en que la sincronización
+ * ya tiene el dato. Una fila de historial de una OT que no esté ahí —borrada
+ * entre las dos lecturas— se ignora: no hay con qué nombrarla.
+ */
+export function laUltimaPorOt(
+  historial: readonly FilaDeHistorial[],
+  idDe: ReadonlyMap<number, string>,
+): Map<number, string> {
+  const numeroDe = new Map<string, number>();
+  for (const [numero, id] of idDe) numeroDe.set(id, numero);
+
+  const ultima = new Map<number, string>();
+  for (const h of historial) {
+    const numero = numeroDe.get(h.ot_id);
+    if (numero === undefined) continue;
+    // La última gana: se pisa a propósito, porque vienen en orden.
+    ultima.set(numero, String(h.fecha_nueva));
+  }
+  return ultima;
 }
 
 /** Vacío y nulo son lo mismo, igual que en `contraste.ts`. */
@@ -208,9 +274,14 @@ export function lasQueHayQueRegistrar(
   if (!opciones.sinFreno && filas.length > TOPE_DE_FILAS_POR_CORRIDA) {
     return {
       filas: [],
+      // No promete una salida que no existe: ver el encabezado de
+      // `TOPE_DE_FILAS_POR_CORRIDA`. El upsert de esta misma corrida ya guardó
+      // las fechas, así que repetir la llamada no encuentra nada que registrar.
       freno: `La planilla movió la fecha de ${filas.length} órdenes de una vez y el tope es `
         + `${TOPE_DE_FILAS_POR_CORRIDA}: no se registró ninguna reprogramación. `
-        + `Las fechas se importaron igual. Si el cambio es de verdad, se confirma a mano.`,
+        + `Las fechas se importaron igual, pero esos movimientos NO quedaron en el `
+        + `historial y repetir la sincronización no los recupera. Si el cambio era de `
+        + `verdad, hay que volver a mover las fechas para que se registren.`,
     };
   }
 

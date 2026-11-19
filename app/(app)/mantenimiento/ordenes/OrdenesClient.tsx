@@ -318,16 +318,22 @@ export default function OrdenesClient({
               ` — se guardó la de más abajo. Corregilo en la planilla.`
             : "") +
           // El freno del historial de reprogramaciones, dicho. La ruta ya lo
-          // devolvía y esta pantalla lo tiraba, que es la peor combinación:
-          // el sistema creyendo que avisó. Las fechas se importaron igual, así
-          // que esto no es un fallo de la corrida — es un renglón que falta y
-          // que sólo se recupera volviendo a apretar con la confirmación.
+          // devolvía y esta pantalla lo tiraba, que es la peor combinación: el
+          // sistema creyendo que avisó. El mensaje viene del módulo y ya dice
+          // que esos movimientos no vuelven.
           (body.reprogramaciones_freno ? ` ${body.reprogramaciones_freno}` : "") +
           // Y si no se pudo registrar nada (la migración todavía no corrió, o
           // la escritura falló), también se dice: un historial que no se
           // escribe no se distingue de uno vacío.
+          //
+          // **No se redacta como algo pasajero**, y es a propósito: el upsert
+          // de esta misma corrida ya guardó las fechas de la planilla, así que
+          // volver a sincronizar encuentra los dos lados iguales y no registra
+          // nada. Lo que se perdió, se perdió. Decir "reintentá" acá sería
+          // prometer una salida que no existe.
           (body.reprogramaciones_sin_registrar
-            ? ` No se pudo registrar lo que la planilla movió: ${body.reprogramaciones_sin_registrar}`
+            ? ` No se registró lo que la planilla movió en esta corrida y no se recupera `
+              + `sincronizando de nuevo: ${body.reprogramaciones_sin_registrar}`
             : "")
         : (body.error ?? "No se pudo sincronizar.")
     );

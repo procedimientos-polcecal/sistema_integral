@@ -47,7 +47,8 @@ import { lasQueLesFaltaLaFormula } from "@/lib/mantenimiento/formulaDelEstado";
 import { contrastar, type OrdenDelSistema } from "@/lib/mantenimiento/contraste";
 import { loQueSeGuardaDelContraste } from "@/lib/mantenimiento/divergencias";
 import {
-  lasQueHayQueRegistrar, type OrdenParaReprogramar,
+  lasQueHayQueRegistrar, laUltimaPorOt,
+  type OrdenParaReprogramar, type FilaDeHistorial,
 } from "@/lib/mantenimiento/reprogramacionesDeLaPlanilla";
 import { generarLasPeriodicas } from "@/lib/mantenimiento/generarPeriodicas";
 import { generarLasEncadenadas } from "@/lib/mantenimiento/generarEncadenadas";
@@ -674,7 +675,22 @@ async function anotarLasDivergencias(
 async function registrarLoQueCorrioLaPlanilla(
   admin: ReturnType<typeof createAdminClient>,
   deLaPlanilla: readonly OrdenLeida[],
-  opciones: { sinFreno?: boolean }
+  // Se llama `sinFrenoDeReprogramaciones` y NO `sinFreno` a propósito, aunque
+  // acá adentro no haya otro freno con el que confundirlo.
+  //
+  // `OpcionesDeCorrida` lleva las DOS llaves, así que pasarle `opciones` entero
+  // —un `registrar...(admin, leidas, opciones)`, que parece una limpieza—
+  // **compila con cualquiera de los dos nombres**: TypeScript acepta
+  // propiedades de más cuando el objeto no es un literal fresco, y se comprobó
+  // que compila. Lo que cambia es QUÉ LLAVE LEE. Con el nombre corto, esa
+  // limpieza ataba en silencio la confirmación del borrado masivo a este freno
+  // —quien confirma un borrado aceptaría además cuatrocientas reprogramaciones
+  // inventadas—; con éste, lee la que corresponde y no pasa nada.
+  //
+  // O sea: el nombre no impide el atajo, lo vuelve inofensivo. Es lo que se
+  // puede garantizar acá, y decirlo como si el compilador lo frenara sería
+  // prometer una defensa que no existe.
+  opciones: { sinFrenoDeReprogramaciones?: boolean }
 ): Promise<{ cuantas: number; freno: string | null; error: string | null }> {
   const vacio = { cuantas: 0, freno: null };
   try {
@@ -691,32 +707,39 @@ async function registrarLoQueCorrioLaPlanilla(
     // La última fila de historial de cada OT, que es contra lo que se compara
     // para no escribir dos veces la misma transición. Se trae entera y no con
     // un `.in()` de los ids candidatos: un `.in()` con muchos ids arma una URL
-    // que PostgREST rechaza con un 400 mudo. El `.order()` no es decorativo —
-    // un `.range()` sin orden deja que la base devuelva las filas como quiera y
-    // dos tandas con órdenes distintos pueden saltearse una; acá eso sería un
+    // que PostgREST rechaza con un 400 mudo.
+    //
+    // Los tres `.order()` no son decorativos y el tercero tampoco. Un `.range()`
+    // sin orden deja que la base devuelva las filas como quiera, y dos tandas
+    // con órdenes distintos pueden saltear o repetir una; acá eso sería un
     // duplicado escrito, que es lo único que esta lectura existe para evitar.
-    const historial = await traerTodo<{ ot_id: string; fecha_nueva: string }>((desde, hasta) =>
+    // `(ot_id, creado_en)` **no alcanza** para desempatar: dos filas de la
+    // misma OT con el mismo `creado_en` —dos inserciones en la misma
+    // transacción, donde `now()` es idéntico— quedan en orden indefinido, y si
+    // caen sobre el corte de 1.000 una se pierde o se cuenta dos veces. `id`
+    // cierra el orden total. Mismo motivo por el que lo agrega
+    // `lib/seguridadHigiene/respaldoEnDrive.ts`.
+    const historial = await traerTodo<FilaDeHistorial>((desde, hasta) =>
       admin
         .from("mant_reprogramaciones_ot")
         .select("ot_id, fecha_nueva")
         .order("ot_id")
         .order("creado_en")
+        .order("id")
         .range(desde, hasta)
     );
-    const ultimaPorId = new Map<string, string>();
-    for (const h of historial) ultimaPorId.set(h.ot_id, String(h.fecha_nueva));
 
-    const ultimaPorOt = new Map<number, string>();
-    for (const o of delSistema) {
-      const ultima = ultimaPorId.get(o.id);
-      if (ultima) ultimaPorOt.set(o.ot_number, ultima);
-    }
+    // Quedarse con la última de cada OT es una decisión —cuál es la última— y
+    // por eso vive en el módulo puro, donde tiene tests: si se rompe, la
+    // protección contra duplicados deja de funcionar sin que nada avise.
+    const ultimaPorOt = laUltimaPorOt(historial, idDe);
 
     // El freno sólo lo levanta su propia llave, que llega hasta acá desde
     // `sinFrenoDeReprogramaciones`. Compartir el `sinFreno` del borrado haría
     // que confirmar un borrado autorizara además esto, que es otra cosa.
     const { filas, freno } = lasQueHayQueRegistrar(
-      delSistema, deLaPlanilla, ultimaPorOt, { sinFreno: opciones.sinFreno }
+      delSistema, deLaPlanilla, ultimaPorOt,
+      { sinFreno: opciones.sinFrenoDeReprogramaciones }
     );
     if (freno) return { cuantas: 0, freno, error: null };
     if (filas.length === 0) return { cuantas: 0, freno: null, error: null };
@@ -933,7 +956,7 @@ export async function sincronizarOrdenes(opciones: OpcionesDeCorrida = {}): Prom
   // guardara el análisis de reprogramaciones vería el 9 % del universo.
   // Va después de las divergencias y antes del upsert, y no tira nunca.
   const reprogramaciones = await registrarLoQueCorrioLaPlanilla(admin, leidasDeLaPlanilla, {
-    sinFreno: opciones.sinFrenoDeReprogramaciones,
+    sinFrenoDeReprogramaciones: opciones.sinFrenoDeReprogramaciones,
   });
 
   let guardadas = 0;
