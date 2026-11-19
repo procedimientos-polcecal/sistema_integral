@@ -89,6 +89,17 @@ describe("celdasDelAltaDeOS", () => {
     const r = celdasDelAltaDeOS({ ...base, sector: "Sector nuevo" }, 281);
     expect(r.ok).toBe(false);
   });
+  it.each(["", "   "])("se niega con el equipo vacio (%j): cero valores en G..T desalinea", (equipo) => {
+    const r = celdasDelAltaDeOS({ ...base, equipo }, 281);
+    expect(r.ok).toBe(false);
+    expect((r as { error: string }).error).toContain("equipo");
+  });
+  it.each(["", "   "])("se niega con el sector vacio (%j)", (sector) => {
+    expect(celdasDelAltaDeOS({ ...base, sector }, 281).ok).toBe(false);
+  });
+  it.each(["area", "descripcion"] as const)("se niega con %s vacia", (campo) => {
+    expect(celdasDelAltaDeOS({ ...base, [campo]: "  " }, 281).ok).toBe(false);
+  });
   it("se niega si la fecha no es valida", () => {
     expect(celdasDelAltaDeOS({ ...base, fecha: new Date("x") }, 281).ok).toBe(false);
   });

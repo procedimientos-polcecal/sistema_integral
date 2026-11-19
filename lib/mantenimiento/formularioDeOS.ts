@@ -14,8 +14,9 @@
  *
  * El formulario tiene **catorce columnas de equipo**, `G` a `T`, una por sector,
  * porque pregunta por el equipo después de elegir el sector. De cada respuesta
- * se llena exactamente una. El master las junta con `FLATTEN`, que tira las
- * vacías y no sabe de qué fila venía cada valor: si el alta pusiera el equipo
+ * se llena exactamente una. El master **de hoy** las junta con `FLATTEN`
+ * (la fórmula nueva de la Tarea 4 concatena por fila y no tira nada), que tira
+ * las vacías y no sabe de qué fila venía cada valor: si el alta pusiera el equipo
  * en cualquier columna, o en dos, desalinearía la columna EQUIPO entera —el
  * error que ya está vivo en las OS 13 y 14—. Por eso el alta **se niega** ante
  * un sector sin columna en vez de adivinar una: una fila que entra por la
@@ -152,6 +153,24 @@ export function celdasDelAltaDeOS(
   const texto = (v: string | null | undefined): string =>
     textoParaLaCelda(String(v ?? "").trim());
 
+  // Lo que no se puede dejar vacío. El equipo es el que protege la alineación:
+  // una fila con cero valores en G..T es el modo de falla de la OS 14, y
+  // escribir "" no ayuda porque el master la tira igual. Negarse es la salida.
+  // El sector vacío ya lo frena `columnaDeEquipo`; área y descripción van a
+  // columnas fijas y no desalinean, pero una OS sin ellas no es una OS.
+  const faltan = (
+    [["equipo", datos.equipo], ["área", datos.area], ["descripción", datos.descripcion]] as const
+  ).filter(([, v]) => String(v ?? "").trim() === "").map(([n]) => n);
+  if (faltan.length > 0) {
+    return {
+      ok: false,
+      error:
+        `Falta ${faltan.join(" y ")}: no se escribe la fila.` +
+        `Con el equipo vacío la fila queda sin ningún valor en las columnas de equipo ` +
+        `y corre la columna EQUIPO del master, como pasó con la OS 14.`,
+    };
+  }
+
   const candidatas: Celda[] = [
     { columna: COL.numero, valor: osNumber },
     { columna: COL.marca, valor: marca },
@@ -166,7 +185,8 @@ export function celdasDelAltaDeOS(
   }
 
   // Lo vacío no se escribe: una celda en blanco escrita deja de serlo para el
-  // `FILTER` del master.
+  // `FILTER` del master. Vale para las celdas comunes y no para la del equipo,
+  // que ya se garantizó no vacía arriba.
   return { ok: true, celdas: candidatas.filter((c) => c.valor !== "") };
 }
 
