@@ -223,6 +223,11 @@ export async function avisarDeLasOT(
       admin
         .from("ordenes_trabajo")
         .select("ot_number, estado, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, sector_raw, descripcion")
+        // Sin orden explícito las páginas no son una partición estable: la
+        // sincronización escribe esta tabla cada diez minutos y una fila movida
+        // entre dos páginas se saltearía. Acá una OT salteada no se anuncia nunca.
+        // Además fija cuáles tres nombra `cuerpoDeVarias`.
+        .order("ot_number", { ascending: true })
         .range(desde, hasta)
     );
     const atrasadas = lasQueSeAtrasaron(ordenes, hoy);
@@ -278,6 +283,9 @@ export async function avisarDeLasOT(
   } catch (e) {
     const motivo = e instanceof Error ? e.message : String(e);
     console.error("mantenimiento: no se pudo avisar de las OT:", motivo);
+    // `error` aparte de `motivo`: «fuera de hora» es una decisión y esto es un
+    // fallo, y quien llama (la ruta, que contesta 503) tiene que poder
+    // distinguirlos sin comparar frases.
     return { ...vacio, motivo, error: motivo };
   }
 }

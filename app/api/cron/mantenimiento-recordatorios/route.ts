@@ -32,5 +32,9 @@ export async function GET(request: Request) {
   if (rechazo) return rechazo;
 
   const resultado = await avisarDeLasOT(createAdminClient(), hoyEnArgentina());
+  // Un fallo es un 503 y no un 200: el llamador es un cron, donde el código de
+  // estado es la única señal, y este recurso no escribe en `sincronizaciones`.
+  // Sin esto fallaría todos los días y el único síntoma sería que no llegan pushes.
+  if (resultado.error) return NextResponse.json(resultado, { status: 503 });
   return NextResponse.json(resultado);
 }
