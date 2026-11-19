@@ -17,7 +17,7 @@
  */
 
 import {
-  losQueEstanEnLaLista, escribirEnLaUrl, conLaPagina, hayAlgunFiltro as hayAlguno,
+  losQueEstanEnLaLista, escribirEnLaUrl, conLaPagina, elSiONo, hayAlgunFiltro as hayAlguno,
 } from "@/lib/core/filtrosUrl";
 import { fechaDeTexto } from "@/lib/core/fechas";
 import { ESPECIALIDADES, ESTADOS_DE_OT } from "./ordenes";
@@ -239,12 +239,23 @@ export interface FiltrosOt {
   proveedor: string[];
   sector: string[];
   equipo: string[];
+  /**
+   * «Se le pasó la fecha», el mismo criterio que `estaAtrasada` de `alertas.ts`
+   * (abierta y con la fecha de inicio —o la pendiente— anterior a hoy).
+   *
+   * **No es un valor más de `estado`**: ese vocabulario espeja el de la
+   * planilla y `ATRASADO` ahí es lo que alguien escribió en la celda, que no
+   * es lo mismo. Meterle un valor inventado rompería la validación contra
+   * `ESTADOS_DE_OT`. Es un sí o un no, y viaja como `atrasada=1`.
+   */
+  atrasada: boolean;
 }
 
 export const FILTROS_VACIOS: FiltrosOt = {
   busqueda: "", campoFecha: "", orden: "", desde: "", hasta: "",
   estado: [], especialidad: [], tipo: [], quien: [],
   prioridad: [], proveedor: [], sector: [], equipo: [],
+  atrasada: false,
 };
 
 /** Las listas contra las que se validan los filtros que son referencias. */
@@ -281,6 +292,7 @@ export function leerFiltrosDeLaUrl(
     proveedor: losQueEstanEnLaLista(params, "proveedor", catalogos.proveedores),
     sector: losQueEstanEnLaLista(params, "sector", catalogos.sectores),
     equipo: losQueEstanEnLaLista(params, "equipo", catalogos.equipos),
+    atrasada: elSiONo(params, "atrasada"),
   };
 }
 
@@ -309,6 +321,7 @@ const NOMBRES: readonly [keyof FiltrosOt, string][] = [
   ["proveedor", "proveedor"],
   ["sector", "sector"],
   ["equipo", "equipo"],
+  ["atrasada", "atrasada"],
 ];
 
 /**

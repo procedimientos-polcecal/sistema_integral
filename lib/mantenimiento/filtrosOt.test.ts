@@ -98,6 +98,7 @@ describe("escribir los filtros en la URL", () => {
       prioridad: ["🟠 Alta"],
       proveedor: ["p-piparo"],
       sector: ["s-filler1", "s-filler2"],
+      atrasada: true,
       equipo: ["e-1"],
     };
     expect(leer(escribirFiltrosEnLaUrl(filtros))).toEqual(filtros);
@@ -361,5 +362,29 @@ describe("en que orden se lista", () => {
    */
   it("no cuenta como filtro puesto", () => {
     expect(hayAlgunFiltro({ ...FILTROS_VACIOS, orden: "numero" })).toBe(false);
+  });
+});
+
+describe("el filtro «atrasada»", () => {
+  it("lee atrasada=1 de la url", () => {
+    expect(leer("atrasada=1").atrasada).toBe(true);
+  });
+  it("cualquier otro valor es false", () => {
+    expect(leer("atrasada=0").atrasada).toBe(false);
+    expect(leer("atrasada=true").atrasada).toBe(false);
+    expect(leer("").atrasada).toBe(false);
+  });
+  it("escribe atrasada=1 y no escribe nada cuando es false", () => {
+    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, atrasada: true })).toBe("atrasada=1");
+    expect(escribirFiltrosEnLaUrl({ ...FILTROS_VACIOS, atrasada: false })).toBe("");
+  });
+  it("cuenta como filtro puesto", () => {
+    expect(hayAlgunFiltro({ ...FILTROS_VACIOS, atrasada: true })).toBe(true);
+  });
+  it("viaja a la consulta de la ruta", () => {
+    expect(consultaDeLaRuta({ ...FILTROS_VACIOS, atrasada: true }, 1)).toContain("atrasada=1");
+  });
+  it("no es un estado: no entra al vocabulario de la planilla", () => {
+    expect(leer("estado=ATRASADA").estado).toEqual([]);
   });
 });

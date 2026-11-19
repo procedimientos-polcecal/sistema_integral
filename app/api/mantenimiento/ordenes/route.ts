@@ -39,6 +39,7 @@ import { filtroDePrioridadConGut } from "@/lib/mantenimiento/prioridad";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { repuestosDelCuerpo, filasParaLaBase } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import { condicionDeAtrasada, ESTADOS_CERRADOS } from "@/lib/mantenimiento/alertas";
 import { esquemaGut } from "@/lib/mantenimiento/gut";
 import { esquemaFalla } from "@/lib/mantenimiento/fallas";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
@@ -168,6 +169,17 @@ export async function GET(request: Request) {
   if (sector.length)       query = query.in("sector_id", sector);
   if (equipo.length)       query = query.in("equipment_id", equipo);
   if (equipment_id)        query = query.eq("equipment_id", equipment_id);
+
+  // «Atrasada» es que se le pasó la fecha, no lo que marca la planilla: la
+  // condición es la misma que `estaAtrasada` y está verificada contra
+  // producción (34 órdenes al 19/11/2026). Va después del `.or()` de la
+  // prioridad a propósito: dos `.or()` seguidos se combinan con AND, y lo que
+  // se quiere es «atrasada Y de esa prioridad», no una u otra.
+  if (searchParams.get("atrasada") === "1") {
+    query = query
+      .not("estado", "in", `(${ESTADOS_CERRADOS.join(",")})`)
+      .or(condicionDeAtrasada(hoyEnArgentina()));
+  }
 
   // El rango corre sobre la fecha que se haya elegido, y los dos extremos
   // entran: quien pone "hasta el 31" espera que el 31 cuente. `columnaDeFecha`
