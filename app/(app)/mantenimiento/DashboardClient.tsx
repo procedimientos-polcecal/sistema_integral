@@ -13,6 +13,9 @@ import { Modal, PieDeModal } from "@/components/Modal";
 import { useCargar } from "@/lib/core/useCargar";
 import type { FilaMtbf, Mtbf } from "@/lib/mantenimiento/mtbf";
 import { DIAS_DE_CALENDARIO, diasCorridos, fechaCorta } from "@/lib/mantenimiento/mtbfVista";
+import {
+  useIndicadoresPorSector, FiabilidadPorSector, EvolucionPorSector, ParadasDeSector,
+} from "./IndicadoresPorSector";
 
 /**
  * Los gráficos, aparte: `recharts` son ~350 KB y su JS bloqueaba el primer
@@ -501,6 +504,15 @@ export default function DashboardClient({
   const [plantFilter, setPlantFilter] = useState("TODAS");
   const [sectorFilter, setSectorFilter] = useState("TODOS");
 
+  // Se pide **una sola vez** y el estado baja a los tres bloques: tres
+  // pedidos de lo mismo serían tres lecturas de 2.500 filas para dibujar lo
+  // mismo. Llega después del primer pintado, como el MTBF.
+  const porSector = useIndicadoresPorSector();
+  const filtroDeSector = useMemo(
+    () => ({ empresa: plantFilter, sector: sectorFilter }),
+    [plantFilter, sectorFilter]
+  );
+
   const [statusModal, setStatusModal] = useState<{ sector: any } | null>(null);
   const [newStatus, setNewStatus] = useState("");
   const [reason, setReason] = useState("");
@@ -690,6 +702,12 @@ export default function DashboardClient({
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Indicadores</h2>
         <div className="space-y-5">
 
+          <FiabilidadPorSector
+            datos={porSector.datos}
+            filtro={filtroDeSector}
+            recargar={porSector.recargar}
+          />
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <KpiCard label="Total equipos"    value={total}           color="var(--text-primary)" />
             <KpiCard label="Operativos"       value={operativos}      color="var(--status-op)" sub={`${pctOperativo}% del total`} />
@@ -796,6 +814,10 @@ export default function DashboardClient({
             se mide. */}
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Evolución mensual</h2>
         <div className="space-y-5">
+
+          <EvolucionPorSector datos={porSector.datos} filtro={filtroDeSector} />
+
+          <ParadasDeSector datos={porSector.datos} filtro={filtroDeSector} />
 
           <OrdenesPorMes datos={otPorMes} delMes={otMes} mes={mesActual} />
 
