@@ -42,7 +42,15 @@ export interface ConteosParaAvisos {
  */
 const AVISOS: { clave: keyof ConteosParaAvisos; id: string; titulo: string; href: string; modulo: Modulo | null }[] = [
   { clave: "rrhhSinClasificar", id: "rrhh-sin-clasificar", titulo: "Ausencias sin clasificar", modulo: "rrhh", href: "/rrhh/asistencia?tab=dia" },
-  { clave: "mantenimientoAtrasadas", id: "mant-atrasadas", titulo: "Órdenes de trabajo atrasadas", modulo: "mantenimiento", href: "/mantenimiento/ordenes?estado=ATRASADO" },
+  // El id es nuevo a propósito: el conteo pasó de 21 (lo que marca la planilla)
+  // a 34 (las que se pasaron de fecha), y con el id viejo el salto saldría como
+  // una novedad falsa de 13 contra `avisos_fotos` y `avisos_vistos`. El viejo
+  // `mant-atrasadas` queda huérfano en `notificaciones_descartes`, que es
+  // inofensivo, y **no se reusa**: dárselo a otro conteo le entregaría a quien
+  // lo descartó un aviso ya silenciado que nunca vio.
+  // El href es el mismo literal que usa `lib/mantenimiento/recordatorioDeOT.ts`:
+  // si cambia el nombre del filtro, hay que cambiar los dos.
+  { clave: "mantenimientoAtrasadas", id: "mant-atrasadas-por-fecha", titulo: "Órdenes de trabajo atrasadas", modulo: "mantenimiento", href: "/mantenimiento/ordenes?atrasada=1" },
   // Órdenes en las que el sistema y la planilla dicen cosas distintas. La
   // tabla se rehace en cada sincronización, así que su tamaño es la
   // divergencia de hoy y no un acumulado: lo que se arregla desaparece solo.

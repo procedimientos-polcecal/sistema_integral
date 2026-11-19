@@ -45,13 +45,19 @@ describe("avisosDeConteos", () => {
 
   it("genera un aviso por cada conteo mayor que cero", () => {
     const avisos = avisosDeConteos({ mantenimientoAtrasadas: 20, facturacionSinVincular: 1 });
-    expect(avisos.map((a) => a.id)).toEqual(["mant-atrasadas", "facturacion-sin-vincular"]);
+    expect(avisos.map((a) => a.id)).toEqual(["mant-atrasadas-por-fecha", "facturacion-sin-vincular"]);
     expect(avisos[0]).toEqual({
-      id: "mant-atrasadas",
+      id: "mant-atrasadas-por-fecha",
       titulo: "Órdenes de trabajo atrasadas",
       cantidad: 20,
-      href: "/mantenimiento/ordenes?estado=ATRASADO",
+      href: "/mantenimiento/ordenes?atrasada=1",
     });
+  });
+
+  it("el aviso de atrasadas lleva el id nuevo y enlaza al filtro que muestra lo mismo", () => {
+    const [aviso] = avisosDeConteos({ mantenimientoAtrasadas: 34 });
+    expect(aviso.id).toBe("mant-atrasadas-por-fecha");
+    expect(aviso.href).toBe("/mantenimiento/ordenes?atrasada=1");
   });
 
   /*

@@ -8,7 +8,7 @@ const aviso = (id: string): Notificacion => ({ id, titulo: id, cantidad: 1, href
 
 describe("moduloDelAviso", () => {
   it("un aviso de conteo sale de su definicion", () => {
-    expect(moduloDelAviso("mant-atrasadas")).toBe("mantenimiento");
+    expect(moduloDelAviso("mant-atrasadas-por-fecha")).toBe("mantenimiento");
     expect(moduloDelAviso("compras-por-aprobar")).toBe("compras");
     expect(moduloDelAviso("syh-vencidas")).toBe("seguridad_higiene");
     expect(moduloDelAviso("calidad-carbonilla-bandeja")).toBe("calidad");
@@ -109,7 +109,7 @@ describe("moduloDelAviso", () => {
 });
 
 describe("soloDeSusModulos", () => {
-  const avisos = [aviso("mant-atrasadas"), aviso("ritmo-trituracion"), aviso("salud-x/y")];
+  const avisos = [aviso("mant-atrasadas-por-fecha"), aviso("ritmo-trituracion"), aviso("salud-x/y")];
 
   /*
    * EL BUG QUE ESTE TEST CIERRA, y la razon por la que `PREFIJOS_DECLARADOS`
@@ -125,7 +125,7 @@ describe("soloDeSusModulos", () => {
 
   it("deja solo los de sus modulos", () => {
     expect(soloDeSusModulos(avisos, ["mantenimiento"]).map((a) => a.id)).toEqual([
-      "mant-atrasadas",
+      "mant-atrasadas-por-fecha",
       "salud-x/y",
     ]);
   });
