@@ -110,13 +110,6 @@ export interface RespuestasDelAviso {
   gut_tendencia: string;
 }
 
-export const RESPUESTAS_VACIAS: RespuestasDelAviso = {
-  especialidad: "", quien: "", fecha_ejecucion: "", fecha_fin: "",
-  descripcion: "", tipo: "", prioridad: "",
-  sector_id: "", sector_raw: "", equipment_id: "", equipo_raw: "", equipo_code: "",
-  gut_gravedad: "", gut_urgencia: "", gut_tendencia: "",
-};
-
 /**
  * Con qué arranca el formulario.
  *
