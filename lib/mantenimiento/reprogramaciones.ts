@@ -71,3 +71,32 @@ export function diasDelMovimiento(m: Reprogramacion): number | null {
   if (!m.fecha_anterior) return null;
   return diasEntre(m.fecha_anterior, m.fecha_nueva);
 }
+
+/**
+ * La fila que se inserta en `mant_reprogramaciones_ot` cuando una persona usa
+ * Postergar. Se arma acá y no en la ruta para poder probarla.
+ *
+ * La etiqueta se copia además del código: si la razón se desactiva o se
+ * renombra después, el movimiento sigue diciendo lo que decía cuando pasó.
+ * `reprogramada_veces` no se escribe nunca desde acá: lo mantiene un trigger.
+ */
+export function filaDeReprogramacionDelSistema(p: {
+  otId: string;
+  fechaAnterior: string | null;
+  fechaNueva: string;
+  razon: string;
+  razonEtiqueta: string | null;
+  justificacion: string;
+  usuarioId: string;
+}): Record<string, unknown> {
+  return {
+    ot_id: p.otId,
+    fecha_anterior: p.fechaAnterior,
+    fecha_nueva: p.fechaNueva,
+    origen: "sistema",
+    razon: p.razon,
+    razon_etiqueta: p.razonEtiqueta,
+    justificacion: p.justificacion.trim(),
+    creado_por: p.usuarioId,
+  };
+}

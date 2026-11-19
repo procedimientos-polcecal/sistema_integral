@@ -10,6 +10,7 @@ import {
 import { corregirLaFechaComprometida } from "@/lib/mantenimiento/formulario";
 import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
 import { celdaDeObservacionPrevia } from "@/lib/mantenimiento/notas";
+import { filaDeReprogramacionDelSistema } from "@/lib/mantenimiento/reprogramaciones";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -124,6 +125,33 @@ export async function POST(request: Request, { params }: Params) {
     }, { status: 500 });
   }
 
+  // ── 2b. El movimiento como dato, para el listado y el análisis ────────────
+  //
+  // **Si este insert falla se contesta 200 con un aviso y no un error.** A esta
+  // altura la fecha ya está escrita en la planilla y guardada en la orden: un
+  // 500 invita a reintentar, y reintentar posterga la orden OTRA VEZ, otros
+  // siete días. Lo que se pierde es el rastro, y eso se dice con todas las
+  // letras en `reprogramacion_error`; lo ya hecho no se puede deshacer.
+  // La fila de `auditoria` de más abajo es otro registro, con otro lector
+  // (sólo `admin_sistema`), y no se toca.
+  const { data: razonDelMenu } = await admin
+    .from("mant_razones_de_postergacion")
+    .select("etiqueta")
+    .eq("codigo", String(body.razon))
+    .maybeSingle();
+
+  const { error: errorHistorial } = await admin
+    .from("mant_reprogramaciones_ot")
+    .insert(filaDeReprogramacionDelSistema({
+      otId: id,
+      fechaAnterior: orden.fecha_ejecucion,
+      fechaNueva: nueva,
+      razon: String(body.razon),
+      razonEtiqueta: razonDelMenu?.etiqueta ?? null,
+      justificacion: String(body.justificacion),
+      usuarioId: user.id,
+    }));
+
   // ── 3. La justificación, que es obligatoria y queda como historial ────────
   //
   // Mismo camino que las justificaciones de siempre: no se editan, y a la
@@ -161,5 +189,8 @@ export async function POST(request: Request, { params }: Params) {
     data: { fecha_ejecucion: nueva },
     nota_error: errorNota?.message ?? null,
     planilla_error: planillaNota,
+    reprogramacion_error: errorHistorial
+      ? `La orden se postergó, pero el movimiento no quedó registrado en el historial (${errorHistorial.message}). No hace falta volver a postergar.`
+      : null,
   });
 }
