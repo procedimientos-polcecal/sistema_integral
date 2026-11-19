@@ -20,7 +20,7 @@ import {
  * El calendario de selección: un mes (o el rango que pida la grilla) de órdenes
  * de trabajo, día por día, con cuánta gente del taller hay cada uno.
  *
- * Lo abre quien elige la fecha de ejecución de una OT, para ver qué tiene cada
+ * Lo abre quien elige la fecha de inicio de una OT, para ver qué tiene cada
  * día antes de decidir. Muestra órdenes y no eventos de la agenda, y no filtra
  * por estado: ver el trabajo que hay, cerrado o no, es lo que sirve para decidir
  * dónde poner el siguiente.
@@ -91,8 +91,12 @@ export async function GET(request: Request) {
     const filas = await traerTodo((d, h) =>
       supabase
         .from("ordenes_trabajo")
+        // `id`, `app_created` y `estado` entran para que la grilla pueda decidir
+        // sola si una orden se puede mover (`porQueNoSePuedeMover`) y llamar a
+        // `postergar` sin otro viaje. No son dato sensible: quien llega acá ya
+        // ve las órdenes enteras en el listado.
         .select(
-          "ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, especialidad, tipo, quien, descripcion, sector_raw, equipo_raw"
+          "id, ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, especialidad, tipo, quien, descripcion, sector_raw, equipo_raw, app_created, estado"
         )
         .or(`fecha_ejecucion.lte.${hasta},fecha_ejecucion_pendiente.lte.${hasta}`)
         .or(

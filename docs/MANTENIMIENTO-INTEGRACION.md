@@ -2190,6 +2190,75 @@ bug nuevo.
   `calculos_diarios` después del recálculo. Es anterior a este trabajo y es de
   RRHH, no de acá.
 
+### Y la otra mitad de programar: el mes de órdenes (17–18/11/2026)
+
+Programar el taller es decidir **el trabajo** y **la gente**, y cada cosa tiene
+su pantalla. Ninguna de las dos sabía nada del calendario de órdenes, así que
+para ubicar un trabajo había que tener la otra mitad en la cabeza. Desde el
+18/11/2026 **las dos llevan una pestaña «Mes»** con el mismo calendario:
+
+| En el menú | La ruta | Sus pestañas |
+|---|---|---|
+| **Programación** | `/mantenimiento/planificacion` | Planes · **Mes** |
+| **Asignación RR.HH** | `/mantenimiento/programacion` | Semana · **Mes** |
+
+(Los dos rótulos no coinciden con su ruta **a propósito** desde el 17/11/2026 —
+el porqué está en `lib/core/nav.ts`—, y eso es lo primero que confunde al leer
+esto. Por eso el componente de la pestaña,
+[`MesDeOrdenes.tsx`](../app/(app)/mantenimiento/ordenes/MesDeOrdenes.tsx), no
+vive en ninguna de las dos carpetas sino al lado del calendario.)
+
+El calendario es el mismo que se abre al cargar una OT —el de «Ver el mes»—,
+que desde este trabajo vive en
+[`CalendarioDeOT.tsx`](../app/(app)/mantenimiento/ordenes/CalendarioDeOT.tsx) y
+lo comparten las tres pantallas. `CalendarioDeFecha` quedó como lo que de
+verdad es de su uso: el `Modal` y su título.
+
+Lo que cambia es **qué se hace con un día**. En el alta de una OT se toca un día
+y esa fecha va al campo; acá se abre el día, se elige una orden y se la corre a
+otro. Es un `modo` y no dos props sueltas, para que no puedan estar los dos
+prendidos.
+
+Cinco cosas que no se deducen del código:
+
+- **Mover una OT no es un update: es `postergar`.** La misma ruta que el botón
+  de la orden, con todo lo que eso trae — la planilla primero, porque es donde
+  manda la fecha; `fecha_ejecucion_pendiente` para que la sincronización del
+  medio no la pise; justificación obligatoria; y auditoría con el par
+  viejo/nuevo. Es **el mismo `PostergarOTModal`** del listado de órdenes, con un
+  `destino` de más: son los dos únicos lugares que lo montan, y que sea uno solo
+  es lo que mantiene la justificación obligatoria en los dos caminos.
+- **El día en el que la grilla pinta una orden NO es el día desde el que esa
+  ruta cuenta.** La grilla usa `fechaParaElCalendario` —la pendiente si la hay—
+  y `postergar` recibe *cuántos días* y los suma siempre a `fecha_ejecucion`. En
+  una orden con pendiente las dos difieren, y contar contra lo que se ve en
+  pantalla la mandaría a un día que nadie eligió, **sin error y sin aviso**. Por
+  eso `diasParaLlegarA` pide `fecha_ejecucion` y la grilla la manda cruda junto
+  a la que pinta; está fijado con un test en `calendarioDeOT.test.ts`.
+- **Sólo hacia adelante y hasta 90 días.** No es una decisión de la pantalla:
+  `loQueFaltaParaPostergar` exige un entero positivo y de hasta
+  `MAXIMO_DE_DIAS`. Adelantar una orden no existe hoy en ninguna punta del
+  sistema, así que el calendario no lo ofrece en vez de ofrecerlo y fallar. El
+  caso real igual entra: la mayoría de las órdenes abiertas tiene la fecha
+  **vencida**, y correrlas a un día de esta semana es ir hacia adelante.
+- **La mayoría de las órdenes no se puede mover, y es lo esperado.** Medido el
+  17/11/2026 contra producción: de las **55 órdenes abiertas** (`ATRASADO`,
+  `POR_HACER`, `EN_PROCESO`), **17 son del sistema** y 38 entraron por el
+  formulario, donde la fecha vive en la pestaña que maneja Google Forms. En el
+  total histórico es peor —222 de 2.490—. Por eso una orden que no se puede
+  mover **dice por qué** en vez de quedarse sin botón: con 38 de 55 mudas, la
+  pantalla parecería rota justo en el caso más común. Lo mismo el día que no
+  puede recibirla: se apaga **y** explica.
+- **La lista de estados cerrados es la tercera con los mismos dos valores**
+  (`REALIZADO`, `SUSPENDIDA`), junto a `CERRADAS` de `alertas.ts` y
+  `CERRADAS_GUT` de `gut.ts`, y **tampoco se unifica**, por el mismo motivo que
+  aquellas dos no se unifican entre sí. Si aparece un estado nuevo hay que mirar
+  las tres.
+
+Lo que **no** se comprobó, y es lo mismo que arrastra toda la pantalla: ningún
+navegador la abrió con una sesión real. Build, `tsc` y los tests pasan; que el
+movimiento de una orden llegue a la planilla no lo probó nadie todavía.
+
 ## El cuaderno de Piparo: leer una foto y sacar las OT (01–02/11/2026)
 
 Piparo entrega su mes en un **cuaderno manuscrito** y no con partes preimpresos

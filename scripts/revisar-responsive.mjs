@@ -85,11 +85,19 @@ export const CALENDARIOS = [
   { ruta: "app/(app)/remises/semana/SemanaClient.tsx", cantidad: 1 },
   { ruta: "app/(app)/cantera/destape/DestapeClient.tsx", cantidad: 2 },
   { ruta: "app/(app)/trituracion/partes/PartesClient.tsx", cantidad: 2 },
-  // El calendario de la fecha de ejecución de una OT. Mide ~47 px por día en un
-  // teléfono (375 menos los márgenes del modal), y por eso cada día muestra a lo
-  // sumo tres fichas y el resto va en «+N más»: con más, la grilla se desarma.
-  // `cantidad: 2` son la de los nombres de los días y la de las celdas.
-  { ruta: "app/(app)/mantenimiento/ordenes/CalendarioDeFecha.tsx", cantidad: 2 },
+  // El mes de órdenes de trabajo: lo usan el alta de una OT (adentro del modal
+  // `CalendarioDeFecha`) y la pestaña «Mes» de Programación. Mide ~47 px por
+  // día en un teléfono (375 menos los márgenes), y por eso cada día muestra a
+  // lo sumo tres fichas y el resto va en «+N más»: con más, la grilla se
+  // desarma. `cantidad: 2` son la de los nombres de los días y la de las
+  // celdas.
+  //
+  // Estaba a nombre de `CalendarioDeFecha.tsx` hasta el 17/11/2026, cuando la
+  // grilla se mudó a `CalendarioDeOT.tsx` para que la compartieran las dos
+  // pantallas. El modal quedó sin ningún `grid-cols-7`, así que **la entrada se
+  // muda y no se duplica**: dejar las dos haría pasar por buena una grilla de
+  // siete columnas nueva en el modal.
+  { ruta: "app/(app)/mantenimiento/ordenes/CalendarioDeOT.tsx", cantidad: 2 },
   // La semana de la Agenda: no es un calendario del mes sino la cuadrícula de
   // siete días con sus horas, y el motivo es el mismo —la semana tiene siete
   // días y con menos columnas deja de ser la semana—. En un teléfono esta

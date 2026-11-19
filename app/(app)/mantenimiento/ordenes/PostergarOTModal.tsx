@@ -5,7 +5,9 @@ import Select from "@/components/Select";
 import { Modal, PieDeModal } from "@/components/Modal";
 import { useBorrador } from "@/lib/core/useBorrador";
 import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
+import { comoSeLee } from "@/lib/core/fechas";
 import { laRazonQueSeGuarda, MAXIMO_DE_DIAS } from "@/lib/mantenimiento/postergar";
+import { diasParaLlegarA } from "@/lib/mantenimiento/moverLaOT";
 
 interface Razon {
   codigo: string;
@@ -31,11 +33,25 @@ interface Razon {
  * es lo que hace que postergar sea un gesto y no un formulario; que se puedan
  * cambiar es lo que evita que la configuración decida por quien está mirando el
  * caso concreto.
+ *
+ * ── SALVO CUANDO LOS DÍAS YA LOS ELIGIÓ UN DEDO ─────────────────────────────
+ *
+ * Con `destino` puesto —es la pestaña «Mes» de Programación, donde se tocó el
+ * día al que va la orden— los días **no se escriben ni los pisa la razón**: se
+ * cuentan solos y se muestran. Dejar el campo editable al lado invitaría a
+ * cambiarlo y a que la orden cayera en otro día, que es exactamente el error
+ * que ese calendario existe para no cometer.
+ *
+ * La cuenta va contra `orden.fecha_ejecucion` y nunca contra el día en el que
+ * la grilla pinta la orden: el porqué está en el encabezado de
+ * `lib/mantenimiento/moverLaOT.ts`.
  */
 export default function PostergarOTModal({
-  orden, onCerrar, onPostergada,
+  orden, destino, onCerrar, onPostergada,
 }: {
   orden: { id: string; ot_number: number; fecha_ejecucion: string | null };
+  /** El día al que va, si ya se eligió. Sin él es el postergar de siempre. */
+  destino?: string;
   onCerrar: () => void;
   onPostergada: () => void;
 }) {
@@ -85,6 +101,12 @@ export default function PostergarOTModal({
   // Los días de esa razón, mientras nadie los corrija.
   const dias = valores.dias ?? String(razones.find((r) => r.codigo === razon)?.dias ?? "");
 
+  // Cuántos días son, cuando el día ya está elegido. `null` quiere decir «los
+  // escribe quien mira», que es el camino de siempre.
+  const diasFijos =
+    destino && orden.fecha_ejecucion ? diasParaLlegarA(orden.fecha_ejecucion, destino) : null;
+  const diasAMandar = diasFijos ?? Number(dias);
+
   // Cambiar de razón devuelve los días a los de la razón nueva: vuelven a quedar
   // sin tocar, así que si se cambia otra vez siguen al desplegable. Y elegir a
   // mano **la que ya estaba mostrada** no es tocar nada: se guarda `null`, o
@@ -101,13 +123,13 @@ export default function PostergarOTModal({
     const res = await fetch(`/api/mantenimiento/ordenes/${orden.id}/postergar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ razon, dias: Number(dias), justificacion }),
+      body: JSON.stringify({ razon, dias: diasAMandar, justificacion }),
     });
     const body = await res.json().catch(() => ({}));
     setGuardando(false);
 
     if (!res.ok) {
-      setError(body.error ?? "No se pudo postergar.");
+      setError(body.error ?? (destino ? "No se pudo mover." : "No se pudo postergar."));
       return;
     }
     // Recién con el guardado en verde no hay nada que recordar.
@@ -115,18 +137,30 @@ export default function PostergarOTModal({
     onPostergada();
   }
 
-  const falta = !razon || !justificacion.trim() || !Number.isInteger(Number(dias)) || Number(dias) <= 0;
+  const falta =
+    !razon || !justificacion.trim() || !Number.isInteger(diasAMandar) || diasAMandar <= 0;
 
   return (
     // El fondo, la X y Escape salen conservando: la justificación a medio
     // escribir queda y aparece igual al volver a abrir. Sólo «Cancelar» tira.
-    <Modal titulo={`Postergar la OT #${orden.ot_number}`} alSalir={onCerrar} tocado={tocado}>
+    <Modal
+      titulo={`${destino ? "Mover" : "Postergar"} la OT #${orden.ot_number}`}
+      alSalir={onCerrar}
+      tocado={tocado}
+    >
       <div className="space-y-4">
         <p className="-mt-2 text-xs text-slate-500">
           {orden.fecha_ejecucion
             ? `Hoy está para el ${orden.fecha_ejecucion.split("-").reverse().join("/")}.`
             : "Esta orden no tiene fecha de inicio."}
         </p>
+
+        {destino && diasFijos !== null && (
+          <p className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-700">
+            Pasa al <span className="font-semibold">{comoSeLee(destino)}</span>: son{" "}
+            {diasFijos} {diasFijos === 1 ? "día" : "días"}.
+          </p>
+        )}
 
         {razones.length === 0 ? (
           <p className="text-sm text-slate-500">
@@ -143,17 +177,21 @@ export default function PostergarOTModal({
               </Select>
             </div>
 
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Cuántos días</label>
-              {/* El ancho va en el `div`: `.input` trae `width: 100%` fuera de
-                  toda capa y le gana a cualquier `w-*` de al lado. */}
-              <div className="w-24">
-                <input
-                  type="number" min={1} max={MAXIMO_DE_DIAS} className="input"
-                  value={dias} onChange={(e) => cambiar({ dias: e.target.value })}
-                />
+            {/* Con el día ya elegido el campo no aparece: lo que se tocó es el
+                día, y los días se dicen arriba. Ver el encabezado. */}
+            {diasFijos === null && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Cuántos días</label>
+                {/* El ancho va en el `div`: `.input` trae `width: 100%` fuera de
+                    toda capa y le gana a cualquier `w-*` de al lado. */}
+                <div className="w-24">
+                  <input
+                    type="number" min={1} max={MAXIMO_DE_DIAS} className="input"
+                    value={dias} onChange={(e) => cambiar({ dias: e.target.value })}
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">
@@ -187,7 +225,9 @@ export default function PostergarOTModal({
             disabled={falta || guardando || razones.length === 0}
             className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {guardando ? "Postergando…" : "Postergar"}
+            {guardando
+              ? destino ? "Moviendo…" : "Postergando…"
+              : destino ? "Mover" : "Postergar"}
           </button>
         </PieDeModal>
       </div>
