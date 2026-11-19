@@ -52,8 +52,10 @@
  * pasar por `toISOString()` corre el día en un servidor en UTC.
  */
 import { sumarDias } from "@/lib/core/fechas";
-import { ultimosMeses } from "./dashboard";
-import { fechaDeFalla, VENTANA_DIAS, MINIMO_OBSERVADO, confiabilidad } from "./mtbf";
+import { ultimosMeses, type Mes } from "./dashboard";
+import {
+  fechaDeFalla, VENTANA_DIAS, MINIMO_OBSERVADO, DIAS_RECIENTE, confiabilidad,
+} from "./mtbf";
 import { esDeUnTercero, MINIMO_REPARACIONES } from "./mttr";
 
 /**
@@ -66,6 +68,15 @@ import { esDeUnTercero, MINIMO_REPARACIONES } from "./mttr";
  * —medido—, o sea una columna de ceros que no ordena nada.
  */
 export const PLAZO_DEL_SECTOR = 7;
+
+/**
+ * Cuántas fallas necesita un punto de la serie mensual para publicarse.
+ *
+ * Mismo espíritu que `MINIMO_REPARACIONES`: con una o dos, «el promedio» es
+ * esa falla. El punto queda en `null` y el gráfico deja el hueco, que es lo
+ * que `connectNulls={false}` existe para dibujar.
+ */
+export const MINIMO_FALLAS_DEL_MES = 3;
 
 const MS_POR_DIA = 86_400_000;
 
@@ -144,7 +155,8 @@ export interface IndicadoresPorSector {
 
 /** Una falla ya fechada, con lo que necesitan las dos cuentas. */
 interface FallaDeSector {
-  sectorId: string;
+  /** `null` cuando la orden no tiene sector: se cuenta aparte. */
+  sectorId: string | null;
   fecha: string;
   horas: number | null;
   esDeTercero: boolean;
@@ -153,16 +165,16 @@ interface FallaDeSector {
 /**
  * Las correctivas fechadas, en la ventana que se pida.
  *
- * Se exporta para que la serie mensual pueda pedir ventanas más viejas que el
- * año sin volver a decidir qué es una falla ni cuándo pasó.
+ * La ventana es un parámetro y no `VENTANA_DIAS` porque acá se piden dos: la
+ * del año, que es la de los números grandes, y una más ancha para que el
+ * primer punto de la serie mensual tenga sus 90 días de atrás.
  */
 function fallasEntre(
   ordenes: OtDeSector[],
   desde: string,
   hasta: string
-): { fallas: FallaDeSector[]; sinSector: number } {
+): FallaDeSector[] {
   const fallas: FallaDeSector[] = [];
-  let sinSector = 0;
 
   for (const ot of ordenes) {
     if (ot.tipo !== "CORRECTIVO") continue;
@@ -170,11 +182,6 @@ function fallasEntre(
     // Lo ejecutado después de `hasta` queda afuera: hay órdenes con fechas del
     // futuro por errores de carga y no son fallas que ya ocurrieron.
     if (fecha === null || fecha < desde || fecha > hasta) continue;
-
-    if (ot.sector_id === null) {
-      sinSector += 1;
-      continue;
-    }
 
     fallas.push({
       sectorId: ot.sector_id,
@@ -186,29 +193,88 @@ function fallasEntre(
     });
   }
 
-  return { fallas, sinSector };
+  return fallas;
 }
 
 const promedio = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+/**
+ * La confiabilidad de un conjunto de fallas que termina en `fin`.
+ *
+ * Devuelve `null` en vez de un número cuando lo que hay no alcanza para
+ * medir: menos de `MINIMO_FALLAS_DEL_MES` fallas, o menos de
+ * `MINIMO_OBSERVADO` días entre la primera y el corte.
+ */
+function confiabilidadDeLaVentana(fechas: string[], fin: string): number | null {
+  if (fechas.length < MINIMO_FALLAS_DEL_MES) return null;
+
+  const primera = fechas.reduce((min, f) => (f < min ? f : min), fechas[0]);
+  const observados = numeroDeDia(fin) - numeroDeDia(primera) + 1;
+  if (observados < MINIMO_OBSERVADO) return null;
+
+  return confiabilidad(observados / fechas.length, PLAZO_DEL_SECTOR);
+}
+
+/**
+ * Dónde termina cada mes para la serie.
+ *
+ * El último corta en `hasta` y no en el fin del mes, porque el mes no terminó:
+ * contar las fallas de diecinueve días contra treinta baja el ritmo sin que
+ * haya pasado nada.
+ */
+function cortesDeLosMeses(meses: Mes[], hasta: string): string[] {
+  return meses.map((m, i) =>
+    i === meses.length - 1 ? hasta : sumarDias(m.hasta, -1)
+  );
+}
 
 export function indicadoresPorSector(
   ordenes: OtDeSector[],
   hasta: string
 ): IndicadoresPorSector {
   const desde = sumarDias(hasta, -(VENTANA_DIAS - 1));
-  const { fallas, sinSector } = fallasEntre(ordenes, desde, hasta);
-
   const meses = ultimosMeses(new Date(hasta + "T00:00:00"), 12);
   const mesEnCurso = meses[meses.length - 1].etiqueta;
+  const cortes = cortesDeLosMeses(meses, hasta);
+
+  // ── POR QUÉ LA SERIE MENSUAL MIRA 90 DÍAS Y NO EL MES ────────────────────
+  //
+  // Un mes suelto tiene muy pocas fallas y el número salta. Medido el
+  // 19/11/2026: Planta filler 1 lleva 2 fallas en noviembre contra 10 a 25 por
+  // mes el resto del año, así que con el mes solo el sector que peor anda
+  // cierra el año en 33 % cuando su confiabilidad anual es 2,5 %. El salto se
+  // repite todos los meses, siempre en el último punto, y se lee como una
+  // mejora que no pasó. Con la ventana móvil ese mismo punto da 8 %.
+  //
+  // Hay dos razones más. El dato llega tarde: 10 de las 70 correctivas
+  // ejecutadas en agosto se cargaron en un mes posterior (p90 de 16 días), así
+  // que el penúltimo punto también nace corto. Y con el mes solo hay huecos de
+  // verdad — Trituración 3 no falló ni en octubre ni en noviembre, o sea que
+  // su línea se cortaba justo en los dos meses que alguien va a mirar. Con los
+  // 90 días no queda un solo hueco en doce meses por ocho sectores.
+  //
+  // 90 es `DIAS_RECIENTE`, que ya es lo que este módulo llama «el ritmo
+  // reciente»; con 180 la línea queda tan plana que no dice nada.
+  const desdeAmplio = sumarDias(cortes[0], -(DIAS_RECIENTE - 1));
+  const todas = fallasEntre(ordenes, desdeAmplio < desde ? desdeAmplio : desde, hasta);
+
+  const sinSector = todas.filter((f) => f.sectorId === null && f.fecha >= desde).length;
 
   const porSector = new Map<string, FallaDeSector[]>();
-  for (const f of fallas) {
+  for (const f of todas) {
+    if (f.sectorId === null) continue;
     const suyas = porSector.get(f.sectorId) ?? [];
     suyas.push(f);
     porSector.set(f.sectorId, suyas);
   }
 
-  const filas: FilaDeSector[] = [...porSector.entries()].map(([sectorId, suyas]) => {
+  const filas: FilaDeSector[] = [];
+  for (const [sectorId, todasLasSuyas] of porSector) {
+    // La fila habla del año: las fallas más viejas están para que el primer
+    // punto de la serie tenga con qué, no para engordar el MTBF.
+    const suyas = todasLasSuyas.filter((f) => f.fecha >= desde);
+    if (suyas.length === 0) continue;
+
     const fechas = suyas.map((f) => f.fecha);
     const primera = fechas.reduce((min, f) => (f < min ? f : min), fechas[0]);
     const diasObservados = numeroDeDia(hasta) - numeroDeDia(primera) + 1;
@@ -220,7 +286,7 @@ export function indicadoresPorSector(
         ? promedio(propias.map((f) => f.horas as number))
         : null;
 
-    return {
+    filas.push({
       sectorId,
       fallas: suyas.length,
       diasObservados,
@@ -235,9 +301,23 @@ export function indicadoresPorSector(
       mttf: mtbf === null || mttr === null ? null : Math.max(0, mtbf - mttr / 24),
       confiabilidad: mtbf === null ? null : confiabilidad(mtbf, PLAZO_DEL_SECTOR),
       ultima: fechas.reduce((max, f) => (f > max ? f : max), fechas[0]),
-      porMes: [],
-    };
-  });
+      porMes: meses.map((mes, i) => {
+        const fin = cortes[i];
+        const ventana = sumarDias(fin, -(DIAS_RECIENTE - 1));
+        return {
+          etiqueta: mes.etiqueta,
+          // Las fallas son las del mes calendario y la confiabilidad mira
+          // noventa días: son dos ventanas distintas en el mismo punto, a
+          // propósito. La barra dice qué pasó ese mes; la línea, cómo viene.
+          fallas: todasLasSuyas.filter((f) => f.fecha >= mes.desde && f.fecha < mes.hasta).length,
+          confiabilidad: confiabilidadDeLaVentana(
+            todasLasSuyas.filter((f) => f.fecha >= ventana && f.fecha <= fin).map((f) => f.fecha),
+            fin
+          ),
+        };
+      }),
+    });
+  }
 
   filas.sort((a, b) => {
     if (a.mtbf === null && b.mtbf === null) return b.fallas - a.fallas;
@@ -246,5 +326,36 @@ export function indicadoresPorSector(
     return a.mtbf - b.mtbf;
   });
 
-  return { filas, ordenesPorMes: [], mesEnCurso, sinSector };
+  return { filas, ordenesPorMes: ordenesPorMes(ordenes, meses), mesEnCurso, sinSector };
+}
+
+/**
+ * Cuántas órdenes se generaron cada mes, abiertas por sector.
+ *
+ * **Cuenta por `fecha` y no por la ejecución**, al revés que todo lo de
+ * arriba. No es una inconsistencia: este gráfico va al lado del de «OT
+ * generadas por mes» que ya está en el tablero, y ése cuenta por `fecha`.
+ * Medido el 19/11/2026, 618 de 2.532 órdenes (24 %) caen en un mes distinto
+ * según cuál de las dos fechas se use —noviembre da 202 por carga contra 159
+ * por ejecución—, así que dos gráficos de órdenes por mes con fechas
+ * distintas tendrían barras que no suman y nada lo diría.
+ *
+ * Una orden sin sector no entra: son 1 de 2.531 y no hay columna donde
+ * ponerla. Las correctivas sin sector sí se cuentan, en `sinSector`.
+ */
+function ordenesPorMes(ordenes: OtDeSector[], meses: Mes[]): OrdenesDelMes[] {
+  const vacios = meses.map((m) => ({ etiqueta: m.etiqueta, porSector: {} as Record<string, number> }));
+
+  for (const ot of ordenes) {
+    if (ot.sector_id === null) continue;
+    const fecha = String(ot.fecha ?? "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) continue;
+
+    const i = meses.findIndex((m) => fecha >= m.desde && fecha < m.hasta);
+    if (i === -1) continue;
+
+    vacios[i].porSector[ot.sector_id] = (vacios[i].porSector[ot.sector_id] ?? 0) + 1;
+  }
+
+  return vacios;
 }

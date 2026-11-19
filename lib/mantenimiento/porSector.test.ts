@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { indicadoresPorSector, type OtDeSector } from "./porSector";
+import { indicadoresPorSector, MINIMO_FALLAS_DEL_MES, type OtDeSector } from "./porSector";
 
 const HASTA = "2026-11-19";
 
@@ -213,5 +213,141 @@ describe("indicadoresPorSector", () => {
 
     expect(r.filas).toEqual([]);
     expect(r.sinSector).toBe(0);
+  });
+});
+
+/** El punto de ese mes en la serie del sector A. */
+const elPunto = (r: ReturnType<typeof indicadoresPorSector>, etiqueta: string) =>
+  delSector(r, "A").porMes.find((p) => p.etiqueta === etiqueta)!;
+
+describe("la serie mensual de confiabilidad", () => {
+  it("cada punto mira los 90 días anteriores, no el mes solo", () => {
+    // Treinta fallas en julio y agosto, ninguna en septiembre: con el mes
+    // solo, septiembre no tendría punto; con la ventana móvil sí.
+    const r = indicadoresPorSector([
+      ...unaPorDia(30, "2026-07-03"),
+      corr({ fecha_ejecucion: "2026-11-10" }),
+    ], HASTA);
+
+    const sep = elPunto(r, "Sep");
+    expect(sep.fallas).toBe(0);
+    expect(sep.confiabilidad).not.toBeNull();
+  });
+
+  it("las fallas del punto son las del mes calendario, no las de la ventana", () => {
+    const r = indicadoresPorSector([
+      ...unaPorDia(30, "2026-07-03"),
+      corr({ fecha_ejecucion: "2026-11-10" }),
+    ], HASTA);
+
+    // Julio: del 3 al 31 son 29; agosto se lleva la que queda.
+    expect(elPunto(r, "Jul").fallas).toBe(29);
+    expect(elPunto(r, "Ago").fallas).toBe(1);
+  });
+
+  it("un punto con menos de MINIMO_FALLAS_DEL_MES en su ventana es null", () => {
+    expect(MINIMO_FALLAS_DEL_MES).toBe(3);
+
+    const r = indicadoresPorSector([
+      corr({ fecha_ejecucion: "2026-05-10" }),
+      corr({ fecha_ejecucion: "2026-05-12" }),
+      ...unaPorDia(5, "2026-11-01"),
+    ], HASTA);
+
+    // Dos fallas en los 90 días que terminan en mayo: no alcanza para opinar.
+    expect(elPunto(r, "May").confiabilidad).toBeNull();
+  });
+
+  it("un punto cuya ventana observó menos de MINIMO_OBSERVADO días es null", () => {
+    const r = indicadoresPorSector(
+      unaPorDia(3, "2026-06-28"),
+      HASTA
+    );
+
+    // Junio: la primera falla de su ventana es el 28, así que se observaron 3
+    // días. Julio, con las mismas tres fallas, ya observó 34.
+    expect(elPunto(r, "Jun").confiabilidad).toBeNull();
+    expect(elPunto(r, "Jul").confiabilidad).not.toBeNull();
+  });
+
+  it("el último punto corta en `hasta` y no en el fin del mes", () => {
+    // Tres fallas el 17, 18 y 19 de noviembre. Contra `hasta` se observaron 3
+    // días y no hay punto; contra el 30 de noviembre serían 14 y sí lo habría.
+    const r = indicadoresPorSector(
+      unaPorDia(3, "2026-11-17"),
+      HASTA
+    );
+
+    expect(elPunto(r, "Nov").confiabilidad).toBeNull();
+  });
+
+  it("usa fallas anteriores a la ventana del año para el primer punto", () => {
+    // La ventana del año arranca el 20/11/2025; la del primer punto mira hasta
+    // el 03/10/2025. Esas tres fallas cuentan para el punto y no para la fila.
+    const r = indicadoresPorSector([
+      ...unaPorDia(3, "2025-10-10"),
+      corr({ fecha_ejecucion: "2026-06-15" }),
+    ], HASTA);
+
+    expect(delSector(r, "A").fallas).toBe(1);
+    expect(elPunto(r, "Dic").confiabilidad).not.toBeNull();
+  });
+
+  it("tiene los doce meses, con el último marcado como el mes en curso", () => {
+    const r = indicadoresPorSector(unaPorDia(5, "2026-11-01"), HASTA);
+
+    expect(delSector(r, "A").porMes).toHaveLength(12);
+    expect(delSector(r, "A").porMes[11].etiqueta).toBe(r.mesEnCurso);
+    expect(r.mesEnCurso).toBe("Nov");
+  });
+});
+
+describe("ordenesPorMes", () => {
+  it("cuenta por la fecha de carga y no por la de ejecución", () => {
+    // Es la misma fecha que usa el gráfico que ya está en la pantalla: con
+    // dos fechas distintas, las barras de los dos no sumarían lo mismo.
+    const r = indicadoresPorSector([
+      corr({ tipo: "PROGRAMADO", fecha: "2026-10-15", fecha_ejecucion: "2026-11-02" }),
+    ], HASTA);
+
+    expect(r.ordenesPorMes.find((m) => m.etiqueta === "Oct")!.porSector.A).toBe(1);
+    expect(r.ordenesPorMes.find((m) => m.etiqueta === "Nov")!.porSector.A).toBeUndefined();
+  });
+
+  it("cuenta todos los tipos, no sólo las correctivas", () => {
+    const r = indicadoresPorSector([
+      corr({ tipo: "PROGRAMADO", fecha: "2026-10-01" }),
+      corr({ tipo: "CORRECTIVO", fecha: "2026-10-02" }),
+      corr({ tipo: null, fecha: "2026-10-03" }),
+    ], HASTA);
+
+    expect(r.ordenesPorMes.find((m) => m.etiqueta === "Oct")!.porSector.A).toBe(3);
+  });
+
+  it("abre el mes por sector", () => {
+    const r = indicadoresPorSector([
+      corr({ sector_id: "A", fecha: "2026-10-01" }),
+      corr({ sector_id: "B", fecha: "2026-10-02" }),
+      corr({ sector_id: "B", fecha: "2026-10-03" }),
+    ], HASTA);
+
+    expect(r.ordenesPorMes.find((m) => m.etiqueta === "Oct")!.porSector)
+      .toEqual({ A: 1, B: 2 });
+  });
+
+  it("tiene los doce meses aunque alguno esté en cero", () => {
+    const r = indicadoresPorSector([corr({ fecha: "2026-10-01" })], HASTA);
+
+    expect(r.ordenesPorMes).toHaveLength(12);
+    expect(r.ordenesPorMes[0].porSector).toEqual({});
+  });
+
+  it("deja afuera lo anterior a los doce meses y lo que no tiene fecha", () => {
+    const r = indicadoresPorSector([
+      corr({ fecha: "2025-11-30" }),
+      corr({ fecha: null, fecha_ejecucion: "2026-10-05" }),
+    ], HASTA);
+
+    expect(r.ordenesPorMes.every((m) => Object.keys(m.porSector).length === 0)).toBe(true);
   });
 });
