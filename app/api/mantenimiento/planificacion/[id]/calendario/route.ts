@@ -224,6 +224,7 @@ async function mandarUnItem(admin: SupabaseClient, item: Item, fechaDelPlan: str
     const respuesta = await postergarLaOT(pedido, { params: Promise.resolve({ id: ordenId }) });
     const cuerpo = (await respuesta.json().catch(() => ({}))) as {
       error?: string; nota_error?: string | null; planilla_error?: string | null;
+      reprogramacion_error?: string | null;
       data?: { fecha_ejecucion?: string };
     };
     if (!respuesta.ok) {
@@ -247,6 +248,11 @@ async function mandarUnItem(admin: SupabaseClient, item: Item, fechaDelPlan: str
     if (cuerpo.nota_error) advertencias.push(`La fecha se corrió, pero no se pudo guardar la nota: ${cuerpo.nota_error}`);
     if (cuerpo.planilla_error) {
       advertencias.push(`La fecha se corrió, pero la nota no llegó a la planilla: ${cuerpo.planilla_error}`);
+    }
+    if (cuerpo.reprogramacion_error) {
+      advertencias.push(
+        `La fecha se corrió, pero la reprogramación no quedó registrada y no va a aparecer en Análisis: ${cuerpo.reprogramacion_error}`
+      );
     }
   }
 

@@ -174,6 +174,7 @@ export const NAV: NavItem[] = [
       // La ve sólo el admin de Mantenimiento, que es el encargado del taller: la
       // semana de turnos y quién falta. No es una pantalla de consulta general.
       { label: "Asignación RR.HH", href: "/mantenimiento/programacion", modulo: "mantenimiento", soloAdmin: true },
+      { label: "Análisis", href: "/mantenimiento/analisis", modulo: "mantenimiento" },
       { label: "Producción", href: "/mantenimiento/produccion", modulo: "mantenimiento" },
       { label: "Historial", href: "/mantenimiento/historial", modulo: "mantenimiento" },
       {
