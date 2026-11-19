@@ -18,9 +18,13 @@
 /** Una fila de `sectores_status_log`, con el sector y el autor ya resueltos. */
 export interface CambioDeSector {
   id: string;
-  /** Null cuando el sector se borró. La fila sobrevive igual desde la 20261119104730. */
+  /**
+   * Null cuando el sector se borró. La fila sobrevive igual desde la
+   * 20261119104730, y **éste es el único campo que distingue a una huérfana**:
+   * `sector` sigue teniendo texto, porque el nombre quedó guardado.
+   */
   sector_id: string | null;
-  /** Cómo se llama hoy el sector, o null si ya no está. */
+  /** Cómo se llama hoy, o cómo se llamaba el día del cambio si ya no está. */
   sector: string | null;
   old_status: string | null;
   new_status: string;

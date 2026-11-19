@@ -35,7 +35,7 @@ export default async function HistorialDeSectoresPage() {
   const filas = await traerTodo<Record<string, any>>((desde, hasta) =>
     supabase
       .from("sectores_status_log")
-      .select("id, sector_id, old_status, new_status, reason, changed_at, " +
+      .select("id, sector_id, sector_nombre, old_status, new_status, reason, changed_at, " +
               "sector:sector_id(nombre, empresas(nombre)), " +
               "autor:changed_by(nombre, apellido)")
       .order("changed_at", { ascending: false })
@@ -47,14 +47,15 @@ export default async function HistorialDeSectoresPage() {
   const cambios: CambioDeSector[] = filas.map((f) => ({
     id: f.id,
     sector_id: f.sector_id ?? null,
-    // Cuando `sector` viene null el sector se borró. El nombre que tenía
-    // quedó guardado en `sectores_status_log.sector_nombre`, que escribe un
-    // trigger desde la 20261119104730: el día que esa migración esté aplicada,
-    // acá va `?? f.sector_nombre` y la columna al `select` de arriba. No se
-    // nombra antes porque el despliegue es automático y la migración la corre
-    // una persona: en esa ventana, pedir una columna que no existe deja la
-    // pantalla en 500.
-    sector: f.sector?.nombre ?? null,
+    // El nombre de **hoy** primero y el guardado como respaldo, en ese orden:
+    // si el sector sigue vivo y lo renombraron, la pantalla tiene que decir
+    // cómo se llama ahora, que es como lo va a buscar quien mira. El guardado
+    // —`sector_nombre`, que llena un trigger desde la 20261119104730— es lo
+    // único que queda cuando el sector se borró y `sector_id` quedó en null.
+    //
+    // Quién de los dos contestó se sabe por `sector_id`, no por el texto: un
+    // sector borrado y uno vivo pueden llamarse igual.
+    sector: f.sector?.nombre ?? f.sector_nombre ?? null,
     old_status: f.old_status ?? null,
     new_status: f.new_status,
     reason: f.reason ?? null,
