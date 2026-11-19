@@ -3729,7 +3729,7 @@ arranca en dos días»—. Seis cosas que no se deducen del código:
   sincronización la lee de la planilla, pero nadie la llena, así que decidir con
   ella reducía la función a `estado === "ATRASADO"`. La consulta del tablero ya
   intentaba mirar la fecha con esa misma columna
-  (`.or(\`estado.eq.ATRASADO,proxima_fecha.lt.${hoy}\`)` en
+  (`.or(estado.eq.ATRASADO,proxima_fecha.lt.${hoy})` en
   `app/(app)/mantenimiento/page.tsx`, línea 173 de `origin/main`), o sea que unificar fue terminar
   lo que estaba escrito y no inventar un criterio. Se sigue sincronizando; sólo se
   dejó de usar para decidir.
