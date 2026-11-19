@@ -73,6 +73,31 @@ export interface LineaDeRepuesto {
   id?: string;
 }
 
+/**
+ * El nombre de un repuesto, escrito como lo guarda el sistema.
+ *
+ * El `;` separa los renglones del texto de la planilla y la `,` también corta
+ * al volver a leerlo, así que cualquiera de los dos adentro de un nombre
+ * partiría ese renglón en dos: se cambian por un espacio.
+ *
+ * **Es una sola función y no dos copias a propósito, y eso costó.** Esto lo
+ * aplicaba `lineasQueValen` al traer un renglón al formulario, y la
+ * comparación de `loQueCambiaDeLaLista` —que decide si un renglón sigue siendo
+ * el mismo— sólo bajaba a minúsculas. O sea que un repuesto guardado con una
+ * coma volvía del formulario sin ella, no se reconocía, y **el renglón que
+ * nadie tocó se borraba y se insertaba de nuevo**, llevándose sus RI pegados
+ * (`on delete cascade`) y soltando la pregunta que se le hizo a Compras
+ * (`on delete set null`). No falla ni avisa.
+ *
+ * Y no es un caso raro: el POST de la ruta guarda el nombre tal cual lo elige
+ * una persona del inventario, y **46 de los 1.210 artículos llevan una coma**
+ * —casi todas decimales: «CADENA DE TRANSMISIÓN 1"X3,05 METROS», «CONTACTOR
+ * 18,5 KW»—. Si aparece una tercera normalización, va acá.
+ */
+export function nombreNormalizado(valor: unknown): string {
+  return String(valor ?? "").replace(/[,;]/g, " ").replace(/\s+/g, " ").trim();
+}
+
 /** Los renglones que valen: los que dicen qué repuesto es. */
 export function lineasQueValen(lineas: readonly LineaDeRepuesto[] | undefined | null): LineaDeRepuesto[] {
   if (!Array.isArray(lineas)) return [];
@@ -85,10 +110,7 @@ export function lineasQueValen(lineas: readonly LineaDeRepuesto[] | undefined | 
         // está**, así que un renglón recién escrito no finge venir de una fila.
         ...(id ? { id } : {}),
         cantidad: String(l?.cantidad ?? "").trim(),
-        // El `;` separa los renglones del texto de la planilla y la `,` también
-        // corta al volver a leerlo: cualquiera de los dos adentro de un nombre
-        // partiría ese renglón en dos.
-        nombre: String(l?.nombre ?? "").replace(/[,;]/g, " ").replace(/\s+/g, " ").trim(),
+        nombre: nombreNormalizado(l?.nombre),
         // Sin código la clave **no está**, en vez de estar vacía: es la misma
         // distinción que `filasParaLaBase` lleva a `null`, y deja intactos los
         // renglones de todo lo que ya existía.
@@ -235,9 +257,16 @@ export function elReemplazoDelCuerpo(
   return { ok: true, lineas: lineasQueValen(body.repuestos as LineaDeRepuesto[]) };
 }
 
-/** El mismo nombre escrito de otra manera sigue siendo el mismo repuesto. */
+/**
+ * El mismo nombre escrito de otra manera sigue siendo el mismo repuesto.
+ *
+ * Normaliza **por `nombreNormalizado`** y no por su cuenta: uno de los dos
+ * nombres que compara viene de la base, tal como lo guardó el POST, y el otro
+ * ya pasó por `lineasQueValen`. Dos normalizaciones distintas acá hacen que un
+ * renglón intacto parezca otro repuesto — ver el encabezado de esa función.
+ */
 const mismoNombre = (a: string, b: string): boolean =>
-  a.trim().toLowerCase().replace(/\s+/g, " ") === b.trim().toLowerCase().replace(/\s+/g, " ");
+  nombreNormalizado(a).toLowerCase() === nombreNormalizado(b).toLowerCase();
 
 /**
  * Qué hay que insertar, qué actualizar y qué borrar para que la lista de la

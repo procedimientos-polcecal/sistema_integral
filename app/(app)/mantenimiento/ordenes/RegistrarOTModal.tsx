@@ -195,8 +195,16 @@ export default function RegistrarOTModal({
   const [estadoDeLaLista, setEstadoDeLaLista] = useState<"cargando" | "lista" | "falla">("cargando");
 
   useCargar(async (vigente) => {
-    const r = await fetch(`/api/mantenimiento/ordenes/${orden.id}/repuestos`);
-    const cuerpo = r.ok ? await r.json().catch(() => null) : null;
+    /*
+     * El `catch` no es de más: un `fetch` que **rechaza** —la red que se corta
+     * en la planta, que es donde se usa esto— no es lo mismo que uno que
+     * contesta mal, y `useCargar` no atrapa nada. Sin esto la función cortaba
+     * en el `await` y el estado se quedaba en «cargando» para siempre: el campo
+     * gris, sin cartel y sin nada que explique por qué.
+     */
+    const cuerpo = await fetch(`/api/mantenimiento/ordenes/${orden.id}/repuestos`)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
     if (!vigente()) return;
     if (!cuerpo) { setEstadoDeLaLista("falla"); return; }
     setRepuestos(lineasDesdeLasFilas(cuerpo.data));
@@ -214,18 +222,33 @@ export default function RegistrarOTModal({
   async function guardarLosRepuestos(): Promise<string> {
     if (estadoDeLaLista !== "lista") return "";
 
-    const r = await fetch(`/api/mantenimiento/ordenes/${orden.id}/repuestos`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repuestos }),
-    });
-    if (r.ok) return "";
+    const noSalio = (porque: string) =>
+      `Los repuestos no se guardaron: ${porque} ` +
+      "Se pueden cargar desde «Repuestos que hacen falta».";
 
-    const cuerpo = await r.json().catch(() => ({}));
-    return (
-      `Los repuestos no se guardaron: ${cuerpo.error ?? ""} ` +
-      "Se pueden cargar desde «Repuestos que hacen falta»."
-    );
+    try {
+      const r = await fetch(`/api/mantenimiento/ordenes/${orden.id}/repuestos`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repuestos }),
+      });
+      if (r.ok) return "";
+
+      const cuerpo = await r.json().catch(() => ({}));
+      // Un 502 contesta HTML y deja `error` en undefined: sin esto el cartel
+      // salía con los dos puntos colgando y sin ningún motivo.
+      return noSalio(cuerpo.error ?? "no contestó el servidor.");
+    } catch (e) {
+      /*
+       * Y si el `fetch` rechaza, el aviso sale igual. Dejarlo propagar cortaba
+       * `guardar()` acá: nunca corrían `setGuardando(false)`, `tirar()` ni el
+       * cartel, así que el modal quedaba congelado **con la OT ya cerrada** y
+       * sin forma de saber que el trabajo sí quedó registrado — lo más probable
+       * es que alguien lo registre de nuevo. Es la tercera escritura y la que
+       * más chance tiene de encontrar la red caída.
+       */
+      return noSalio(e instanceof Error ? e.message : String(e));
+    }
   }
 
   const traerListas = useCargar(async (vigente) => {

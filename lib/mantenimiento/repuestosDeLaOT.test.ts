@@ -369,3 +369,40 @@ describe("loQueCambiaDeLaLista", () => {
       });
   });
 });
+
+describe("la coma del nombre no parte en dos al renglon que nadie toco", () => {
+  /**
+   * El POST de la ruta guarda `nombre` con `.trim()` y nada mas, y de ahi
+   * entra lo que alguien elige del inventario tal cual: **46 de los 1.210
+   * articulos llevan una coma**, casi todas decimales —«CADENA DE TRANSMISION
+   * 1"X3,05 METROS», «CONTACTOR 18,5 KW»—. Al traer esa fila al formulario,
+   * `lineasQueValen` le cambia la coma por un espacio, asi que el nombre de la
+   * base y el del formulario dejan de ser iguales letra por letra.
+   *
+   * Si `mismoNombre` no normaliza igual, ese renglon —que nadie toco— se borra
+   * y se inserta de nuevo, y con el se van sus RI pegados (`on delete
+   * cascade`) y la pregunta que se le hizo a Compras (`on delete set null`).
+   * Es exactamente el dano que `loQueCambiaDeLaLista` existe para evitar.
+   */
+  it("el renglon con coma se actualiza en su lugar, no se borra", () => {
+    const guardado = 'CADENA DE TRANSMISION 1"X3,05 METROS';
+    const [linea] = lineasDesdeLasFilas([
+      { id: "r1", nombre: guardado, codigo: "00321", cantidad: "1" },
+    ]);
+
+    expect(loQueCambiaDeLaLista([{ id: "r1", nombre: guardado }], [linea])).toEqual({
+      insertar: [],
+      actualizar: [{ id: "r1", codigo: "00321", cantidad: "1" }],
+      borrar: [],
+    });
+  });
+
+  it("y lo mismo con el punto y coma", () => {
+    const guardado = "correa B-75; reforzada";
+    const [linea] = lineasDesdeLasFilas([
+      { id: "r1", nombre: guardado, codigo: null, cantidad: null },
+    ]);
+
+    expect(loQueCambiaDeLaLista([{ id: "r1", nombre: guardado }], [linea]).borrar).toEqual([]);
+  });
+});
