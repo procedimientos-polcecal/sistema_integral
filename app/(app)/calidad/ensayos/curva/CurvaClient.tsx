@@ -4,8 +4,12 @@ import { useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
-import { comoSeLee } from "@/lib/core/fechas";
-import { curvaDeLaMuestra } from "@/lib/calidad/ensayos/curva";
+import {
+  TOPE_DE_MUESTRAS,
+  compararMuestras,
+  etiquetasDeMuestras,
+  type MuestraParaComparar,
+} from "@/lib/calidad/ensayos/comparacion";
 
 const esqueleto = () => <div className="h-full w-full animate-pulse rounded-lg bg-slate-100" />;
 const CurvaDeRetenido = dynamic(
@@ -25,44 +29,6 @@ export interface MuestraParaLaLista {
   id: string;
   fecha: string;
   observaciones: string | null;
-}
-
-/** Lo que hace falta de la muestra elegida para dibujar su curva. */
-export interface EnsayoDeLaCurva {
-  id: string;
-  pesoMuestraG: number | null;
-  retenidos: { malla: number; retenido_g: number }[];
-}
-
-/**
- * La etiqueta de cada muestra en el desplegable, en el orden en que llegan.
- *
- * Dos muestras del mismo día son un caso real, y **la observación no alcanza
- * para distinguirlas**: medido contra la base, hay 91 muestras y sólo 13 tienen
- * observaciones, y en 2 de los 6 grupos de (producto, fecha) con más de una
- * muestra el texto salía idéntico. Por eso los empates se numeran —«(1 de 2)»,
- * «(2 de 2)»—, en el orden que ya trae la consulta (fecha y, a igual fecha, hora
- * de carga), que es determinista. No se muestra la hora de carga: es cuándo se
- * tipeó la muestra y no cuándo se midió, y ponerla invita a leerla como lo
- * segundo.
- */
-function etiquetasDe(muestras: MuestraParaLaLista[]): string[] {
-  const base = muestras.map((m) => {
-    const obs = m.observaciones?.trim();
-    if (!obs) return comoSeLee(m.fecha);
-    return `${comoSeLee(m.fecha)} · ${obs.length > 40 ? `${obs.slice(0, 40)}…` : obs}`;
-  });
-  const total = new Map<string, number>();
-  for (const e of base) total.set(e, (total.get(e) ?? 0) + 1);
-
-  const visto = new Map<string, number>();
-  return base.map((e) => {
-    const n = total.get(e) ?? 1;
-    if (n === 1) return e;
-    const orden = (visto.get(e) ?? 0) + 1;
-    visto.set(e, orden);
-    return `${e} (${orden} de ${n})`;
-  });
 }
 
 /**
@@ -118,14 +84,21 @@ function Aviso({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** «no midió #325» · «no midió #6, #7 ni #20»: la enumeración negativa, con su «ni». */
+function enumerarQueFaltan(mallas: number[]): string {
+  const nombres = mallas.map((m) => `#${m}`);
+  if (nombres.length <= 1) return nombres.join("");
+  return `${nombres.slice(0, -1).join(", ")} ni ${nombres[nombres.length - 1]}`;
+}
+
 /**
- * La curva de una muestra, con sus tamices prendibles.
+ * Las curvas de las muestras elegidas, con sus tamices prendibles.
  *
- * Es un componente aparte **para que `key={muestra.id}` lo reinicie**: los
- * tamices apagados son de la muestra que se miraba, y arrastrarlos a otra
- * escondería un punto medido que nadie vio apagar.
+ * Es un componente aparte **para que la `key` lo reinicie**: los tamices
+ * apagados son del conjunto que se miraba, y arrastrarlos a otro escondería un
+ * punto medido que nadie vio apagar.
  */
-function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
+function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
   const [apagadas, setApagadas] = useState<number[]>([]);
   const [bajando, setBajando] = useState(false);
   const [falloLaDescarga, setFalloLaDescarga] = useState<string | null>(null);
@@ -133,20 +106,22 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
   const panelAcumulado = useRef<HTMLDivElement>(null);
   const panelPasante = useRef<HTMLDivElement>(null);
 
-  const curva = useMemo(
-    () =>
-      curvaDeLaMuestra(
-        { pesoMuestraG: ensayo.pesoMuestraG, retenidos: ensayo.retenidos },
-        apagadas
-      ),
-    [ensayo, apagadas]
-  );
+  const comparacion = useMemo(() => compararMuestras(muestras, apagadas), [muestras, apagadas]);
 
-  // Con retenidos pero sin peso tamizado, `curvaDeLaMuestra` devuelve el
-  // problema y **ninguna malla**: sin esto la pantalla mostraría una fila de
-  // chips vacía y tres gráficos en blanco sin decir por qué.
-  if (curva.problema !== undefined && curva.mallas.length === 0) {
-    return <Aviso>{curva.problema}</Aviso>;
+  const problemas = comparacion.series.filter((s) => s.problema !== undefined);
+
+  // Ninguna de las muestras elegidas tiene mallas: sin esto la pantalla
+  // mostraría una fila de chips vacía y tres gráficos en blanco sin decir por
+  // qué. Con una sola muestra, el problema de `granulometria()` es el texto que
+  // lo explica.
+  if (comparacion.mallas.length === 0) {
+    return (
+      <Aviso>
+        {problemas.length > 0
+          ? problemas.map((s) => s.problema).join(" ")
+          : "Ninguna de las muestras elegidas tiene granulometría cargada."}
+      </Aviso>
+    );
   }
 
   const alternar = (malla: number) =>
@@ -155,15 +130,15 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
     );
 
   /**
-   * Baja el Excel de la muestra: la tabla sale de la base y de acá viajan sólo
-   * los tamices apagados y la foto de cada gráfico.
+   * Baja el Excel: la tabla sale de la base y de acá viajan sólo los ids, los
+   * tamices apagados y la foto de cada gráfico.
    *
    * Cada foto sale a `scale: 4`: en la hoja la imagen mide 640 px de ancho y el
    * informe se imprime, así que con `scale: 2` la densidad volvía a ser la de la
    * pantalla (~100 dpi, blando). El ancho en la hoja no se toca: el alto sale
    * del aspecto. El peso tiene que seguir bajo el megabyte por imagen que
-   * acepta la ruta. Si la ruta contesta con un 400, **se muestra el
-   * mensaje que mandó**: es el que dice qué pasó.
+   * acepta la ruta. Si la ruta contesta con un 400, **se muestra el mensaje que
+   * mandó**: es el que dice qué pasó.
    */
   async function bajarElExcel() {
     const paneles = [
@@ -187,7 +162,7 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
     try {
       const html2canvas = (await import("html2canvas")).default;
       const formulario = new FormData();
-      formulario.append("muestra_id", ensayo.id);
+      formulario.append("muestras", JSON.stringify(muestras.map((m) => m.id)));
       formulario.append("apagadas", JSON.stringify(apagadas));
       for (const { campo, nodo } of paneles) {
         const lienzo = await html2canvas(nodo!, {
@@ -223,22 +198,26 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
   return (
     <div className="space-y-3">
       {/*
-        El otro problema que puede traer `curvaDeLaMuestra` —lo retenido supera
-        al peso— sí viene con mallas y con puntos: se avisa y se dibuja igual,
-        porque verlo es la única forma de corregirlo.
+        El problema que puede traer una muestra —lo retenido supera al peso— sí
+        viene con mallas y con puntos: se avisa y se dibuja igual, porque verlo
+        es la única forma de corregirlo.
       */}
-      {curva.problema !== undefined && (
-        <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          {curva.problema}
-        </p>
+      {problemas.length > 0 && (
+        <div className="space-y-1 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {problemas.map((s) => (
+            <p key={s.id}>
+              {muestras.length > 1 ? `${s.etiqueta}: ${s.problema}` : s.problema}
+            </p>
+          ))}
+        </div>
       )}
       <div className="space-y-1">
         <p className="text-xs text-slate-500">
-          Tamices de esta muestra. Apagá uno para sacarlo de las curvas, por ejemplo si se
-          tamizó mal.
+          Tamices de {muestras.length === 1 ? "esta muestra" : "las muestras elegidas"}. Apagá uno
+          para sacarlo de las curvas, por ejemplo si se tamizó mal.
         </p>
         <div className="flex flex-wrap gap-1.5">
-          {curva.mallas.map((malla) => {
+          {comparacion.mallas.map((malla) => {
             const prendida = !apagadas.includes(malla);
             return (
               <button
@@ -259,14 +238,14 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
         </div>
       </div>
 
-      {curva.puntos.length === 0 ? (
+      {comparacion.filas.length === 0 ? (
         <Aviso>Apagaste todos los tamices: prendé alguno para ver la curva.</Aviso>
       ) : (
         <>
           {/*
             El botón sólo existe cuando hay gráficos que fotografiar: sin
             granulometría o sin peso no hay mallas (y se avisó arriba), y con
-            todos los tamices apagados no hay puntos (y se avisó acá).
+            todos los tamices apagados no hay filas (y se avisó acá).
           */}
           <div className="flex flex-wrap items-center gap-3">
             <button type="button" onClick={bajarElExcel} disabled={bajando} className="btn-secondary">
@@ -283,11 +262,11 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
           )}
           <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <PanelDelGrafico titulo="Retenido por tamiz" nodo={panelRetenido}>
-              <CurvaDeRetenido puntos={curva.puntos} />
+              <CurvaDeRetenido filas={comparacion.filas} series={comparacion.series} />
             </PanelDelGrafico>
             <div className="space-y-2">
               <PanelDelGrafico titulo="Acumulado" nodo={panelAcumulado}>
-                <CurvaDeAcumulado puntos={curva.puntos} />
+                <CurvaDeAcumulado filas={comparacion.filas} series={comparacion.series} />
               </PanelDelGrafico>
               <p className="text-xs text-slate-500">
                 El acumulado de una malla ya incluye lo que retuvieron las apagadas antes que
@@ -295,9 +274,26 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
               </p>
             </div>
             <PanelDelGrafico titulo="Pasante" nodo={panelPasante}>
-              <CurvaDePasante puntos={curva.puntos} />
+              <CurvaDePasante filas={comparacion.filas} series={comparacion.series} />
             </PanelDelGrafico>
           </div>
+          {/*
+            Un hueco en una curva sólo se entiende si se nombra: una línea que
+            se corta sin explicación se lee como un error del sistema.
+          */}
+          {comparacion.disparejas.length > 0 && (
+            <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              No todas midieron los mismos tamices, así que hay curvas que no llegan de punta a
+              punta:{" "}
+              {comparacion.disparejas.map((d, i) => (
+                <span key={d.etiqueta}>
+                  {i > 0 && "; "}
+                  {d.etiqueta} no midió {enumerarQueFaltan(d.faltan)}
+                </span>
+              ))}
+              .
+            </p>
+          )}
         </>
       )}
     </div>
@@ -307,35 +303,58 @@ function LaCurva({ ensayo }: { ensayo: EnsayoDeLaCurva }) {
 export default function CurvaClient({
   productos,
   productoId,
+  productoNombre,
+  delSelector,
   muestras,
-  ensayo,
 }: {
   productos: { id: string; nombre: string }[];
   /** "" si no hay producto elegido. */
   productoId: string;
-  muestras: MuestraParaLaLista[];
-  ensayo: EnsayoDeLaCurva | null;
+  productoNombre: string;
+  /** Las muestras del producto elegido, para el selector. */
+  delSelector: MuestraParaLaLista[];
+  /** Las muestras elegidas, que pueden ser de varios productos. */
+  muestras: MuestraParaComparar[];
 }) {
   const router = useRouter();
 
-  /** Producto y muestra van en la URL para poder mandar el enlace. Los tamices no. */
-  const ir = (producto: string, muestra: string) => {
+  /** Producto y muestras van en la URL para poder mandar el enlace. Los tamices no. */
+  const ir = (producto: string, ids: string[]) => {
     const q = new URLSearchParams();
     if (producto) q.set("producto", producto);
-    if (muestra) q.set("muestra", muestra);
+    if (ids.length > 0) q.set("muestras", ids.join(","));
     const texto = q.toString();
     router.push(texto ? `/calidad/ensayos/curva?${texto}` : "/calidad/ensayos/curva");
   };
 
+  const elegidas = muestras.map((m) => m.id);
   const producto = productos.find((p) => p.id === productoId);
-  const etiquetas = useMemo(() => etiquetasDe(muestras), [muestras]);
+
+  // Las etiquetas y los colores de las elegidas salen de la misma función que
+  // los usa adentro, sin los tamices apagados —que no los cambian—, para que
+  // el chip y la leyenda del gráfico no puedan decir cosas distintas.
+  const series = useMemo(() => compararMuestras(muestras, []).series, [muestras]);
+
+  // Las del selector son todas del mismo producto, así que la etiqueta no lo
+  // repite; y las que ya están elegidas no se vuelven a ofrecer.
+  const porAgregar = useMemo(() => {
+    const libres = delSelector.filter((m) => !elegidas.includes(m.id));
+    const etiquetas = etiquetasDeMuestras(
+      libres.map((m) => ({ producto: productoNombre, fecha: m.fecha, observaciones: m.observaciones })),
+      false
+    );
+    return libres.map((m, i) => ({ id: m.id, etiqueta: etiquetas[i] }));
+  }, [delSelector, elegidas, productoNombre]);
+
+  const lleno = elegidas.length >= TOPE_DE_MUESTRAS;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 md:p-6">
       <div>
         <h1 className="text-xl font-bold text-slate-900">Curva granulométrica</h1>
         <p className="text-sm text-slate-500">
-          Elegí un producto y una de sus muestras para ver lo retenido, el acumulado y el pasante de cada tamiz.
+          Elegí una muestra para ver lo retenido, el acumulado y el pasante de cada tamiz, o varias
+          para compararlas. Se pueden mezclar productos.
         </p>
       </div>
 
@@ -343,7 +362,7 @@ export default function CurvaClient({
         <div className="flex flex-wrap gap-2">
           <Select
             value={productoId}
-            onChange={(e) => ir(e.target.value, "")}
+            onChange={(e) => ir(e.target.value, elegidas)}
             className="max-w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
           >
             <option value="">Elegí un producto</option>
@@ -354,35 +373,72 @@ export default function CurvaClient({
             ))}
           </Select>
 
-          {productoId !== "" && muestras.length > 0 && (
+          {productoId !== "" && !lleno && porAgregar.length > 0 && (
             <Select
-              value={ensayo?.id ?? ""}
-              onChange={(e) => ir(productoId, e.target.value)}
+              value=""
+              onChange={(e) => e.target.value && ir(productoId, [...elegidas, e.target.value])}
               className="max-w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
             >
-              <option value="">Elegí una muestra</option>
-              {muestras.map((m, i) => (
+              <option value="">
+                {elegidas.length === 0 ? "Elegí una muestra" : "Agregar otra muestra"}
+              </option>
+              {porAgregar.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {etiquetas[i]}
+                  {m.etiqueta}
                 </option>
               ))}
             </Select>
           )}
+
+          {lleno && (
+            <p className="self-center text-xs text-slate-500">
+              Son {TOPE_DE_MUESTRAS} muestras como máximo: sacá una para poder agregar otra.
+            </p>
+          )}
         </div>
 
-        {productoId === "" ? (
+        {/*
+          Los chips sobreviven al cambio de producto: así se arma un conjunto
+          que cruza productos sin otra pantalla.
+        */}
+        {series.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {series.map((s) => (
+              <span
+                key={s.id}
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white py-1 pl-2 pr-1 text-xs text-slate-700"
+              >
+                <span
+                  aria-hidden
+                  className="inline-block h-2.5 w-2.5 rounded-full"
+                  style={{ background: s.color }}
+                />
+                {s.etiqueta}
+                <button
+                  type="button"
+                  aria-label={`Sacar ${s.etiqueta}`}
+                  onClick={() => ir(productoId, elegidas.filter((id) => id !== s.id))}
+                  className="rounded-full px-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {muestras.length > 0 ? (
+          <LasCurvas key={elegidas.join(",")} muestras={muestras} />
+        ) : productoId === "" ? (
           <Aviso>Elegí un producto para ver las muestras que tiene.</Aviso>
-        ) : muestras.length === 0 ? (
+        ) : delSelector.length === 0 ? (
           <Aviso>{producto?.nombre} todavía no tiene muestras cargadas.</Aviso>
-        ) : ensayo === null ? (
-          <Aviso>
-            {producto?.nombre} tiene {muestras.length}{" "}
-            {muestras.length === 1 ? "muestra" : "muestras"}: elegí una para ver su curva.
-          </Aviso>
-        ) : ensayo.retenidos.length === 0 ? (
-          <Aviso>Esta muestra no tiene granulometría cargada, así que no hay curva que dibujar.</Aviso>
         ) : (
-          <LaCurva key={ensayo.id} ensayo={ensayo} />
+          <Aviso>
+            {producto?.nombre} tiene {delSelector.length}{" "}
+            {delSelector.length === 1 ? "muestra" : "muestras"}: elegí una para ver su curva, o
+            varias para compararlas.
+          </Aviso>
         )}
       </section>
     </div>
