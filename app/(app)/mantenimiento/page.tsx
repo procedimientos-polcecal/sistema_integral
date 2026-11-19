@@ -5,7 +5,7 @@ import { lunesDe } from "@/lib/mantenimiento/produccion";
 import {
   ultimosMeses, paradasExigidas, ventanasDeReparacion, nombreDelMes,
 } from "@/lib/mantenimiento/dashboard";
-import { resumirAtrasadas, hoyISO } from "@/lib/mantenimiento/alertas";
+import { resumirAtrasadas, hoyISO, condicionDeAtrasada, ESTADOS_CERRADOS } from "@/lib/mantenimiento/alertas";
 import { sumarDias } from "@/lib/core/fechas";
 import DashboardClient from "./DashboardClient";
 import { sectoresDePlanta, empresaDelSector } from "@/lib/mantenimiento/sectores";
@@ -164,13 +164,14 @@ export default async function MantenimientoDashboardPage() {
 
   const ventanas = ventanasDeReparacion(conEmpresa, planes ?? [], pendientes);
 
-  // Las que podrían estar atrasadas: la marca de la planilla o una fecha
-  // vencida. El filtro fino lo hace `resumirAtrasadas`, que sabe que una
-  // realizada tarde ya no está atrasada.
+  // Las atrasadas: la marca de la planilla o una fecha vencida, con la misma
+  // definición que `estaAtrasada` (`condicionDeAtrasada`). `resumirAtrasadas`
+  // vuelve a filtrar por si las dos se separaran.
   const { data: candidatas } = await supabase
     .from("ordenes_trabajo")
-    .select("ot_number, estado, proxima_fecha, sector_raw, descripcion, equipo_raw, quien, gut_gravedad, gut_urgencia, gut_tendencia")
-    .or(`estado.eq.ATRASADO,proxima_fecha.lt.${hoy}`)
+    .select("ot_number, estado, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, sector_raw, descripcion, equipo_raw, quien, gut_gravedad, gut_urgencia, gut_tendencia")
+    .not("estado", "in", `(${ESTADOS_CERRADOS.join(",")})`)
+    .or(condicionDeAtrasada(hoy))
     .limit(500);
 
   const atrasadas = resumirAtrasadas(candidatas ?? [], hoy);

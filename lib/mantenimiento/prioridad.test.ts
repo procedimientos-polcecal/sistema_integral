@@ -23,10 +23,10 @@ describe("ordenSugerido", () => {
    * d = 5·4·4 = 80.
    */
   const ordenes = [
-    { id: "a", ot_number: 10, estado: "POR_HACER", prioridad: "BAJA", gut_gravedad: 2, gut_urgencia: 2, gut_tendencia: 3, fecha: "2026-08-01", proxima_fecha: null },
-    { id: "b", ot_number: 11, estado: "ATRASADO", prioridad: "BAJA", gut_gravedad: 1, gut_urgencia: 1, gut_tendencia: 1, fecha: "2026-08-20", proxima_fecha: null },
-    { id: "c", ot_number: 12, estado: "POR_HACER", prioridad: "ALTA", gut_gravedad: 4, gut_urgencia: 4, gut_tendencia: 5, fecha: "2026-08-15", proxima_fecha: null },
-    { id: "d", ot_number: 13, estado: "EN_PROCESO", prioridad: "ALTA", gut_gravedad: 5, gut_urgencia: 4, gut_tendencia: 4, fecha: "2026-08-10", proxima_fecha: null },
+    { id: "a", ot_number: 10, estado: "POR_HACER", prioridad: "BAJA", gut_gravedad: 2, gut_urgencia: 2, gut_tendencia: 3, fecha: "2026-08-01", fecha_ejecucion: null },
+    { id: "b", ot_number: 11, estado: "ATRASADO", prioridad: "BAJA", gut_gravedad: 1, gut_urgencia: 1, gut_tendencia: 1, fecha: "2026-08-20", fecha_ejecucion: null },
+    { id: "c", ot_number: 12, estado: "POR_HACER", prioridad: "ALTA", gut_gravedad: 4, gut_urgencia: 4, gut_tendencia: 5, fecha: "2026-08-15", fecha_ejecucion: null },
+    { id: "d", ot_number: 13, estado: "EN_PROCESO", prioridad: "ALTA", gut_gravedad: 5, gut_urgencia: 4, gut_tendencia: 4, fecha: "2026-08-10", fecha_ejecucion: null },
   ];
 
   it("lo atrasado sigue yendo primero, aunque tenga el puntaje más bajo", () => {
@@ -59,7 +59,7 @@ describe("ordenSugerido", () => {
    * medio en cada eje, así que queda entre las de más de 27 y las de menos.
    */
   it("la que no tiene puntaje queda entre las de más y las de menos de 27", () => {
-    const base = { estado: "POR_HACER", fecha: "2026-08-01", proxima_fecha: null };
+    const base = { estado: "POR_HACER", fecha: "2026-08-01", fecha_ejecucion: null };
     const alta   = { ...base, id: "alta",   ot_number: 1, gut_gravedad: 5, gut_urgencia: 3, gut_tendencia: 2 }; // 30
     const sin    = { ...base, id: "sin",    ot_number: 2 };
     const baja   = { ...base, id: "baja",   ot_number: 3, gut_gravedad: 4, gut_urgencia: 3, gut_tendencia: 2 }; // 24
@@ -69,7 +69,7 @@ describe("ordenSugerido", () => {
 
   it("la que no tiene puntaje no se hunde por debajo de una de 25", () => {
     // Si valiera 0 iría al final; vale 27 y le gana a una de menos.
-    const base = { estado: "POR_HACER", fecha: "2026-08-01", proxima_fecha: null };
+    const base = { estado: "POR_HACER", fecha: "2026-08-01", fecha_ejecucion: null };
     const sin  = { ...base, id: "sin", ot_number: 1 };
     const casi = { ...base, id: "casi", ot_number: 2, gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 1 }; // 25
     expect(ordenSugerido([casi, sin], HOY)[0].id).toBe("sin");
@@ -80,7 +80,7 @@ describe("ordenSugerido", () => {
     // una abierta sin puntuar (27) y de una abierta de 12. Con sólo el puntaje
     // saldría primera. Hoy la lista que llega es de pendientes, pero el orden
     // no debe depender de eso.
-    const base = { fecha: "2026-08-01", proxima_fecha: null };
+    const base = { fecha: "2026-08-01", fecha_ejecucion: null };
     const hecha  = { ...base, id: "hecha",  ot_number: 1, estado: "REALIZADO", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 5 }; // 125
     const cancel = { ...base, id: "cancel", ot_number: 2, estado: "CANCELADA", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 4 }; // 100
     const sin    = { ...base, id: "sin",    ot_number: 3, estado: "POR_HACER" };
@@ -92,7 +92,7 @@ describe("ordenSugerido", () => {
   it("con sólo dos de las tres notas cuenta como sin puntaje", () => {
     // Dos de tres es 5·5·(falta): si se multiplicara lo que hay, valdría 25 y
     // quedaría debajo de la de 27. Es sin puntaje, así que vale 27 y va antes.
-    const base = { estado: "POR_HACER", fecha: "2026-08-01", proxima_fecha: null };
+    const base = { estado: "POR_HACER", fecha: "2026-08-01", fecha_ejecucion: null };
     const dosDeTres = { ...base, id: "dos", ot_number: 1, gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: null };
     const casi      = { ...base, id: "casi", ot_number: 2, gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 1 }; // 25
     expect(ordenSugerido([casi, dosDeTres], HOY)[0].id).toBe("dos");
@@ -105,15 +105,15 @@ describe("ordenSugerido", () => {
    */
   it("la prioridad de la planilla ya no cambia el orden", () => {
     const comoVienen = [
-      { id: "baja",  ot_number: 1, estado: "POR_HACER", prioridad: "🟢 Baja",  fecha: "2026-08-01", proxima_fecha: null },
-      { id: "alta",  ot_number: 2, estado: "POR_HACER", prioridad: "🟠 Alta",  fecha: "2026-08-01", proxima_fecha: null },
-      { id: "media", ot_number: 3, estado: "POR_HACER", prioridad: "🟡 Media", fecha: "2026-08-01", proxima_fecha: null },
+      { id: "baja",  ot_number: 1, estado: "POR_HACER", prioridad: "🟢 Baja",  fecha: "2026-08-01", fecha_ejecucion: null },
+      { id: "alta",  ot_number: 2, estado: "POR_HACER", prioridad: "🟠 Alta",  fecha: "2026-08-01", fecha_ejecucion: null },
+      { id: "media", ot_number: 3, estado: "POR_HACER", prioridad: "🟡 Media", fecha: "2026-08-01", fecha_ejecucion: null },
     ];
     expect(ordenSugerido(comoVienen, HOY).map((o) => o.id)).toEqual(["baja", "alta", "media"]);
   });
 
   it("una prioridad alta no le gana a un puntaje más alto ni a una fecha más vieja", () => {
-    const base = { estado: "POR_HACER", proxima_fecha: null };
+    const base = { estado: "POR_HACER", fecha_ejecucion: null };
     const altaNueva = { ...base, id: "altaNueva", ot_number: 1, prioridad: "🟠 Alta", fecha: "2026-08-20", gut_gravedad: 3, gut_urgencia: 3, gut_tendencia: 3 };
     const bajaVieja = { ...base, id: "bajaVieja", ot_number: 2, prioridad: "🟢 Baja", fecha: "2026-08-01", gut_gravedad: 3, gut_urgencia: 3, gut_tendencia: 3 };
     const bajaFuerte = { ...base, id: "bajaFuerte", ot_number: 3, prioridad: "🟢 Baja", fecha: "2026-08-25", gut_gravedad: 5, gut_urgencia: 5, gut_tendencia: 5 };
