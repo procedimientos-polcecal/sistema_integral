@@ -146,13 +146,40 @@ describe("analizarLaSemana", () => {
 
   it("abre las que no cerraron en siguen abiertas / cerraron después / cerraron antes", () => {
     expect(a.noCerraron).toBe(5);
-    expect(a.lasDiez).toEqual({ siguenAbiertas: 2, cerraronDespues: 2, cerraronAntes: 1 });
+    expect(a.lasDiez).toEqual({
+      siguenAbiertas: 2,
+      cerraronDespues: 2,
+      cerraronAntes: 1,
+      sinFechaDeCierre: 1,
+    });
   });
 
   it("las tres partes suman exactamente las que no cerraron", () => {
     const { siguenAbiertas, cerraronDespues, cerraronAntes } = a.lasDiez;
     expect(siguenAbiertas + cerraronDespues + cerraronAntes).toBe(a.noCerraron);
     expect(a.noCerraron).toBe(a.conInicio - a.cerradasDentro);
+  });
+
+  it("dice cuántas de las que cerraron después están ahí sin que conste cuándo", () => {
+    // La 3021 es la única `REALIZADO` sin fecha de cierre, y está adentro de
+    // las 2 de «cerraron después»: es un subconjunto, no una cuarta parte.
+    expect(a.lasDiez.sinFechaDeCierre).toBe(1);
+    expect(a.lasDiez.sinFechaDeCierre).toBeLessThanOrEqual(a.lasDiez.cerraronDespues);
+    expect(numeros(a.listas.cerradasFueraDeFecha)).toContain(3021);
+  });
+
+  it("sin ninguna cerrada sin fecha, ese número es cero y el desglose no cambia", () => {
+    const todasConFecha = ORDENES.map((o) =>
+      o.ot_number === 3021 ? { ...o, fecha_cierre: "2026-11-10" } : o,
+    );
+    const b = analizarLaSemana(todasConFecha, LUNES);
+    expect(b.lasDiez).toEqual({
+      siguenAbiertas: 2,
+      cerraronDespues: 2,
+      cerraronAntes: 1,
+      sinFechaDeCierre: 0,
+    });
+    expect(b.noCerraron).toBe(a.noCerraron);
   });
 
   it("una cerrada antes de su fecha de inicio cuenta en 'cerraron antes' y NO en 'fuera de fecha'", () => {

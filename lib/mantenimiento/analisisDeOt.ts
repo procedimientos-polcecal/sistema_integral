@@ -60,6 +60,19 @@
  *      Hacer de `cerraronDespues` el resto es lo que vuelve imposible que
  *      alguna orden se caiga del desglose.
  *
+ * **Y por eso el resultado dice además cuántas son.** `lasDiez.sinFechaDeCierre`
+ * no es una cuarta parte del desglose: es el subconjunto de `cerraronDespues`
+ * del que sólo consta que no cerró en su semana. La medida que lo justifica,
+ * para que el próximo no tenga que rehacerla: **1 de las 10** que no cerraron
+ * en la semana 45 es una `REALIZADO` sin fecha, y **220 de 2.489** en toda la
+ * base (17/11/2026). O sea que la inferencia no mueve el número —el balde
+ * seguiría diciendo 6 contra 6— pero sí le hace afirmar al panel algo que no
+ * sabe: «cerraron después del domingo» dice que el trabajo terminó tarde, y de
+ * esa orden lo cierto es que nadie sabe cuándo terminó. Un cuarto renglón no
+ * es la salida —el desglose de tres ya se acordó y partirlo rompe justamente
+ * lo que lo vuelve confiable, que las partes sumen el total—, así que el
+ * número viaja aparte y la pantalla lo dice en el rótulo.
+ *
  * **El valor `ATRASADO` del estado no se usa nunca.** Lo calcula la planilla
  * con un `ARRAYFORMULA` contra el `TODAY()` de su último recálculo, así que
  * envejece solo: de 29 órdenes abiertas con fecha vencida, sólo 17 lo decían.
@@ -113,8 +126,18 @@ export interface AnalisisDeLaSemana {
   porTipo: { tipo: string; cantidad: number; porcentaje: number }[];
   /** La frase de una línea que arma la hoja, en castellano. */
   diagnostico: string;
-  /** El desglose de `noCerraron`. Las tres partes suman exactamente ese número. */
-  lasDiez: { siguenAbiertas: number; cerraronDespues: number; cerraronAntes: number };
+  /**
+   * El desglose de `noCerraron`. **Las tres primeras** suman exactamente ese
+   * número; `sinFechaDeCierre` no es una cuarta parte sino **cuántas de las de
+   * `cerraronDespues` están ahí sin que conste cuándo cerraron**, para que la
+   * pantalla pueda decirlo en el rótulo sin partir el desglose en cuatro.
+   */
+  lasDiez: {
+    siguenAbiertas: number;
+    cerraronDespues: number;
+    cerraronAntes: number;
+    sinFechaDeCierre: number;
+  };
   listas: {
     conInicio: OrdenParaAnalisis[];
     sinCerrar: OrdenParaAnalisis[];
@@ -215,12 +238,18 @@ export function analizarLaSemana(
   const sinCerrar: OrdenParaAnalisis[] = [];
   const cerradasFueraDeFecha: OrdenParaAnalisis[] = [];
   const cerraronAntes: OrdenParaAnalisis[] = [];
+  let sinFechaDeCierre = 0;
   for (const o of conInicio) {
     if (entre(o.fecha_cierre, lunes, domingo)) continue;
+    const cierre = o.fecha_cierre === "" ? null : o.fecha_cierre;
     if (estaAbierta(o)) sinCerrar.push(o);
-    else if (o.fecha_cierre !== null && o.fecha_cierre !== "" && o.fecha_cierre < lunes) {
-      cerraronAntes.push(o);
-    } else cerradasFueraDeFecha.push(o);
+    else if (cierre !== null && cierre < lunes) cerraronAntes.push(o);
+    else {
+      cerradasFueraDeFecha.push(o);
+      // Cerrada y sin fecha: está en este balde porque es el resto, no porque
+      // conste que cerró tarde. Se cuenta para que la pantalla lo diga.
+      if (cierre === null) sinFechaDeCierre += 1;
+    }
   }
 
   const cantidadPorTipo = (tipo: string) =>
@@ -260,6 +289,7 @@ export function analizarLaSemana(
       siguenAbiertas: sinCerrar.length,
       cerraronDespues: cerradasFueraDeFecha.length,
       cerraronAntes: cerraronAntes.length,
+      sinFechaDeCierre,
     },
     listas: {
       conInicio: [...conInicio].sort(porNumero),
