@@ -15,8 +15,9 @@ import { celdaDeObservacionPrevia } from "@/lib/mantenimiento/notas";
 import { fechaDeLaCarga, type FechaDeLaCarga } from "@/lib/mantenimiento/avisos";
 import { marcarElAviso } from "@/lib/mantenimiento/marcarElAviso";
 import {
-  reservarClave, anotarLaClave, respuestaDeLaReserva,
+  reservarClave, anotarLaClave, respuestaDeLaReserva, soltarLaClave,
 } from "@/lib/mantenimiento/claveDeCarga";
+import { porQueNoPuedeTenerOtraOrden } from "@/lib/mantenimiento/avisoYaTieneOrden";
 import { ESTA_PENDIENTE, prioridadParaLaPlanilla } from "@/lib/mantenimiento/prioridad";
 import {
   estadoSegunElCierre, loQueFaltaParaDarPorRealizada, loQueHayQueExportar,
@@ -401,6 +402,45 @@ export async function POST(request: Request) {
     return NextResponse.json({ error }, { status: 400 });
   }
 
+  // ── Un aviso, una orden ─────────────────────────────────────
+  //
+  // `avisos.work_order_id` es **una sola columna**, así que una segunda orden
+  // para el mismo aviso no queda al lado de la primera: la pisa. El aviso
+  // termina apuntando a la última y la anterior sigue viva, abierta y sin
+  // nadie que la nombre — y nada avisa. El porqué completo y lo que esto
+  // decide no mirar están en `lib/mantenimiento/avisoYaTieneOrden.ts`.
+  //
+  // **Se lee acá, y se rechaza en dos lugares distintos.** El motivo es la
+  // clave: devolver un 409 después de `reservarClave` dejaría esa clave
+  // reservada y sin resolver para una orden que nunca se va a crear, y el
+  // próximo reintento recibiría `en-duda` —"mirá la planilla"— por algo que
+  // no tiene nada que ver con la planilla. Así que sin clave se rechaza ya
+  // mismo, y con clave se espera a que la reserva diga `seguir` y se la
+  // suelta antes de contestar. La consulta es una sola en los dos casos.
+  //
+  // Y **no reemplaza al veredicto `ya-esta`**, que es otra cosa: aquél
+  // reconoce *la misma carga* reintentada y contesta 200 con su número. Éste
+  // reconoce *otra carga* apuntando a un aviso que ya está atendido. Por eso
+  // este control nunca corre antes que aquél.
+  let yaTieneOrden: string | null = null;
+  if (aviso_id) {
+    const { data: elAviso } = await admin
+      .from("avisos")
+      .select("oa_number, work_order_id, ordenes_trabajo(ot_number)")
+      .eq("id", aviso_id)
+      .maybeSingle();
+    yaTieneOrden = porQueNoPuedeTenerOtraOrden(elAviso);
+  }
+
+  // Sin clave no hay nada reservado todavía, así que el rechazo sale entero
+  // acá. Es el camino de quien carga con señal desde la pantalla.
+  if (yaTieneOrden && !(typeof body?.clave === "string" && body.clave.trim())) {
+    avisarDeLaCarga(request, user.id, {
+      ...deEstaCarga, status: 409, error: yaTieneOrden, enDuda: false,
+    });
+    return NextResponse.json({ error: yaTieneOrden }, { status: 409 });
+  }
+
   // ── La clave de la carga ────────────────────────────────────
   //
   // Una OT cargada sin señal llega con una `clave` que el teléfono repite en
@@ -497,6 +537,22 @@ export async function POST(request: Request) {
       });
       return NextResponse.json(respuesta.cuerpo, { status: respuesta.status });
     }
+  }
+
+  // La otra mitad del control de arriba. Llegar acá con `clave` quiere decir
+  // que la reserva dijo `seguir`: no es un reintento de esta misma carga, es
+  // una carga nueva. Si el aviso ya tiene orden, se suelta la clave —nada se
+  // escribió todavía, así que soltarla es correcto y evita el `en-duda` que
+  // mandaría a mirar la planilla para nada— y se contesta lo mismo que sin
+  // cola, con el mismo 409, que para la cola es definitivo: la carga queda
+  // parada y la mira una persona, en vez de reintentarse para siempre contra
+  // una regla que no va a cambiar.
+  if (yaTieneOrden && clave) {
+    await soltarLaClave(admin, clave, user.id);
+    avisarDeLaCarga(request, user.id, {
+      ...deEstaCarga, status: 409, error: yaTieneOrden, enDuda: false,
+    });
+    return NextResponse.json({ error: yaTieneOrden }, { status: 409 });
   }
 
   // Una sola vez, y antes de los dos usos: la misma forma va a la planilla y a
@@ -748,8 +804,12 @@ export async function POST(request: Request) {
     }
   }
 
-  // Si nace de un aviso, el aviso queda apuntando a ella: es lo que evita que
-  // alguien genere dos órdenes para el mismo problema. La marca la escribe
+  // Si nace de un aviso, el aviso queda apuntando a ella. Hasta el
+  // 19/11/2026 este comentario decía que eso «evita que alguien genere dos
+  // órdenes para el mismo problema», y era falso: nadie leía la marca, así
+  // que la segunda orden la pisaba. Ahora sí la lee alguien — el control de
+  // «Un aviso, una orden», más arriba en esta misma función—, y por eso la
+  // marca pasó de ser un dato a ser el candado. La marca la escribe
   // `lib/mantenimiento/marcarElAviso.ts`, compartida con `avisos/enlazar` para
   // que los dos caminos dejen exactamente lo mismo. Sus dos fallas se juntan
   // en un solo campo porque es lo que esta ruta siempre contestó y lo que la
