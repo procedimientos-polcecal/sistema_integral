@@ -1,10 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   clasificarParaReponer, estaAbierto, altaDeReposicion, pedidosAbiertosPorCodigo,
-  avisoDePedidoAbierto,
+  avisoDePedidoAbierto, ordenarParaReponer, cuantoFalta,
+  ORDENES_DE_REPOSICION, ORDEN_POR_DEFECTO,
   DIAS_DE_CONSUMO,
 } from "./reponer";
-import type { ArticuloConFaltante, MovimientoDelConsumo, RequerimientoConCodigo } from "./reponer";
+import type {
+  ArticuloConFaltante, MovimientoDelConsumo, RequerimientoConCodigo,
+  Candidato, OrdenDeReposicion,
+} from "./reponer";
 
 const HOY = "2026-10-02";
 
@@ -436,5 +440,126 @@ describe("el aviso de que ya esta pedido", () => {
 describe("la ventana", () => {
   it("son 90 dias", () => {
     expect(DIAS_DE_CONSUMO).toBe(90);
+  });
+});
+
+describe("ordenar la lista", () => {
+  const cand = (p: Partial<ArticuloConFaltante> & {
+    salidas?: number; diasDesdeLaUltima?: number;
+  } = {}): Candidato => {
+    const { salidas = 1, diasDesdeLaUltima = 10, ...resto } = p;
+    return { articulo: art(resto), salidas, diasDesdeLaUltima };
+  };
+
+  const codigos = (lista: Candidato[]) => lista.map((c) => c.articulo.codigo);
+
+  it("por descripcion ignora mayusculas y acentos", () => {
+    // Sin normalizar, `localeCompare` deja «arbol» despues de «Zapata» porque
+    // compara el caso antes que la letra, y ese es justo el error que se ve en
+    // pantalla sin que nadie lo pueda explicar.
+    const lista = [
+      cand({ codigo: "00003", descripcion: "zapata de freno" }),
+      cand({ codigo: "00001", descripcion: "Árbol de levas" }),
+      cand({ codigo: "00002", descripcion: "BUJE DE BRONCE" }),
+    ];
+    expect(codigos(ordenarParaReponer(lista, "descripcion")))
+      .toEqual(["00001", "00002", "00003"]);
+  });
+
+  it("por descripcion el 9 va antes que el 10", () => {
+    const lista = [
+      cand({ codigo: "00002", descripcion: "BUJE 10" }),
+      cand({ codigo: "00001", descripcion: "BUJE 9" }),
+    ];
+    expect(codigos(ordenarParaReponer(lista, "descripcion")))
+      .toEqual(["00001", "00002"]);
+  });
+
+  it("por codigo, en el orden del catalogo", () => {
+    const lista = [cand({ codigo: "00345" }), cand({ codigo: "00018" }), cand({ codigo: "01002" })];
+    expect(codigos(ordenarParaReponer(lista, "codigo")))
+      .toEqual(["00018", "00345", "01002"]);
+  });
+
+  it("por uso, lo que mas se movio arriba", () => {
+    const lista = [
+      cand({ codigo: "00001", salidas: 2 }),
+      cand({ codigo: "00002", salidas: 9 }),
+      cand({ codigo: "00003", salidas: 5 }),
+    ];
+    expect(codigos(ordenarParaReponer(lista, "uso")))
+      .toEqual(["00002", "00003", "00001"]);
+  });
+
+  it("por lo que mas falta usa la proporcion y no el faltante crudo", () => {
+    // El caso que justifica la funcion: faltan 30 bolsas de un minimo de 500 y
+    // falta 1 rodamiento de un minimo de 1. Ordenado por faltante crudo, el
+    // rodamiento —del que no queda ninguno— queda ultimo.
+    const lista = [
+      cand({ codigo: "00001", stock_actual: 470, stock_seguridad: 500, faltante: 30 }),
+      cand({ codigo: "00002", stock_actual: 0, stock_seguridad: 1, faltante: 1 }),
+    ];
+    expect(codigos(ordenarParaReponer(lista, "falta"))).toEqual(["00002", "00001"]);
+  });
+
+  it("cuantoFalta es 1 cuando no queda nada y no se pasa de 1", () => {
+    expect(cuantoFalta(art({ stock_actual: 0, stock_seguridad: 4, faltante: 4 }))).toBe(1);
+    // Un minimo en cero no puede pasar, pero si pasara la fila no se esconde.
+    expect(cuantoFalta(art({ stock_seguridad: 0, faltante: 3 }))).toBe(1);
+  });
+
+  it("por la salida mas reciente", () => {
+    const lista = [
+      cand({ codigo: "00001", diasDesdeLaUltima: 40 }),
+      cand({ codigo: "00002", diasDesdeLaUltima: 2 }),
+    ];
+    expect(codigos(ordenarParaReponer(lista, "ultima"))).toEqual(["00002", "00001"]);
+  });
+
+  it("los cinco criterios desempatan por codigo, asi la lista no se reacomoda sola", () => {
+    // Todo igual menos el codigo: sin desempate, cada uno de los cinco devuelve
+    // el orden en que vino la consulta, que cambia entre dos cargas.
+    for (const { valor } of ORDENES_DE_REPOSICION) {
+      const lista = [cand({ codigo: "00345", id: "b" }), cand({ codigo: "00018", id: "a" })];
+      expect(codigos(ordenarParaReponer(lista, valor))).toEqual(["00018", "00345"]);
+    }
+  });
+
+  it("no toca la lista que recibe", () => {
+    // Ordenar en el lugar lo que llega del servidor hace que React vea el mismo
+    // arreglo y no vuelva a dibujar: la pantalla se queda como estaba.
+    const lista = [cand({ codigo: "00345" }), cand({ codigo: "00018" })];
+    const copia = [...lista];
+    ordenarParaReponer(lista, "codigo");
+    expect(lista).toEqual(copia);
+  });
+
+  it("un orden que no existe cae en el por defecto en vez de romper", () => {
+    const lista = [
+      cand({ codigo: "00001", salidas: 2 }),
+      cand({ codigo: "00002", salidas: 9 }),
+    ];
+    const inventado = "lo-que-alguien-pego" as OrdenDeReposicion;
+    expect(codigos(ordenarParaReponer(lista, inventado)))
+      .toEqual(codigos(ordenarParaReponer(lista, ORDEN_POR_DEFECTO)));
+  });
+
+  it("el por defecto es uno de los cinco y es el uso", () => {
+    expect(ORDENES_DE_REPOSICION.map((o) => o.valor)).toContain(ORDEN_POR_DEFECTO);
+    expect(ORDEN_POR_DEFECTO).toBe("uso");
+  });
+
+  it("clasificar devuelve los dos grupos ya ordenados por el por defecto", () => {
+    const articulos = [
+      art({ id: "a", codigo: "00001" }),
+      art({ id: "b", codigo: "00002" }),
+    ];
+    const movimientos = [
+      salida("00001", "2026-09-30"),
+      salida("00002", "2026-09-30"),
+      salida("00002", "2026-09-29"),
+    ];
+    const { paraPedir } = clasificarParaReponer(articulos, movimientos, [], HOY);
+    expect(paraPedir.map((c) => c.articulo.codigo)).toEqual(["00002", "00001"]);
   });
 });

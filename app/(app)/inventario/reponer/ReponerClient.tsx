@@ -1,14 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 // `altaDeReposicion` vive en el lib y no acá porque la arma también el stock,
 // que desde el 5/10/2026 puede pedir un faltante sin pasar por esta pantalla.
+// `ordenarParaReponer` también: el criterio y su rótulo son la misma decisión.
 import {
-  DIAS_DE_CONSUMO, altaDeReposicion, type Candidato, type ConPedido,
+  DIAS_DE_CONSUMO, altaDeReposicion, ordenarParaReponer,
+  ORDENES_DE_REPOSICION, ORDEN_POR_DEFECTO,
+  type Candidato, type ConPedido, type OrdenDeReposicion,
 } from "@/lib/inventario/reponer";
 import { COMPRA_LABELS } from "@/lib/compras/constants";
+import Select from "@/components/Select";
 import NuevoRequerimientoModal, {
   type ValoresIniciales,
 } from "@/app/(app)/compras/requerimientos/NuevoRequerimientoModal";
@@ -35,7 +39,13 @@ export default function ReponerClient({
   const router = useRouter();
   const [pidiendo, setPidiendo] = useState<ValoresIniciales | null>(null);
   const [pedido, setPedido] = useState("");
+  const [orden, setOrden] = useState<OrdenDeReposicion>(ORDEN_POR_DEFECTO);
 
+  // Un solo control para los dos grupos, a propósito. Son la misma lista
+  // partida por "¿ya está pedido?", y dos selectores invitarían a dejarlos en
+  // criterios distintos: buscar un artículo pediría mirar dos órdenes.
+  const pedirOrdenado = useMemo(() => ordenarParaReponer(paraPedir, orden), [paraPedir, orden]);
+  const pedidosOrdenados = useMemo(() => ordenarParaReponer(yaPedidos, orden), [yaPedidos, orden]);
 
   return (
     // `max-w-4xl` como `ListaClient`, la pantalla vecina con el mismo ritmo de
@@ -53,6 +63,24 @@ export default function ReponerClient({
           </Link>.
         </p>
       </div>
+
+      {/* Sólo si hay algo que ordenar: un selector sobre una lista vacía es un
+          control que promete que la pantalla podría decir otra cosa. */}
+      {paraPedir.length + yaPedidos.length > 0 && (
+        <Select
+          // El ancho entero en el teléfono —se elige con el pulgar— y lo que
+          // mida en escritorio. No lleva rótulo aparte porque cada opción ya
+          // dice «Ordenar por…», como en el listado de proveedores.
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm sm:w-auto"
+          aria-label="Ordenar la lista"
+          value={orden}
+          onChange={(e) => setOrden(e.target.value as OrdenDeReposicion)}
+        >
+          {ORDENES_DE_REPOSICION.map((o) => (
+            <option key={o.valor} value={o.valor}>{o.etiqueta}</option>
+          ))}
+        </Select>
+      )}
 
       {/* Arriba y no al final de la lista: son 17 filas o más, y quien aprieta
           Pedir en una del medio, parado en el pañol y con el celular en la mano,
@@ -81,7 +109,7 @@ export default function ReponerClient({
           </p>
         ) : (
           <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
-            {paraPedir.map((c) => (
+            {pedirOrdenado.map((c) => (
               // Sin `flex-wrap`: acá el botón no compite con nada que valga la
               // pena bajar de línea. `Detalle` tiene base 0 y se queda con lo que
               // sobra al lado del botón (~230px a 375px de ancho).
@@ -112,7 +140,7 @@ export default function ReponerClient({
           </p>
 
           <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
-            {yaPedidos.map((c) => {
+            {pedidosOrdenados.map((c) => {
               // Una sola vez: era la misma búsqueda dos veces en la misma línea,
               // una para el color y otra para el texto.
               const compra = COMPRA_LABELS[c.ri.estado_compra as keyof typeof COMPRA_LABELS];

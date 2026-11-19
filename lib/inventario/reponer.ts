@@ -17,6 +17,8 @@
  * las dos cosas se nota mirando la pantalla.
  */
 
+import { norm } from "@/lib/core/texto";
+
 /**
  * La ventana de consumo, en días. Medido el 02/10/2026 sobre los 497 faltantes
  * sin pedido: con 30 días quedan 28, con 90 quedan 75 y con 180 quedan 95. Se
@@ -86,6 +88,33 @@ export interface Reposicion {
   paraPedir: Candidato[];
   yaPedidos: ConPedido[];
 }
+
+/**
+ * Por qué criterio se puede ordenar la lista.
+ *
+ * Son cinco y no uno porque la pregunta que trae a alguien acá no siempre es la
+ * misma: "¿qué conviene pedir?" se contesta con el uso, "¿está el buje de la
+ * cinta?" se contesta alfabéticamente, y "¿qué se nos acabó del todo?" con lo
+ * que más falta. El orden de arranque sigue siendo el uso, que es el que
+ * sostiene el recorte de la lista (el porqué está en `clasificarParaReponer`).
+ *
+ * La etiqueta vive acá y no en la pantalla porque el criterio y su nombre son
+ * la misma decisión: un comparador que dice una cosa bajo un rótulo que dice
+ * otra no lo nota nadie hasta que alguien se pregunta por qué la lista está
+ * "mal ordenada".
+ */
+export const ORDENES_DE_REPOSICION = [
+  { valor: "uso", etiqueta: "Ordenar por lo que más se usa" },
+  { valor: "descripcion", etiqueta: "Ordenar por descripción (A–Z)" },
+  { valor: "codigo", etiqueta: "Ordenar por código" },
+  { valor: "falta", etiqueta: "Ordenar por lo que más falta" },
+  { valor: "ultima", etiqueta: "Ordenar por la salida más reciente" },
+] as const;
+
+export type OrdenDeReposicion = (typeof ORDENES_DE_REPOSICION)[number]["valor"];
+
+/** Con cuál arranca la pantalla. */
+export const ORDEN_POR_DEFECTO: OrdenDeReposicion = "uso";
 
 /** El pedido abierto más nuevo de un código, y cuántos hay. */
 export interface PedidoAbierto {
@@ -274,6 +303,72 @@ export function altaDeReposicion(articulo: ArticuloConFaltante): AltaDeReposicio
 }
 
 /**
+ * Cuán por debajo del mínimo está, de 0 a 1.
+ *
+ * **No es el faltante.** Comparar faltantes crudos entre artículos distintos no
+ * dice nada: faltan 30 bolsas de un mínimo de 500 y falta 1 rodamiento de un
+ * mínimo de 1, y el segundo es el que dejó la máquina sin repuesto. La
+ * proporción sí es comparable, y en 1 quiere decir "no queda ninguno".
+ *
+ * El mínimo en cero no puede pasar —`faltante > 0` exige que haya un mínimo por
+ * encima del stock— pero si llegara, 1 es la lectura que no esconde la fila.
+ */
+export function cuantoFalta(articulo: ArticuloConFaltante): number {
+  const minimo = Number(articulo.stock_seguridad);
+  if (!(minimo > 0)) return 1;
+  return Math.min(1, Number(articulo.faltante) / minimo);
+}
+
+/**
+ * El desempate final, igual para los cinco criterios.
+ *
+ * Sin él, dos artículos que empatan quedan en el orden en que vinieron de la
+ * consulta y la lista se reacomoda sola entre dos cargas. Pasa de verdad: por
+ * descripción hay códigos distintos con el mismo texto, y por uso la mayoría de
+ * las filas tiene una sola salida.
+ */
+const porCodigo = (a: Candidato, b: Candidato) =>
+  clave(a.articulo.codigo).localeCompare(clave(b.articulo.codigo), "es", { numeric: true });
+
+/**
+ * El criterio de cada orden, **sin** el desempate: lo pone `ordenarParaReponer`
+ * una sola vez, que es lo que garantiza que ninguno se olvide de ponerlo.
+ */
+const COMPARADORES: Record<OrdenDeReposicion, (a: Candidato, b: Candidato) => number> = {
+  // Lo que más se mueve arriba; a igual uso, lo más reciente.
+  uso: (a, b) => b.salidas - a.salidas || a.diasDesdeLaUltima - b.diasDesdeLaUltima,
+  // `norm` y no el texto crudo: las descripciones llegan de la planilla en
+  // mayúsculas, en minúsculas y con acentos según quién las escribió, y
+  // ordenar sin normalizar manda «Árbol» después de «Zapata». `numeric` hace
+  // que «BUJE 9» vaya antes que «BUJE 10».
+  descripcion: (a, b) =>
+    norm(a.articulo.descripcion).localeCompare(norm(b.articulo.descripcion), "es", { numeric: true }),
+  // El propio desempate alcanza: agregar algo acá sería ordenar dos veces por
+  // lo mismo.
+  codigo: () => 0,
+  falta: (a, b) => cuantoFalta(b.articulo) - cuantoFalta(a.articulo),
+  ultima: (a, b) => a.diasDesdeLaUltima - b.diasDesdeLaUltima,
+};
+
+/**
+ * Ordena una de las dos listas por el criterio elegido.
+ *
+ * Devuelve una copia: ordenar en el lugar lo que llega del servidor hace que
+ * React vea el mismo arreglo y no vuelva a dibujar.
+ *
+ * Un `orden` que no existe cae en el por defecto en vez de romper. No es
+ * paranoia: el valor viene de un `<select>`, o sea de un string, y el día que
+ * esto se guarde en la URL va a llegar lo que alguien tenga pegado.
+ */
+export function ordenarParaReponer<T extends Candidato>(
+  lista: T[],
+  orden: OrdenDeReposicion
+): T[] {
+  const criterio = COMPARADORES[orden] ?? COMPARADORES[ORDEN_POR_DEFECTO];
+  return [...lista].sort((a, b) => criterio(a, b) || porCodigo(a, b));
+}
+
+/**
  * Parte los artículos en los dos grupos de la pantalla.
  *
  * Entra el que tiene faltante, está activo y tuvo **al menos una salida** en la
@@ -341,16 +436,11 @@ export function clasificarParaReponer(
     });
   }
 
-  // Primero lo que más se mueve; a igual uso, lo más reciente; y a igual todo,
-  // por código — si no, el orden lo decide en qué orden vino la consulta y la
-  // pantalla se reordena sola entre dos cargas.
-  const orden = (a: Candidato, b: Candidato) =>
-    b.salidas - a.salidas ||
-    a.diasDesdeLaUltima - b.diasDesdeLaUltima ||
-    clave(a.articulo.codigo).localeCompare(clave(b.articulo.codigo));
-
-  paraPedir.sort(orden);
-  yaPedidos.sort(orden);
-
-  return { paraPedir, yaPedidos };
+  // El orden de arranque. La pantalla deja cambiarlo, pero el que llega del
+  // servidor es éste: lo que más se mueve arriba es lo que sostiene el recorte
+  // de la lista, y es también el único que no depende de que alguien elija.
+  return {
+    paraPedir: ordenarParaReponer(paraPedir, ORDEN_POR_DEFECTO),
+    yaPedidos: ordenarParaReponer(yaPedidos, ORDEN_POR_DEFECTO),
+  };
 }
