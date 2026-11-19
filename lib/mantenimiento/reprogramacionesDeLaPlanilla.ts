@@ -1,6 +1,10 @@
 /**
  * Qué fechas corrió la planilla, de lo que la sincronización está por pisar.
  *
+ * Los totales de abajo (2.467 de 2.531) difieren de los de CLAUDE.md (2.471 de
+ * 2.532) en el mismo día: la conciliación está en la sección «La reprogramación
+ * de una OT y el Análisis» de docs/MANTENIMIENTO-INTEGRACION.md.
+ *
  * ── POR QUÉ EXISTE ──────────────────────────────────────────────────────────
  *
  * En Mantenimiento manda la planilla, y —medido el 19/11/2026— sólo 264 de las

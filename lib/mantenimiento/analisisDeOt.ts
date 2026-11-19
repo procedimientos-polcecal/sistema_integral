@@ -2,6 +2,13 @@
  * El análisis semanal de las OT: los seis números de la hoja `Analisis de OT` y
  * las listas que los desglosan.
  *
+ * Ojo: «cerrada» se normaliza de tres maneras que NO coinciden. Acá se compara
+ * con `trim().toUpperCase()`; `reprogramacionesDeLaPlanilla.ts` compara sólo
+ * con `trim()`; y `filtrosOt.ts` manda a PostgREST un `estado.not.in.(…)` exacto.
+ * Un `estado` en minúsculas (hoy hay 0, medido) sería cerrada para el análisis y
+ * abierta para la sincronización y el filtro del listado. No se unificaron a
+ * propósito: no asumir que dicen lo mismo.
+ *
  * Es la aritmética de la hoja `Analisis de OT` de la planilla
  * `1aCMQlLnigQnO32p-IxDGjsFLu-5hv8pnD8_-zTML8Jo`, puesta acá para poder
  * probarla: la ruta y la pantalla no tienen lógica propia.
@@ -122,7 +129,7 @@ export interface AnalisisDeLaSemana {
   cerradasEnLaSemana: number;
   /** De esas cerradas en la semana, las de tipo correctivo. */
   correctivasCerradas: number;
-  /** El cuadro de tipo de mantenimiento cerrado. Los porcentajes suman 100. */
+  /** El cuadro de tipo de mantenimiento cerrado. Los porcentajes suman 100, salvo con total 0: ahí son tres ceros. */
   porTipo: { tipo: string; cantidad: number; porcentaje: number }[];
   /** La frase de una línea que arma la hoja, en castellano. */
   diagnostico: string;

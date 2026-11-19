@@ -185,8 +185,8 @@ export default function AnalisisClient({ canEdit }: { canEdit: boolean }) {
             })}
           </div>
 
-          {pestania === "conInicio" && <ListaDeOrdenes ordenes={a.listas.conInicio} vacia="Ninguna OT empieza en esta semana." />}
-          {pestania === "sinCerrar" && <ListaDeOrdenes ordenes={a.listas.sinCerrar} vacia="No quedó ninguna sin cerrar." />}
+          {pestania === "conInicio" && <ListaDeOrdenes ordenes={a.listas.conInicio} vacia="Ninguna OT empieza en esta semana." conCierre />}
+          {pestania === "sinCerrar" && <ListaDeOrdenes ordenes={a.listas.sinCerrar} vacia="No quedó ninguna sin cerrar." conCierre />}
           {pestania === "fueraDeFecha" && <ListaDeOrdenes ordenes={a.listas.cerradasFueraDeFecha} vacia="Ninguna cerró fuera de fecha." conCierre />}
           {pestania === "cerradas" && <ListaDeOrdenes ordenes={a.listas.cerradasEnLaSemana} vacia="No se cerró ninguna OT en la semana." conCierre />}
           {pestania === "reprogramaciones" && <Reprogramaciones datos={datos} />}
@@ -222,6 +222,9 @@ function Orden({ o, conCierre }: { o: OrdenParaAnalisis; conCierre?: boolean }) 
       <div className="flex flex-wrap items-baseline gap-x-3 text-sm">
         <span className="font-semibold">OT {o.ot_number}</span>
         <span className="text-slate-600">{sectorYEquipo(o)}</span>
+        {/* Las listas no filtran por tipo como la planilla: sin esto la tarjeta
+            dice «CORRECTIVO 3», la pestaña muestra 9 y no se sabe cuáles 3. */}
+        {o.tipo && <span className="text-slate-500 text-xs">{o.tipo}</span>}
         <span className="text-slate-400 text-xs">
           Inicio {o.fecha_ejecucion ? comoSeLee(o.fecha_ejecucion) : "sin fecha"}
           {conCierre && ` · Cierre ${o.fecha_cierre ? comoSeLee(o.fecha_cierre) : "sin fecha"}`}
@@ -257,7 +260,7 @@ function Necesitan({ ordenes, canEdit, onPostergar }: {
           frases de 35 caracteres gritadas no se leen. */}
       <div className="flex flex-wrap gap-2 text-sm">
         <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">{ordenes.length} en total</span>
-        <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-800">{desdeElSistema} se pueden postergar desde el sistema</span>
+        <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-800">{canEdit ? `${desdeElSistema} se pueden postergar desde el sistema` : `${desdeElSistema} son del sistema, pero necesitás permiso de edición para postergarlas`}</span>
         <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-800">{ordenes.length - desdeElSistema} hay que cambiarlas en la planilla</span>
       </div>
       {ordenes.length === 0 ? (

@@ -189,10 +189,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ analisis, necesitan, reprogramaciones, autores });
   } catch (e) {
     // El detalle al log y no al cuerpo: el mensaje de Supabase nombra tablas y
-    // columnas, y a la pantalla le alcanza con reintentar.
+    // columnas. Y el texto no promete un reintento: con la migración sin aplicar
+    // la causa es una columna que no existe y reintentar no la arregla (ya se
+    // prometió una salida inexistente dos veces en esta rama).
     console.error("[mantenimiento/analisis] no se pudo armar el análisis:", e);
     return NextResponse.json(
-      { error: "No se pudo armar el análisis. Probá de nuevo en un momento." },
+      { error: "No se pudo armar el análisis." },
       { status: 500 },
     );
   }

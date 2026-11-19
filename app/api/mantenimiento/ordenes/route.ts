@@ -13,6 +13,7 @@ import {
 } from "@/lib/mantenimiento/cancelacion";
 import { celdaDeObservacionPrevia } from "@/lib/mantenimiento/notas";
 import { fechaDeLaCarga, type FechaDeLaCarga } from "@/lib/mantenimiento/avisos";
+import { traerTodo } from "@/lib/core/paginado";
 import { marcarElAviso } from "@/lib/mantenimiento/marcarElAviso";
 import {
   reservarClave, anotarLaClave, respuestaDeLaReserva,
@@ -232,6 +233,13 @@ export async function GET(request: Request) {
   // `.in()` más largo arma una URL que PostgREST rechaza; la página es de 50,
   // pero `?pendientes=1` trae hasta 300.
   //
+  // El lote está atrapado entre dos límites mudos: la URL (de ahí los 200) y
+  // las 1.000 filas que PostgREST corta sin avisar —cada id trae varios
+  // movimientos, así que 300 órdenes pasan de largo—. Achicar el lote no cierra
+  // el segundo, por eso cada lote se pagina por dentro con `traerTodo`, y el
+  // `id` desempata porque dos movimientos anotados en la misma pasada comparten
+  // `creado_en` y sin él la cadena de fechas podría salir invertida en pantalla.
+  //
   // Si la consulta falla —por ejemplo la migración todavía no corrió— el listado
   // sale igual, sin cadenas: perder un renglón de la fila es mejor que perder la
   // pantalla entera.
@@ -240,13 +248,25 @@ export async function GET(request: Request) {
     .filter((o) => ((o as { reprogramada_veces?: number }).reprogramada_veces ?? 0) > 0)
     .map((o) => o.id as string);
   for (let i = 0; i < idsReprogramadas.length; i += 200) {
-    const { data: filas, error: errMov } = await supabase
-      .from("mant_reprogramaciones_ot")
-      .select("*")
-      .in("ot_id", idsReprogramadas.slice(i, i + 200))
-      .order("creado_en", { ascending: true });
-    if (errMov) break;
-    for (const f of (filas ?? []) as Reprogramacion[]) (movimientos[f.ot_id] ??= []).push(f);
+    const lote = idsReprogramadas.slice(i, i + 200);
+    let filas: Reprogramacion[];
+    try {
+      filas = await traerTodo<Reprogramacion>((desde, hasta) =>
+        supabase
+          .from("mant_reprogramaciones_ot")
+          .select("*")
+          .in("ot_id", lote)
+          .order("creado_en", { ascending: true })
+          .order("id", { ascending: true })
+          .range(desde, hasta),
+      );
+    } catch (errMov) {
+      // Se loguea: un listado que pierde todas las cadenas por un error pasajero
+      // es indistinguible de uno donde nunca se reprogramó nada.
+      console.error("[mantenimiento/ordenes] no se pudo leer el historial de reprogramaciones:", errMov);
+      break;
+    }
+    for (const f of filas) (movimientos[f.ot_id] ??= []).push(f);
   }
 
   return NextResponse.json({ data, count, movimientos });

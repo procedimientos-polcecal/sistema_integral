@@ -712,7 +712,7 @@ clase sin capa, y las otras dos muerden igual de callado:
 | `.card` | `box-shadow` | `ring-*`, `shadow-*` |
 | `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost` | `color` y `font-size` | `text-red-700`, `text-xs`, `text-sm` |
 | `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost` | `cursor` | `disabled:cursor-not-allowed`, `cursor-*` |
-| `.badge` | `font-size: 11px` **y `text-transform: uppercase`** | `text-xs`, `text-sm` — y la segunda no es una utilidad que pierde sino una que nadie pensó en poner: una oración dentro de un `.badge` sale **gritada en mayúsculas** |
+| `.badge` | `display: inline-flex`, `border-radius`, `padding`, `font-size: 11px`, `font-weight: 600`, `letter-spacing` **y `text-transform: uppercase`** | `block`, `rounded-md`, `px-*`/`py-*`, `font-normal`, `tracking-*`, `text-xs`, `text-sm` — y la segunda no es una utilidad que pierde sino una que nadie pensó en poner: una oración dentro de un `.badge` sale **gritada en mayúsculas** |
 
 **Los cuatro `.btn-*` están en la lista a propósito, y `.badge` entró último
 —el 19/11/2026, después de `.btn-ghost`—.** Una tabla incompleta es lo que hace
