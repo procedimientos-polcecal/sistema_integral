@@ -155,6 +155,45 @@ Dos detalles que no se deducen del código:
   otro — los once bloques de la hoja `Calcio` y la tabla de `Otros` del 02/10
   anotan el retenido de cada tamiz y cierran con un `Ac #200`.
 
+### La cal útil vial entra sólo el día que alguien tituló (19/11/2026)
+
+El reporte cierra cada tabla con **peso volumétrico** y **humedad**, que son
+filas fijas, y desde el 19/11/2026 lleva también **cal útil vial** — pero ésa
+**no es fija**: aparece únicamente en la tabla donde alguna de sus muestras la
+tituló. Hasta entonces el dato se cargaba, se guardaba y se calculaba, y el
+reporte era el único lugar del módulo que no lo mostraba.
+
+El porqué está medido, el 19/11/2026 contra producción:
+
+| Determinación | Muestras con el dato |
+|---|---|
+| Humedad | 104 de 115 |
+| Peso volumétrico | 68 de 115 |
+| **Cal útil vial** | **3 de 115** |
+
+Las tres son del producto **Cal**, y en cada uno de esos tres días las otras 5
+o 6 muestras de la jornada no la tenían.
+
+Con esos números una fila fija diría algo falso. El guión de la humedad
+significa «hoy no se midió», que es información sobre algo que se mide casi
+siempre; el de la cal útil, en una columna de Filler, Calcio o un despacho,
+significaría «no corresponde» — y las dos cosas se escriben igual. Una fila
+entera de guiones todos los días, en productos donde la determinación no va, es
+la clase de renglón que enseña a no mirar ninguno.
+
+Dos cosas más que no se deducen del código:
+
+- **La bandera se mira sobre el valor calculado y no sobre el `ml de ácido`
+  cargado.** Una titulación a la que le falta el peso de la muestra no da
+  número —`calUtilVial` devuelve null con su problema— y agregar la fila por
+  ella dejaría ese renglón de guiones que no tenerla fija evita.
+- **La decisión es por tabla, no por reporte.** Si el que tituló fue un Calcio,
+  que va en su propia tabla por tamizar desde #6, la fila entra ahí y la tabla
+  del formato no la lleva.
+
+El día que la cal útil se titule todos los días, esto se vuelve una fila fija y
+el cambio es mover `FILA_CAL_UTIL` adentro de `FILAS_FINALES`.
+
 **Falta el envío por correo.** El repo no tiene con qué mandar un mail propio:
 lo único que manda correos es Supabase Auth, y sólo sus plantillas de acceso.
 Hace falta un proveedor (Resend, o el SMTP de la casilla corporativa) y esa
