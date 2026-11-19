@@ -80,10 +80,26 @@ function inicioEfectivo(orden: OrdenParaRecordar): string {
   return (inicio ?? "").slice(0, 10);
 }
 
-/** Las que arrancaban el día que cruzó, y siguen abiertas pasada su ventana. */
+/** El día en que la orden vence: su fin, o el inicio si la ventana es de un día. */
+function finEfectivo(orden: OrdenParaRecordar): string {
+  const inicio = inicioEfectivo(orden);
+  const fin = String(orden.fecha_fin ?? "").slice(0, 10);
+  return fin && fin > inicio ? fin : inicio;
+}
+
+/**
+ * Las que vencieron el día que cruzó, y siguen abiertas.
+ *
+ * **Se cruza el fin de la ventana y no el inicio**, porque `estaAtrasada` vence
+ * por el fin. Cruzar el inicio fue el error que estuvo acá: en una orden de
+ * varios días las dos condiciones nunca son verdaderas el mismo día —el día
+ * `inicio+1` todavía no está atrasada y el día `fin+1` ya no tiene su inicio en
+ * los días que cruzaron—, así que no se anunciaba nunca. Para las de un solo
+ * día el fin efectivo es el inicio y nada cambia.
+ */
 export function lasQueSeAtrasaron(ordenes: OrdenParaRecordar[], hoy: string): OrdenParaRecordar[] {
   const dias = diasQueCruzaron(hoy);
-  return ordenes.filter((o) => estaAtrasada(o, hoy) && dias.includes(inicioEfectivo(o)));
+  return ordenes.filter((o) => estaAtrasada(o, hoy) && dias.includes(finEfectivo(o)));
 }
 
 /**
@@ -218,6 +234,12 @@ export async function avisarDeLasOT(
   const vacio = { enviadas: 0, personas: 0, atrasadas: 0, proximas: 0 };
   if (!esHoraDeAvisar(ahora)) return { ...vacio, motivo: "fuera de hora" };
 
+  // Fuera del `try` para que el `catch` informe lo que ya salió: un fallo tardío
+  // (el `delete` de una suscripción vencida) no desmanda los pushes enviados.
+  let enviadas = 0;
+  const alcanzados = new Set<string>();
+  let cuenta = { atrasadas: 0, proximas: 0 };
+
   try {
     const ordenes = await traerTodo<OrdenParaRecordar>((desde, hasta) =>
       admin
@@ -232,7 +254,7 @@ export async function avisarDeLasOT(
     );
     const atrasadas = lasQueSeAtrasaron(ordenes, hoy);
     const proximas = lasQueArrancan(ordenes, hoy);
-    const cuenta = { atrasadas: atrasadas.length, proximas: proximas.length };
+    cuenta = { atrasadas: atrasadas.length, proximas: proximas.length };
     const avisos = [textoDeLasAtrasadas(atrasadas), textoDeLasQueArrancan(proximas, hoy)].filter(
       (a): a is Aviso => a !== null
     );
@@ -259,8 +281,6 @@ export async function avisarDeLasOT(
       admin.from("push_suscripciones").select("usuario_id, endpoint, p256dh, auth").range(desde, hasta)
     );
 
-    let enviadas = 0;
-    const alcanzados = new Set<string>();
     for (const aparato of suscripciones) {
       if (!destinatarios.has(aparato.usuario_id)) continue;
       for (const aviso of avisos) {
@@ -286,6 +306,6 @@ export async function avisarDeLasOT(
     // `error` aparte de `motivo`: «fuera de hora» es una decisión y esto es un
     // fallo, y quien llama (la ruta, que contesta 503) tiene que poder
     // distinguirlos sin comparar frases.
-    return { ...vacio, motivo, error: motivo };
+    return { ...vacio, ...cuenta, enviadas, personas: alcanzados.size, motivo, error: motivo };
   }
 }

@@ -90,6 +90,15 @@ describe("a quién nombra", () => {
     const o = ot(5, null, null, { fecha_ejecucion: "2026-11-18", fecha_fin: "2026-11-18" });
     expect(lasQueSeAtrasaron([o], HOY)).toEqual([o]);
   });
+  it("una orden de varios días se nombra el día después de su fin, no el de su inicio", () => {
+    // 17/11 → 18/11: vence el 18, así que se atrasa el 19. Cruzar el inicio no
+    // la nombraba nunca: el 18 todavía no está atrasada y el 19 su inicio quedó atrás.
+    const o = ot(16, null, null, { fecha_ejecucion: "2026-11-17", fecha_fin: "2026-11-18" });
+    expect(lasQueSeAtrasaron([o], "2026-11-19")).toEqual([o]);
+    expect(lasQueSeAtrasaron([o], "2026-11-18")).toEqual([]);
+    // Y no se repite al día siguiente.
+    expect(lasQueSeAtrasaron([o], "2026-11-20")).toEqual([]);
+  });
   it("no nombra una realizada ni una cancelada", () => {
     const realizada = ot(6, null, null, { estado: "REALIZADO", fecha_ejecucion: "2026-11-18" });
     const cancelada = ot(7, null, null, { estado: "CANCELADA", fecha_ejecucion: "2026-11-18" });
