@@ -21,7 +21,12 @@ import type { Muestra, ValorEvaluado } from "./types";
  * tabla, con sus propias filas, así que no se pierde ni una medición.
  */
 
-export type TipoDeFila = "retenido" | "acumulado" | "peso_volumetrico" | "humedad";
+export type TipoDeFila =
+  | "retenido"
+  | "acumulado"
+  | "peso_volumetrico"
+  | "humedad"
+  | "cal_util_vial";
 
 export interface FilaDelReporte {
   etiqueta: string;
@@ -36,6 +41,35 @@ const FILAS_FINALES: FilaDelReporte[] = [
   { etiqueta: "Peso volumétrico (g/l)", tipo: "peso_volumetrico", destacada: false },
   { etiqueta: "Humedad bh (%)", tipo: "humedad", destacada: false },
 ];
+
+/**
+ * La cal útil vial, que **no es una fila fija**: entra sólo en la tabla donde
+ * alguna muestra la tituló.
+ *
+ * Medido el 19/11/2026 contra producción: la tiene **3 de 115 muestras**, las
+ * tres del producto `Cal`, y en cada uno de esos días las otras 5 o 6 muestras
+ * del día no. Contra eso, el peso volumétrico está en 68 de 115 y la humedad en
+ * 104, y por eso ésas sí son fijas: su guión dice «hoy no se midió», que es
+ * información sobre algo que se mide casi siempre.
+ *
+ * Una fila fija acá diría otra cosa. El reporte lleva Filler, Calcio y los
+ * despachos, donde la cal útil **no se mide nunca**, así que un guión suyo no
+ * sería «faltó» sino «no corresponde» — y las dos cosas se escriben igual. Una
+ * fila entera de guiones todos los días, en productos donde la determinación no
+ * va, es la clase de renglón que enseña a no mirar ninguno.
+ *
+ * Va al final porque es la última del formulario y la más rara de las tres.
+ */
+const FILA_CAL_UTIL: FilaDelReporte = {
+  etiqueta: "Cal útil vial (%)",
+  tipo: "cal_util_vial",
+  destacada: false,
+};
+
+/** Las finales de una tabla, con la cal útil si alguna de sus muestras tituló. */
+function filasFinales(conCalUtil: boolean): FilaDelReporte[] {
+  return conCalUtil ? [...FILAS_FINALES, FILA_CAL_UTIL] : [...FILAS_FINALES];
+}
 
 /**
  * Las ocho filas del formato de siempre, en el orden de la planilla: cada
@@ -56,6 +90,14 @@ export const FILAS_DEL_REPORTE: FilaDelReporte[] = [
 ];
 
 /**
+ * Las filas del formato de siempre, con la cal útil al final si alguna de sus
+ * muestras tituló. Sin cal útil son exactamente las de `FILAS_DEL_REPORTE`.
+ */
+export function filasDelFormato(conCalUtil: boolean): FilaDelReporte[] {
+  return conCalUtil ? [...FILAS_DEL_REPORTE, FILA_CAL_UTIL] : FILAS_DEL_REPORTE;
+}
+
+/**
  * Las filas de una tabla para un juego de tamices que no es el de siempre.
  *
  * **Un retenido por malla y un solo acumulado, al final.** No es una invención:
@@ -64,8 +106,9 @@ export const FILAS_DEL_REPORTE: FilaDelReporte[] = [
  * cada tamiz y cierran con un `Ac #200`. Un acumulado debajo de cada malla
  * duplicaría el alto de la tabla para repetir una suma corrida que nadie pide.
  */
-export function filasParaMallas(mallas: number[]): FilaDelReporte[] {
-  if (mallas.length === 0) return [...FILAS_FINALES];
+export function filasParaMallas(mallas: number[], conCalUtil = false): FilaDelReporte[] {
+  const finales = filasFinales(conCalUtil);
+  if (mallas.length === 0) return finales;
 
   const ordenadas = [...mallas].sort((a, b) => a - b);
   const ultima = ordenadas[ordenadas.length - 1];
@@ -83,7 +126,7 @@ export function filasParaMallas(mallas: number[]): FilaDelReporte[] {
       malla: ultima,
       destacada: true,
     },
-    ...FILAS_FINALES,
+    ...finales,
   ];
 }
 
@@ -126,6 +169,9 @@ function celdaDe(fila: FilaDelReporte, evaluada: MuestraEvaluada): ValorEvaluado
   if (fila.tipo === "humedad") {
     return evaluada.humedad.valor === null ? null : evaluada.humedad;
   }
+  if (fila.tipo === "cal_util_vial") {
+    return evaluada.calUtilVial.valor === null ? null : evaluada.calUtilVial;
+  }
 
   const g = evaluada.granulometria.filas.find((f) => f.malla === fila.malla);
   if (!g) return null;
@@ -151,6 +197,19 @@ function mallasDe(d: MuestraDelDia): number[] {
  */
 function entraEnElFormato(mallas: number[]): boolean {
   return mallas.every((m) => (MALLAS_DEL_LISTADO as readonly number[]).includes(m));
+}
+
+/**
+ * Si esa muestra tiene un valor de cal útil que mostrar.
+ *
+ * Se mira el **valor calculado** y no el `ml de ácido` cargado: una titulación
+ * a la que le falta el peso de la muestra no da número —`calUtilVial` devuelve
+ * null con su problema—, y agregar la fila por ella dejaría un renglón de
+ * guiones en todas las columnas, que es justo lo que no tener la fila fija
+ * evita.
+ */
+function titulo(d: MuestraDelDia): boolean {
+  return d.evaluada.calUtilVial.valor !== null;
 }
 
 function columnaDe(d: MuestraDelDia, filas: FilaDelReporte[]): ColumnaDelReporte {
@@ -196,17 +255,18 @@ export function armarReporte(fecha: string, delDia: MuestraDelDia[]): Reporte {
   const tablas: TablaDelReporte[] = [];
 
   if (delFormato.length > 0) {
+    const filas = filasDelFormato(delFormato.some(titulo));
     tablas.push({
       mallas: [],
       esElFormato: true,
-      filas: FILAS_DEL_REPORTE,
-      columnas: delFormato.map((d) => columnaDe(d, FILAS_DEL_REPORTE)),
+      filas,
+      columnas: delFormato.map((d) => columnaDe(d, filas)),
     });
   }
 
   for (const muestras of porJuego.values()) {
     const mallas = mallasDe(muestras[0]);
-    const filas = filasParaMallas(mallas);
+    const filas = filasParaMallas(mallas, muestras.some(titulo));
     tablas.push({
       mallas,
       esElFormato: false,
@@ -229,7 +289,11 @@ export function armarReporte(fecha: string, delDia: MuestraDelDia[]): Reporte {
 export function comoSeEscribe(fila: FilaDelReporte, celda: ValorEvaluado | null): string {
   if (celda?.valor === null || celda === null) return "-";
 
-  if (fila.tipo === "humedad") {
+  // La cal útil va con la misma forma que la humedad —signo y dos decimales—
+  // aunque sus valores ronden el 57 %: es el redondeo con el que la calcula
+  // `calUtilVial`, y recortarlo acá haría que la planilla diga un número que el
+  // resto del sistema no dice.
+  if (fila.tipo === "humedad" || fila.tipo === "cal_util_vial") {
     return `${celda.valor.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
   }
   if (fila.tipo === "peso_volumetrico") {

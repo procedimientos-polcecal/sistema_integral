@@ -14,7 +14,7 @@ export interface ModalProps {
   tocado?: boolean;
   /** Un visor de sólo lectura: sale derecho y nunca pregunta. */
   soloLectura?: boolean;
-  ancho?: "chico" | "medio" | "ancho";
+  ancho?: "chico" | "medio" | "ancho" | "enorme";
 }
 
 // El ancho va en el panel, que no es `.card`: ninguna clase sin capa declara
@@ -23,6 +23,10 @@ const ANCHOS = {
   chico: "max-w-sm",
   medio: "max-w-lg",
   ancho: "max-w-3xl",
+  // Para mirar un dibujo, no para leer un formulario: un gráfico ampliado a
+  // `ancho` queda en 768 px, que es poco más del doble de lo que mide en su
+  // grilla de tres columnas.
+  enorme: "max-w-6xl",
 } as const;
 
 /**

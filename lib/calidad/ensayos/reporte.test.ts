@@ -87,6 +87,85 @@ describe("FILAS_DEL_REPORTE", () => {
   });
 });
 
+/**
+ * La cal útil vial, medida el 19/11/2026 contra producción: **3 muestras de
+ * 115**, las tres del producto `Cal`, y en cada uno de esos días el resto de
+ * las 6 o 7 muestras no la tenía. Por eso la fila no es fija como el peso
+ * volumétrico (68 de 115) ni como la humedad (104 de 115): entra el día que
+ * alguien tituló y los demás días el reporte queda como estaba.
+ *
+ * Los números del fixture son los de la muestra real del 18/11: 46,9 ml de
+ * ácido sobre 3 g, que por `ml × 0,037 / peso × 100` dan 57,84 %.
+ */
+describe("la cal útil vial", () => {
+  const CAL = { id: "p6", nombre: "Cal", orden: 6 };
+  const TITULADA = { cal_util_ml_acido: 46.9, cal_util_peso_muestra_g: 3 };
+
+  it("no agrega la fila cuando nadie la midio", () => {
+    const r = armarReporte("2026-11-17", [tamizada("m1", CAL, { 50: 1, 100: 2, 200: 3 })]);
+
+    expect(r.tablas[0].filas.map((f) => f.etiqueta)).not.toContain("Cal útil vial (%)");
+  });
+
+  it("agrega la fila al final el dia que alguien la midio", () => {
+    const r = armarReporte("2026-11-18", [
+      tamizada("m1", CAL, { 50: 1, 100: 2, 200: 3 }, TITULADA),
+    ]);
+
+    const etiquetas = r.tablas[0].filas.map((f) => f.etiqueta);
+    expect(etiquetas).toContain("Cal útil vial (%)");
+    expect(etiquetas[etiquetas.length - 1]).toBe("Cal útil vial (%)");
+  });
+
+  it("la celda lleva el valor titulado, y guion en las que no titularon", () => {
+    const r = armarReporte("2026-11-18", [
+      tamizada("m1", CAL, { 50: 1, 100: 2, 200: 3 }, TITULADA),
+      tamizada("m2", FILLER1, { 50: 1, 100: 2, 200: 3 }),
+    ]);
+
+    const tabla = r.tablas[0];
+    const i = tabla.filas.findIndex((f) => f.tipo === "cal_util_vial");
+    // Las columnas van por orden de catalogo: Filler 1 (1) antes que Cal (6).
+    const laDeCal = tabla.columnas.find((c) => c.producto === "Cal")!;
+    const laDeFiller = tabla.columnas.find((c) => c.producto === "Filler 1")!;
+    expect(laDeCal.celdas[i]?.valor).toBe(57.84);
+    expect(laDeFiller.celdas[i]).toBeNull();
+  });
+
+  it("se escribe con el signo de porcentaje y dos decimales", () => {
+    const fila = { etiqueta: "Cal útil vial (%)", tipo: "cal_util_vial" as const, destacada: false };
+
+    expect(comoSeEscribe(fila, { valor: 57.84 })).toBe("57,84%");
+    expect(comoSeEscribe(fila, null)).toBe("-");
+  });
+
+  it("la fila entra sola en la tabla que la tiene, no en todas", () => {
+    // Un Calcio tamiza desde #6, asi que va en su propia tabla. Si titula el
+    // Calcio, la tabla del formato no tiene por que llevar la fila.
+    const r = armarReporte("2026-11-18", [
+      tamizada("m1", FILLER1, { 50: 1, 100: 2, 200: 3 }),
+      tamizada("m2", CALCIO02, { 6: 1, 50: 2, 200: 3 }, TITULADA),
+    ]);
+
+    expect(r.tablas).toHaveLength(2);
+    const conLaFila = r.tablas.filter((t) =>
+      t.filas.some((f) => f.tipo === "cal_util_vial")
+    );
+    expect(conLaFila).toHaveLength(1);
+    expect(conLaFila[0].esElFormato).toBe(false);
+  });
+
+  it("una titulacion sin peso no inventa la fila", () => {
+    // `calUtilVial` devuelve null y un problema cuando falta el peso titulado:
+    // la fila diria «-» en todas las columnas, que es una fila que no dice nada.
+    const r = armarReporte("2026-11-18", [
+      tamizada("m1", CAL, { 50: 1, 100: 2, 200: 3 }, { cal_util_ml_acido: 46.9 }),
+    ]);
+
+    expect(r.tablas[0].filas.map((f) => f.tipo)).not.toContain("cal_util_vial");
+  });
+});
+
 describe("filasParaMallas", () => {
   /**
    * Es lo que calidad ya escribe cuando el juego es otro: el retenido de cada

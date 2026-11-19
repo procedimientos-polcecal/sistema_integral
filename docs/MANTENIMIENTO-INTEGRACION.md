@@ -2316,6 +2316,36 @@ Lo que **no** se comprobó, y es lo mismo que arrastra toda la pantalla: ningún
 navegador la abrió con una sesión real. Build, `tsc` y los tests pasan; que el
 movimiento de una orden llegue a la planilla no lo probó nadie todavía.
 
+#### Lo que encontró la revisión, y se corrigió el 19/11/2026
+
+- **El mes lo ve cualquiera con el módulo; moverlo pide `canEdit`.** La pestaña
+  salía sin ninguna guarda, y `/mantenimiento/planificacion` la ven también los
+  **seis usuarios que tienen Mantenimiento en `lectura`** (cinco `encargado`
+  activos, medido el 18/11/2026): veían «Mover a otro día», escribían la
+  justificación y recién ahí la ruta contestaba 403. Ahora `MesDeOrdenes` pide
+  `puedeMover` —obligatoria y sin default, porque las dos pantallas reparten
+  permisos distintos— y sin él el calendario se ve entero y el botón no está.
+  Es la misma regla que «Postergar» en el listado. `/mantenimiento/programacion`
+  no tenía el problema: ahí sólo entra el admin.
+- **Una recarga que falla sobre un mes ya dibujado era invisible.** `error`
+  quedaba tapado por la foto vieja, así que si el refetch posterior a mover
+  fallaba se veía el cartel verde «la OT quedó para el 25/11» **y la grilla
+  pintándola el día de antes**, sin un solo aviso. Lo que sigue ahí es volver a
+  moverla, y postergar suma días sobre la fecha que ya cambió: la orden termina
+  en un día que nadie eligió, con otra escritura a la planilla y otra
+  justificación. Ahora `datos` y `fallo` llevan el número de pedido que los
+  escribió y manda el más nuevo, así que la grilla vieja sigue a la vista —sirve—
+  con el cartel encima diciendo que es de antes.
+- **La regla del estado vivía sólo en el cliente.** La ruta traía `estado` en su
+  `select` y no lo miraba. Ahora rechaza las `REALIZADO`
+  (`porQueElEstadoNoDejaPostergar`, en `lib/` y con tests, no adentro de la
+  ruta). **Sólo `REALIZADO`**, que es donde las dos puntas coinciden: el
+  calendario además se niega con `SUSPENDIDA` y el listado la deja postergar
+  —su botón sale con `pideJustificacion`, que es «todo lo que no está
+  realizado»—. Esa diferencia **queda**, con un test que la fija en vez de
+  taparla: hoy no tiene ni un caso (0 órdenes en `SUSPENDIDA`) y arbitrarla
+  desde el servidor sería elegir por el listado sin que nadie lo haya pedido.
+
 ## El cuaderno de Piparo: leer una foto y sacar las OT (01–02/11/2026)
 
 Piparo entrega su mes en un **cuaderno manuscrito** y no con partes preimpresos

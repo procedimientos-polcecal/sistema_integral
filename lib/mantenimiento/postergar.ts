@@ -35,6 +35,29 @@ import { sumarDias } from "@/lib/core/fechas";
  */
 export const MAXIMO_DE_DIAS = 90;
 
+/**
+ * Por qué el estado no deja postergar la orden, o `null` si deja.
+ *
+ * Vive acá y no adentro de la ruta por lo de siempre: las rutas no tienen tests
+ * y esto es una regla, no plomería. La escribió el 19/11/2026 una revisión que
+ * encontró que la ruta traía `estado` en su `select` y **no lo miraba**, así
+ * que la única defensa contra postergar una orden ya hecha estaba en las dos
+ * pantallas.
+ *
+ * **Sólo `REALIZADO`**, que es donde las dos puntas coinciden: el calendario
+ * además se niega con `SUSPENDIDA` y el listado la deja. Esa diferencia se
+ * decide en la pantalla y el servidor no la arbitra — el porqué está en
+ * `moverLaOT.ts`.
+ *
+ * Un estado desconocido no traba: un texto que nadie reconoce no prueba que la
+ * orden esté hecha, y la planilla escribe ahí lo que quiere.
+ */
+export function porQueElEstadoNoDejaPostergar(estado: unknown): string | null {
+  return String(estado ?? "").trim().toUpperCase() === "REALIZADO"
+    ? "Esta orden ya está realizada: correrle la fecha de inicio no cambia nada."
+    : null;
+}
+
 /** La fecha corrida, o `null` si no hay de dónde partir. */
 export function laNuevaFecha(fecha: string | null | undefined, dias: number): string | null {
   if (!fecha) return null;

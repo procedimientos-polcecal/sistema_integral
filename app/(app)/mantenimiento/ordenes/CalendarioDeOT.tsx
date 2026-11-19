@@ -94,6 +94,20 @@ export type ModoDelCalendario =
     }
   | {
       tipo: "programar";
+      /**
+       * Si quien mira puede mover una orden, o sea si tiene nivel de edición en
+       * Mantenimiento. En `false` el calendario se ve entero —qué tiene cada
+       * día y cuánta gente hay es información, no una acción— y lo único que no
+       * aparece es el botón de mover.
+       *
+       * **No es una comodidad: es la misma regla que el botón «Postergar» del
+       * listado**, que va detrás de `canEdit`. `/mantenimiento/planificacion` la
+       * ve cualquiera con el módulo —seis usuarios la tienen en `lectura`—, así
+       * que sin esto el botón sale para todos y el servidor contesta 403
+       * después de haber hecho escribir la justificación. Un botón que rebota es
+       * peor que uno que no está.
+       */
+      puedeMover: boolean;
       /** La orden que se está moviendo, o `null` si no hay ninguna en curso. */
       moviendo: OrdenDelDia | null;
       onEmpezarAMover: (orden: OrdenDelDia) => void;
@@ -160,8 +174,22 @@ export default function CalendarioDeOT({
   const moviendo = modo.tipo === "programar" ? modo.moviendo : null;
 
   const [mes, setMes] = useState(() => (/^\d{4}-\d{2}-\d{2}$/.test(valor) ? valor : hoy).slice(0, 7));
-  const [datos, setDatos] = useState<{ mes: string; dias: DiaDelCalendario[] } | null>(null);
-  const [fallo, setFallo] = useState<{ mes: string; mensaje: string } | null>(null);
+  /*
+   * Los dos llevan el número del pedido que los escribió, y es lo que decide
+   * cuál manda cuando los dos hablan del mismo mes: el más nuevo.
+   *
+   * Sin eso, una recarga que falla sobre un mes YA DIBUJADO era invisible —la
+   * foto vieja tapaba el error— y la pantalla se contradecía sola: el cartel
+   * verde decía «la OT quedó para el 25/11» y la grilla la seguía pintando el
+   * día de antes, sin un solo aviso. Lo que sigue naturalmente ahí es volver a
+   * moverla, y postergar **suma días sobre la fecha que ya cambió**: la orden
+   * termina en un día que nadie eligió, con otra escritura a la planilla y otra
+   * justificación. El camino sólo existe desde que hay `recarga`; con el cambio
+   * de mes el error se veía, porque ahí la foto era de otro mes.
+   */
+  const [datos, setDatos] = useState<{ mes: string; dias: DiaDelCalendario[]; pedido: number } | null>(null);
+  const [fallo, setFallo] = useState<{ mes: string; mensaje: string; pedido: number } | null>(null);
+  const pedidos = useRef(0);
   const [intento, setIntento] = useState(0);
   const [filtros, setFiltros] = useState<Filtros>(SIN_FILTROS);
   const [diaAbierto, setDiaAbierto] = useState<string | null>(null);
@@ -178,19 +206,20 @@ export default function CalendarioDeOT({
 
   useEffect(() => {
     let cancelado = false;
+    const pedido = ++pedidos.current;
     (async () => {
       try {
         const res = await fetch(`/api/mantenimiento/calendario?desde=${desde}&hasta=${hasta}`);
         const cuerpo = await res.json().catch(() => ({}));
         if (cancelado) return;
         if (!res.ok || !Array.isArray(cuerpo.dias)) {
-          setFallo({ mes, mensaje: cuerpo.error ?? `El servidor contestó ${res.status}.` });
+          setFallo({ mes, pedido, mensaje: cuerpo.error ?? `El servidor contestó ${res.status}.` });
           return;
         }
-        setDatos({ mes, dias: cuerpo.dias });
+        setDatos({ mes, pedido, dias: cuerpo.dias });
       } catch (e) {
         if (!cancelado) {
-          setFallo({ mes, mensaje: e instanceof Error ? e.message : String(e) });
+          setFallo({ mes, pedido, mensaje: e instanceof Error ? e.message : String(e) });
         }
       }
     })();
@@ -202,9 +231,15 @@ export default function CalendarioDeOT({
     if (diaAbierto) panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [diaAbierto]);
 
-  const cargando = datos?.mes !== mes && fallo?.mes !== mes;
-  const error = datos?.mes === mes ? null : fallo?.mes === mes ? fallo.mensaje : null;
-  const dias = datos?.mes === mes ? datos.dias : null;
+  // De este mes, y el más nuevo de los dos manda. `dias` y `error` pueden estar
+  // los dos puestos a la vez, y es justamente el caso que antes no se veía: la
+  // grilla de antes sigue a la vista —sirve— con el cartel encima diciendo que
+  // no se pudo volver a leer.
+  const laFoto = datos?.mes === mes ? datos : null;
+  const elFallo = fallo?.mes === mes ? fallo : null;
+  const cargando = !laFoto && !elFallo;
+  const error = elFallo && elFallo.pedido > (laFoto?.pedido ?? -1) ? elFallo.mensaje : null;
+  const dias = laFoto?.dias ?? null;
 
   const porDia = useMemo(() => {
     const m = new Map<string, DiaDelCalendario>();
@@ -381,8 +416,15 @@ export default function CalendarioDeOT({
 
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-4 space-y-2" role="alert">
+              {/* Dos textos porque son dos cosas distintas: no haber podido
+                  leer el mes, y haber leído uno viejo. El segundo es el que
+                  importa — con la grilla a la vista, un «no se pudo consultar»
+                  a secas deja que esa foto de antes de mover la orden pase por
+                  buena. */}
               <p className="text-sm font-medium text-red-800">
-                No se pudo consultar el calendario. Esto no quiere decir que el mes esté vacío.
+                {dias
+                  ? "No se pudo volver a leer el mes. Lo que se ve abajo es de antes: puede que ya no sea lo que hay."
+                  : "No se pudo consultar el calendario. Esto no quiere decir que el mes esté vacío."}
               </p>
               <p className="text-xs text-red-700 break-words">{error}</p>
               <button
@@ -446,7 +488,7 @@ export default function CalendarioDeOT({
               diaIso={diaAbierto}
               filtros={filtros}
               elegirElDia={modo.tipo === "elegir" ? modo.onElegir : null}
-              onMover={modo.tipo === "programar" ? empezarAMover : null}
+              onMover={modo.tipo === "programar" && modo.puedeMover ? empezarAMover : null}
               onCerrar={() => setDiaAbierto(null)}
             />
           </div>

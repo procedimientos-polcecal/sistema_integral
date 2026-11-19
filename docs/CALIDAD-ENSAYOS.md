@@ -155,6 +155,45 @@ Dos detalles que no se deducen del código:
   otro — los once bloques de la hoja `Calcio` y la tabla de `Otros` del 02/10
   anotan el retenido de cada tamiz y cierran con un `Ac #200`.
 
+### La cal útil vial entra sólo el día que alguien tituló (19/11/2026)
+
+El reporte cierra cada tabla con **peso volumétrico** y **humedad**, que son
+filas fijas, y desde el 19/11/2026 lleva también **cal útil vial** — pero ésa
+**no es fija**: aparece únicamente en la tabla donde alguna de sus muestras la
+tituló. Hasta entonces el dato se cargaba, se guardaba y se calculaba, y el
+reporte era el único lugar del módulo que no lo mostraba.
+
+El porqué está medido, el 19/11/2026 contra producción:
+
+| Determinación | Muestras con el dato |
+|---|---|
+| Humedad | 104 de 115 |
+| Peso volumétrico | 68 de 115 |
+| **Cal útil vial** | **3 de 115** |
+
+Las tres son del producto **Cal**, y en cada uno de esos tres días las otras 5
+o 6 muestras de la jornada no la tenían.
+
+Con esos números una fila fija diría algo falso. El guión de la humedad
+significa «hoy no se midió», que es información sobre algo que se mide casi
+siempre; el de la cal útil, en una columna de Filler, Calcio o un despacho,
+significaría «no corresponde» — y las dos cosas se escriben igual. Una fila
+entera de guiones todos los días, en productos donde la determinación no va, es
+la clase de renglón que enseña a no mirar ninguno.
+
+Dos cosas más que no se deducen del código:
+
+- **La bandera se mira sobre el valor calculado y no sobre el `ml de ácido`
+  cargado.** Una titulación a la que le falta el peso de la muestra no da
+  número —`calUtilVial` devuelve null con su problema— y agregar la fila por
+  ella dejaría ese renglón de guiones que no tenerla fija evita.
+- **La decisión es por tabla, no por reporte.** Si el que tituló fue un Calcio,
+  que va en su propia tabla por tamizar desde #6, la fila entra ahí y la tabla
+  del formato no la lleva.
+
+El día que la cal útil se titule todos los días, esto se vuelve una fila fija y
+el cambio es mover `FILA_CAL_UTIL` adentro de `FILAS_FINALES`.
+
 **Falta el envío por correo.** El repo no tiene con qué mandar un mail propio:
 lo único que manda correos es Supabase Auth, y sólo sus plantillas de acceso.
 Hace falta un proveedor (Resend, o el SMTP de la casilla corporativa) y esa
@@ -342,6 +381,136 @@ bajando un archivo y abriéndolo.
 - **El problema de la muestra viaja y no bloquea la descarga.** «Lo retenido
   supera el peso de la muestra» queda escrito en la hoja y el archivo se baja:
   bloquearlo escondería justo la muestra que después genera un reclamo.
+
+### Comparar varias muestras (19/11/2026)
+
+La pantalla acepta **hasta seis muestras a la vez** y las superpone en los tres
+gráficos y en el Excel. Spec:
+[2026-11-19-calidad-curva-comparar-muestras-design.md](superpowers/specs/2026-11-19-calidad-curva-comparar-muestras-design.md)
+· plan:
+[2026-11-19-calidad-curva-comparar-muestras.md](superpowers/plans/2026-11-19-calidad-curva-comparar-muestras.md).
+
+**Lo que lo obligó todo, medido el 19/11/2026 contra producción:** de 106
+muestras con granulometría en 8 productos, **4 productos tienen muestras que
+midieron juegos de mallas distintos**. Filler 1 tiene tres juegos entre sus 21
+muestras: 16 con `#20,50,100,200`, 4 con `#50,100,200,325` y 1 con
+`#50,100,200`. Filler 2, Cal y Despacho a Kartonsec tienen dos cada uno. O sea
+que comparar dos muestras del mismo producto **cruza con frecuencia una que
+midió `#20` con otra que midió `#325`**, y el eje X —que era «las mallas que
+midió *esta* muestra»— deja de alcanzar.
+
+**El eje es la unión, y el hueco queda en `null`.** Las tres salidas que no se
+tomaron, cada una por lo que inventa:
+
+- **Interpolar** dibuja un punto en una malla que esa muestra no tamizó, con el
+  mismo aspecto que los medidos. Es la regla de todo el sistema: enlazar al que
+  se le parece es peor que dejar en null.
+- **Poner cero** afirma «no quedó nada retenido ahí», que es una medición y
+  falsa; en el acumulado además haría *bajar* la curva, que es imposible.
+- **Cortar el eje a la intersección** esconde mediciones reales: con un Filler 1
+  de cada juego la intersección es `#50,100,200`, y se perderían `#20` y `#325`,
+  justo los extremos donde se ve si el material se fue a grueso o a fino.
+
+Del lado de recharts eso es **`connectNulls={false}`**, que es la única línea de
+`GraficosDeLaCurva.tsx` que sostiene la decisión entera: con `true` recharts une
+los dos puntos vecinos y dibuja un tramo que cruza por encima de una malla que
+nadie tamizó, indistinguible de un dato.
+
+**Y el hueco se nombra.** Debajo de los gráficos hay una línea —«no todas
+midieron los mismos tamices: … no midió #325»— que aparece sólo cuando las
+elegidas no midieron lo mismo. **Da vuelta a medias la decisión del 05/11** de
+no avisar de las mallas que faltan, y no es una contradicción: allá la malla
+faltante salía de **lo que declara el producto**, un dato que la pantalla ni
+recibe; acá la malla está en el eje **porque la midió otra muestra que está en
+el mismo gráfico**, y una línea que se corta sin explicación se lee como un
+error del sistema. Sigue sin avisarse de las mallas que el producto declara y
+nadie midió.
+
+**El tope es seis**, por dos cosas medidas: el producto más cargado tiene 23
+muestras y superponerlas es ruido, y seis es lo que una paleta distingue
+impresa en gris, que es donde termina el Excel.
+
+**Se pueden cruzar productos, y sale del mismo mecanismo.** El selector de
+producto filtra la lista, pero las muestras elegidas **sobreviven al cambio de
+producto**. Así, armar un conjunto de un solo producto es el camino natural y
+comparar Filler 1 contra Filler 2 —o Emapi contra Kartonsec, que parecen el
+mismo material a dos clientes— no pide ninguna pantalla de más. El eje Y es
+porcentaje del peso tamizado, así que no hay unidades que no se puedan
+comparar. La etiqueta lleva el producto **sólo cuando el conjunto cruza más de
+uno**: con un solo producto, el nombre repetido seis veces no distingue nada.
+
+**El Excel pasó a formato largo: una fila por par (muestra, malla).** El motivo
+es el mismo hueco. En formato ancho, una malla que esa muestra no midió sería
+una celda vacía al lado de números reales, y **una celda vacía en una planilla
+se lee como cero** — exactamente la medición falsa que la pantalla se cuida de
+no dibujar. En largo esa fila no existe, que es lo que pasó. De paso la hoja no
+se ensancha: con seis muestras mide lo mismo que con una.
+
+**La URL acepta las dos formas.** `?muestras=a,b` es la nueva; `?muestra=a`
+—la del 05/11— se sigue leyendo, porque ya hay enlaces de una muestra sola
+dando vueltas y romperlos no tiene ninguna ventaja. Sin repetidos y topeada en
+seis, porque la URL la escribe cualquiera.
+
+**Y `?producto=` cambió de precedencia, que es la segunda regla del 05/11 que
+esto da vuelta.** Antes mandaba el producto *de la muestra*; ahora manda
+`?producto=` cuando es válido, y si no viene se abre en el de la primera
+muestra elegida. Con varias muestras —y de productos distintos— no hay un
+«producto de la muestra» que pueda mandar, y el selector tiene que poder
+apuntar a otro para agregar una suya. Lo que se asume: mientras el conjunto sea
+de un solo producto y el selector muestre otro, los chips no llevan nombre de
+producto, así que la pantalla puede decir «Filler 2» arriba de un chip que dice
+sólo «03/11/2026» y es de Filler 1. Se corrige en cuanto se agrega la segunda.
+
+**Los seis colores no alcanzan, y eso está medido.** La primera paleta tenía el
+verde y el naranja con un contraste de luminancia de **1,004**: el mismo gris
+exacto, o sea dos curvas indistinguibles en la fotocopia del informe. Y no se
+arregla eligiendo mejor: **una línea tiene que verse contra el fondo blanco**,
+lo que la deja por debajo de una luminancia de 0,37, y seis valores en esa
+banda no pasan de ~1,2 entre sí. Lo que separa de verdad es el **trazo**
+(`TRAZOS_DE_LA_COMPARACION`), que no depende del tóner; el color es para la
+pantalla. Las dos propiedades están fijadas con tests.
+
+**Una muestra elegida que no tiene granulometría lo dice**, en la pantalla y en
+la hoja. Es un camino normal y no un caso raro: el listado del producto trae
+todas sus muestras, incluidas las cargadas sólo con humedad o peso volumétrico.
+Sin ese aviso, el encabezado del Excel promete N muestras, la tabla entrega
+menos y nada explica la diferencia — la misma celda muda que el formato largo
+vino a evitar, por la otra puerta. Por lo mismo, un peso tamizado que falta
+viaja como «—» y no como celda vacía. **No es lo mismo que una muestra sin
+peso**: ésa sí midió y tiene su propio texto.
+
+Lo que **no** cambió: apagar un tamiz sigue sin recalcular ningún acumulado y
+lo apaga en las tres curvas y en todas las muestras —la razón para apagarlo es
+del tamiz, no de la muestra—; no se dibujan límites; y los dos riesgos de
+lectura del 05/11 y los dos del 11/11 siguen valiendo tal cual.
+
+### Ampliar un gráfico (19/11/2026)
+
+Cada uno de los tres paneles tiene un botón que lo abre en grande, en el
+`Modal` compartido en modo sólo lectura. En la grilla de tres columnas un
+gráfico mide ~287 px de ancho, y ahí una curva de seis muestras no se lee.
+
+Dos cosas que no se deducen del código:
+
+- **El modal dibuja una segunda copia del gráfico, y los tres paneles de la
+  grilla siguen montados.** No es casual ni derroche: el botón del Excel
+  rasteriza esos paneles por sus `ref`, así que agrandar uno *en su lugar*
+  —escondiendo los otros dos— dejaría a `html2canvas` apuntando a nodos
+  ocultos, y el informe saldría con la tabla bien y los tres cuadros vacíos
+  **sin que nada avise**. La guarda del `svg.recharts-surface` tampoco lo
+  atraparía: el nodo existe y su SVG también, sólo que no se ve.
+- **El botón lleva `data-html2canvas-ignore`**, que es el atributo que
+  `html2canvas` respeta al clonar el nodo (verificado contra el paquete
+  instalado: `IGNORE_ATTRIBUTE`, usado en el recorrido de hijos). Sin eso, el
+  control de la pantalla viajaría dentro de la foto y el informe tendría un
+  cuadrito gris en la esquina de cada gráfico que nadie puede apretar.
+
+En la vista ampliada la leyenda muestra la etiqueta entera; en la grilla se
+corta en 26 caracteres, porque seis observaciones de 40 envuelven varias filas
+dentro de un panel de alto fijo y se comen el dibujo.
+
+Lo que **no** hace: no se salta de un gráfico a otro sin cerrar. Son dos clics
+y no se midió que hagan falta menos.
 
 ## La lista de productos no es el catálogo del núcleo
 

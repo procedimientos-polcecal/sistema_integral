@@ -46,7 +46,16 @@ import PostergarOTModal from "./PostergarOTModal";
  *   servidor, no el estado de acá; sin el `recarga` la orden seguiría pintada
  *   en el día viejo hasta que alguien cambiara de mes.
  */
-export default function MesDeOrdenes() {
+export default function MesDeOrdenes({ puedeMover }: {
+  /**
+   * Si quien mira tiene nivel de edición en Mantenimiento. Es obligatoria y no
+   * tiene default a propósito: las dos pantallas que montan esto reparten
+   * permisos distintos —`/programacion` es sólo de admin y `/planificacion` la
+   * ve cualquiera con el módulo— y un default haría que la de todos heredara
+   * el permiso de la otra sin que nada lo dijera.
+   */
+  puedeMover: boolean;
+}) {
   const [moviendo, setMoviendo] = useState<OrdenDelDia | null>(null);
   const [destino, setDestino] = useState<string | null>(null);
   const [recarga, setRecarga] = useState(0);
@@ -67,8 +76,8 @@ export default function MesDeOrdenes() {
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-600">
-        Qué órdenes tiene cada día y cuánta gente del taller hay. Tocá un día para verlo, y desde
-        ahí podés correrle la fecha a una orden.
+        Qué órdenes tiene cada día y cuánta gente del taller hay. Tocá un día para verlo
+        {puedeMover ? ", y desde ahí podés correrle la fecha a una orden." : "."}
       </p>
 
       {aviso && (
@@ -81,6 +90,7 @@ export default function MesDeOrdenes() {
         recarga={recarga}
         modo={{
           tipo: "programar",
+          puedeMover,
           moviendo,
           onEmpezarAMover: (o) => { setMoviendo(o); setDestino(null); },
           onCancelarElMovimiento: cancelar,

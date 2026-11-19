@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   laNuevaFecha, laRazonQueSeGuarda, loQueFaltaParaPostergar, MAXIMO_DE_DIAS,
+  porQueElEstadoNoDejaPostergar,
 } from "./postergar";
+import { porQueNoSePuedeMover } from "./moverLaOT";
 
 describe("laNuevaFecha", () => {
   it("corre la fecha los días que se le pidan", () => {
@@ -78,5 +80,49 @@ describe("laRazonQueSeGuarda", () => {
 
   it("sin configuración todavía, cualquier elección cuenta", () => {
     expect(laRazonQueSeGuarda("FALTA_REPUESTO", undefined)).toBe("FALTA_REPUESTO");
+  });
+});
+
+/**
+ * La regla que faltaba del lado del servidor hasta el 19/11/2026: la ruta traía
+ * `estado` en su `select` y no lo miraba, así que lo único que impedía
+ * postergar una orden ya hecha eran las dos pantallas.
+ */
+describe("porQueElEstadoNoDejaPostergar", () => {
+  it("una realizada no se posterga, y lo dice", () => {
+    expect(porQueElEstadoNoDejaPostergar("REALIZADO")).toContain("ya está realizada");
+  });
+
+  it("no le importan los espacios ni las mayúsculas, que la planilla mezcla", () => {
+    expect(porQueElEstadoNoDejaPostergar("  realizado ")).not.toBeNull();
+  });
+
+  it("todo lo que sigue abierto se posterga", () => {
+    for (const estado of ["POR_HACER", "ATRASADO", "EN_PROCESO", "SUSPENDIDA"]) {
+      expect(porQueElEstadoNoDejaPostergar(estado)).toBeNull();
+    }
+  });
+
+  /**
+   * Un texto que nadie reconoce no prueba que la orden esté hecha, y en esa
+   * columna la planilla escribe lo que quiere.
+   */
+  it("un estado desconocido o vacío no traba", () => {
+    expect(porQueElEstadoNoDejaPostergar("LO_QUE_SEA")).toBeNull();
+    expect(porQueElEstadoNoDejaPostergar(null)).toBeNull();
+    expect(porQueElEstadoNoDejaPostergar(undefined)).toBeNull();
+    expect(porQueElEstadoNoDejaPostergar("")).toBeNull();
+  });
+
+  /**
+   * Las dos puntas no dicen lo mismo y este test lo FIJA en vez de taparlo: el
+   * servidor arbitra sólo `REALIZADO`, donde las dos coinciden, y la `SUSPENDIDA`
+   * queda como una decisión de la pantalla del calendario. El día que alguien
+   * unifique, este test es el que tiene que cambiar a propósito.
+   */
+  it("la SUSPENDIDA la frena el calendario y no el servidor, y es deliberado", () => {
+    const suspendida = { app_created: true, estado: "SUSPENDIDA", fecha_ejecucion: "2026-11-10" };
+    expect(porQueNoSePuedeMover(suspendida)).toContain("cerrada");
+    expect(porQueElEstadoNoDejaPostergar("SUSPENDIDA")).toBeNull();
   });
 });
