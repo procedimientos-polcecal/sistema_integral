@@ -21,6 +21,7 @@ import {
 } from "@/lib/core/filtrosUrl";
 import { fechaDeTexto } from "@/lib/core/fechas";
 import { ESPECIALIDADES, ESTADOS_DE_OT } from "./ordenes";
+import { CERRADAS } from "./alertas";
 
 /**
  * Los valores que la planilla usa en estas tres columnas.
@@ -86,6 +87,58 @@ export const ETIQUETA_DE_QUIEN: Record<(typeof QUIENES_DE_OT)[number], string> =
   CONTRATADO: "Contratado",
   MIXTO: "Mixto",
 };
+
+/**
+ * Las dos cosas que se pueden querer decir con «reprogramada», que son filtros
+ * distintos y se pidieron alcanzables juntos o por separado:
+ *
+ * - `hechas`: la orden ya se corrió de fecha alguna vez (`reprogramada_veces`
+ *   mayor a cero; la mantiene un trigger y nadie la escribe).
+ * - `necesitan`: la orden sigue abierta y su fecha de inicio ya pasó, o sea que
+ *   hay que correrla.
+ *
+ * Es un solo filtro con dos valores y no dos filtros porque dentro de un filtro
+ * los valores suman, que es lo que se pidió: elegir los dos da la unión.
+ *
+ * El `Record` es sobre el tuple, por lo mismo que `ETIQUETA_DE_TIPO`.
+ */
+export const VALORES_DE_REPROGRAMACION = ["hechas", "necesitan"] as const;
+
+export const ETIQUETA_DE_REPROGRAMACION: Record<(typeof VALORES_DE_REPROGRAMACION)[number], string> = {
+  hechas: "Ya reprogramadas",
+  necesitan: "Que necesitan reprogramarse",
+};
+
+/**
+ * La condición de PostgREST para `.or()` que sale de ese filtro, o `null` si no
+ * hay nada que agregar. Vive acá y no en la ruta —que no tiene tests— para que
+ * lo que decide cada valor se pueda probar.
+ *
+ * - `necesitan` usa el campo `estado` y **nunca el valor `ATRASADO`**: la planilla
+ *   lo calcula contra el `TODAY()` de su última recalculada y envejece sola
+ *   (de 29 abiertas vencidas, 17 decían ATRASADO). Abierta es «fuera de
+ *   `CERRADAS`», la misma lista que decide qué orden está atrasada.
+ * - Los dos valores se unen con coma, que en `.or()` es un o. El `and(...)` de
+ *   `necesitan` va adentro para que su coma no se lea como otro o.
+ * - `hoy` se valida: llega armado a un string de filtro y una fecha que no lo es
+ *   podría meter otra condición.
+ */
+export function condicionDeReprogramacion(
+  valores: readonly string[],
+  hoy: string
+): string | null {
+  const condiciones: string[] = [];
+  if (valores.includes("hechas")) condiciones.push("reprogramada_veces.gt.0");
+  if (valores.includes("necesitan")) {
+    const dia = fechaDeTexto(hoy);
+    if (dia) {
+      condiciones.push(
+        `and(estado.not.in.(${CERRADAS.join(",")}),fecha_ejecucion.lt.${dia})`
+      );
+    }
+  }
+  return condiciones.length ? condiciones.join(",") : null;
+}
 
 /**
  * La prioridad viene con el emoji adelante, tal cual la escribe la planilla:
@@ -239,12 +292,14 @@ export interface FiltrosOt {
   proveedor: string[];
   sector: string[];
   equipo: string[];
+  /** `hechas` y/o `necesitan`. Ver `VALORES_DE_REPROGRAMACION`. */
+  reprogramacion: string[];
 }
 
 export const FILTROS_VACIOS: FiltrosOt = {
   busqueda: "", campoFecha: "", orden: "", desde: "", hasta: "",
   estado: [], especialidad: [], tipo: [], quien: [],
-  prioridad: [], proveedor: [], sector: [], equipo: [],
+  prioridad: [], proveedor: [], sector: [], equipo: [], reprogramacion: [],
 };
 
 /** Las listas contra las que se validan los filtros que son referencias. */
@@ -281,6 +336,7 @@ export function leerFiltrosDeLaUrl(
     proveedor: losQueEstanEnLaLista(params, "proveedor", catalogos.proveedores),
     sector: losQueEstanEnLaLista(params, "sector", catalogos.sectores),
     equipo: losQueEstanEnLaLista(params, "equipo", catalogos.equipos),
+    reprogramacion: losQueEstanEnLaLista(params, "reprogramacion", VALORES_DE_REPROGRAMACION),
   };
 }
 
@@ -309,6 +365,7 @@ const NOMBRES: readonly [keyof FiltrosOt, string][] = [
   ["proveedor", "proveedor"],
   ["sector", "sector"],
   ["equipo", "equipo"],
+  ["reprogramacion", "reprogramacion"],
 ];
 
 /**

@@ -9,6 +9,7 @@ import {
   leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, consultaDeLaRuta, hayAlgunFiltro,
   FILTROS_VACIOS, TIPOS_DE_OT, QUIENES_DE_OT, PRIORIDADES_DE_OT, CAMPOS_DE_FECHA,
   ETIQUETA_DE_TIPO, ETIQUETA_DE_QUIEN, ORDENES_DEL_LISTADO,
+  VALORES_DE_REPROGRAMACION, ETIQUETA_DE_REPROGRAMACION,
   type FiltrosOt,
 } from "@/lib/mantenimiento/filtrosOt";
 import { leerPaginaDeLaUrl } from "@/lib/core/filtrosUrl";
@@ -133,6 +134,7 @@ export default function OrdenesClient({
   const [proveedor, setProveedor] = useState(arranque.proveedor);
   const [sector, setSector] = useState(arranque.sector);
   const [equipo, setEquipo] = useState(arranque.equipo);
+  const [reprogramacion, setReprogramacion] = useState(arranque.reprogramacion);
   // No es un filtro —no saca filas— pero viaja igual que ellos, porque el
   // orden lo resuelve la base. Por eso queda afuera de `hayAlgunFiltro` y de
   // «Limpiar»: no es algo que esconda órdenes.
@@ -209,8 +211,10 @@ export default function OrdenesClient({
   const filtros: FiltrosOt = useMemo(() => ({
     busqueda: busquedaAplicada, campoFecha, orden, desde, hasta,
     estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo,
+    reprogramacion,
   }), [busquedaAplicada, campoFecha, orden, desde, hasta,
-       estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo]);
+       estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo,
+       reprogramacion]);
 
   const hayFiltros = hayAlgunFiltro(filtros);
 
@@ -221,6 +225,7 @@ export default function OrdenesClient({
     setCampoFecha(""); setDesde(""); setHasta("");
     setEstado([]); setEspecialidad([]); setTipo([]); setQuien([]);
     setPrioridad([]); setProveedor([]); setSector([]); setEquipo([]);
+    setReprogramacion([]);
   }
 
   // La búsqueda espera un momento para no consultar en cada tecla.
@@ -633,6 +638,10 @@ export default function OrdenesClient({
             <MultiSelect valores={equipo} onCambio={setEquipo}
               vacio="Todo equipo" plural="equipos"
               opciones={equipos.map((x: any) => [x.id, x.code ? `${x.code} · ${x.name}` : x.name])} />
+            {/* Un solo filtro con dos valores que suman: ver `VALORES_DE_REPROGRAMACION`. */}
+            <MultiSelect valores={reprogramacion} onCambio={setReprogramacion}
+              vacio="Reprogramación" plural="criterios"
+              opciones={VALORES_DE_REPROGRAMACION.map((v) => [v, ETIQUETA_DE_REPROGRAMACION[v]])} />
 
             {hayFiltros && (
               <button

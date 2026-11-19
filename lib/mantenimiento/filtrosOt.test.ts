@@ -4,6 +4,7 @@ import {
   columnaDeFecha, FILTROS_VACIOS, type FiltrosOt,
   TIPOS_DE_OT, QUIENES_DE_OT, ETIQUETA_DE_TIPO, ETIQUETA_DE_QUIEN,
   ordenDelListado, ORDENES_DEL_LISTADO,
+  VALORES_DE_REPROGRAMACION, ETIQUETA_DE_REPROGRAMACION, condicionDeReprogramacion,
 } from "./filtrosOt";
 import { leerPaginaDeLaUrl } from "@/lib/core/filtrosUrl";
 
@@ -99,6 +100,7 @@ describe("escribir los filtros en la URL", () => {
       proveedor: ["p-piparo"],
       sector: ["s-filler1", "s-filler2"],
       equipo: ["e-1"],
+      reprogramacion: ["hechas", "necesitan"],
     };
     expect(leer(escribirFiltrosEnLaUrl(filtros))).toEqual(filtros);
   });
@@ -361,5 +363,83 @@ describe("en que orden se lista", () => {
    */
   it("no cuenta como filtro puesto", () => {
     expect(hayAlgunFiltro({ ...FILTROS_VACIOS, orden: "numero" })).toBe(false);
+  });
+});
+
+describe("el filtro de reprogramacion", () => {
+  it("viaja a la URL como ?reprogramacion=hechas", () => {
+    const f = { ...FILTROS_VACIOS, reprogramacion: ["hechas"] };
+    expect(escribirFiltrosEnLaUrl(f)).toBe("reprogramacion=hechas");
+    expect(leer("reprogramacion=hechas").reprogramacion).toEqual(["hechas"]);
+  });
+
+  it("acepta los dos valores a la vez y los escribe como se eligieron", () => {
+    const leidos = leer("reprogramacion=necesitan&reprogramacion=hechas");
+    expect(leidos.reprogramacion).toEqual(["necesitan", "hechas"]);
+    // Una lista viaja como un solo parametro con los valores separados por coma,
+    // igual que el resto de los filtros, en el orden en que se eligieron.
+    expect(escribirFiltrosEnLaUrl(leidos)).toBe("reprogramacion=necesitan%2Chechas");
+    expect(leer("reprogramacion=necesitan%2Chechas").reprogramacion).toEqual(["necesitan", "hechas"]);
+  });
+
+  it("descarta un valor que no esta en la lista", () => {
+    expect(leer("reprogramacion=todas").reprogramacion).toEqual([]);
+    expect(leer("reprogramacion=hechas,todas").reprogramacion).toEqual(["hechas"]);
+  });
+
+  /** A diferencia de `campoFecha`, este SI esconde filas. */
+  it("cuenta para hayAlgunFiltro", () => {
+    expect(hayAlgunFiltro({ ...FILTROS_VACIOS, reprogramacion: ["necesitan"] })).toBe(true);
+  });
+
+  it("vuelve a FILTROS_VACIOS al limpiar", () => {
+    expect(FILTROS_VACIOS.reprogramacion).toEqual([]);
+    expect(leer("")).toEqual(FILTROS_VACIOS);
+  });
+
+  it("viaja a la ruta con el mismo nombre", () => {
+    const f = { ...FILTROS_VACIOS, reprogramacion: ["hechas", "necesitan"] };
+    expect(consultaDeLaRuta(f, 1)).toContain("reprogramacion=hechas%2Cnecesitan");
+  });
+
+  it("ninguna etiqueta esta vacia ni se repite", () => {
+    const etiquetas = VALORES_DE_REPROGRAMACION.map((v) => ETIQUETA_DE_REPROGRAMACION[v]);
+    for (const e of etiquetas) expect(e.trim()).not.toBe("");
+    expect(new Set(etiquetas).size).toBe(VALORES_DE_REPROGRAMACION.length);
+  });
+});
+
+describe("la condicion de reprogramacion para la consulta", () => {
+  const hoy = "2026-11-19";
+  // El estado ATRASADO no aparece nunca: la planilla lo calcula contra el
+  // TODAY() de su ultima recalculada y envejece sola.
+  const necesitan = "and(estado.not.in.(REALIZADO,CANCELADA),fecha_ejecucion.lt.2026-11-19)";
+
+  it("sin valores no agrega condicion", () => {
+    expect(condicionDeReprogramacion([], hoy)).toBeNull();
+  });
+
+  it("hechas: las que ya se corrieron", () => {
+    expect(condicionDeReprogramacion(["hechas"], hoy)).toBe("reprogramada_veces.gt.0");
+  });
+
+  it("necesitan: abiertas con la fecha de inicio ya pasada, sin mirar el estado ATRASADO", () => {
+    const c = condicionDeReprogramacion(["necesitan"], hoy)!;
+    expect(c).toBe(necesitan);
+    expect(c).not.toContain("ATRASADO");
+    expect(c).not.toContain("SUSPENDIDA");
+  });
+
+  it("los dos suman: es un o entre las dos condiciones, no una y", () => {
+    expect(condicionDeReprogramacion(["hechas", "necesitan"], hoy))
+      .toBe(`reprogramada_veces.gt.0,${necesitan}`);
+  });
+
+  it("un valor que no existe no agrega condicion", () => {
+    expect(condicionDeReprogramacion(["todas"], hoy)).toBeNull();
+  });
+
+  it("la fecha que no es una fecha no llega a la consulta", () => {
+    expect(condicionDeReprogramacion(["necesitan"], "x),estado.eq.1")).toBeNull();
   });
 });

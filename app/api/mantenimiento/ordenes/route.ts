@@ -34,7 +34,7 @@ import {
 import { exportarLoPendiente } from "@/lib/mantenimiento/sincronizar";
 import { avisarDeLaCarga } from "@/lib/mantenimiento/avisarDeLaCarga";
 import { paginaPedida } from "@/lib/core/paginado";
-import { columnaDeFecha, ordenDelListado } from "@/lib/mantenimiento/filtrosOt";
+import { columnaDeFecha, ordenDelListado, condicionDeReprogramacion } from "@/lib/mantenimiento/filtrosOt";
 import { filtroDePrioridadConGut } from "@/lib/mantenimiento/prioridad";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { repuestosDelCuerpo, filasParaLaBase } from "@/lib/mantenimiento/repuestosDeLaOT";
@@ -102,6 +102,7 @@ export async function GET(request: Request) {
   const proveedor    = varios("proveedor");
   const sector       = varios("sector");
   const equipo       = varios("equipo");
+  const reprogramacion = varios("reprogramacion");
   // `equipment_id` es el nombre viejo, con un solo valor. Lo usa la ficha del
   // equipo para traer sus órdenes; se conserva para no romperla.
   const equipment_id = searchParams.get("equipment_id");
@@ -168,6 +169,12 @@ export async function GET(request: Request) {
   if (sector.length)       query = query.in("sector_id", sector);
   if (equipo.length)       query = query.in("equipment_id", equipo);
   if (equipment_id)        query = query.eq("equipment_id", equipment_id);
+  // Los dos valores suman (un solo `.or()` con las dos condiciones) y se
+  // recortan contra el resto de los filtros, porque cada `.or()` va como su
+  // propio parámetro y PostgREST los une con y. Qué sale de cada valor lo decide
+  // `condicionDeReprogramacion`, que tiene los tests.
+  const deReprogramacion = condicionDeReprogramacion(reprogramacion, hoyEnArgentina());
+  if (deReprogramacion)    query = query.or(deReprogramacion);
 
   // El rango corre sobre la fecha que se haya elegido, y los dos extremos
   // entran: quien pone "hasta el 31" espera que el 31 cuente. `columnaDeFecha`
