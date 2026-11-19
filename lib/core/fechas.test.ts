@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   fechaEnArgentina, hoyEnArgentina, diaEnArgentina, ahoraEnArgentina, instanteDeArgentina,
-  sumarDias, diaDeLaSemana, semanaDe, comoSeLee, fechaDeTexto,
+  sumarDias, diaDeLaSemana, semanaDe, numeroDeSemana, comoSeLee, fechaDeTexto,
   rangoDelMes, mesRelativo, esMesValido, horaEnArgentina, esFechaIso,
 } from "./fechas";
 
@@ -150,6 +150,19 @@ describe("semanaDe", () => {
   it("el corrimiento mueve semanas enteras", () => {
     expect(semanaDe("2026-09-02", -1)[0]).toBe("2026-08-24");
     expect(semanaDe("2026-09-02", 1)[0]).toBe("2026-09-07");
+  });
+});
+
+describe("numeroDeSemana", () => {
+  it("los bordes de fin y principio de año", () => {
+    expect(numeroDeSemana("2025-12-29")).toBe(1);
+    expect(numeroDeSemana("2026-12-28")).toBe(53);
+    expect(numeroDeSemana("2024-12-30")).toBe(1);
+  });
+
+  it("un domingo cuenta para la semana que cierra", () => {
+    expect(numeroDeSemana("2026-11-08")).toBe(45);
+    expect(numeroDeSemana("2026-11-02")).toBe(45);
   });
 });
 

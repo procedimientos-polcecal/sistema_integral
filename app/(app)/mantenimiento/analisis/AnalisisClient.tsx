@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import CadenaDeFechas from "@/components/mantenimiento/CadenaDeFechas";
 import PostergarOTModal from "../ordenes/PostergarOTModal";
-import { comoSeLee, fechaEnArgentina, hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
+import { comoSeLee, fechaEnArgentina, hoyEnArgentina, numeroDeSemana, sumarDias } from "@/lib/core/fechas";
+import { RAZON_DEL_PLAN } from "@/lib/mantenimiento/planAlCalendario";
 import type { AnalisisDeLaSemana, OrdenParaAnalisis } from "@/lib/mantenimiento/analisisDeOt";
 import type { Reprogramacion } from "@/lib/mantenimiento/reprogramaciones";
 
@@ -28,12 +29,19 @@ interface Respuesta {
 
 type Pestania = "conInicio" | "sinCerrar" | "fueraDeFecha" | "cerradas" | "reprogramaciones" | "necesitan";
 
-/** Número de semana ISO del lunes dado: la semana que contiene a su jueves. */
-function numeroDeSemana(lunes: string): number {
-  const jueves = new Date(`${sumarDias(lunes, 3)}T00:00:00Z`);
-  const primeroDeEnero = Date.UTC(jueves.getUTCFullYear(), 0, 1);
-  const diaDelAnio = Math.floor((jueves.getTime() - primeroDeEnero) / 86_400_000) + 1;
-  return Math.ceil(diaDelAnio / 7);
+/** «1 día» / «2 días»: el uno es el caso más común y no admite plural. */
+function dias(n: number): string {
+  return `${n} ${n === 1 ? "día" : "días"}`;
+}
+
+/** La razón como se lee. La del calendario del plan no tiene etiqueta a propósito (no es una fila de la configuración). */
+function laRazon(m: { razon: string | null; razon_etiqueta: string | null }): string {
+  if (m.razon === RAZON_DEL_PLAN) return "El plan del día";
+  return m.razon_etiqueta ?? m.razon ?? "Sin razón";
+}
+
+function sectorYEquipo(o: { sector_raw: string | null; equipo_raw: string | null }): string {
+  return [o.sector_raw, o.equipo_raw].filter(Boolean).join(" · ") || "Sin sector ni equipo";
 }
 
 function comoPorcentaje(c: number | null): string {
@@ -75,7 +83,7 @@ export default function AnalisisClient({ canEdit }: { canEdit: boolean }) {
   const pestanias: { id: Pestania; rotulo: string; cantidad: number | null }[] = [
     { id: "conInicio", rotulo: "Con inicio en la semana", cantidad: a?.conInicio ?? null },
     { id: "sinCerrar", rotulo: "Sin cerrar", cantidad: a?.listas.sinCerrar.length ?? null },
-    { id: "fueraDeFecha", rotulo: "Cerradas fuera de fecha", cantidad: a?.listas.cerradasFueraDeFecha.length ?? null },
+    { id: "fueraDeFecha", rotulo: "Cerraron después del domingo", cantidad: a?.listas.cerradasFueraDeFecha.length ?? null },
     { id: "cerradas", rotulo: "Cerradas en la semana", cantidad: a?.cerradasEnLaSemana ?? null },
     { id: "reprogramaciones", rotulo: "Reprogramaciones", cantidad: datos?.reprogramaciones.length ?? null },
     // Es la única que no se mueve con las flechas: lleva «hoy» para que un
@@ -95,14 +103,14 @@ export default function AnalisisClient({ canEdit }: { canEdit: boolean }) {
                 <div className="font-semibold">Semana {numeroDeSemana(a.lunes)}</div>
                 <div className="text-slate-500">{comoSeLee(a.lunes)} al {comoSeLee(a.domingo)}</div>
               </>
-            ) : <div className="text-slate-400">…</div>}
+            ) : <div className="text-slate-400">{error ? "Sin datos" : "…"}</div>}
           </div>
           <button type="button" className="btn-secondary" onClick={() => setDia(sumarDias(dia, 7))} aria-label="Semana siguiente">→</button>
         </div>
       </div>
 
       {error && (
-        <div className="card text-sm" role="alert" style={{ borderColor: "#FCA5A5" }}>
+        <div className="card p-5 text-sm" role="alert" style={{ borderColor: "#FCA5A5" }}>
           {error}{" "}
           <button type="button" className="btn-secondary" onClick={recargar}>Reintentar</button>
         </div>
@@ -123,7 +131,7 @@ export default function AnalisisClient({ canEdit }: { canEdit: boolean }) {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="card space-y-3">
+            <div className="card p-5 space-y-3">
               <h2 className="font-semibold text-sm">Tipo de mantenimiento cerrado</h2>
               <p className="text-sm text-slate-700">{a.diagnostico}</p>
               <div className="overflow-x-auto">
@@ -142,17 +150,19 @@ export default function AnalisisClient({ canEdit }: { canEdit: boolean }) {
               </div>
             </div>
 
-            <div className="card space-y-2">
-              <h2 className="font-semibold text-sm">Las {a.noCerraron} que no cerraron en su semana</h2>
+            <div className="card p-5 space-y-2">
+              <h2 className="font-semibold text-sm">
+                {a.noCerraron === 1 ? "La que no cerró en su semana" : `Las ${a.noCerraron} que no cerraron en su semana`}
+              </h2>
               <ul className="text-sm space-y-1">
-                <li><strong>{a.lasDiez.siguenAbiertas}</strong> siguen abiertas</li>
+                <li><strong>{a.lasDiez.siguenAbiertas}</strong> {a.lasDiez.siguenAbiertas === 1 ? "sigue abierta" : "siguen abiertas"}</li>
                 <li>
-                  <strong>{a.lasDiez.cerraronDespues}</strong> cerraron después del domingo
+                  <strong>{a.lasDiez.cerraronDespues}</strong> {a.lasDiez.cerraronDespues === 1 ? "cerró" : "cerraron"} después del domingo
                   {a.lasDiez.sinFechaDeCierre > 0 && (
                     <span className="text-slate-500"> ({a.lasDiez.sinFechaDeCierre} sin que conste cuándo)</span>
                   )}
                 </li>
-                <li><strong>{a.lasDiez.cerraronAntes}</strong> cerraron antes del lunes</li>
+                <li><strong>{a.lasDiez.cerraronAntes}</strong> {a.lasDiez.cerraronAntes === 1 ? "cerró" : "cerraron"} antes del lunes</li>
               </ul>
             </div>
           </div>
@@ -199,7 +209,7 @@ export default function AnalisisClient({ canEdit }: { canEdit: boolean }) {
 
 function Metrica({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
-    <div className="card">
+    <div className="card p-4">
       <div className="text-2xl font-semibold tabular-nums">{valor}</div>
       <div className="text-xs text-slate-500">{rotulo}</div>
     </div>
@@ -211,7 +221,7 @@ function Orden({ o, conCierre }: { o: OrdenParaAnalisis; conCierre?: boolean }) 
     <>
       <div className="flex flex-wrap items-baseline gap-x-3 text-sm">
         <span className="font-semibold">OT {o.ot_number}</span>
-        <span className="text-slate-600">{[o.sector_raw, o.equipo_raw].filter(Boolean).join(" · ") || "Sin sector ni equipo"}</span>
+        <span className="text-slate-600">{sectorYEquipo(o)}</span>
         <span className="text-slate-400 text-xs">
           Inicio {o.fecha_ejecucion ? comoSeLee(o.fecha_ejecucion) : "sin fecha"}
           {conCierre && ` · Cierre ${o.fecha_cierre ? comoSeLee(o.fecha_cierre) : "sin fecha"}`}
@@ -228,7 +238,7 @@ function ListaDeOrdenes({ ordenes, vacia, conCierre }: { ordenes: OrdenParaAnali
   return (
     <ul className="space-y-2">
       {ordenes.map((o) => (
-        <li key={o.id} className="card space-y-1"><Orden o={o} conCierre={conCierre} /></li>
+        <li key={o.id} className="card p-4 space-y-1"><Orden o={o} conCierre={conCierre} /></li>
       ))}
     </ul>
   );
@@ -243,21 +253,28 @@ function Necesitan({ ordenes, canEdit, onPostergar }: {
       <p className="text-xs text-slate-500">
         Abiertas con la fecha de inicio ya pasada, contra hoy: no cambia al mover la semana.
       </p>
+      {/* Oraciones y no `.badge`: esa clase fuerza mayúsculas y 11 px, y tres
+          frases de 35 caracteres gritadas no se leen. */}
       <div className="flex flex-wrap gap-2 text-sm">
-        <span className="badge badge-fs">{ordenes.length} en total</span>
-        <span className="badge badge-op">{desdeElSistema} se pueden postergar desde el sistema</span>
-        <span className="badge badge-rep">{ordenes.length - desdeElSistema} hay que cambiarlas en la planilla</span>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">{ordenes.length} en total</span>
+        <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-800">{desdeElSistema} se pueden postergar desde el sistema</span>
+        <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-800">{ordenes.length - desdeElSistema} hay que cambiarlas en la planilla</span>
       </div>
       {ordenes.length === 0 ? (
         <p className="text-sm text-slate-500">No hay ninguna OT abierta con la fecha vencida.</p>
       ) : (
         <ul className="space-y-2">
           {ordenes.map((o) => (
-            <li key={o.id} className="card flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+            <li key={o.id} className="card p-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
               <div className="space-y-1 min-w-0"><Orden o={o} /></div>
               <div className="shrink-0 text-sm">
                 {o.app_created ? (
-                  canEdit && <button type="button" className="btn-secondary" onClick={() => onPostergar(o)}>Postergar</button>
+                  canEdit ? (
+                    <button type="button" className="btn-secondary" onClick={() => onPostergar(o)}>Postergar</button>
+                  ) : (
+                    // Un botón que no está no se distingue de uno que falta.
+                    <span className="text-slate-500">Se puede postergar desde el sistema — hace falta permiso de edición</span>
+                  )
                 ) : (
                   <span className="text-slate-500">Entró por el formulario — se cambia en la planilla</span>
                 )}
@@ -277,12 +294,13 @@ function Reprogramaciones({ datos }: { datos: Respuesta }) {
   return (
     <ul className="space-y-2">
       {datos.reprogramaciones.map((r) => (
-        <li key={r.ot_id} className="card space-y-2">
+        <li key={r.ot_id} className="card p-4 space-y-2">
           <div className="flex flex-wrap items-baseline gap-x-3 text-sm">
-            <span className="font-semibold">{r.ot_number !== null ? `OT ${r.ot_number}` : "OT que ya no está"}</span>
-            <span className="text-slate-600">{[r.sector_raw, r.equipo_raw].filter(Boolean).join(" · ")}</span>
+            {/* Sin número sólo si la orden se insertó entre las dos lecturas de la ruta. */}
+            <span className="font-semibold">{r.ot_number !== null ? `OT ${r.ot_number}` : "OT sin datos todavía"}</span>
+            <span className="text-slate-600">{sectorYEquipo(r)}</span>
             <span className="text-slate-400 text-xs">
-              {r.dias > 0 ? `${r.dias} días de más` : r.dias < 0 ? `${-r.dias} días de menos` : "sin diferencia"} en total
+              {r.dias > 0 ? `${dias(r.dias)} de más` : r.dias < 0 ? `${dias(-r.dias)} de menos` : "sin diferencia"} en total
             </span>
           </div>
           {r.descripcion && <p className="text-sm text-slate-600 break-words">{r.descripcion}</p>}
@@ -301,7 +319,7 @@ function Reprogramaciones({ datos }: { datos: Respuesta }) {
                   <span className="font-medium">Cambiada en la planilla</span>
                 ) : (
                   <>
-                    <span className="font-medium">{m.razon_etiqueta ?? m.razon ?? "Sin razón"}</span>
+                    <span className="font-medium">{laRazon(m)}</span>
                     {m.justificacion && <> — «{m.justificacion}»</>}
                     {" · "}
                     {(m.creado_por && datos.autores[m.creado_por]) || "autor que ya no figura"}

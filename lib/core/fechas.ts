@@ -183,6 +183,19 @@ export function semanaDe(iso: string, corrimiento = 0): string[] {
   return Array.from({ length: 7 }, (_, i) => sumarDias(lunes, i));
 }
 
+/**
+ * Número de semana ISO 8601 de un día: la semana pertenece al año de su jueves.
+ * Por eso el lunes 29/12/2025 ya es la semana 1 (de 2026) y el 28/12/2026 es la
+ * 53: los bordes de enero y diciembre son donde esta cuenta se equivoca.
+ */
+export function numeroDeSemana(iso: string): number {
+  const dow = diaDeLaSemana(iso);
+  const jueves = sumarDias(iso, 4 - (dow === 0 ? 7 : dow));
+  const [a, m, d] = jueves.split("-").map(Number);
+  const diaDelAnio = Math.round((Date.UTC(a, m - 1, d) - Date.UTC(a, 0, 1)) / 86_400_000) + 1;
+  return Math.ceil(diaDelAnio / 7);
+}
+
 /** Una fecha "YYYY-MM-DD" como la escribe una persona: 24/08/2026. */
 export function comoSeLee(iso: string): string {
   const [a, m, d] = iso.split("-");
