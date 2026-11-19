@@ -3,7 +3,7 @@ import {
   loQuePropone, loQueElAvisoNoTrae, sembradoDesdeElAviso, extrasDelAviso,
   type AvisoParaLaOT,
 } from "./otDesdeAviso";
-import { prioridadDeUrgencia } from "./avisos";
+import { PRIORIDADES_DE_OT } from "./filtrosOt";
 
 /**
  * Un aviso como los que entraron el 20/10/2026: con equipo y sector
@@ -41,15 +41,17 @@ describe("con qué arranca el formulario", () => {
   });
 
   /**
-   * `prioridadDeUrgencia` devuelve la palabra pelada; el emoji se lo pone la
-   * ruta con `prioridadParaLaPlanilla`, una sola vez y antes de sus dos usos.
-   * Son DOS traducciones encadenadas: inventar aca el emoji saltearia la
+   * La urgencia la traduce `prioridadDeUrgencia` y el emoji se lo pone
+   * `prioridadParaLaPlanilla`: son DOS traducciones encadenadas y las dos
+   * tienen que correr acá, porque lo que sale de esta funcion lo muestra el
+   * desplegable de `NuevaOTModal`. Inventar el emoji al lado saltearia la
    * segunda, que es lo que el 16/10 dejo OT que el filtro no encontraba.
    */
-  it("la prioridad sale de la urgencia, con la traduccion que ya habia", () => {
-    expect(propuesto().prioridad).toBe("MEDIA");
-    expect(loQuePropone({ ...AVISO, urgencia: "🟠 Alta" }, DE_ENTRADA).prioridad).toBe("ALTA");
-    expect(loQuePropone({ ...AVISO, urgencia: null }, DE_ENTRADA).prioridad).toBe("MEDIA");
+  it("la prioridad sale de la urgencia, en el vocabulario de la planilla", () => {
+    expect(propuesto().prioridad).toBe("🟡 Media");
+    expect(loQuePropone({ ...AVISO, urgencia: "🟠 Alta" }, DE_ENTRADA).prioridad).toBe("🟠 Alta");
+    expect(loQuePropone({ ...AVISO, urgencia: "🟢 Baja" }, DE_ENTRADA).prioridad).toBe("🟢 Baja");
+    expect(loQuePropone({ ...AVISO, urgencia: null }, DE_ENTRADA).prioridad).toBe("🟡 Media");
   });
 
   it("un aviso sin descripcion se nombra por su numero, no queda vacio", () => {
@@ -129,12 +131,21 @@ describe("lo que el aviso siembra", () => {
     expect(s.descripcion).toBe("Aviso A123");
   });
 
-  // Review Focus 3
-  it("una urgencia que no conoce no inventa una prioridad ni rompe", () => {
-    for (const u of [null, "", "URGENTÍSIMO"]) {
+  /*
+   * EL CONTRATO QUE FALTABA, Y POR ESO ESTO LLEGÓ A LA REVISIÓN FINAL. Acá
+   * decía `expect(s.prioridad).toBe(prioridadDeUrgencia(u))`, o sea el sembrado
+   * contra su propia fuente: da verde pase lo que pase, incluso —como pasaba—
+   * con un valor que el desplegable no tiene y que abría el campo en blanco.
+   *
+   * La pregunta correcta no es de dónde sale sino **si quien lo va a mostrar lo
+   * conoce**, así que se le pregunta a `PRIORIDADES_DE_OT`, que es la lista que
+   * renderiza `NuevaOTModal`. Con las tres urgencias y con una que no existe:
+   * una desconocida cae en MEDIA, y eso también tiene que ser mostrable.
+   */
+  it("el valor sembrado existe en el desplegable que lo va a mostrar", () => {
+    for (const u of ["🟠 Alta", "🟡 Media", "🟢 Baja", null, "", "URGENTÍSIMO"]) {
       const s = sembradoDesdeElAviso({ ...AVISO, urgencia: u }, "2026-11-19");
-      expect(typeof s.prioridad).toBe("string");
-      expect(s.prioridad).toBe(prioridadDeUrgencia(u));
+      expect(PRIORIDADES_DE_OT).toContain(s.prioridad);
     }
   });
 
@@ -147,8 +158,16 @@ describe("lo que el aviso siembra", () => {
     expect(s.equipment_id).toBe("");
   });
 
-  // Review Focus 5: el enlace no vive en el estado del formulario.
-  it("los extras llevan el aviso y su repuesto", () => {
-    expect(extrasDelAviso(AVISO)).toEqual({ aviso_id: "av-1", repuesto: "cadena" });
+  /*
+   * Review Focus 5: el enlace no vive en el estado del formulario.
+   *
+   * Y EL `repuesto` NO VIAJA, aunque el aviso lo tenga. El formulario completo
+   * manda `repuestos` —un arreglo, siempre— y `repuestosDelCuerpo` mira
+   * `body.repuesto` sólo cuando no hay arreglo, así que mandarlo era mandar un
+   * campo que la ruta descarta. Antes esto afirmaba lo contrario y daba verde.
+   */
+  it("los extras llevan el aviso y nada más", () => {
+    expect(extrasDelAviso(AVISO)).toEqual({ aviso_id: "av-1" });
+    expect(extrasDelAviso(AVISO)).not.toHaveProperty("repuesto");
   });
 });

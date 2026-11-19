@@ -58,6 +58,7 @@
  */
 
 import { prioridadDeUrgencia } from "@/lib/mantenimiento/avisos";
+import { prioridadParaLaPlanilla, PRIORIDAD_MEDIA } from "@/lib/mantenimiento/prioridad";
 
 /** Lo que de un aviso hace falta para armar la orden. */
 export interface AvisoParaLaOT {
@@ -70,6 +71,11 @@ export interface AvisoParaLaOT {
   equipment_id: string | null;
   equipo_raw: string | null;
   equipo_code: string | null;
+  /**
+   * La columna `repuesto` del aviso. **Hoy no viaja a la orden** y el porqué
+   * está en `extrasDelAviso`; se nombra igual porque es de acá de donde
+   * saldría el primer renglón de `repuestos` el día que esa columna se use.
+   */
   repuesto: string | null;
 }
 
@@ -116,8 +122,25 @@ export interface RespuestasDelAviso {
  * **Correctiva siempre**: alguien reportó una falla, no es un preventivo
  * programado. Y la prioridad sale de la urgencia del aviso por
  * `prioridadDeUrgencia`, que es la traducción que ya existía — no una segunda.
- * Esa función devuelve la palabra pelada («MEDIA»); el emoji se lo pone la
- * ruta con `prioridadParaLaPlanilla`, una sola vez y antes de sus dos usos.
+ *
+ * ── Y SALE CON EL EMOJI, PORQUE ACÁ YA NO TERMINA EN LA RUTA ────────────────
+ *
+ * `prioridadDeUrgencia` devuelve la palabra pelada —"MEDIA"— y eso alcanzaba
+ * mientras esto llenaba un formulario propio, que ofrecía esas mismas tres
+ * palabras. Desde que el aviso siembra el formulario completo, quien muestra
+ * este valor es el desplegable de `NuevaOTModal`, que ofrece
+ * `PRIORIDADES_DE_OT` —"🟠 Alta", "🟡 Media", "🟢 Baja"—: con la palabra pelada
+ * **ninguna opción coincide y el campo se abre en blanco**. Si nadie lo toca el
+ * dato igual sale bien, porque la ruta normaliza; si alguien lo toca, elige a
+ * ciegas sobre una urgencia que nunca llegó a ver.
+ *
+ * Por eso la segunda traducción —`prioridadParaLaPlanilla`, la misma que corre
+ * la ruta— se aplica acá y no se inventa un emoji al lado: sigue habiendo una
+ * sola tabla de equivalencias, y la ruta la vuelve a aplicar sin efecto porque
+ * es idempotente ("🟡 Media" entra y sale igual). Lo ata el test «el valor
+ * sembrado existe en el desplegable», que pregunta por `PRIORIDADES_DE_OT` y no
+ * por la función de la que sale: comparar el sembrado contra su propia fuente
+ * da verde pase lo que pase, y es lo que dejó pasar esto.
  *
  * Los tres que el aviso no puede contestar quedan como se los pase quien
  * llama: la especialidad vacía —el aviso no da ni un indicio y acertarle de
@@ -153,7 +176,12 @@ export function loQuePropone(
 
     descripcion: aviso.descripcion?.trim() || `Aviso ${aviso.oa_number ?? ""}`.trim(),
     tipo: "CORRECTIVO",
-    prioridad: prioridadDeUrgencia(aviso.urgencia),
+    // El `??` no se alcanza: `prioridadDeUrgencia` devuelve siempre ALTA,
+    // MEDIA o BAJA, y las tres están en la tabla. Está porque el tipo de
+    // `prioridadParaLaPlanilla` admite null —se la llama también con lo que
+    // venga de la planilla— y un `!` acá sería afirmar sin red lo que el
+    // desplegable no puede mostrar: Media es su valor por defecto.
+    prioridad: prioridadParaLaPlanilla(prioridadDeUrgencia(aviso.urgencia)) ?? PRIORIDAD_MEDIA,
     sector_id: aviso.sector_id ?? "",
     sector_raw: aviso.sector_raw ?? "",
     equipment_id: aviso.equipment_id ?? "",
@@ -213,15 +241,30 @@ export function sembradoDesdeElAviso(
 }
 
 /**
- * Lo que viaja en el cuerpo además de los campos del formulario: a cuál
- * aviso pertenece la orden —para que el aviso quede apuntando a ella y nadie
- * genere una segunda— y su repuesto. Ninguno de los dos vive en el estado del
- * formulario.
+ * Lo que viaja en el cuerpo además de los campos del formulario: a cuál aviso
+ * pertenece la orden, para que el aviso quede apuntando a ella y nadie genere
+ * una segunda. No vive en el estado del formulario —ver la prop `aviso` de
+ * `NuevaOTModal`— y por eso se suma recién al armar el cuerpo.
+ *
+ * ── POR QUÉ NO MANDA EL `repuesto` DEL AVISO, AUNQUE LO MANDABA ─────────────
+ *
+ * Lo mandaba el formulario recortado, que no tenía lista de repuestos: ahí
+ * `repuesto` era el único campo del tema y la ruta lo leía. El formulario
+ * completo manda **`repuestos`** —un arreglo, siempre, aunque sea el renglón
+ * vacío con el que arranca—, y `repuestosDelCuerpo` (`repuestosDeLaOT.ts`)
+ * mira `body.repuesto` **sólo cuando no hay arreglo**. O sea que mandarlo era
+ * mandar un campo que la ruta descarta: un contrato que el test afirmaba y
+ * nadie honraba, que es peor que no tenerlo.
+ *
+ * Hoy no se pierde nada: medido el 19/11/2026, **0 de 254 avisos tienen
+ * `repuesto` cargado**. El día que alguien empiece a usar esa columna, lo que
+ * corresponde **no es revivir este campo** —volvería a caer en la rama que la
+ * ruta no mira— sino sembrarlo como **primer renglón de `repuestos`**, que es
+ * por donde el formulario completo los manda y donde además se puede ver y
+ * corregir antes de crear la orden.
  */
-export function extrasDelAviso(
-  aviso: AvisoParaLaOT
-): { aviso_id: string; repuesto: string | null } {
-  return { aviso_id: aviso.id, repuesto: aviso.repuesto };
+export function extrasDelAviso(aviso: AvisoParaLaOT): { aviso_id: string } {
+  return { aviso_id: aviso.id };
 }
 
 /**
