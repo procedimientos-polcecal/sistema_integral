@@ -8,6 +8,9 @@ import {
   type SectorDePlanta,
 } from "@/lib/compras/sectorDelPedido";
 import { PRIORIDADES, PRIORIDAD_LABELS } from "@/lib/compras/constants";
+import {
+  copiarDelRequerimiento, numeroDeRi, avisoDeReutilizado,
+} from "@/lib/compras/reutilizarRequerimiento";
 import { recortarParaPantalla } from "@/lib/compras/texto";
 import Select from "@/components/Select";
 
@@ -43,16 +46,54 @@ export interface ValoresIniciales {
 
 /**
  * Alta de un requerimiento. Es el formulario que hoy vive en Google Forms, así
- * que se mantiene igual de corto: sólo descripción y área son obligatorias.
+ * que se mantiene igual de corto: descripción, área y dónde se necesita.
+ *
+ * El lugar se exige desde el 11/11/2026, a pedido. No cuesta nada: medido ese
+ * día, de los 2.270 RI **ninguno** estaba sin ubicación, así que esto no
+ * cambia una costumbre sino que cierra la puerta. Lo que se evitaba es que un
+ * pedido sin lugar no se puede filtrar por ubicación y, sobre todo, que de ahí
+ * salen el sector, el equipo ofrecido y quién paga: sin lugar, los tres
+ * quedan a cargo de quien pide.
  */
+/**
+ * Con qué se ofrece copiar un pedido viejo, o nada para no ofrecerlo.
+ *
+ * **Es opt-in a propósito, y ésa es la decisión que importa de esta prop.**
+ * Este modal lo montan seis pantallas y cuatro de ellas abren el formulario
+ * **ya completo** —los tres listados de Inventario y los repuestos de una OT
+ * mandan descripción, código y cantidad en `inicial`—. Un botón de «traer otro
+ * pedido» ahí pisaría exactamente los campos que hacen que valga la pena
+ * abrirlo desde esa pantalla: alguien que viene de un repuesto faltante y toca
+ * «Traer» pierde el repuesto.
+ *
+ * Así que lo prenden las dos pantallas donde el formulario nace vacío —Compras
+ * y Mis pedidos—, nombrándolo. Un `inicial` y un `reutilizar` juntos no están
+ * prohibidos por el tipo, pero hoy no existen juntos y es mejor que agregarlo
+ * cueste pensar.
+ */
+export interface Reutilizar {
+  /**
+   * Pedidos para elegir de una lista, sin tener que saberse el número.
+   *
+   * Lo manda Mis pedidos con lo que **ya tiene cargado en pantalla**: es la
+   * misma lista que se está mirando, así que no cuesta una consulta más y no
+   * puede mostrar algo que esa persona no pueda ver. Compras no lo manda —ahí
+   * se copian pedidos de cualquiera y una lista de los últimos no serviría—,
+   * y sin esto queda sólo el campo del número.
+   */
+  recientes?: { nro_ri: number; descripcion: string | null }[];
+}
+
 export default function NuevoRequerimientoModal({
-  areas, empresas, ubicaciones, inicial, advertencia, onClose, onSaved,
+  areas, empresas, ubicaciones, inicial, advertencia, reutilizar, onClose, onSaved,
 }: {
   areas: Opcion[];
   empresas: Opcion[];
   ubicaciones: Opcion[];
   /** Precargado desde otra pantalla. Se puede editar todo antes de enviar. */
   inicial?: ValoresIniciales;
+  /** Ofrecer copiar un pedido viejo. Ver `Reutilizar`. */
+  reutilizar?: Reutilizar;
   /**
    * Algo que quien monta el modal quiere decir antes de que se confirme.
    *
@@ -271,6 +312,72 @@ export default function NuevoRequerimientoModal({
     elegirUbicacion(ubicacionId);
   }
 
+  /* ── Copiar un pedido viejo ────────────────────────────────────────────
+   * Se piden los mismos materiales una y otra vez. `vieneDe` queda puesto
+   * hasta que se guarda: es lo que sostiene la barra que pide revisar, porque
+   * estos campos **no los escribió quien está mirando la pantalla**. Qué se
+   * copia lo decide `lib/compras/reutilizarRequerimiento.ts`. */
+  const [numeroViejo, setNumeroViejo] = useState("");
+  const [trayendo, setTrayendo] = useState(false);
+  const [errorAlTraer, setErrorAlTraer] = useState("");
+  const [vieneDe, setVieneDe] = useState<string | null>(null);
+
+  async function traerElViejo(escrito: string) {
+    const numero = numeroDeRi(escrito);
+    if (!numero) { setErrorAlTraer("Poné el N° del pedido que querés copiar."); return; }
+
+    setTrayendo(true); setErrorAlTraer("");
+    try {
+      const res = await fetch(`/api/compras/requerimientos/reutilizar?numero=${numero}`);
+      const cuerpo = await res.json().catch(() => ({}));
+      // Nada se toca si no se pudo traer: lo que ya hubiera escrito queda.
+      if (!res.ok) { setErrorAlTraer(cuerpo.error ?? "No se pudo traer ese pedido."); return; }
+
+      const { campos, noEntraron } = copiarDelRequerimiento(cuerpo.data, {
+        // Los ids de lo que los desplegables ofrecen **ahora mismo**, que es
+        // contra lo que hay que validar: un pedido de hace seis meses puede
+        // apuntar a una ubicación dada de baja o a un equipo vendido.
+        areas: areas.map((a) => a.id),
+        ubicaciones: ubicaciones.map((u) => u.id),
+        equipos: equipos.map((e2) => e2.id),
+        empresas: empresas.map((e2) => e2.id),
+        prioridades: PRIORIDADES,
+      });
+
+      if (campos.descripcion !== undefined) setDescripcion(campos.descripcion);
+      if (campos.codigo !== undefined) setCodigo(campos.codigo);
+      if (campos.cantidad !== undefined) setCantidad(campos.cantidad);
+      if (campos.detalle !== undefined) setDetalle(campos.detalle);
+      if (campos.areaId) setAreaId(campos.areaId);
+
+      // El lugar pasa por **la misma deducción** que elegirlo a mano —sector,
+      // equipos ofrecidos, empresa sugerida—, igual que hace lo precargado.
+      // Repetir sus cuentas acá sería el segundo camino que tarde o temprano
+      // deja de dar lo mismo.
+      if (campos.ubicacionId) elegirUbicacion(campos.ubicacionId);
+
+      // Y DESPUÉS lo copiado, que le gana a lo deducido: el equipo y quién
+      // paga del pedido viejo son más específicos que lo que sugiere el lugar,
+      // y son lo que la persona pidió copiar. `elegirUbicacion` ya corrió, así
+      // que estos dos `set` son los últimos sobre el mismo estado.
+      if (campos.equipoId) setEquipoId(campos.equipoId);
+      if (campos.paga) setPaga(campos.paga);
+      if (campos.prioridad) setPrioridad(campos.prioridad);
+
+      // La deducción de lo precargado corre una sola vez y mira `ubicacionId`.
+      // Sin esto volvería a correr en el render siguiente —porque la ubicación
+      // acaba de dejar de estar vacía— y le pisaría el equipo al que se copió
+      // con el del lugar. Ya se dedujo acá arriba.
+      setDedujoLaInicial(true);
+
+      setVieneDe(avisoDeReutilizado(numero, noEntraron));
+    } catch {
+      setErrorAlTraer("No se pudo traer ese pedido.");
+    } finally {
+      setTrayendo(false);
+    }
+  }
+
   /** El sector deducido, para poder nombrarlo en pantalla. */
   const sectorDeducido = sectores.find((s2) => s2.id === sectorId);
 
@@ -398,6 +505,79 @@ export default function NuevoRequerimientoModal({
               pedido exista. */}
           {advertencia}
 
+          {/* Antes de los campos y no escondido entre ellos: es lo primero que
+              se hace cuando se vuelve a pedir algo que ya se pidió. Sólo
+              aparece donde el formulario nace vacío — ver `Reutilizar`. */}
+          {reutilizar && (
+            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <label className="block text-xs font-medium text-slate-600">
+                Reutilizar un pedido
+              </label>
+
+              {reutilizar.recientes && reutilizar.recientes.length > 0 && (
+                <Select
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value=""
+                  onChange={(e) => { if (e.target.value) traerElViejo(e.target.value); }}
+                  disabled={trayendo}
+                >
+                  {/* «De la lista» y no «de los tuyos»: es la página que se
+                      está mirando, con sus filtros puestos. Prometer más sería
+                      mentir, y el campo del número cubre todo lo demás. */}
+                  <option value="">Elegí uno de la lista…</option>
+                  {reutilizar.recientes.map((p) => (
+                    <option key={p.nro_ri} value={String(p.nro_ri)}>
+                      {p.nro_ri} · {recortarParaPantalla(p.descripcion ?? "", 60)}
+                    </option>
+                  ))}
+                </Select>
+              )}
+
+              <div className="flex gap-2">
+                <input
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={numeroViejo}
+                  onChange={(e) => { setNumeroViejo(e.target.value); setErrorAlTraer(""); }}
+                  /* Enter traería el pedido y además mandaría el formulario:
+                     dentro de un <form>, un input suelto lo envía. Se corta
+                     acá y se trae, que es lo que quien escribe espera. */
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); traerElViejo(numeroViejo); }
+                  }}
+                  placeholder={
+                    reutilizar.recientes?.length
+                      ? "…o el N° de RI de cualquier otro"
+                      : "N° de RI — ej: 2184"
+                  }
+                  disabled={trayendo}
+                />
+                {/* `type="button"`, si no envía el formulario. */}
+                <button
+                  type="button"
+                  onClick={() => traerElViejo(numeroViejo)}
+                  disabled={trayendo}
+                  className="btn-secondary shrink-0"
+                >
+                  {trayendo ? "Buscando…" : "Traer"}
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                Copia todo menos la fecha, que la ponés vos.
+              </p>
+              {errorAlTraer && <p className="text-xs text-red-600">{errorAlTraer}</p>}
+            </div>
+          )}
+
+          {/* Queda hasta que se guarde: estos campos no los escribió quien
+              está mirando, así que un pedido copiado no se puede ver igual que
+              uno tipeado. */}
+          {vieneDe && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {vieneDe}
+            </p>
+          )}
+
           <Campo label="Qué se necesita" requerido>
             <input
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -476,13 +656,19 @@ export default function NuevoRequerimientoModal({
           </div>
 
           {/* Dónde se necesita */}
-          <Campo label="Dónde se necesita">
+          <Campo label="Dónde se necesita" requerido>
             <Select
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={ubicacionId}
               onChange={(e) => elegirUbicacion(e.target.value)}
             >
-              <option value="">Sin especificar</option>
+              {/*
+                «Elegir…» y no «Sin especificar»: lo segundo se lee como una
+                opción válida, y dejar el lugar en blanco es lo que vuelve
+                imposible filtrar por ubicación y deducir el sector —de ahí
+                salen también el equipo y quién paga—.
+              */}
+              <option value="">Elegir…</option>
               {ubicaciones.map((u) => (
                 <option key={u.id} value={u.id}>{u.nombre}</option>
               ))}
@@ -589,7 +775,7 @@ export default function NuevoRequerimientoModal({
             </button>
             <button
               type="submit"
-              disabled={guardando || creado || !descripcion.trim() || !areaId}
+              disabled={guardando || creado || !descripcion.trim() || !areaId || !ubicacionId}
               className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
             >
               {guardando ? "Guardando…" : creado ? "Ya se creó" : "Crear requerimiento"}
