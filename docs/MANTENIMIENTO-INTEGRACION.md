@@ -1786,19 +1786,18 @@ tiene su razón, que es distinta:
   —mismos campos, mismos vocabularios de `lib/`, misma `loQueFaltaParaCrear`—
   pero vive **fuera del grupo `(app)`** porque tiene que dibujarse **sin
   servidor**: el layout de `(app)` le pregunta a Supabase quién sos y redirige
-  al login, y sin conexión no contesta. Es el único de los tres que no manda
-  `aviso_id`, a propósito: ahí se carga una orden suelta. Unificarlo es otro
-  trabajo, y mientras tanto sigue siendo un lugar donde una regla nueva hay que
-  copiarla.
+  al login, y sin conexión no contesta. Unificarlo es otro trabajo, y mientras
+  tanto sigue siendo un lugar donde una regla nueva hay que copiarla.
 - **`app/(app)/mantenimiento/mantenimientos/GenerarOTDeMantenimiento.tsx`** es
   **el pariente más cercano del que se borró**, y por eso conviene mirarlo antes
   de dar por cerrado este tema. No es un formulario de OT recortado: es la
-  confirmación de las **tres cosas que un preventivo programado no dice**
-  —especialidad, quién lo realiza y para cuándo, más la fecha de fin, que es
-  opcional—. Todo lo demás lo hereda del mantenimiento y se muestra sin poder
-  editarse, así que no ofrece prioridad, GUT, repuestos, contratista ni los
-  operarios 2 y 3. Tiene su propio `cuerpoDeLaOT`, su `RESPUESTAS_VACIAS`, su
-  `respuestasIniciales` y su `loQueHayQuePreguntar` en
+  confirmación de las **cuatro cosas que un preventivo programado no dice**
+  —especialidad, quién lo realiza, para cuándo y hasta cuándo—. Las cuatro son
+  obligatorias: `fecha_fin` entró a `IMPRESCINDIBLES` el 04/11/2026 y este
+  formulario la pide como los otros. Todo lo demás lo hereda del mantenimiento
+  y se muestra sin poder editarse, así que no ofrece prioridad, GUT, repuestos,
+  contratista ni los operarios 2 y 3. Tiene su propio `cuerpoDeLaOT`, su
+  `RESPUESTAS_VACIAS`, su `respuestasIniciales` y su `loQueHayQuePreguntar` en
   [lib/mantenimiento/otDesdeMantenimiento.ts](../lib/mantenimiento/otDesdeMantenimiento.ts).
   Dos cosas que hay que saber: **la regla de qué falta sí es compartida** —
   `loQueFaltaDelMantenimiento` corre `loQueFaltaParaCrear` sobre su propio
@@ -1806,6 +1805,14 @@ tiene su razón, que es distinta:
   **postea con un `fetch` pelado y no pasa por la cola**, que es exactamente lo
   que este cambio le sacó al camino del aviso: sin señal ese `await fetch`
   tira, el modal queda con el spinner puesto y lo contestado adentro.
+
+**Y los tres se enlazan a cosas distintas, que es lo que hay que mirar antes de
+decir «éste no enlaza».** `NuevaOTModal` manda **`aviso_id`** cuando la orden
+nace de un aviso, y nada cuando es una OT suelta.
+`GenerarOTDeMantenimiento` manda **`schedule_id`**, el preventivo del que sale.
+`FormularioOTOffline` **no manda ninguno de los dos**, a propósito: ahí se carga
+una orden suelta, parado en la planta, y una que nace de un aviso se carga desde
+el aviso, que es donde está el botón.
 
 **7. Lo que el cambio trajo de arriba, sin ser el objetivo.** El camino viejo
 hacía un `fetch` pelado y se colgaba sin señal; el nuevo pasa por la cola. Y el
@@ -1839,6 +1846,26 @@ servidor y merece su propio trabajo—. **Mientras tanto, la salida es
 el enlace se vuelve a poner a mano desde el aviso, con «Ya tiene OT»
 (`enlazarOtAlAviso`). Lo que corresponde el día que se unifique es que ese
 formulario arrastre los campos del cuerpo que no muestra, en vez de perderlos.
+
+**9. Y hay un segundo camino a dos órdenes para el mismo aviso: cerrar el modal
+y volver a abrirlo.** El modal deshabilita «Crear OT» en cuanto la carga queda
+encolada, y eso cierra el camino de apretar dos veces seguidas — que era el que
+se arregló. Pero **`yaQuedoEnLaCola` sale de `useState`**: si alguien cierra el
+modal con la X o con Escape después de encolar y lo vuelve a abrir, `resultado`
+arranca en `null`, el botón vuelve a estar habilitado y el borrador sigue ahí
+—la X y Escape conservan a propósito—, así que se puede mandar una **segunda OT
+con el mismo `aviso_id`**: `mandarOEncolar` genera una clave nueva por llamada y
+la ruta no mira si el aviso ya tiene `work_order_id`.
+
+Es **más angosto todavía** que el del punto 8, porque pide perder la señal en
+una pantalla a la que no se llega sin señal —`/mantenimiento/avisos` la dibuja
+el servidor—, encolar, cerrar y reabrir. **No se arregla con más estado en el
+modal**, y por eso se deja escrito en vez de parchearlo: cualquier memoria que
+viva adentro del componente se pierde al desmontarlo, y una que viva en el
+borrador haría falta tirarla a mano con cada aviso. **El cierre de verdad es
+que `POST /api/mantenimiento/ordenes` se niegue cuando el aviso ya tiene
+`work_order_id`** —una comprobación, del lado que las dos puertas comparten—, y
+esa ruta queda fuera de este plan.
 
 ## Los repuestos de una orden, y si los hay
 
