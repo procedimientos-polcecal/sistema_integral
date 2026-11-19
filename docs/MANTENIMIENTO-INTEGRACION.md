@@ -1714,7 +1714,7 @@ máquina sabe dónde está. Y las urgencias se escriben **con su emoji** —"�
 no "ALTA"— porque así están en la planilla, y dos vocabularios para lo mismo es
 cómo la próxima lectura deja de reconocerlas.
 
-## Hay un solo formulario de OT, y el aviso lo abre sembrado (19/11/2026)
+## Un solo formulario de OT para avisos y órdenes, y el aviso lo siembra (19/11/2026)
 
 Hasta esa fecha había **dos** formularios para crear una orden: el completo
 (`app/(app)/mantenimiento/ordenes/NuevaOTModal.tsx`) y uno recortado que se abría
@@ -1777,16 +1777,68 @@ porque el pedido fue que el formulario fuera el mismo, y registrar trabajo ya
 hecho contra un aviso es un caso real. No queda sin control: `loQueFaltaParaCrear`
 exige las horas y quién lo hizo cuando hay fecha de cierre.
 
-**6. `FormularioOTOffline` (`app/cargar`) es el tercer formulario de OT y queda
-afuera a propósito.** Vive fuera del grupo `(app)` porque tiene que dibujarse
-**sin servidor**: el layout de `(app)` le pregunta a Supabase quién sos y
-redirige al login, y sin conexión no contesta. Unificarlo es otro trabajo, y
-mientras tanto sigue siendo un lugar donde una regla nueva hay que copiarla.
+**6. Uno solo quiere decir uno para avisos y órdenes de trabajo, y quedan dos
+afuera.** El título cuenta lo que se unificó y no cuántos archivos crean una OT
+en el repo, que siguen siendo tres. Los otros dos no son un olvido y cada uno
+tiene su razón, que es distinta:
+
+- **`app/cargar/FormularioOTOffline.tsx`** es el mismo formulario de siempre
+  —mismos campos, mismos vocabularios de `lib/`, misma `loQueFaltaParaCrear`—
+  pero vive **fuera del grupo `(app)`** porque tiene que dibujarse **sin
+  servidor**: el layout de `(app)` le pregunta a Supabase quién sos y redirige
+  al login, y sin conexión no contesta. Es el único de los tres que no manda
+  `aviso_id`, a propósito: ahí se carga una orden suelta. Unificarlo es otro
+  trabajo, y mientras tanto sigue siendo un lugar donde una regla nueva hay que
+  copiarla.
+- **`app/(app)/mantenimiento/mantenimientos/GenerarOTDeMantenimiento.tsx`** es
+  **el pariente más cercano del que se borró**, y por eso conviene mirarlo antes
+  de dar por cerrado este tema. No es un formulario de OT recortado: es la
+  confirmación de las **tres cosas que un preventivo programado no dice**
+  —especialidad, quién lo realiza y para cuándo, más la fecha de fin, que es
+  opcional—. Todo lo demás lo hereda del mantenimiento y se muestra sin poder
+  editarse, así que no ofrece prioridad, GUT, repuestos, contratista ni los
+  operarios 2 y 3. Tiene su propio `cuerpoDeLaOT`, su `RESPUESTAS_VACIAS`, su
+  `respuestasIniciales` y su `loQueHayQuePreguntar` en
+  [lib/mantenimiento/otDesdeMantenimiento.ts](../lib/mantenimiento/otDesdeMantenimiento.ts).
+  Dos cosas que hay que saber: **la regla de qué falta sí es compartida** —
+  `loQueFaltaDelMantenimiento` corre `loQueFaltaParaCrear` sobre su propio
+  cuerpo, así que el desfasaje de octubre no puede repetirse por ahí—, y
+  **postea con un `fetch` pelado y no pasa por la cola**, que es exactamente lo
+  que este cambio le sacó al camino del aviso: sin señal ese `await fetch`
+  tira, el modal queda con el spinner puesto y lo contestado adentro.
 
 **7. Lo que el cambio trajo de arriba, sin ser el objetivo.** El camino viejo
 hacía un `fetch` pelado y se colgaba sin señal; el nuevo pasa por la cola. Y el
 error de marcar el aviso en su planilla ahora llega por el mismo texto que todo
 lo demás que queda a medias, en vez de armarse aparte.
+
+**8. Y lo que ese mismo camino abrió: corregir una OT parada le saca el enlace
+al aviso.** Es la contracara del punto anterior y nadie la había visto. Ahora
+una OT nacida de un aviso puede quedar **encolada**; si el reenvío recibe un
+rechazo definitivo, la carga queda **parada** en `/cargar` y esa pantalla ofrece
+dos salidas que no son equivalentes:
+
+- **«Reintentar igual»** vuelve a mandar `carga.cuerpo`, el cuerpo guardado tal
+  cual, así que **conserva el `aviso_id`** y también las tres notas GUT.
+- **«Corregir y volver a mandar»** rearma el cuerpo desde `FormularioOTOffline`,
+  y ese formulario **no tiene `aviso_id`** ni los campos del GUT: su `vacio()`
+  no los nombra, y `borradorDesdeElCuerpo`
+  ([lib/mantenimiento/borradorDeCarga.ts](../lib/mantenimiento/borradorDeCarga.ts))
+  copia **sólo los campos que `vacio()` tiene** y descarta el resto a propósito.
+  O sea que la OT se crea **sin enlace al aviso**: el aviso queda para siempre
+  en «sin orden de trabajo» con una orden suya dando vueltas, invitando a que
+  alguien genere una segunda — y **nada lo dice**, ni en la pantalla ni en la
+  orden.
+
+Es un agujero **conocido y angosto**: pide que la carga se encole, que después
+la rechacen definitivamente y que quien la corrija elija el segundo botón. No se
+arregla acá a propósito, porque el arreglo vive en `FormularioOTOffline`, que el
+diseño y el plan dejan explícitamente afuera —es el que tiene que dibujarse sin
+servidor y merece su propio trabajo—. **Mientras tanto, la salida es
+«Reintentar igual»** cuando la carga venía de un aviso; si hubo que corregirla,
+el enlace se vuelve a poner a mano desde el aviso, con «Ya tiene OT»
+(`enlazarOtAlAviso`). Lo que corresponde el día que se unifique es que ese
+formulario arrastre los campos del cuerpo que no muestra, en vez de perderlos.
 
 ## Los repuestos de una orden, y si los hay
 
@@ -2067,8 +2119,9 @@ Cómo queda el resto:
 
 - **Se puntúa sólo desde el SdG**, nunca en el formulario de Google: de 2.227
   órdenes, 2.209 entraron por ahí y llegan sin puntuar. Se puntúa al crear
-  (`NuevaOTModal`, que es también el que se abre desde un aviso), y sobre una orden ya cargada desde el
-  listado y el detalle, por `PATCH /api/mantenimiento/ordenes/[id]/gut`. No
+  (`NuevaOTModal`, que es también el que se abre desde un aviso), y sobre una
+  orden ya cargada desde el listado y el detalle, por
+  `PATCH /api/mantenimiento/ordenes/[id]/gut`. No
   audita: un puntaje se deshace escribiendo otro. Los tres desplegables arrancan
   **vacíos** y no son obligatorios.
 - **Ningún camino de alta hereda un puntaje.** Aviso → OT no siembra
