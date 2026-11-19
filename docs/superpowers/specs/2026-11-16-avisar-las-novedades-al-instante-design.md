@@ -302,3 +302,36 @@ porque son las que un lector futuro no puede deducir del código.
 - **Los lunes se solapa con el resumen de totales.** La misma persona recibe
   las novedades desde las 7:00 y los totales a las 8:30. Es una vez por semana
   y es el precio de conservar la red semanal.
+
+### Lo que se comprobó en producción (18 y 19/11/2026)
+
+Desplegado el 18/11/2026 a las 11:25 UTC, con la migración ya aplicada. Las
+tres pruebas que el plan pedía, y lo que dio cada una:
+
+- **Sin movimiento no manda nada.** Las corridas de las 11:41 y las 11:56
+  dejaron las **nueve** cantidades idénticas —17, 12, 1, 12, 1, 39, 37, 3,
+  15— y cero ausencias en la ventana, y `visto_en` igual avanzó de `11:41:10`
+  a `11:56:10`. Que el vistazo avance aunque no se mande nada es la mitad que
+  sostiene todo lo demás: sin eso la primera corrida nunca deja de ser la
+  primera.
+- **Una ausencia cargada llega en la corrida siguiente.** Se cargó a las
+  `11:56:13.984` y el push llegó a las 12:11 UTC (9:11 de Argentina),
+  diciendo «Ausencias cargadas · 1 más». **Cayó del lado correcto de un borde
+  que conviene no deshacer**: la corrida de las 11:56 había capturado su hora
+  a las `11:56:10.289`, tres segundos y medio antes de que la ausencia
+  existiera, así que su ventana `[11:41:10, 11:56:10)` no la alcanzó y la
+  siguiente la tomó una sola vez. Con la ventana cerrada arriba —que fue un
+  arreglo de la revisión— el mismo hecho se habría avisado en las dos.
+- **El flanco de la salud no se pudo ejercitar**, y queda dicho: no hubo
+  ningún recurso caído en esos dos días. Cuando pase, lo que tiene que verse
+  es **un solo push** y después silencio, aunque la racha siga subiendo seis
+  veces por hora. Dos seguidos del mismo recurso apuntan al borrado del
+  vistazo.
+
+Y una cuarta que no estaba en la lista y que importa tanto como las otras:
+**el resumen diario del 18/11 corrió con el código nuevo —a las 11:30 UTC, con
+el deploy ya arriba— y escribió su foto igual**, diez filas, un miércoles, sin
+mandar nada. O sea que la mitad que se apagó es sólo el envío: la foto que
+alimenta los totales de los lunes y la idempotencia de ese cron siguen
+andando. Era lo que había que comprobar antes de creer que sacar el cron de
+`vercel.json` es inofensivo. No lo es.
