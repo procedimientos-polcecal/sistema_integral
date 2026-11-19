@@ -700,6 +700,18 @@ export default function MisPedidosClient({
           areas={areas}
           empresas={empresas}
           ubicaciones={ubicaciones}
+          /*
+           * La lista que ya está cargada, sin una consulta más: es lo que esta
+           * persona está mirando, así que no puede ofrecer un pedido que no
+           * pueda ver, y es donde está el que quiere repetir. Cambia con los
+           * filtros, y por eso el desplegable dice «de la lista».
+           */
+          reutilizar={{
+            recientes: pedidos.map((p) => ({
+              nro_ri: p.nro_ri,
+              descripcion: p.descripcion,
+            })),
+          }}
           onClose={() => setModalAbierto(false)}
           onSaved={() => { setModalAbierto(false); cargar(); contar(); router.refresh(); }}
         />
