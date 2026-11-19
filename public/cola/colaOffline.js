@@ -731,6 +731,7 @@ export function loQueQuedoPendiente(cuerpoCrudo) {
   const cuerpo = esObjeto(cuerpoCrudo) ? cuerpoCrudo : {};
   const claveError = texto(cuerpo.clave_error);
   const planillaError = texto(cuerpo.planilla_error);
+  const avisoError = texto(cuerpo.aviso_error);
 
   const partes = [
     texto(cuerpo.advertencia),
@@ -740,7 +741,19 @@ export function loQueQuedoPendiente(cuerpoCrudo) {
         `(${claveError}): si se vuelve a mandar, mirá la planilla antes de darla ` +
         `por duplicada.`,
     textoDelPendienteDePlanilla(planillaError, cuerpo.planilla_reintentando === true),
-    texto(cuerpo.aviso_error),
+    // EL AVISO QUE NO QUEDÓ MARCADO, CON SU ORACIÓN. Iba crudo, y la frase que
+    // lo precede dice «la OT se creó y el aviso quedó marcado»: pegada a ella,
+    // una línea de Postgres suelta —«new row violates row-level security
+    // policy for table "avisos"»— afirma lo contrario de lo anterior sin decir
+    // de qué habla. Lo que hay que entender es que la próxima persona que mire
+    // la planilla de avisos lo va a ver pendiente y puede pedir una segunda OT
+    // para lo mismo; el texto de Google o de Postgres va adentro del paréntesis
+    // y sin traducir, igual que en los otros dos.
+    avisoError === null
+      ? null
+      : `Ojo: la orden se creó, pero el aviso no quedó marcado como atendido ` +
+        `(${avisoError}): sigue figurando pendiente, así que avisá antes de que ` +
+        `alguien genere una segunda orden para lo mismo.`,
     // Los repuestos que no entraron. **Faltaba**, y es el único de los cuatro
     // que no se decía por este camino: el modal de «Nueva orden de trabajo» lo
     // leía por su cuenta, así que la misma OT contaba una cosa cargada con la
