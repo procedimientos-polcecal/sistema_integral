@@ -3728,7 +3728,9 @@ arranca en dos días»—. Seis cosas que no se deducen del código:
   por eso la `estaAtrasada` anterior contaba **21 donde las fechas dicen 34**: la
   sincronización la lee de la planilla, pero nadie la llena, así que decidir con
   ella reducía la función a `estado === "ATRASADO"`. La consulta del tablero ya
-  intentaba mirar la fecha con esa misma columna, o sea que unificar fue terminar
+  intentaba mirar la fecha con esa misma columna
+  (`.or(\`estado.eq.ATRASADO,proxima_fecha.lt.${hoy}\`)` en
+  `app/(app)/mantenimiento/page.tsx`, línea 173 de `origin/main`), o sea que unificar fue terminar
   lo que estaba escrito y no inventar un criterio. Se sigue sincronizando; sólo se
   dejó de usar para decidir.
 - **«Atrasada» es que la ventana entera quedó atrás, no que el inicio haya
@@ -3766,17 +3768,20 @@ arranca en dos días»—. Seis cosas que no se deducen del código:
   Un cartel que afirma dos cuando son tres enseña a no leer el siguiente.
 - **Medido contra las 2.531 OT el 19/11/2026**, lo que nombraría cada corrida: un
   jueves, 6 atrasadas y 5 próximas; un sábado, 6 y 3; un lunes, 6 y 0. Los tres
-  conjuntos de atrasadas son **disjuntos** —dieciocho órdenes distintas—, o sea
-  que el 6 es la tasa diaria y no un conjunto repetido: arrancan unas seis por día
-  hábil y casi ninguna se cierra dentro de su ventana.
+  conjuntos de atrasadas son **disjuntos** —dieciocho órdenes distintas—, lo
+  que prueba que el 6 repetido no era un mismo conjunto pegado. Son tres corridas
+  puntuales: **no se midió una tasa diaria**, y no se midió cuántas se cierran
+  dentro de su ventana (el spec, que sí midió los cruces por día, dice entre 1 y 7
+  y casi siempre 1 o 2).
 - **Le llega a dos personas**, medido el 19/11/2026: de los cinco que administran
   el módulo, sólo los dos `admin_sistema` tienen las notificaciones prendidas, y
   el push va por aparato. Y **si el cron se muere nadie se entera**: como los
-  otros cuatro crons que mandan push, no escribe en `sincronizaciones` y no está
+  otros tres crons de push (`avisos-diarios`, `avisos-al-instante` y
+  `remises-notificaciones`), no escribe en `sincronizaciones` y no está
   en el `REGISTRO` de
   [lib/core/saludDeLasSincronizaciones.ts](../lib/core/saludDeLasSincronizaciones.ts),
-  así que el aviso de salud no lo vigila. Es el mismo lado ciego que el de un
-  cron diario de push: una orden que no se avisa no se nota.
+  así que el aviso de salud no lo vigila. El aviso de divergencia de la Agenda
+  no es un caso aparte: lo manda el cron `agenda`, que sí registra su corrida.
 
 De las atrasadas, **la mayoría no se puede reprogramar desde el SdG**: `postergar`
 sólo mueve las que creó el sistema (`app_created`) y las otras entraron por el

@@ -408,7 +408,7 @@ Expected: FAIL — `COLOR_ATRASADA` no está definido.
 
 - [ ] **Step 3: Agregar los dos colores y la entrada de leyenda**
 
-En `coloresDeEspecialidad.ts`, con el porqué medido al lado: el rojo contra los cinco rellenos da de 1,00:1 a 1,52:1, así que una franja encima no se ve; de relleno con texto blanco da 6,47:1.
+En `coloresDeEspecialidad.ts`, con el porqué medido al lado: el rojo `#b91c1c` contra los cinco rellenos da de 1,20:1 a 2,03:1 (bajo el 3:1 de WCAG para lo que no es texto), así que una franja encima no se ve (la cifra anterior, de 1,00:1 a 1,52:1, estaba mal medida); de relleno con texto blanco da 6,47:1.
 
 - [ ] **Step 4: Pintar la ficha en `CalendarioDeOT.tsx`**
 
@@ -661,7 +661,7 @@ git commit -m "feat(mantenimiento): un push dos dias antes de una OT y otro cuan
 
 - **`proxima_fecha` está vacía en las 2531 filas** y por eso `estaAtrasada` decía 21 donde la fecha dice 34. La consulta del tablero ya intentaba mirar la fecha con esa misma columna: unificar fue terminar lo que estaba escrito.
 - **«Atrasada» es que la ventana entera quedó atrás**, no que el inicio haya pasado: una OT que arrancó ayer y termina el 30 está en curso. Y como el dato viaja por orden y no por día, mirar sólo el inicio pintaría de rojo celdas de días futuros.
-- **El rojo va de relleno y la especialidad al borde**, porque el rojo sobre los cinco rellenos da de 1,00:1 a 1,52:1 — contra el gris es el mismo tono de luz exacto.
+- **El rojo va de relleno y la especialidad al borde**, porque el rojo sobre los cinco rellenos da de 1,20:1 a 2,03:1 (púrpura 1,20, azul 1,25, gris 1,34, verde 1,96, ámbar 2,03), todos bajo el 3:1 de WCAG; la cifra anterior, de 1,00:1 a 1,52:1 con «el mismo tono de luz» contra el gris, estaba mal medida.
 - **El cron corre de lunes a sábado**: por eso el lunes cubre dos días hacia atrás y el sábado dos hacia adelante. Sacar uno de los dos deja un día sin avisar y nada lo dice.
 - **Le llega a dos personas**, medido el 19/11/2026: de los cinco que administran el módulo, sólo los dos `admin_sistema` tienen las notificaciones prendidas.
 - **Si el cron se muere nadie se entera**: como los otros cuatro crons de push, no escribe en `sincronizaciones` y no está en el `REGISTRO` de salud.

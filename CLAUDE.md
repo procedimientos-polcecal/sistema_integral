@@ -1148,7 +1148,8 @@ atrasada. **No pasa por `avisarAQuienDecide()`**, y es otro precedente y no un
 permiso, igual que el de la Agenda. Dos cosas lo hacen sostenible: manda **una
 notificación por persona y por corrida**, y como el domingo no sale, el lunes y
 el sábado miran más días para no dejar uno huérfano. Y arrastra el lado ciego de
-los demás crons de push: **no escribe en `sincronizaciones`**, así que si se
+los otros tres crons de push (`avisos-diarios`, `avisos-al-instante` y
+`remises-notificaciones`): **no escribe en `sincronizaciones`**, así que si se
 muere nadie se entera. El detalle, en la sección `## Cuándo una OT está atrasada,
 y quién se entera` de [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md).
 
