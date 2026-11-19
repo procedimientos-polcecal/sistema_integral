@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   lineasQueValen, textoParaLaPlanilla, filasParaLaBase, repuestosDelCuerpo,
-  lineasDesdeElCuerpo,
+  lineasDesdeElCuerpo, lineasDesdeLasFilas, elReemplazoDelCuerpo, loQueCambiaDeLaLista,
 } from "@/lib/mantenimiento/repuestosDeLaOT";
 import { itemsDeRepuesto } from "@/lib/mantenimiento/repuestosDesdeOt";
 
@@ -243,5 +243,129 @@ describe("el codigo del inventario en el renglon", () => {
       .toEqual([{ cantidad: "1", nombre: "Correa" }]);
     expect(lineasQueValen([{ cantidad: "1", nombre: "Correa", codigo: "  " }]))
       .toEqual([{ cantidad: "1", nombre: "Correa" }]);
+  });
+});
+
+describe("lineasDesdeLasFilas", () => {
+  it("un null de la base llega como campo vacio y no como el texto 'null'", () => {
+    expect(lineasDesdeLasFilas([
+      { id: "r1", nombre: "periflex", codigo: null, cantidad: null },
+    ])).toEqual([{ id: "r1", cantidad: "", nombre: "periflex" }]);
+  });
+
+  it("conserva el codigo, que es el enlace al panol", () => {
+    expect(lineasDesdeLasFilas([
+      { id: "r1", nombre: "CAJA DE RODAMIENTO UPC 213", codigo: "00185", cantidad: "2" },
+    ])).toEqual([
+      { id: "r1", cantidad: "2", nombre: "CAJA DE RODAMIENTO UPC 213", codigo: "00185" },
+    ]);
+  });
+
+  it("una OT sin repuestos abre con un renglon en blanco: sin donde escribir no se completa", () => {
+    expect(lineasDesdeLasFilas([])).toEqual([{ cantidad: "", nombre: "" }]);
+    expect(lineasDesdeLasFilas(null)).toEqual([{ cantidad: "", nombre: "" }]);
+  });
+});
+
+describe("elReemplazoDelCuerpo", () => {
+  it("sin la clave `repuestos` no reemplaza: un cuerpo incompleto borraria la lista entera", () => {
+    const falta = { ok: false, error: "Falta la lista de repuestos" };
+    expect(elReemplazoDelCuerpo({})).toEqual(falta);
+    expect(elReemplazoDelCuerpo(null)).toEqual(falta);
+    expect(elReemplazoDelCuerpo({ repuestos: "2 grillas" })).toEqual(falta);
+  });
+
+  it("una lista vacia si reemplaza: sacar todos los renglones es «no se uso ninguno»", () => {
+    expect(elReemplazoDelCuerpo({ repuestos: [] })).toEqual({ ok: true, lineas: [] });
+  });
+
+  it("limpia los renglones con la misma regla que el alta, y conserva el id", () => {
+    expect(elReemplazoDelCuerpo({ repuestos: [
+      { id: "r1", cantidad: "2", nombre: "rodamiento 22216, EK", codigo: "00185" },
+      { cantidad: "", nombre: "   " },
+    ] })).toEqual({
+      ok: true,
+      lineas: [{ id: "r1", cantidad: "2", nombre: "rodamiento 22216 EK", codigo: "00185" }],
+    });
+  });
+});
+
+describe("loQueCambiaDeLaLista", () => {
+  const existentes = [
+    { id: "r1", nombre: "periflex" },
+    { id: "r2", nombre: "rodamiento 6206" },
+  ];
+
+  it("un renglon sin id se inserta", () => {
+    expect(loQueCambiaDeLaLista([], [{ cantidad: "2", nombre: "grillas 2 mm" }]))
+      .toEqual({
+        insertar: [{ cantidad: "2", nombre: "grillas 2 mm" }],
+        actualizar: [],
+        borrar: [],
+      });
+  });
+
+  /**
+   * El renglon que no cambio de nombre NO se borra, y esto es lo caro de la
+   * tarea: `mant_ri_de_repuesto.repuesto_id` es `on delete cascade` —los RI
+   * pegados a ese renglon mueren— y `ordenes_trabajo_notas.repuesto_id` es
+   * `on delete set null` —la pregunta a Compras se suelta y deja de estar
+   * abierta—. Un reemplazo a lo bruto se los lleva sin un solo error.
+   */
+  it("un renglon que conserva el nombre se actualiza en su lugar", () => {
+    expect(loQueCambiaDeLaLista(existentes, [
+      { id: "r1", cantidad: "3", nombre: "periflex", codigo: "00185" },
+      { id: "r2", cantidad: "", nombre: "rodamiento 6206" },
+    ])).toEqual({
+      insertar: [],
+      actualizar: [
+        { id: "r1", cantidad: "3", codigo: "00185" },
+        { id: "r2", cantidad: null, codigo: null },
+      ],
+      borrar: [],
+    });
+  });
+
+  it("cambiar solo mayusculas o espacios no es otro repuesto", () => {
+    expect(loQueCambiaDeLaLista(existentes, [
+      { id: "r1", cantidad: "1", nombre: "  PERIFLEX " },
+      { id: "r2", cantidad: "", nombre: "rodamiento 6206" },
+    ]).insertar).toEqual([]);
+  });
+
+  /**
+   * Y un renglon cuyo nombre cambio SI se borra y se inserta: un RI pegado a
+   * «rodamiento 6206» no vale para «6207», y heredar el enlace es «enlazar al
+   * que se le parece», que es peor que dejarlo en null.
+   */
+  it("un renglon cuyo nombre cambio se borra y se inserta de nuevo", () => {
+    expect(loQueCambiaDeLaLista(existentes, [
+      { id: "r1", cantidad: "", nombre: "periflex" },
+      { id: "r2", cantidad: "1", nombre: "rodamiento 6207" },
+    ])).toEqual({
+      insertar: [{ id: "r2", cantidad: "1", nombre: "rodamiento 6207" }],
+      actualizar: [{ id: "r1", cantidad: null, codigo: null }],
+      borrar: ["r2"],
+    });
+  });
+
+  it("el id que ya no esta en la lista se borra: sacarlo tiene que poder sacarlo", () => {
+    expect(loQueCambiaDeLaLista(existentes, [{ id: "r1", cantidad: "", nombre: "periflex" }]))
+      .toEqual({
+        insertar: [],
+        actualizar: [{ id: "r1", cantidad: null, codigo: null }],
+        borrar: ["r2"],
+      });
+  });
+
+  it("un id que la base ya no tiene se inserta en vez de perderse", () => {
+    // Dos personas en la misma OT: la otra saco el renglon mientras este modal
+    // estaba abierto. Lo que se escribio no se tira.
+    expect(loQueCambiaDeLaLista([], [{ id: "r9", cantidad: "1", nombre: "correa B-75" }]))
+      .toEqual({
+        insertar: [{ id: "r9", cantidad: "1", nombre: "correa B-75" }],
+        actualizar: [],
+        borrar: [],
+      });
   });
 });

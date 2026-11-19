@@ -62,6 +62,15 @@ export interface LineaDeRepuesto {
    * «enlazar al que se le parece es peor que dejar en null» viene a evitar.
    */
   codigo?: string;
+  /**
+   * El id de la fila de `ordenes_trabajo_repuestos`, **sólo cuando el renglón
+   * salió de la base**.
+   *
+   * Lo trae `lineasDesdeLasFilas` y lo usa `loQueCambiaDeLaLista` para saber
+   * qué renglón es cuál. Un renglón recién escrito no lo tiene y por eso se
+   * inserta. El alta nunca lo ve: ahí no hay filas todavía.
+   */
+  id?: string;
 }
 
 /** Los renglones que valen: los que dicen qué repuesto es. */
@@ -70,7 +79,11 @@ export function lineasQueValen(lineas: readonly LineaDeRepuesto[] | undefined | 
   return lineas
     .map((l) => {
       const codigo = String(l?.codigo ?? "").trim();
+      const id = String(l?.id ?? "").trim();
       return {
+        // Primero el id por lo mismo que el código: sin él la clave **no
+        // está**, así que un renglón recién escrito no finge venir de una fila.
+        ...(id ? { id } : {}),
         cantidad: String(l?.cantidad ?? "").trim(),
         // El `;` separa los renglones del texto de la planilla y la `,` también
         // corta al volver a leerlo: cualquiera de los dos adentro de un nombre
@@ -175,4 +188,113 @@ export function lineasDesdeElCuerpo(
   // cantidad y nombre es adivinar, y acá el que mira es quien lo escribió —
   // que lo acomode si quiere.
   return suelto ? [{ cantidad: "", nombre: suelto }] : vacio;
+}
+
+/** Una fila de `ordenes_trabajo_repuestos`, como la devuelve el GET. */
+export interface FilaDeRepuesto {
+  id: string;
+  nombre: string | null;
+  codigo: string | null;
+  cantidad: string | null;
+}
+
+/**
+ * Los renglones con los que arranca el formulario de registrar el trabajo.
+ *
+ * Es la hermana de `lineasDesdeElCuerpo` y existe por lo mismo: un formulario
+ * necesita al menos un renglón en blanco donde escribir, así que una OT sin
+ * repuestos no abre con la lista vacía sino con uno vacío.
+ *
+ * Lo que no se puede hacer es pasar las filas tal cual: `cantidad` y `codigo`
+ * vienen en `null` de la base, y un `null` dentro de un `<input>` controlado se
+ * ve como el texto «null». `lineasQueValen` ya los vacía, y de paso trae el
+ * `id`, que es lo que después deja actualizar el renglón en vez de borrarlo.
+ */
+export function lineasDesdeLasFilas(
+  filas: readonly FilaDeRepuesto[] | null | undefined
+): LineaDeRepuesto[] {
+  const lineas = lineasQueValen(filas as readonly LineaDeRepuesto[] | null | undefined);
+  return lineas.length > 0 ? lineas : [{ cantidad: "", nombre: "" }];
+}
+
+/**
+ * Lo que el cuerpo del `PUT` dice que se usó, o por qué no se puede saber.
+ *
+ * **Que falte la clave no es una lista vacía.** La ruta borra lo que la lista
+ * no nombra, así que un cuerpo sin `repuestos` —un cliente viejo, un error de
+ * serialización— borraría la lista entera de la orden sin dejar rastro. Una
+ * lista vacía **sí** reemplaza: sacar todos los renglones es «no se usó
+ * ninguno», y eso tiene que poder decirse.
+ */
+export function elReemplazoDelCuerpo(
+  body: { repuestos?: unknown } | null | undefined
+): { ok: true; lineas: LineaDeRepuesto[] } | { ok: false; error: string } {
+  if (!Array.isArray(body?.repuestos)) {
+    return { ok: false, error: "Falta la lista de repuestos" };
+  }
+  return { ok: true, lineas: lineasQueValen(body.repuestos as LineaDeRepuesto[]) };
+}
+
+/** El mismo nombre escrito de otra manera sigue siendo el mismo repuesto. */
+const mismoNombre = (a: string, b: string): boolean =>
+  a.trim().toLowerCase().replace(/\s+/g, " ") === b.trim().toLowerCase().replace(/\s+/g, " ");
+
+/**
+ * Qué hay que insertar, qué actualizar y qué borrar para que la lista de la
+ * orden quede como la dejó el formulario.
+ *
+ * ── POR QUÉ NO SE BORRA TODO Y SE INSERTA DE NUEVO ──────────────────────────
+ *
+ * Porque de la fila de un repuesto cuelgan dos cosas que no se ven desde acá:
+ * `mant_ri_de_repuesto.repuesto_id` es **`on delete cascade`** —los RI que
+ * alguien pegó a ese renglón mueren con él— y `ordenes_trabajo_notas.repuesto_id`
+ * es **`on delete set null`** —la pregunta que se le hizo a Compras se suelta
+ * del repuesto y, por eso mismo, deja de estar abierta—. Un reemplazo a lo
+ * bruto se lleva las dos cosas de **todos** los renglones, incluidos los que
+ * nadie tocó, y no falla ni avisa.
+ *
+ * ── Y POR QUÉ EL QUE CAMBIÓ DE NOMBRE SÍ SE BORRA ───────────────────────────
+ *
+ * Porque entonces no es el mismo repuesto. Un RI pegado a «rodamiento 6206» no
+ * vale para «rodamiento 6207», y heredarle el enlace es «enlazar al que se le
+ * parece», que en esta casa es peor que dejarlo en null: no se nota nunca,
+ * porque el dato aparece en el lugar que no es. Es la misma regla que ya aplica
+ * la pantalla cuando alguien escribe encima de un nombre elegido del
+ * inventario: se le borra el código.
+ *
+ * Mayúsculas y espacios de más no cuentan: eso es corregir cómo está escrito,
+ * no cambiar de pieza.
+ *
+ * Un renglón cuyo `id` la base ya no tiene **se inserta** en vez de perderse:
+ * quiere decir que alguien lo sacó mientras este formulario estaba abierto, y
+ * lo que se escribió acá no se tira por eso.
+ */
+export function loQueCambiaDeLaLista(
+  existentes: readonly { id: string; nombre: string | null }[],
+  lineas: readonly LineaDeRepuesto[]
+): {
+  insertar: LineaDeRepuesto[];
+  actualizar: { id: string; codigo: string | null; cantidad: string | null }[];
+  borrar: string[];
+} {
+  const nombrePorId = new Map(existentes.map((e) => [e.id, String(e.nombre ?? "")]));
+  const insertar: LineaDeRepuesto[] = [];
+  const actualizar: { id: string; codigo: string | null; cantidad: string | null }[] = [];
+  const siguen = new Set<string>();
+
+  for (const l of lineas) {
+    const anterior = l.id ? nombrePorId.get(l.id) : undefined;
+    if (l.id && anterior !== undefined && mismoNombre(anterior, l.nombre)) {
+      siguen.add(l.id);
+      actualizar.push({ id: l.id, codigo: l.codigo || null, cantidad: l.cantidad || null });
+    } else {
+      insertar.push(l);
+    }
+  }
+
+  return {
+    insertar,
+    actualizar,
+    borrar: existentes.map((e) => e.id).filter((id) => !siguen.has(id)),
+  };
 }
