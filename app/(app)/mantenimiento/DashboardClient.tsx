@@ -16,6 +16,7 @@ import { DIAS_DE_CALENDARIO, diasCorridos, fechaCorta } from "@/lib/mantenimient
 import {
   useIndicadoresPorSector, FiabilidadPorSector, EvolucionPorSector, ParadasDeSector,
 } from "./IndicadoresPorSector";
+import AtrasadasDeLaSemana, { type ResumenDeLaSemana } from "./AtrasadasDeLaSemana";
 
 /**
  * Los gráficos, aparte: `recharts` son ~350 KB y su JS bloqueaba el primer
@@ -467,7 +468,7 @@ function empresaDe(s: any): string {
 export default function DashboardClient({
   usuario, equipos, upcoming, overdue,
   empresas, sectores, sectoresStatusLog, recentExecutions, otStats, tipoTally, quienTally,
-  otPorMes, otMes, mesActual, ventanas, semanaQueViene, paradas, atrasadas, hoy,
+  otPorMes, otMes, mesActual, ventanas, semanaQueViene, paradas, atrasadas, laSemana, hoy,
   avisosSinOT, osPendientes, canEdit, esAdmin,
 }: {
   usuario: any;
@@ -490,6 +491,8 @@ export default function DashboardClient({
     atrasadas: any[];
     porSector: { sector: string; cuantas: number }[];
   };
+  /** Las atrasadas que vencían en los últimos siete días, de la misma lista. */
+  laSemana: ResumenDeLaSemana;
   hoy: string;
   ventanas: VentanaDeReparacion[];
   semanaQueViene: string;
@@ -841,6 +844,8 @@ export default function DashboardClient({
             tienen un botón que cambia algo: no son un indicador. */}
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Gestión operativa</h2>
         <div className="space-y-5">
+
+          <AtrasadasDeLaSemana resumen={laSemana} hoy={hoy} />
 
           <OrdenesAtrasadas resumen={atrasadas} hoy={hoy} />
 
