@@ -260,16 +260,34 @@ export async function avisarDeLasOT(
     );
     if (avisos.length === 0) return { ...vacio, ...cuenta, motivo: "nada que avisar" };
 
-    const [leerUsuarios, leerGrants] = await Promise.all([
-      admin.from("usuarios").select("id, rol, activo"),
-      admin.from("usuario_modulos").select("id, usuario_id, modulo, nivel").eq("modulo", "mantenimiento"),
+    // Las dos van paginadas aunque hoy sean catorce filas. La regla de la casa
+    // es que no se razona «esta tabla es chica»: PostgREST corta en 1000 sin
+    // avisar, y acá el síntoma sería que a los destinatarios del final de la
+    // lista deja de llegarles el push — en silencio, porque este cron tampoco
+    // escribe en `sincronizaciones`.
+    //
+    // Y el `.order()` no es prolijidad, es la otra mitad: sin un orden
+    // explícito las páginas no son una partición estable y una fila que se
+    // mueve entre dos se saltea. Paginar sin ordenar es peor que no paginar,
+    // porque parece seguro. Es la misma razón escrita arriba, en las órdenes.
+    const [usuarios, grants] = await Promise.all([
+      traerTodo<{ id: string; rol: Rol; activo: boolean }>((desde, hasta) =>
+        admin
+          .from("usuarios")
+          .select("id, rol, activo")
+          .order("id", { ascending: true })
+          .range(desde, hasta)
+      ),
+      traerTodo<UsuarioModulo>((desde, hasta) =>
+        admin
+          .from("usuario_modulos")
+          .select("id, usuario_id, modulo, nivel")
+          .eq("modulo", "mantenimiento")
+          .order("id", { ascending: true })
+          .range(desde, hasta)
+      ),
     ]);
-    if (leerUsuarios.error) throw new Error(leerUsuarios.error.message);
-    if (leerGrants.error) throw new Error(leerGrants.error.message);
-    const destinatarios = quienesAdministran(
-      (leerUsuarios.data ?? []) as { id: string; rol: Rol; activo: boolean }[],
-      (leerGrants.data ?? []) as UsuarioModulo[]
-    );
+    const destinatarios = quienesAdministran(usuarios, grants);
     if (destinatarios.size === 0) return { ...vacio, ...cuenta, motivo: "sin destinatarios" };
 
     const suscripciones = await traerTodo<{

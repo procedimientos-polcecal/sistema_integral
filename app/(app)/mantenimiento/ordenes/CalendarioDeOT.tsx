@@ -583,6 +583,10 @@ function CeldaDelDia({
   const visibles = ordenadas((info?.ordenes ?? []).filter((o) => pasaElFiltro(o, filtros)));
   const fichas = visibles.slice(0, MAX_FICHAS);
   const resto = visibles.length - fichas.length;
+  // Sobre `visibles` y no sobre `fichas`: la cuenta tiene que incluir las que
+  // quedaron en el «+N más», que son invisibles para los dos —el que mira y el
+  // que escucha— pero siguen estando en ese día.
+  const atrasadasDelDia = visibles.filter((o) => o.atrasada).length;
   const numero = Number(dia.slice(8, 10));
 
   // Un solo botón por día: las fichas y el «+N más» son texto adentro, así que
@@ -596,7 +600,15 @@ function CeldaDelDia({
     <button
       type="button"
       onClick={onTocar}
-      aria-label={`${comoSeLee(dia)}: ${visibles.length} ${visibles.length === 1 ? "orden" : "órdenes"}`}
+      // Las atrasadas se nombran **acá** y no en cada ficha. El nombre
+      // accesible de un botón lo fija su `aria-label` y anula lo que haya
+      // adentro, así que una etiqueta puesta en el `<span>` de una ficha no se
+      // anuncia nunca —y encima iría sobre un `<span>` sin `role`, que tampoco
+      // las expone—. Sin esto, el que usa lector de pantalla oye «5 órdenes» y
+      // no se entera de que hay rojo, que es lo único que este color dice.
+      aria-label={`${comoSeLee(dia)}: ${visibles.length} ${visibles.length === 1 ? "orden" : "órdenes"}${
+        atrasadasDelDia > 0 ? `, ${atrasadasDelDia} ${atrasadasDelDia === 1 ? "atrasada" : "atrasadas"}` : ""
+      }`}
       aria-pressed={abierto}
       aria-disabled={noPuedeRecibir ? true : undefined}
       title={noPuedeRecibir ?? undefined}
@@ -638,8 +650,13 @@ function CeldaDelDia({
           <span
             key={o.ot_number}
             className="block truncate rounded px-0.5 text-center text-[10px] font-semibold leading-4"
+            // El `title` se queda: es el globo del mouse y sí se ve. El
+            // `aria-label` que estaba acá se fue al botón del día, que es el
+            // único texto que un lector de pantalla llega a decir; dejarlo
+            // puesto prometía algo que no pasaba, y una etiqueta que no puede
+            // ganar se saca — la misma regla que las utilidades de Tailwind
+            // contra las clases sin capa.
             title={o.atrasada ? "Atrasada" : undefined}
-            aria-label={o.atrasada ? `OT ${o.ot_number}, atrasada` : undefined}
             style={
               // El rojo va de relleno y la especialidad queda en el borde: encima
               // del relleno de especialidad el rojo no se ve (ver
