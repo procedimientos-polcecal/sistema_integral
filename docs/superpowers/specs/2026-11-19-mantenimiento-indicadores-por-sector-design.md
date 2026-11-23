@@ -135,13 +135,21 @@ y **dice desde cuándo se registra**, con la fecha leída de la base y no
 escrita a mano: el día que haya un año de historia, el renglón deja de llamar
 la atención solo, sin que nadie lo edite.
 
-**Las atrasadas no tienen fecha de vencimiento.** Ninguna de las **61 OT
-abiertas** tiene `proxima_fecha`: las 19 atrasadas están marcadas `ATRASADO` a
-mano desde la planilla. Consecuencia que conviene saber antes de leer el
-tablero de hoy: **`diasDeAtraso` devuelve `null` en las 19**, así que el panel
-de atrasadas que ya existe muestra «—» en todas y su orden «de la más vieja a
-la más nueva» no ordena nada. Lo que sí tienen —**las 19**— es
-`fecha_ejecucion`: el día en que la orden decía que había que hacerla.
+**Las atrasadas no tienen fecha de vencimiento.** `proxima_fecha` está en null
+en **todas** las filas de `ordenes_trabajo` —las 2.902 del 23/11/2026, cerradas
+incluidas—, y eso no es una foto de las abiertas de hoy sino la columna entera:
+la sincronización la lee de la planilla pero nadie la llena. Consecuencia:
+`diasDeAtraso` devolvía `null` en todas las atrasadas, así que el panel que ya
+existía mostraba «—» y su orden «de la más vieja a la más nueva» no ordenaba
+nada. Lo que sí tienen es `fecha_ejecucion`.
+
+**Esto lo resolvió `main` mientras la rama se escribía, y mejor** (commits
+`371ff64e` y siguientes, traídos el 23/11/2026): dejó de usar `proxima_fecha`
+para decidir, el inicio sale de `fechaParaElCalendario` —la pendiente si la
+hay— y el vencimiento es `fecha_fin` cuando es posterior al inicio. Así que el
+respaldo que este spec proponía para `diasDeAtraso` **no existe más**: lo
+reemplaza el de main, y la ventana de siete dias se recorta con
+`vencimientoDe()`, la misma fecha con la que `estaAtrasada` decide.
 
 Con esa fecha y la ventana `[hoy − 6, hoy]` —siete días contando hoy—,
 **8 de las 19 vencieron esta semana**, repartidas en **7 equipos y 5
@@ -300,8 +308,12 @@ Cada gráfico dice cuál usa: «generadas» el de carga, «fallas» el otro.
 **Una sola lectura, de `VENTANA_DIAS + 90` días.** Los 90 de más son los que
 necesita el primer punto de la línea mensual, que mira hacia atrás; pedir 365
 dejaría los primeros meses sin ventana completa y con un `null` que no es un
-dato faltante sino un borde. Medido: son **2.503 órdenes**, una tanda y media
-de `traerTodo()`.
+dato faltante sino un borde.
+
+Medido el 23/11/2026: el `.or` alcanza a **2.897 de las 2.902 filas** de la
+tabla, tres tandas de `traerTodo()`. O sea que **la ventana casi no acota**
+—toda la historia cabe adentro—, y está escrita por lo que va a pasar cuando la
+tabla tenga años viejos, no por lo que ahorra hoy.
 
 ### 3. `lib/mantenimiento/alertas.ts` — las atrasadas de la semana
 

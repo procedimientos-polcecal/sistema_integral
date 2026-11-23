@@ -73,9 +73,12 @@ export function paradasPorSector(
   }
 
   const sectores: ParadaDeSector[] = [...porSector.values()].map((suyos) => {
-    // El último en el tiempo es el que dice cómo está ahora. El desempate por
-    // `id` es el mismo de `conPermanencia`: dos cambios pueden compartir marca
-    // de tiempo, y dos corridas tienen que devolver lo mismo.
+    // El último en el tiempo es el que dice cómo está ahora, y el desempate por
+    // `id` existe por lo mismo que el de `conPermanencia`: dos cambios pueden
+    // compartir marca de tiempo y dos corridas tienen que devolver lo mismo.
+    // **No es la misma comparación**: allá es `localeCompare` y acá `>`. Con
+    // los UUID que escribe la base coinciden, pero si alguna vez hiciera falta
+    // que las dos ordenaran igual de verdad, hay que unificarlas.
     const ultimo = suyos.reduce((max, c) =>
       Date.parse(c.changed_at) > Date.parse(max.changed_at) ||
       (c.changed_at === max.changed_at && c.id > max.id)

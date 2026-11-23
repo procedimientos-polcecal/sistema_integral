@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { diasDeAtraso, type GrupoDeLaSemana } from "@/lib/mantenimiento/alertas";
+import { fechaCorta } from "@/lib/mantenimiento/mtbfVista";
 
 /**
  * Las órdenes que tenían que hacerse esta semana y no se hicieron.
@@ -87,8 +88,8 @@ export default function AtrasadasDeLaSemana({ resumen, hoy }: {
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold text-amber-900">
           {resumen.total} de {resumen.deTodas} orden{resumen.deTodas === 1 ? "" : "es"} atrasada
-          {resumen.deTodas === 1 ? "" : "s"} tenía{resumen.total === 1 ? "" : "n"} que hacerse
-          esta semana
+          {resumen.deTodas === 1 ? "" : "s"} venía{resumen.total === 1 ? "" : "n"} entre el{" "}
+          {fechaCorta(resumen.desde)} y el {fechaCorta(hoy)}
         </h2>
         <Link
           href="/mantenimiento/ordenes?atrasada=1"

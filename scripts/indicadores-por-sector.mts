@@ -19,6 +19,7 @@ import {
   resumirLaSemana, hoyISO, condicionDeAtrasada, CERRADAS, type DeLaSemana,
 } from "../lib/mantenimiento/alertas.ts";
 import { duracionLegible } from "../lib/mantenimiento/historialDeSectores.ts";
+import { ultimosMeses } from "../lib/mantenimiento/dashboard.ts";
 import {
   conComa, diasCorridos, porcentajeDeConfiabilidad,
 } from "../lib/mantenimiento/mtbfVista.ts";
@@ -74,11 +75,36 @@ const huecos = d.filas.slice(0, 6).reduce(
 console.log(`\n  huecos en esos 6 × ${meses.length} puntos: ${huecos}` +
   (huecos === 0 ? "  ← la ventana móvil no deja ninguno" : "  ← mirar cuáles y por qué"));
 
+// Las barras apiladas contra el gráfico que va justo abajo en la misma
+// sección. Son dos lecturas distintas de la misma tabla por la misma columna,
+// así que **tienen que dar lo mismo**: si no, dos gráficos pegados dicen cosas
+// distintas y nada lo avisa. Ya pasó una vez, con cuatro órdenes que la ventana
+// de la lectura dejaba afuera — el porqué está en el `.or` de `porSectorDatos`.
 console.log("\n── Órdenes por mes y por sector ───────────────────────────");
-for (const mes of d.ordenesPorMes) {
+const mesesDeAbajo = ultimosMeses(new Date(`${hasta}T12:00:00`), 12);
+let descuadres = 0;
+for (const [i, mes] of d.ordenesPorMes.entries()) {
   const total = Object.values(mes.porSector).reduce((a, b) => a + b, 0);
-  console.log(`  ${mes.etiqueta.padEnd(8)} ${String(total).padStart(4)} órdenes en ${Object.keys(mes.porSector).length} sectores`);
+
+  // La misma consulta de `page.tsx` para el gráfico de abajo: por `fecha`.
+  const { count } = await sb
+    .from("ordenes_trabajo")
+    .select("id", { count: "exact", head: true })
+    .gte("fecha", mesesDeAbajo[i].desde)
+    .lt("fecha", mesesDeAbajo[i].hasta);
+
+  const abajo = count ?? 0;
+  const cuadra = total === abajo;
+  if (!cuadra) descuadres += 1;
+  console.log(
+    `  ${mes.etiqueta.padEnd(8)} ${String(total).padStart(4)} apiladas` +
+    ` · ${String(abajo).padStart(4)} en el gráfico de abajo` +
+    ` · ${Object.keys(mes.porSector).length} sectores` +
+    (cuadra ? "" : `   ← NO CUADRA (${total - abajo})`)
+  );
 }
+console.log(`\n  meses que no cuadran: ${descuadres}` +
+  (descuadres === 0 ? "  ← los dos gráficos suman lo mismo" : "  ← mirar el `.or` de la lectura"));
 
 console.log("\n── Paradas de sector ──────────────────────────────────────");
 console.log(`  se registra desde: ${d.paradas.desde ?? "nunca cambió ninguno"}`);

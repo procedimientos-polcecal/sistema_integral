@@ -100,7 +100,15 @@ function Recuadro({
   ayuda: string;
   datos: Estado;
   recargar?: () => void;
-  /** Alto del esqueleto, para que el tablero no salte cuando llegue. */
+  /**
+   * Alto del esqueleto, para que el bloque ocupe lugar mientras carga.
+   *
+   * **No evita que el tablero salte**, y no se intenta: la tabla de quince
+   * filas mide unos 600 px y los dos gráficos con sus rótulos pasan los 450,
+   * así que un esqueleto del alto exacto dejaría medio tablero en blanco en el
+   * primer pintado para no correr nada después. Es el mismo criterio de
+   * `PeoresPorMtbf`.
+   */
   alto: string;
   children: (datos: IndicadoresDeLaPlantaPorSector) => React.ReactNode;
 }) {
@@ -141,7 +149,6 @@ function Recuadro({
 const AYUDA_FIABILIDAD = [
   "Cada cuánto falla algo en el sector, cuánto lleva arreglarlo y qué tan probable es que aguante una semana sin una correctiva.",
   "Se cuenta sobre las correctivas del último año, desde la primera falla de cada sector.",
-  DIAS_DE_CALENDARIO.titulo,
   "El MTBF es del sector entero y no de una máquina: Filler 1 tiene una correctiva cada dos días porque tiene muchas máquinas, no porque alguna falle cada dos días.",
 ].join(" ");
 
@@ -287,9 +294,11 @@ const AYUDA_EVOLUCION =
   "y cada punto se calcula con los 90 días anteriores: con las fallas de un mes solo el número " +
   "salta y baja sin que haya cambiado nada en la planta.";
 
-export function EvolucionPorSector({ datos, filtro }: { datos: Estado; filtro: Filtro }) {
+export function EvolucionPorSector({ datos, filtro, recargar }: {
+  datos: Estado; filtro: Filtro; recargar?: () => void;
+}) {
   return (
-    <Recuadro titulo="Órdenes y confiabilidad por sector" ayuda={AYUDA_EVOLUCION} datos={datos} alto="h-96">
+    <Recuadro titulo="Órdenes y confiabilidad por sector" ayuda={AYUDA_EVOLUCION} datos={datos} recargar={recargar} alto="h-96">
       {(d) => {
         const deOrdenes = seriesDelFiltro(d, filtro, true);
         const deConfiabilidad = seriesDelFiltro(d, filtro, false);
@@ -309,13 +318,27 @@ export function EvolucionPorSector({ datos, filtro }: { datos: Estado; filtro: F
           return fila;
         });
 
+        // Las series se nombran por el **nombre** del sector, que es lo que la
+        // leyenda tiene que decir, y por eso el mapa también. El supuesto, que
+        // hoy se cumple: dos sectores de planta activos no se llaman igual —si
+        // pasara, `seriesDelFiltro` ya habría producido dos claves idénticas y
+        // las dos líneas se pisarían antes de llegar acá—. Llevarlo al id pide
+        // separar la clave de la serie del rótulo en los dos gráficos, la
+        // leyenda y la paleta.
         const porNombre = new Map(d.filas.map((f) => [f.sector, f]));
         const datosDeConfiabilidad = (d.filas[0]?.porMes ?? []).map((_, i) => {
-          const fila: Record<string, unknown> = { etiqueta: d.filas[0].porMes[i].etiqueta };
+          const fallas: Record<string, number> = {};
+          const fila: Record<string, unknown> = {
+            etiqueta: d.filas[0].porMes[i].etiqueta, fallas,
+          };
           for (const clave of deConfiabilidad.claves) {
+            const punto = porNombre.get(clave)?.porMes[i];
             // Un sector sin ninguna falla en el año no tiene serie: su línea
             // no existe, que es distinto de tener un hueco.
-            fila[clave] = porNombre.get(clave)?.porMes[i].confiabilidad ?? null;
+            fila[clave] = punto?.confiabilidad ?? null;
+            // Las del mes calendario, para el tooltip: son las que explican un
+            // punto sin medir.
+            if (punto) fallas[clave] = punto.fallas;
           }
           return fila;
         });
@@ -377,9 +400,11 @@ function diaCorto(iso: string): string {
   return new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-export function ParadasDeSector({ datos, filtro }: { datos: Estado; filtro: Filtro }) {
+export function ParadasDeSector({ datos, filtro, recargar }: {
+  datos: Estado; filtro: Filtro; recargar?: () => void;
+}) {
   return (
-    <Recuadro titulo="Paradas de mantenimiento por sector" ayuda={AYUDA_PARADAS} datos={datos} alto="h-32">
+    <Recuadro titulo="Paradas de mantenimiento por sector" ayuda={AYUDA_PARADAS} datos={datos} recargar={recargar} alto="h-32">
       {(d) => {
         const deLaEmpresa = new Set(
           d.sectores
@@ -398,7 +423,7 @@ export function ParadasDeSector({ datos, filtro }: { datos: Estado; filtro: Filt
           <>
             {paradas.length === 0 ? (
               <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-500">
-                Ningún sector del filtro cambió de estado todavía.
+                Ningún sector del filtro cambió de estado.
               </p>
             ) : (
               <ul className="divide-y divide-slate-100">

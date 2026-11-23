@@ -7,7 +7,7 @@ import Link from "next/link";
 import InfoTip from "@/components/InfoTip";
 import KpiCard from "@/components/KpiCard";
 import type { VentanaDeReparacion, OtQueExigeParar } from "@/lib/mantenimiento/dashboard";
-import { diasDeAtraso } from "@/lib/mantenimiento/alertas";
+import { diasDeAtraso, resumirLaSemana } from "@/lib/mantenimiento/alertas";
 import Select from "@/components/Select";
 import { Modal, PieDeModal } from "@/components/Modal";
 import { useCargar } from "@/lib/core/useCargar";
@@ -220,8 +220,9 @@ function OrdenesAtrasadas({ resumen, hoy }: {
               <span className="min-w-0 flex-1 truncate text-red-900">
                 {o.descripcion ?? o.equipo_raw ?? "—"}
               </span>
-              {/* Sin fecha de vencimiento no se sabe hace cuánto: la marcaron
-                  a mano en la planilla y no dice desde cuándo. */}
+              {/* «Sin fecha» es raro desde que el atraso se cuenta contra el
+                  inicio efectivo: pasa sólo con la que marcó la planilla sin
+                  ninguna fecha de ejecución ni pendiente. */}
               <span className="shrink-0 text-xs text-red-600">
                 {dias === null ? "sin fecha" : `${dias} día${dias === 1 ? "" : "s"}`}
               </span>
@@ -515,6 +516,41 @@ export default function DashboardClient({
     () => ({ empresa: plantFilter, sector: sectorFilter }),
     [plantFilter, sectorFilter]
   );
+
+  /**
+   * Las atrasadas de la semana, recortadas con el mismo filtro que los tres
+   * bloques de arriba.
+   *
+   * Se recalcula acá y no en el servidor porque el filtro es estado del
+   * cliente. No cuesta una lectura más: `atrasadas.atrasadas` ya viene entera
+   * —es la misma lista de la que el servidor sacó `laSemana`— y
+   * `resumirLaSemana` es pura, así que se la vuelve a llamar sobre el recorte.
+   * Eso es lo que mantiene coherente el encabezado: **`deTodas` se recuenta
+   * sobre el mismo filtro**, y si no, elegir POLYSAN dejaría diciendo «3 de 19»
+   * con un 19 de las dos empresas.
+   *
+   * **Se cruza por `sector_id` contra el catálogo y nunca por `sector_raw`**:
+   * ese texto lo escribe la planilla y no se puede atar a una empresa. La
+   * consecuencia, asumida: una atrasada **sin** `sector_id` no entra en ningún
+   * filtro —no se la puede atribuir a ninguna empresa— y sólo se la ve con el
+   * tablero sin filtrar, que es donde aparece como «Sin sector».
+   */
+  const laSemanaDelFiltro = useMemo(() => {
+    if (plantFilter === "TODAS" && sectorFilter === "TODOS") return laSemana;
+
+    const delFiltro = new Set(
+      sectores
+        .filter((s: any) => (sectorFilter !== "TODOS"
+          ? s.nombre === sectorFilter
+          : empresaDe(s) === plantFilter))
+        .map((s: any) => s.id as string)
+    );
+
+    return resumirLaSemana(
+      atrasadas.atrasadas.filter((o: any) => o.sector_id && delFiltro.has(o.sector_id)),
+      hoy
+    );
+  }, [laSemana, atrasadas, sectores, plantFilter, sectorFilter, hoy]);
 
   const [statusModal, setStatusModal] = useState<{ sector: any } | null>(null);
   const [newStatus, setNewStatus] = useState("");
@@ -818,9 +854,9 @@ export default function DashboardClient({
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Evolución mensual</h2>
         <div className="space-y-5">
 
-          <EvolucionPorSector datos={porSector.datos} filtro={filtroDeSector} />
+          <EvolucionPorSector datos={porSector.datos} filtro={filtroDeSector} recargar={porSector.recargar} />
 
-          <ParadasDeSector datos={porSector.datos} filtro={filtroDeSector} />
+          <ParadasDeSector datos={porSector.datos} filtro={filtroDeSector} recargar={porSector.recargar} />
 
           <OrdenesPorMes datos={otPorMes} delMes={otMes} mes={mesActual} />
 
@@ -845,7 +881,7 @@ export default function DashboardClient({
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Gestión operativa</h2>
         <div className="space-y-5">
 
-          <AtrasadasDeLaSemana resumen={laSemana} hoy={hoy} />
+          <AtrasadasDeLaSemana resumen={laSemanaDelFiltro} hoy={hoy} />
 
           <OrdenesAtrasadas resumen={atrasadas} hoy={hoy} />
 

@@ -18,8 +18,13 @@ import type { CambioDeSector } from "./historialDeSectores";
  * son los que necesita el primer punto de la serie mensual, que mira hacia
  * atrás: pidiendo sólo el año, ese punto quedaría en `null` por falta de
  * lectura y no por falta de fallas, que son dos cosas distintas y se ven
- * iguales en el gráfico. Medido el 19/11/2026 son **2.503 órdenes**, una tanda
- * y media de `traerTodo()`.
+ * iguales en el gráfico.
+ *
+ * **La ventana no acota casi nada, y conviene saberlo antes de confiar en
+ * ella**: medido el 23/11/2026, el `.or` alcanza a 2.897 de las 2.902 filas de
+ * la tabla —tres tandas de `traerTodo()`—, porque casi toda la historia de
+ * `ordenes_trabajo` cabe en estos 455 días. Está escrita porque el día que la
+ * tabla tenga años viejos sí va a acotar, no porque hoy ahorre viajes.
  *
  * **Se traen todos los tipos, no sólo las correctivas.** El gráfico de órdenes
  * por mes y por sector no es de fallas; el filtro de `CORRECTIVO` lo aplica
@@ -68,7 +73,17 @@ export async function indicadoresPorSectorDeLaPlanta(
     supabase
       .from("ordenes_trabajo")
       .select("ot_number, tipo, fecha, fecha_ejecucion, sector_id, horas, contratista")
-      .or(`fecha_ejecucion.gte.${desde},and(fecha_ejecucion.is.null,fecha.gte.${desde})`)
+      // Las **dos** fechas, cada una por su lado y sin condicionar una a la
+      // otra. La de falla sale de `fecha_ejecucion`, pero las barras de órdenes
+      // por mes se cuentan por `fecha`, y hay filas donde las dos no caen en el
+      // mismo año: medido el 23/11/2026, 4 de 2.901 —la #1223 dice
+      // `fecha_ejecucion 2023-03-06` contra `fecha 2026-03-06`, el año mal
+      // tipeado—. Con la condición vieja, `fecha_ejecucion.gte` ∨ (null ∧
+      // `fecha.gte`), esas cuatro no se leían: la barra de Dic decía 96 contra
+      // las 99 del gráfico de abajo, que lee la misma tabla por `fecha`. Traer
+      // de más es correcto acá y traer de menos no, así que la rama por `fecha`
+      // va suelta y de paso subsume a la que miraba el null.
+      .or(`fecha_ejecucion.gte.${desde},fecha.gte.${desde}`)
       .order("ot_number")
       .range(de, a)
   );
@@ -80,14 +95,31 @@ export async function indicadoresPorSectorDeLaPlanta(
     empresas: unknown;
   }>(supabase, "id, nombre, codigo, empresas(nombre)");
 
+  // `sectoresDePlanta` se come su error —`const { data } = …`— así que una
+  // lectura fallida llega como lista vacía, y de ahí el `flatMap` de más abajo
+  // se lleva **todas** las filas y la tabla dice «ningún sector tuvo
+  // correctivas en el último año». Eso es exactamente la confusión que este
+  // módulo evita en todo lo demás: un fallo de lectura indistinguible de un
+  // «no hay nada». Acá no puede haber cero —son los quince sectores de planta
+  // del catálogo, y si alguna vez fueran cero no habría nada que mostrar
+  // igual—, así que vacío significa que la lectura no anduvo y se va por el
+  // 500, que es lo que enciende el «Reintentar» de la pantalla.
+  if (sectores.length === 0) {
+    throw new Error("No se pudo leer el catálogo de sectores de planta");
+  }
+
   // El embebido va **sin `!inner`**, como el historial completo y al revés que
   // el tablero: un cambio cuyo sector se borró tiene `sector_id` en null desde
   // la 20261119104730, y con `!inner` desaparecería de la cuenta.
   const filasDelLog = await traerTodo<Record<string, any>>((de, a) =>
     supabase
       .from("sectores_status_log")
+      // Sin el `autor:changed_by(nombre, apellido)` que trae el historial: acá
+      // no se muestra quién lo hizo —esta proyección sólo alimenta la cuenta de
+      // paradas— y era un embebido a `usuarios`, una tabla cerrada con RLS, para
+      // un campo que nunca llega a la pantalla.
       .select("id, sector_id, sector_nombre, old_status, new_status, reason, changed_at, " +
-              "sector:sector_id(nombre), autor:changed_by(nombre, apellido)")
+              "sector:sector_id(nombre)")
       .order("changed_at", { ascending: false })
       .range(de, a)
   );
@@ -103,9 +135,10 @@ export async function indicadoresPorSectorDeLaPlanta(
     new_status: f.new_status,
     reason: f.reason ?? null,
     changed_at: f.changed_at,
-    autor: f.autor
-      ? `${f.autor.nombre ?? ""} ${f.autor.apellido ?? ""}`.trim() || null
-      : null,
+    // Siempre null: no se lee. `CambioDeSector` lo pide porque el historial
+    // completo sí lo muestra, y ésta es la misma forma con un campo que acá no
+    // se consulta — `paradasPorSector` no lo toca y no sale en la respuesta.
+    autor: null,
   }));
 
   const indicadores = indicadoresPorSector(ordenes, hasta);

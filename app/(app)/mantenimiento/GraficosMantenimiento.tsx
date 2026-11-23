@@ -168,7 +168,11 @@ export function EjecucionesPorSemana({ datos }: { datos: { semana: string; canti
  *
  * **Cuenta por la fecha de carga**, igual que `OtsPorMes`, que vive debajo en
  * la misma sección: con fechas distintas las barras de los dos no sumarían lo
- * mismo y nada lo diría.
+ * mismo y nada lo diría. Que de verdad sumen depende además de qué filas se
+ * leyeron, y ahí hubo un hueco real —cuatro órdenes con el año mal tipeado en
+ * `fecha_ejecucion` quedaban fuera de la lectura y de estas barras, pero no de
+ * las de abajo—: el porqué y la medición están en el `.or` de
+ * `lib/mantenimiento/porSectorDatos.ts`.
  */
 export function OrdenesPorMesYSector({
   datos, claves, colores,
@@ -218,6 +222,12 @@ export function OrdenesPorMesYSector({
  *
  * El eje va de 0 a 1 y se escribe en porcentaje; el mes en curso se nombra
  * como incompleto en el tooltip, porque su ventana termina hoy.
+ *
+ * **El tooltip dice además cuántas fallas tuvo el sector ese mes**, que las
+ * filas traen en `fallas`. No es decorado: son dos mediciones distintas
+ * —las fallas son del mes calendario y la confiabilidad mira los 90 días
+ * anteriores— y es lo que explica un punto «sin medir», que quiere decir que
+ * en su ventana no hubo fallas suficientes y no que el sector anduviera bien.
  */
 export function ConfiabilidadPorSector({
   datos, claves, colores, mesEnCurso,
@@ -248,10 +258,16 @@ export function ConfiabilidadPorSector({
         <Tooltip
           contentStyle={TOOLTIP}
           labelFormatter={(l) => (l === mesEnCurso ? `${l} (incompleto)` : String(l))}
-          formatter={(v: any, name: any) => [
-            v === null || v === undefined ? "sin medir" : `${(Number(v) * 100).toFixed(1)}%`,
-            name,
-          ]}
+          formatter={(v: any, name: any, item: any) => {
+            const cuantas = (item?.payload?.fallas as Record<string, number> | undefined)?.[String(name)];
+            const fallas = cuantas === undefined
+              ? ""
+              : ` · ${cuantas} falla${cuantas === 1 ? "" : "s"}`;
+            return [
+              `${v === null || v === undefined ? "sin medir" : `${(Number(v) * 100).toFixed(1)}%`}${fallas}`,
+              name,
+            ];
+          }}
         />
         {claves.length > 1 && <Legend iconType="plainline" iconSize={14} wrapperStyle={{ fontSize: 11 }} />}
         {claves.map((key) => (
