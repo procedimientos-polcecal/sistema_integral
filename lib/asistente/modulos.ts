@@ -115,6 +115,9 @@ export const MODULO_DE_TABLA: Record<string, Ambito> = {
   mant_partes_contratista: "mantenimiento",
   mant_partes_contratista_renglones: "mantenimiento",
   mant_contratista_lugares: "mantenimiento",
+  // Cada vez que a una OT se le corrió la fecha de inicio. Tiene nota: no
+  // cubre a las cerradas, así que contar sobre ella subcuenta a propósito.
+  mant_reprogramaciones_ot: "mantenimiento",
   planificacion_diaria: "mantenimiento",
   planificacion_diaria_items: "mantenimiento",
   avisos: "mantenimiento",

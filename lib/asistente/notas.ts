@@ -43,6 +43,19 @@ export const NOTAS: Record<string, string> = {
     "`nro_ri` **no es una foreign key** a `compras_requerimientos`: cruzarlas con " +
     "un join pierde en silencio los RI que la planilla de Compras ya dejó de tener.",
 
+  mant_reprogramaciones_ot:
+    "Cada vez que a una OT se le corrió la fecha de inicio: de `fecha_anterior` " +
+    "a `fecha_nueva`. `origen` dice por dónde pasó — `sistema` es el botón " +
+    "Postergar y `planilla` es alguien que editó la fecha en la hoja de cálculo. " +
+    "**No cubre a las órdenes cerradas**: un cambio de fecha en la planilla sobre " +
+    "una REALIZADO o CANCELADA no genera fila, a propósito, porque ahí lo más " +
+    "probable es que estén corrigiendo la carga de algo ya hecho. Así que contar " +
+    "reprogramaciones sobre el total de OT subcuenta, y eso no es un hueco. " +
+    "`ordenes_trabajo.reprogramada_veces` es el conteo de esta misma tabla, que " +
+    "mantiene un trigger: usá una o la otra, nunca las dos sumadas. " +
+    "`razon_etiqueta` en null con `razon = 'planificacion_del_dia'` quiere decir " +
+    "«el plan del día», que es un código del sistema y no una razón del catálogo.",
+
   avisos:
     "El primer eslabón de Mantenimiento: alguien vio que algo anda mal. De un aviso " +
     "sale después una orden de trabajo.",
