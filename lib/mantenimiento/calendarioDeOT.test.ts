@@ -23,6 +23,9 @@ const orden = (
   descripcion: "Cambiar rodamiento",
   sector_raw: "Molienda",
   equipo_raw: "Molino 1",
+  operario_1: null,
+  operario_2: null,
+  operario_3: "Piparo",
   ...extra,
 });
 
@@ -67,13 +70,14 @@ describe("armar el calendario", () => {
       "2026-11-01",
       "2026-11-07",
       new Map(),
+      "2026-11-19",
     );
     const marcas = cal.map((d) => d.ordenes.map((o) => o.arrastre));
     expect(marcas).toEqual([[], [false], [true], [true], [], [], []]);
   });
 
   it("los dias sin ordenes estan igual, vacios, y son uno por dia del rango", () => {
-    const cal = armarElCalendario([], "2026-11-01", "2026-11-03", new Map());
+    const cal = armarElCalendario([], "2026-11-01", "2026-11-03", new Map(), "2026-11-19");
     expect(cal.map((d) => d.dia)).toEqual(["2026-11-01", "2026-11-02", "2026-11-03"]);
     expect(cal.every((d) => d.ordenes.length === 0)).toBe(true);
   });
@@ -84,6 +88,7 @@ describe("armar el calendario", () => {
       "2026-11-01",
       "2026-11-30",
       new Map(),
+      "2026-11-19",
     );
     // El inicio (30/10) queda afuera, así que el 01 y el 02 son continuación.
     expect(cal[0].ordenes.map((o) => o.arrastre)).toEqual([true]);
@@ -97,6 +102,7 @@ describe("armar el calendario", () => {
       "2026-11-01",
       "2026-11-30",
       new Map(),
+      "2026-11-19",
     );
     expect(cal).toHaveLength(30);
     expect(cal[28].ordenes.map((o) => o.arrastre)).toEqual([false]);
@@ -109,6 +115,7 @@ describe("armar el calendario", () => {
       "2026-11-01",
       "2026-11-07",
       new Map(),
+      "2026-11-19",
     );
     expect(cal.every((d) => d.ordenes.length === 0)).toBe(true);
   });
@@ -119,6 +126,7 @@ describe("armar el calendario", () => {
       "2026-11-01",
       "2026-11-07",
       new Map(),
+      "2026-11-19",
     );
     expect(cal.every((d) => d.ordenes.length === 0)).toBe(true);
   });
@@ -129,6 +137,7 @@ describe("armar el calendario", () => {
       "2026-11-01",
       "2026-11-10",
       new Map(),
+      "2026-11-19",
     );
     expect(cal.filter((d) => d.ordenes.length > 0).map((d) => d.dia)).toEqual(["2026-11-06"]);
   });
@@ -144,12 +153,13 @@ describe("armar el calendario", () => {
       "2026-11-01",
       "2026-11-10",
       new Map(),
+      "2026-11-19",
     );
     expect(cal.filter((d) => d.ordenes.length > 0).map((d) => d.dia)).toEqual(["2026-11-09"]);
   });
 
   it("una OT sin ninguna fecha no aparece en ningun dia", () => {
-    const cal = armarElCalendario([orden(1)], "2026-11-01", "2026-11-03", new Map());
+    const cal = armarElCalendario([orden(1)], "2026-11-01", "2026-11-03", new Map(), "2026-11-19");
     expect(cal.every((d) => d.ordenes.length === 0)).toBe(true);
   });
 
@@ -162,6 +172,7 @@ describe("armar el calendario", () => {
       "2026-11-02",
       "2026-11-02",
       new Map(),
+      "2026-11-19",
     );
     expect(cal[0].ordenes.map((o) => o.ot_number)).toEqual([1, 2]);
   });
@@ -172,6 +183,7 @@ describe("armar el calendario", () => {
       "2026-11-02",
       "2026-11-02",
       new Map(),
+      "2026-11-19",
     );
     expect(cal[0].ordenes[0]).toEqual({
       id: "id-7",
@@ -186,6 +198,13 @@ describe("armar el calendario", () => {
       app_created: true,
       estado: "POR_HACER",
       fecha_ejecucion: "2026-11-02",
+      atrasada: true,
+      diasDeAtraso: 17,
+      // Los tres viajan, los puestos y los vacíos: el panel de asignar necesita
+      // saber qué posiciones están libres sin pedir la orden de nuevo.
+      operario_1: null,
+      operario_2: null,
+      operario_3: "Piparo",
     });
   });
 
@@ -201,6 +220,7 @@ describe("armar el calendario", () => {
       "2026-11-02",
       "2026-11-05",
       new Map(),
+      "2026-11-19",
     );
     expect(cal[0].ordenes).toHaveLength(0);
     expect(cal[3].ordenes[0]).toMatchObject({
@@ -220,8 +240,64 @@ describe("armar el calendario", () => {
       "2026-11-02",
       "2026-11-03",
       new Map([["2026-11-02", hay]]),
+      "2026-11-19",
     );
     expect(cal[0].gente).toEqual(hay);
     expect(cal[1].gente).toEqual(NO_SE);
+  });
+});
+
+describe("atrasada en el calendario", () => {
+  it("marca atrasada la orden vencida, en todos los dias que ocupa", () => {
+    const dias = armarElCalendario(
+      [orden(1, { fecha_ejecucion: "2026-11-16", fecha_fin: "2026-11-17" })],
+      "2026-11-16", "2026-11-20", new Map(), "2026-11-19",
+    );
+    expect(dias[0].ordenes[0].atrasada).toBe(true);
+    expect(dias[1].ordenes[0].atrasada).toBe(true);
+  });
+
+  it("no marca la que sigue dentro de su ventana, ni en el dia ya pasado", () => {
+    const dias = armarElCalendario(
+      [orden(2, { fecha_ejecucion: "2026-11-18", fecha_fin: "2026-11-25" })],
+      "2026-11-18", "2026-11-25", new Map(), "2026-11-19",
+    );
+    expect(dias.flatMap((d) => d.ordenes).every((o) => !o.atrasada)).toBe(true);
+  });
+
+  it("decide contra el inicio verdadero y no contra el borde del rango", () => {
+    const dias = armarElCalendario(
+      [orden(3, { fecha_ejecucion: "2026-10-30", fecha_fin: "2026-11-02" })],
+      "2026-11-01", "2026-11-30", new Map(), "2026-11-19",
+    );
+    expect(dias[0].ordenes[0].atrasada).toBe(true);
+  });
+});
+
+describe("los dias de atraso viajan calculados", () => {
+  it("llegan en todos los dias que ocupa la orden, contados desde el inicio", () => {
+    const dias = armarElCalendario(
+      [orden(1, { fecha_ejecucion: "2026-11-16", fecha_fin: "2026-11-17" })],
+      "2026-11-16", "2026-11-20", new Map(), "2026-11-19",
+    );
+    expect(dias[0].ordenes[0].diasDeAtraso).toBe(3);
+    expect(dias[1].ordenes[0].diasDeAtraso).toBe(3);
+  });
+
+  it("cuentan desde la pendiente cuando la hay, que es la que la grilla pinta", () => {
+    const dias = armarElCalendario(
+      [orden(2, { fecha_ejecucion: "2026-11-01", fecha_ejecucion_pendiente: "2026-11-16" })],
+      "2026-11-16", "2026-11-20", new Map(), "2026-11-19",
+    );
+    expect(dias[0].ordenes[0].diasDeAtraso).toBe(3);
+  });
+
+  it("son null cuando la orden no esta atrasada", () => {
+    const dias = armarElCalendario(
+      [orden(3, { fecha_ejecucion: "2026-11-25" })],
+      "2026-11-25", "2026-11-26", new Map(), "2026-11-19",
+    );
+    expect(dias[0].ordenes[0].atrasada).toBe(false);
+    expect(dias[0].ordenes[0].diasDeAtraso).toBeNull();
   });
 });

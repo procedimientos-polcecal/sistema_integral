@@ -11,8 +11,12 @@ import { TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { oficioDeLaEspecialidad } from "@/lib/mantenimiento/genteDelDia";
 import type { DiaDelCalendario } from "@/lib/mantenimiento/calendarioDeOT";
 import { porQueNoSePuedeMover, porQueNoSePuedeMoverA } from "@/lib/mantenimiento/moverLaOT";
+import { porQueNoSePuedeAsignar } from "@/lib/mantenimiento/asignarOperario";
 import type { Oficio } from "@/lib/mantenimiento/programacion";
-import { colorDeEspecialidad, textoSobreLaEspecialidad, LEYENDA_DE_ESPECIALIDADES } from "./coloresDeEspecialidad";
+import {
+  colorDeEspecialidad, textoSobreLaEspecialidad, LEYENDA_DE_ESPECIALIDADES,
+  COLOR_ATRASADA, TEXTO_SOBRE_ATRASADA,
+} from "./coloresDeEspecialidad";
 
 /**
  * El mes de órdenes de trabajo: qué tiene cada día y cuánta gente del taller
@@ -63,7 +67,8 @@ const MESES = [
 const DIAS_DE_LA_SEMANA = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const ENCABEZADOS = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"];
 
-const OFICIOS: Record<Oficio, { uno: string; varios: string }> = {
+/** Cómo se nombra cada oficio en pantalla. Lo comparte el panel de asignar. */
+export const OFICIOS: Record<Oficio, { uno: string; varios: string }> = {
   mecanico: { uno: "mecánico", varios: "mecánicos" },
   electricista: { uno: "electricista", varios: "electricistas" },
   lubricador: { uno: "lubricador", varios: "lubricadores" },
@@ -113,6 +118,13 @@ export type ModoDelCalendario =
       onEmpezarAMover: (orden: OrdenDelDia) => void;
       onCancelarElMovimiento: () => void;
       onElegirElDestino: (dia: string) => void;
+      /**
+       * Abrir el panel de asignar operarios a esa orden, en ese día. `null`
+       * cuando quien mira no puede: es un permiso más alto que `puedeMover`
+       * —ahí salen los nombres del taller— y por eso es una función aparte y no
+       * otro `boolean`.
+       */
+      onAsignar: ((orden: OrdenDelDia, dia: string) => void) | null;
     };
 
 function pasaElFiltro(o: OrdenDelDia, f: Filtros): boolean {
@@ -135,6 +147,13 @@ function ordenadas(ordenes: OrdenDelDia[]): OrdenDelDia[] {
 }
 
 /** Cuántas órdenes cae en cada sector ese día, de más a menos. */
+/** Los nombres que esa orden ya tiene puestos, en el orden de las posiciones. */
+function quienesEstan(o: OrdenDelDia): string[] {
+  return [o.operario_1, o.operario_2, o.operario_3]
+    .map((n) => n?.trim())
+    .filter((n): n is string => Boolean(n));
+}
+
 function cuentaPorSector(ordenes: OrdenDelDia[]): { sector: string; cantidad: number }[] {
   const cuenta = new Map<string, { sector: string; cantidad: number }>();
   for (const o of ordenes) {
@@ -159,7 +178,7 @@ function fondoDelDia(n: number): string {
 }
 
 export default function CalendarioDeOT({
-  modo, recarga = 0,
+  modo, recarga = 0, franjaDeLaSemana, onRango,
 }: {
   modo: ModoDelCalendario;
   /**
@@ -168,6 +187,28 @@ export default function CalendarioDeOT({
    * en el día nuevo, y el componente no se desmonta.
    */
   recarga?: number;
+  /**
+   * Qué dibujar arriba de cada semana, por lunes. Opcional y sin default: las
+   * tres pantallas que montan este calendario reparten permisos distintos y
+   * sólo «Asignación RR.HH» tiene los nombres del taller. Por eso esto es una
+   * prop de render y no un `boolean`: quien los tiene los dibuja, y acá no
+   * entra ni la ruta que los trae ni el permiso que los guarda.
+   */
+  franjaDeLaSemana?: (lunes: string) => React.ReactNode;
+  /**
+   * Qué rango está pidiendo la grilla. El mes es estado de acá —se cambia con
+   * las flechas— así que el padre no tiene otra forma de saber para qué
+   * semanas traer lo suyo.
+   *
+   * **Tiene que ser estable entre renders**, o sea un `useCallback` y no una
+   * arrow escrita en el JSX: va en las dependencias de un efecto que llama al
+   * padre, así que una identidad nueva por render es un bucle infinito. Y lo
+   * que el padre guarde tiene que conservar su identidad cuando el rango no
+   * cambió (`MesDeOrdenes` devuelve el mismo objeto), por lo mismo. La de al
+   * lado, `franjaDeLaSemana`, **sí** puede ir inline: no está en ninguna
+   * dependencia.
+   */
+  onRango?: (desde: string, hasta: string) => void;
 }) {
   const hoy = hoyEnArgentina();
   const valor = modo.tipo === "elegir" ? modo.valor : "";
@@ -225,6 +266,9 @@ export default function CalendarioDeOT({
     })();
     return () => { cancelado = true; };
   }, [desde, hasta, mes, intento, recarga]);
+
+  // El rango, para quien quiera traer lo suyo para las mismas semanas.
+  useEffect(() => { onRango?.(desde, hasta); }, [desde, hasta, onRango]);
 
   // En el teléfono el panel queda debajo de la grilla: al abrirlo hay que verlo.
   useEffect(() => {
@@ -442,20 +486,37 @@ export default function CalendarioDeOT({
               <div className="grid grid-cols-7 gap-px pb-px text-center text-[10px] font-semibold uppercase text-slate-400">
                 {ENCABEZADOS.map((h) => <div key={h}>{h}</div>)}
               </div>
-              <div className="grid grid-cols-7 gap-px rounded-lg overflow-hidden bg-slate-200 border border-slate-200">
-                {semanas.flat().map((dia) => (
-                  <CeldaDelDia
-                    key={dia}
-                    dia={dia}
-                    delMes={dia.startsWith(mes)}
-                    info={porDia.get(dia)}
-                    filtros={filtros}
-                    esHoy={dia === hoy}
-                    esElValor={dia === valor}
-                    abierto={dia === diaAbierto}
-                    noPuedeRecibir={moviendo ? porQueNoSePuedeMoverA(moviendo, dia) : null}
-                    onTocar={() => tocarElDia(dia)}
-                  />
+              {/* Una grilla por semana, no una sola de 42 celdas: la franja del
+                  taller va *entre* las filas, y eso no se puede hacer con una
+                  grilla única sin que el elemento intercalado ocupe celdas.
+                  Sin la prop las filas quedan pegadas por `space-y-px`, pero
+                  **no es idéntico a antes y no se afirma que lo sea**: antes
+                  había una caja con un borde y dos esquinas redondeadas, y
+                  ahora hay una por semana. Eso toca a las dos pantallas que no
+                  reciben franja —el alta de una OT y la pestaña Mes de
+                  `/planificacion`—, y no se pudo mirar en un navegador porque
+                  todo está detrás del login. */}
+              <div className="space-y-px">
+                {semanas.map((semana) => (
+                  <div key={semana[0]}>
+                    {franjaDeLaSemana?.(semana[0])}
+                    <div className="grid grid-cols-7 gap-px rounded-lg overflow-hidden bg-slate-200 border border-slate-200">
+                      {semana.map((dia) => (
+                        <CeldaDelDia
+                          key={dia}
+                          dia={dia}
+                          delMes={dia.startsWith(mes)}
+                          info={porDia.get(dia)}
+                          filtros={filtros}
+                          esHoy={dia === hoy}
+                          esElValor={dia === valor}
+                          abierto={dia === diaAbierto}
+                          noPuedeRecibir={moviendo ? porQueNoSePuedeMoverA(moviendo, dia) : null}
+                          onTocar={() => tocarElDia(dia)}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
 
@@ -466,6 +527,10 @@ export default function CalendarioDeOT({
                     {l.nombre}
                   </span>
                 ))}
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: COLOR_ATRASADA }} />
+                  Atrasada
+                </span>
                 <span className="inline-flex items-center gap-1">
                   <span
                     className="inline-block h-2.5 w-4 rounded-sm"
@@ -489,6 +554,7 @@ export default function CalendarioDeOT({
               filtros={filtros}
               elegirElDia={modo.tipo === "elegir" ? modo.onElegir : null}
               onMover={modo.tipo === "programar" && modo.puedeMover ? empezarAMover : null}
+              onAsignar={modo.tipo === "programar" ? modo.onAsignar : null}
               onCerrar={() => setDiaAbierto(null)}
             />
           </div>
@@ -517,6 +583,10 @@ function CeldaDelDia({
   const visibles = ordenadas((info?.ordenes ?? []).filter((o) => pasaElFiltro(o, filtros)));
   const fichas = visibles.slice(0, MAX_FICHAS);
   const resto = visibles.length - fichas.length;
+  // Sobre `visibles` y no sobre `fichas`: la cuenta tiene que incluir las que
+  // quedaron en el «+N más», que son invisibles para los dos —el que mira y el
+  // que escucha— pero siguen estando en ese día.
+  const atrasadasDelDia = visibles.filter((o) => o.atrasada).length;
   const numero = Number(dia.slice(8, 10));
 
   // Un solo botón por día: las fichas y el «+N más» son texto adentro, así que
@@ -530,7 +600,15 @@ function CeldaDelDia({
     <button
       type="button"
       onClick={onTocar}
-      aria-label={`${comoSeLee(dia)}: ${visibles.length} ${visibles.length === 1 ? "orden" : "órdenes"}`}
+      // Las atrasadas se nombran **acá** y no en cada ficha. El nombre
+      // accesible de un botón lo fija su `aria-label` y anula lo que haya
+      // adentro, así que una etiqueta puesta en el `<span>` de una ficha no se
+      // anuncia nunca —y encima iría sobre un `<span>` sin `role`, que tampoco
+      // las expone—. Sin esto, el que usa lector de pantalla oye «5 órdenes» y
+      // no se entera de que hay rojo, que es lo único que este color dice.
+      aria-label={`${comoSeLee(dia)}: ${visibles.length} ${visibles.length === 1 ? "orden" : "órdenes"}${
+        atrasadasDelDia > 0 ? `, ${atrasadasDelDia} ${atrasadasDelDia === 1 ? "atrasada" : "atrasadas"}` : ""
+      }`}
       aria-pressed={abierto}
       aria-disabled={noPuedeRecibir ? true : undefined}
       title={noPuedeRecibir ?? undefined}
@@ -572,12 +650,27 @@ function CeldaDelDia({
           <span
             key={o.ot_number}
             className="block truncate rounded px-0.5 text-center text-[10px] font-semibold leading-4"
+            // El `title` se queda: es el globo del mouse y sí se ve. El
+            // `aria-label` que estaba acá se fue al botón del día, que es el
+            // único texto que un lector de pantalla llega a decir; dejarlo
+            // puesto prometía algo que no pasaba, y una etiqueta que no puede
+            // ganar se saca — la misma regla que las utilidades de Tailwind
+            // contra las clases sin capa.
+            title={o.atrasada ? "Atrasada" : undefined}
             style={
-              o.arrastre
-                // Hueca: el color queda en el borde y el número va oscuro, porque
-                // el ámbar y el verde sobre blanco no se leen a 10 px.
-                ? { background: "#ffffff", color: "#0f172a", border: `1.5px dashed ${color}` }
-                : { background: color, color: textoSobreLaEspecialidad(o.especialidad), border: `1.5px solid ${color}` }
+              // El rojo va de relleno y la especialidad queda en el borde: encima
+              // del relleno de especialidad el rojo no se ve (ver
+              // `COLOR_ATRASADA`). El arrastre sigue hueco, con el rojo en el
+              // borde y en el número.
+              o.atrasada && o.arrastre
+                ? { background: "#ffffff", color: COLOR_ATRASADA, border: `1.5px dashed ${COLOR_ATRASADA}` }
+                : o.atrasada
+                  ? { background: COLOR_ATRASADA, color: TEXTO_SOBRE_ATRASADA, border: `1.5px solid ${color}` }
+                  : o.arrastre
+                    // Hueca: el color queda en el borde y el número va oscuro, porque
+                    // el ámbar y el verde sobre blanco no se leen a 10 px.
+                    ? { background: "#ffffff", color: "#0f172a", border: `1.5px dashed ${color}` }
+                    : { background: color, color: textoSobreLaEspecialidad(o.especialidad), border: `1.5px solid ${color}` }
             }
           >
             {o.ot_number}
@@ -596,7 +689,7 @@ function CeldaDelDia({
 // ─── El panel del día ───────────────────────────────────────────────────────
 
 function PanelDelDia({
-  dia, diaIso, filtros, elegirElDia, onMover, onCerrar,
+  dia, diaIso, filtros, elegirElDia, onMover, onAsignar, onCerrar,
 }: {
   dia: DiaDelCalendario | null;
   diaIso: string;
@@ -605,6 +698,8 @@ function PanelDelDia({
   elegirElDia: ((dia: string) => void) | null;
   /** Empezar a mover una orden, en el modo `programar`. */
   onMover: ((orden: OrdenDelDia) => void) | null;
+  /** Abrir el panel de asignar operarios, sólo para quien ve el taller. */
+  onAsignar: ((orden: OrdenDelDia, dia: string) => void) | null;
   onCerrar: () => void;
 }) {
   const todas = dia?.ordenes ?? [];
@@ -690,6 +785,7 @@ function PanelDelDia({
           {ordenes.map((o) => {
             const color = colorDeEspecialidad(o.especialidad);
             const noSeMueve = onMover ? porQueNoSePuedeMover(o) : null;
+            const noSeAsigna = onAsignar ? porQueNoSePuedeAsignar(o) : null;
             return (
               <li key={o.ot_number} className="rounded-lg bg-white p-2 space-y-1 border border-slate-200">
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -699,6 +795,16 @@ function PanelDelDia({
                   >
                     OT {o.ot_number}
                   </span>
+                  {o.atrasada && (
+                    <span
+                      className="rounded px-1.5 text-[11px] font-semibold leading-5"
+                      style={{ background: "#fee2e2", color: "#991b1b" }}
+                    >
+                      {o.diasDeAtraso == null
+                        ? "Atrasada"
+                        : `Atrasada ${o.diasDeAtraso} ${o.diasDeAtraso === 1 ? "día" : "días"}`}
+                    </span>
+                  )}
                   {o.arrastre && (
                     <span className="text-[11px] text-slate-500">continúa de un día anterior</span>
                   )}
@@ -735,6 +841,25 @@ function PanelDelDia({
                       className="btn-secondary w-full justify-center"
                     >
                       Mover a otro día
+                    </button>
+                  )
+                )}
+
+                {/* Asignar, sólo para quien ve el taller con nombre. Como
+                    arriba: la cerrada **dice por qué** en vez de quedarse sin
+                    botón, porque ahí sus tres columnas ya dicen quién lo hizo. */}
+                {onAsignar && (
+                  noSeAsigna ? (
+                    <p className="text-[11px] text-slate-500 break-words pt-0.5">{noSeAsigna}</p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onAsignar(o, diaIso)}
+                      className="btn-secondary w-full justify-center"
+                    >
+                      {quienesEstan(o).length === 0
+                        ? "Asignar operarios"
+                        : `Operarios: ${quienesEstan(o).join(", ")}`}
                     </button>
                   )
                 )}

@@ -56,7 +56,7 @@ function Agrupado({ titulo, grupos, parametro }: {
                 que dejarlo afuera. */}
             {g.id ? (
               <Link
-                href={`/mantenimiento/ordenes?${parametro}=${g.id}&estado=ATRASADO`}
+                href={`/mantenimiento/ordenes?${parametro}=${g.id}&atrasada=1`}
                 className="min-w-0 flex-1 truncate text-amber-900 hover:underline"
                 title={g.nombre}
               >
@@ -91,7 +91,7 @@ export default function AtrasadasDeLaSemana({ resumen, hoy }: {
           esta semana
         </h2>
         <Link
-          href="/mantenimiento/ordenes?estado=ATRASADO"
+          href="/mantenimiento/ordenes?atrasada=1"
           className="text-xs font-semibold text-amber-800 hover:underline"
         >
           Verlas todas →

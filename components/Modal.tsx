@@ -161,7 +161,16 @@ export function Modal({
         className={`w-full ${ANCHOS[ancho]} max-h-full flex flex-col rounded-2xl bg-white shadow-xl`}
         style={{ animation: "fadeUp .2s ease both" }}
       >
-        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 shrink-0">
+        {/* Los 12 px que separan el título de lo que sigue están repartidos:
+            4 acá y 8 de `pt-2` en el cuerpo. Suman lo mismo, pero el cuerpo
+            es el que scrollea y **una caja con `overflow` recorta por arriba
+            lo que se sale de su caja de relleno**: ahí no se puede scrollear.
+            Veinte formularios abren con un subtítulo gris pegado al título
+            (`<p className="-mt-2 …">`), y con el relleno entero en el
+            encabezado esos 8 px negativos caían fuera del cuerpo y el renglón
+            quedaba cortado por la mitad — medido, 8 px de 20 de alto de línea.
+            Mantener la suma es lo que deja intacto al modal sin subtítulo. */}
+        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-1 shrink-0">
           <h2 id={idTitulo} className="min-w-0 text-base font-bold text-slate-900">
             {titulo}
           </h2>
@@ -177,8 +186,11 @@ export function Modal({
           </button>
         </div>
         {/* El scroll es del cuerpo y no de la página: en 343 px un formulario
-            largo se recorre sin que el título y la X se vayan. */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">{children}</div>
+            largo se recorre sin que el título y la X se vayan. El `pt-2` es la
+            otra mitad del hueco bajo el título, y está acá a propósito: ver el
+            comentario del encabezado antes de moverlo a cualquiera de los dos
+            lados. */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-2 pb-5">{children}</div>
       </div>
     </div>,
     document.body,

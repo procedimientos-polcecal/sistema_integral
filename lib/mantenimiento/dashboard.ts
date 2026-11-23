@@ -7,6 +7,7 @@
  */
 
 import { DIAS } from "@/lib/mantenimiento/produccion";
+import { estaAtrasada } from "@/lib/mantenimiento/alertas";
 
 const MESES = [
   "Ene", "Feb", "Mar", "Abr", "May", "Jun",
@@ -67,6 +68,9 @@ interface OTPendiente {
   estado?: string | null;
   descripcion?: string | null;
   equipo_raw?: string | null;
+  fecha_ejecucion?: string | null;
+  fecha_ejecucion_pendiente?: string | null;
+  fecha_fin?: string | null;
 }
 
 /** Una OT pendiente que obliga a parar el sector, con lo justo para nombrarla. */
@@ -77,6 +81,8 @@ export interface OtQueExigeParar {
   descripcion: string | null;
   /** El respaldo cuando no hay descripción, que es como se las nombra en planta. */
   equipo_raw: string | null;
+  /** Atrasada según `estaAtrasada`: la marca de la planilla o la ventana vencida. */
+  atrasada: boolean;
 }
 
 /**
@@ -88,6 +94,9 @@ const PESO_DEL_ESTADO: Record<string, number> = {
   EN_PROCESO: 1,
   POR_HACER: 2,
 };
+
+/** Atrasada va primero aunque la planilla no la haya marcado: manda la definición única. */
+const pesoDe = (o: OtQueExigeParar) => (o.atrasada ? 0 : (PESO_DEL_ESTADO[o.estado] ?? 9));
 
 /**
  * Las OT pendientes que obligan a parar cada sector, agrupadas por sector.
@@ -107,7 +116,8 @@ const PESO_DEL_ESTADO: Record<string, number> = {
  * sume a mano, que es el lado seguro del error—.
  */
 export function paradasExigidas(
-  ordenes: OTPendiente[]
+  ordenes: OTPendiente[],
+  hoy: string
 ): Record<string, OtQueExigeParar[]> {
   const porSector: Record<string, OtQueExigeParar[]> = {};
 
@@ -118,6 +128,7 @@ export function paradasExigidas(
       estado: o.estado ?? "",
       descripcion: o.descripcion ?? null,
       equipo_raw: o.equipo_raw ?? null,
+      atrasada: estaAtrasada(o, hoy),
     });
   }
 
@@ -127,7 +138,7 @@ export function paradasExigidas(
   for (const lista of Object.values(porSector)) {
     lista.sort(
       (a, b) =>
-        (PESO_DEL_ESTADO[a.estado] ?? 9) - (PESO_DEL_ESTADO[b.estado] ?? 9) ||
+        pesoDe(a) - pesoDe(b) ||
         a.ot_number - b.ot_number
     );
   }

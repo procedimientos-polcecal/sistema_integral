@@ -12,6 +12,7 @@ import {
 import TraerDeLaPlanilla from "../TraerDeLaPlanilla";
 import type { UltimaSync } from "@/lib/core/sincronizaciones";
 import Desplegable from "@/components/Select";
+import { descripcionDelArticulo, type EmbedDeArticulo } from "@/lib/inventario/kardex";
 
 interface Movimiento {
   id: string;
@@ -22,10 +23,24 @@ interface Movimiento {
   fecha: string | null;
   solicitante: string | null;
   sector_raw: string | null;
+  /**
+   * El equipo, tal como quedó escrito en la columna K de la planilla. Es texto
+   * y no un enlace a propósito: `equipo_raw` es lo que dice la fila, y el
+   * `equipo_id` de al lado es lo que el sistema pudo reconocer. Para mostrarlo
+   * manda el texto, que es lo que vería quien abre la planilla.
+   */
+  equipo_raw: string | null;
   proveedor_raw: string | null;
   ri: number | null;
   origen: string;
   sheets_pendiente: string | null;
+  /**
+   * El artículo, traído por el embed. `articulo_id` es `not null`, así que la
+   * descripción llega siempre. El tipo sale de `lib/inventario/kardex.ts`, que
+   * acepta las dos formas en que PostgREST puede devolver un embed y es por
+   * donde se lee.
+   */
+  articulo?: EmbedDeArticulo;
 }
 
 interface Pendiente {
@@ -109,10 +124,19 @@ export default function MovimientosClient({
     setError("");
     const supabase = createClient();
 
+    // La cadena va literal: armada en una variable, Supabase pierde la
+    // inferencia de tipos. El embed es `articulo:inventario_articulos(...)`
+    // sin nombrar el foreign key porque hay **un solo** camino entre las dos
+    // tablas (`articulo_id`); el día que haya dos, PostgREST contesta 300
+    // PGRST201 y hay que escribirlo entero. Lo lee la sesión de quien mira,
+    // así que depende de la RLS de `inventario_articulos` — que es la misma
+    // `tiene_acceso_inventario()` que la de esta tabla, o sea que quien ve el
+    // kardex ve la descripción. Si alguna de las dos cambia y la otra no, la
+    // columna se vacía sin error.
     let q = supabase
       .from("inventario_movimientos")
       .select(
-        "id, codigo, tipo, cantidad, stock_resultante, fecha, solicitante, sector_raw, proveedor_raw, ri, origen, sheets_pendiente",
+        "id, codigo, tipo, cantidad, stock_resultante, fecha, solicitante, sector_raw, equipo_raw, proveedor_raw, ri, origen, sheets_pendiente, articulo:inventario_articulos(descripcion)",
         { count: "exact" }
       );
 
@@ -212,14 +236,32 @@ export default function MovimientosClient({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              {/*
+                Nueve columnas, las mismas de antes, con dos de ellas llevando
+                un dato más cada una: «Artículo» es el código con su
+                descripción y «Destino» es el sector con su equipo.
+
+                POR QUÉ NO SON ONCE. Medido el 23/11/2026 sobre las 5.063 filas
+                del kardex: el equipo está en **723 (14,3 %)**, así que una
+                columna propia serían ocho de cada diez filas con un guión; y
+                su texto es largo —mediana 31 caracteres, «PY-A1-07 - SEPARADOR
+                DINÁMICO»— porque trae el código y el nombre juntos. Con la
+                descripción pasa al revés: está en las 5.063, mediana 20 y
+                máximo 54. Dos columnas más de ese ancho dejan la tabla
+                scrolleando de lado en cualquier pantalla, y lo que se pierde
+                al hacerlo no es estética: es poder comparar dos filas.
+
+                El orden tampoco cambió, a propósito. Es el del kardex de la
+                planilla, que es lo que lee la misma gente.
+              */}
               <tr>
                 <th className="px-3 py-2 text-left">Fecha</th>
-                <th className="px-3 py-2 text-left">Código</th>
+                <th className="px-3 py-2 text-left">Artículo</th>
                 <th className="px-3 py-2 text-left">Tipo</th>
                 <th className="px-3 py-2 text-right">Cantidad</th>
                 <th className="px-3 py-2 text-right">Queda</th>
                 <th className="px-3 py-2 text-left">Quién</th>
-                <th className="px-3 py-2 text-left">Sector</th>
+                <th className="px-3 py-2 text-left">Destino</th>
                 <th className="px-3 py-2 text-left">RI</th>
                 <th className="px-3 py-2 text-left">Origen</th>
               </tr>
@@ -232,32 +274,59 @@ export default function MovimientosClient({
                   Ningún movimiento coincide.
                 </td></tr>
               ) : (
-                filas.map((m) => (
-                  <tr key={m.id} className="hover:bg-slate-50">
-                    <td className="whitespace-nowrap px-3 py-2 text-slate-500">
-                      {/* Sin pasar por `new Date`: "2026-09-02" se parsea como
-                          medianoche UTC y desde Argentina se lee 1/9. Era por
-                          qué el último día que se veía era siempre el anterior
-                          al último que había entrado. */}
-                      {m.fecha ? comoSeLee(m.fecha.slice(0, 10)) : "—"}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-slate-700">{m.codigo ?? "—"}</td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${COLOR[m.tipo] ?? ""}`}>
-                        {m.tipo}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-right text-slate-700">{m.cantidad}</td>
-                    <td className="px-3 py-2 text-right text-slate-500">{m.stock_resultante ?? "—"}</td>
-                    <td className="px-3 py-2 text-slate-600">{m.solicitante ?? "—"}</td>
-                    <td className="px-3 py-2 text-slate-600">{m.sector_raw ?? "—"}</td>
-                    <td className="px-3 py-2 text-slate-500">{m.ri ?? "—"}</td>
-                    <td className="px-3 py-2 text-xs text-slate-400">
-                      {m.origen === "app" ? "Sistema" : "Planilla"}
-                      {m.sheets_pendiente && <span className="text-amber-700"> · sin escribir</span>}
-                    </td>
-                  </tr>
-                ))
+                filas.map((m) => {
+                  const descripcion = descripcionDelArticulo(m);
+                  return (
+                    // `align-top`: ahora toda fila mide dos líneas —la
+                    // descripción está en las 5.063—, y con el alineado del
+                    // medio la fecha y los números quedan flotando entre los dos
+                    // renglones de al lado en vez de empezar donde empieza la
+                    // fila.
+                    <tr key={m.id} className="align-top hover:bg-slate-50">
+                      <td className="whitespace-nowrap px-3 py-2 text-slate-500">
+                        {/* Sin pasar por `new Date`: "2026-09-02" se parsea como
+                            medianoche UTC y desde Argentina se lee 1/9. Era por
+                            qué el último día que se veía era siempre el anterior
+                            al último que había entrado. */}
+                        {m.fecha ? comoSeLee(m.fecha.slice(0, 10)) : "—"}
+                      </td>
+                      {/* El código arriba y la descripción abajo. El código es
+                          con lo que se busca y lo que lleva la planilla, así que
+                          sigue primero y en mono; la descripción es con lo que
+                          se reconoce lo que pasó, y es lo que faltaba. */}
+                      <td className="px-3 py-2">
+                        <span className="block font-mono text-slate-700">{m.codigo ?? "—"}</span>
+                        {descripcion && (
+                          <span className="block text-xs text-slate-500">{descripcion}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${COLOR[m.tipo] ?? ""}`}>
+                          {m.tipo}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-700">{m.cantidad}</td>
+                      <td className="px-3 py-2 text-right text-slate-500">{m.stock_resultante ?? "—"}</td>
+                      <td className="px-3 py-2 text-slate-600">{m.solicitante ?? "—"}</td>
+                      {/* El sector arriba y el equipo abajo, que es como se
+                          cargan: en la planilla el desplegable de equipos de la
+                          columna K depende del sector de la J, y en el
+                          formulario del SdG pasa lo mismo. Leerlos juntos es
+                          leer una sola respuesta a «¿a dónde fue?». */}
+                      <td className="px-3 py-2 text-slate-600">
+                        <span className="block">{m.sector_raw ?? "—"}</span>
+                        {m.equipo_raw && (
+                          <span className="block text-xs text-slate-500">{m.equipo_raw}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-slate-500">{m.ri ?? "—"}</td>
+                      <td className="px-3 py-2 text-xs text-slate-400">
+                        {m.origen === "app" ? "Sistema" : "Planilla"}
+                        {m.sheets_pendiente && <span className="text-amber-700"> · sin escribir</span>}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

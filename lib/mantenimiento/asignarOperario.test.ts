@@ -1,0 +1,186 @@
+import { describe, expect, it } from "vitest";
+import {
+  elAvisoDeLaPlanilla,
+  elCuerpoDeLaAsignacion,
+  porQueNoEntra,
+  porQueNoHayAQuienElegir,
+  porQueNoSePuedeAsignar,
+  turnoDelDia,
+  type OrdenQueSeAsigna,
+} from "./asignarOperario";
+import type { OperarioDelCatalogo } from "./operarioDelCatalogo";
+
+const vacios = { operario_1: null, operario_2: null, operario_3: null };
+const abierta: OrdenQueSeAsigna = { estado: "POR_HACER", ...vacios };
+
+const delCatalogo = (
+  nombre: string,
+  slot: number,
+  extra: Partial<OperarioDelCatalogo> = {},
+): OperarioDelCatalogo => ({
+  nombre,
+  slot,
+  empleadoId: `i-${nombre}`,
+  porQueNoSeSabe: null,
+  oficio: "mecanico",
+  ...extra,
+});
+
+const piparo = delCatalogo("Piparo", 3);
+
+describe("a que orden se le puede asignar", () => {
+  it("una orden abierta se puede asignar", () => {
+    expect(porQueNoSePuedeAsignar(abierta)).toBeNull();
+  });
+
+  it("una REALIZADO no, y dice que ahi ya dice quien lo hizo", () => {
+    expect(porQueNoSePuedeAsignar({ ...abierta, estado: "REALIZADO" }))
+      .toContain("ya dice quién lo hizo");
+  });
+
+  it("una CANCELADA tampoco", () => {
+    expect(porQueNoSePuedeAsignar({ ...abierta, estado: "CANCELADA" }))
+      .not.toBeNull();
+  });
+
+  /*
+   * Una orden de arrastre no es un caso aparte: el día que se mira no cambia
+   * si la orden admite gente. Lo que decide es el estado y nada más.
+   */
+  it("lo unico que decide si se puede asignar es el estado", () => {
+    const enProceso: OrdenQueSeAsigna = { estado: "EN_PROCESO", ...vacios };
+    expect(porQueNoSePuedeAsignar(enProceso)).toBeNull();
+    expect(porQueNoSePuedeAsignar({ ...enProceso, operario_1: "Aguirre" })).toBeNull();
+  });
+
+  it("una orden sin estado se deja asignar: no consta que este cerrada", () => {
+    expect(porQueNoSePuedeAsignar({ estado: null, ...vacios })).toBeNull();
+  });
+});
+
+describe("si ese nombre entra en esa orden", () => {
+  it("un nombre entra en su propia posicion", () => {
+    expect(porQueNoEntra(abierta, piparo)).toBeNull();
+  });
+
+  it("si esa posicion ya tiene a alguien, lo dice en vez de pisarlo", () => {
+    expect(porQueNoEntra({ ...abierta, operario_3: "Picart" }, piparo))
+      .toContain("Picart");
+  });
+
+  it("el mismo nombre dos veces no entra", () => {
+    const ocupada: OrdenQueSeAsigna = { ...abierta, operario_3: "Piparo" };
+    expect(porQueNoEntra(ocupada, piparo)).toContain("ya está");
+  });
+
+  it("otra posicion ocupada no molesta", () => {
+    expect(porQueNoEntra({ ...abierta, operario_1: "Aguirre" }, piparo)).toBeNull();
+  });
+
+  it("una orden cerrada contesta lo mismo que porQueNoSePuedeAsignar", () => {
+    const cerrada: OrdenQueSeAsigna = { ...abierta, estado: "REALIZADO" };
+    expect(porQueNoEntra(cerrada, piparo)).toBe(porQueNoSePuedeAsignar(cerrada));
+  });
+
+  it("un slot que no es 1, 2 ni 3 no entra en ninguna columna", () => {
+    expect(porQueNoEntra(abierta, delCatalogo("Raro", 4))).not.toBeNull();
+  });
+});
+
+describe("el cuerpo que se le manda al PATCH", () => {
+  it("nombra la columna del slot", () => {
+    expect(elCuerpoDeLaAsignacion("abc", 2, "Garcia"))
+      .toEqual({ id: "abc", operario_2: "Garcia" });
+  });
+
+  /*
+   * Vacío y no `null`: lo que decide en `repartirRegistroDeOT` es que la clave
+   * venga, y su `texto()` convierte el vacío en null para la tabla y en celda
+   * vacía para la planilla. Omitir la clave dejaría el nombre donde estaba.
+   */
+  it("sacar manda la columna vacia y no la omite", () => {
+    expect(elCuerpoDeLaAsignacion("abc", 2, null))
+      .toEqual({ id: "abc", operario_2: "" });
+  });
+
+  it("no manda ninguna otra columna", () => {
+    expect(Object.keys(elCuerpoDeLaAsignacion("abc", 1, "Aguirre")).sort())
+      .toEqual(["id", "operario_1"]);
+  });
+});
+
+/*
+ * Los dos de abajo salieron de la revisión de la rama (19/11/2026), y son el
+ * mismo síntoma por dos puertas: el panel mostraba **menos de lo que el sistema
+ * sabía**. Son funciones puras porque la regla de la casa es que lo que decide
+ * se saca a `lib/` para poder probarlo — y acá lo que decide es el texto.
+ */
+describe("por que la lista de nombres esta vacia", () => {
+  it("con nombres no dice nada", () => {
+    expect(porQueNoHayAQuienElegir(3, null, false)).toBeNull();
+  });
+
+  /*
+   * Éste es el caso que destapó la revisión: si `/taller-del-mes` contesta 500,
+   * el modal se abría con tres desplegables vacíos y ningún cartel, o sea
+   * indistinguible de «el catálogo está vacío». Un diagnóstico que no se
+   * distingue de otro no es un diagnóstico.
+   */
+  it("un fallo del servidor se dice con lo que contesto, sin traducir", () => {
+    const d = porQueNoHayAQuienElegir(0, "connect ETIMEDOUT 10.0.0.1:443", false);
+    expect(d).toContain("connect ETIMEDOUT 10.0.0.1:443");
+  });
+
+  it("mientras carga lo dice, y no culpa al catalogo", () => {
+    const d = porQueNoHayAQuienElegir(0, null, true)!;
+    expect(d).toContain("Buscando");
+    expect(d).not.toContain("catálogo");
+  });
+
+  it("el catalogo vacio de verdad manda a cargarlo", () => {
+    expect(porQueNoHayAQuienElegir(0, null, false)).toContain("catálogo");
+  });
+
+  it("un fallo gana sobre «todavia no cargo»: el que explica es el error", () => {
+    expect(porQueNoHayAQuienElegir(0, "500", true)).toContain("500");
+  });
+});
+
+describe("que se le dice a la persona cuando la planilla no se dejo escribir", () => {
+  it("sin error no hay nada que decir", () => {
+    expect(elAvisoDeLaPlanilla("Piparo", null)).toBeNull();
+  });
+
+  it("al poner, se dice lo que contesto Google sin traducir", () => {
+    const a = elAvisoDeLaPlanilla("Piparo", "Unable to parse range: OT!P9999")!;
+    expect(a).toContain("Unable to parse range: OT!P9999");
+  });
+
+  /*
+   * Sacar lleva una advertencia de más y es la única defensa que el diseño
+   * aceptó para el vaciado: la cola se rearma desde la fila, donde una celda
+   * vacía no se distingue de una que nunca se llenó, así que la próxima
+   * sincronización devuelve el nombre viejo.
+   */
+  it("al sacar, ademas avisa que la sincronizacion lo va a devolver", () => {
+    const a = elAvisoDeLaPlanilla(null, "403 PERMISSION_DENIED")!;
+    expect(a).toContain("403 PERMISSION_DENIED");
+    expect(a).toContain("devolver");
+  });
+
+  it("y el de sacar nombra a quien hay que sacar a mano", () => {
+    expect(elAvisoDeLaPlanilla(null, "403", "Picart")).toContain("Picart");
+  });
+});
+
+describe("el turno real de un dia", () => {
+  it("la pisada gana sobre el ciclo, y sin pisada manda el ciclo", () => {
+    expect(turnoDelDia("4-12", "12-20")).toBe("12-20");
+    expect(turnoDelDia("4-12", null)).toBe("4-12");
+    expect(turnoDelDia(null, null)).toBeNull();
+  });
+
+  it("una pisada sobre alguien sin turno del ciclo igual lo ubica", () => {
+    expect(turnoDelDia(null, "8-16")).toBe("8-16");
+  });
+});

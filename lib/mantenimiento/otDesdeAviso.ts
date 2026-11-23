@@ -18,11 +18,27 @@
  *
  * ── LO QUE HACE ESTE ARCHIVO, QUE ES LO ÚNICO QUE IMPIDE QUE VUELVA ──────────
  *
- * El formulario **no tiene su propia lista de campos**. Arma el cuerpo con lo
- * que hay y se lo pasa a `loQueFaltaParaCrear` —la misma función que corre el
- * servidor—, y pregunta por lo que esa función nombre. Si mañana la regla
- * exige un campo más, el formulario lo pide solo; si deja de exigir uno, deja
- * de pedirlo. Las dos mitades ya no pueden separarse porque hay una sola.
+ * **Ya no hay un formulario recortado para los avisos.** Se unificaron: desde
+ * un aviso se abre el mismo formulario completo que para una OT cualquiera
+ * (`NuevaOTModal`), y el aviso sólo lo **siembra**. Lo que sigue en pie de
+ * aquel arreglo es la raíz del bug: el formulario no tiene su propia lista de
+ * campos obligatorios, sino que pregunta por lo que nombre `loQueFaltaParaCrear`
+ * —la misma función que corre el servidor—. Por eso `sembradoDesdeElAviso`
+ * sale de `loQuePropone` y no es una segunda regla de sembrado: dos reglas
+ * que tenían que decir lo mismo y vivían en archivos distintos fueron
+ * exactamente lo que se rompió.
+ *
+ * ── DESDE UN AVISO TAMBIÉN SE PUEDE CARGAR TRABAJO YA HECHO ──────────────────
+ *
+ * Antes la orden que nacía de un aviso nacía siempre cerrada en «por hacer»,
+ * con `fecha_cierre` vacía: se pensó que un aviso pide trabajo y no carga
+ * trabajo hecho, y el formulario recortado ni mostraba esos dos campos. **Eso
+ * dejó de ser cierto**: el pedido fue que el formulario fuera el mismo, así
+ * que desde un aviso se ven y se pueden usar «estado inicial» y «fecha de
+ * cierre». Registrar contra un aviso un trabajo que ya se hizo es un caso real
+ * —quien lo arregló antes de que alguien lo cargara—, y no queda sin control:
+ * con fecha de cierre `loQueFaltaParaCrear` exige las horas y quién lo hizo,
+ * igual que en cualquier otra OT.
  *
  * ── EL AVISO PROPONE; LA ORDEN LA ESCRIBE UNA PERSONA ───────────────────────
  *
@@ -41,8 +57,8 @@
  * se reportó y cuándo.
  */
 
-import { loQueFaltaParaCrear, type DatosDelAltaDeOT } from "@/lib/mantenimiento/altaDeOT";
 import { prioridadDeUrgencia } from "@/lib/mantenimiento/avisos";
+import { prioridadParaLaPlanilla, PRIORIDAD_MEDIA } from "@/lib/mantenimiento/prioridad";
 
 /** Lo que de un aviso hace falta para armar la orden. */
 export interface AvisoParaLaOT {
@@ -55,6 +71,11 @@ export interface AvisoParaLaOT {
   equipment_id: string | null;
   equipo_raw: string | null;
   equipo_code: string | null;
+  /**
+   * La columna `repuesto` del aviso. **Hoy no viaja a la orden** y el porqué
+   * está en `extrasDelAviso`; se nombra igual porque es de acá de donde
+   * saldría el primer renglón de `repuestos` el día que esa columna se use.
+   */
   repuesto: string | null;
 }
 
@@ -71,8 +92,9 @@ export interface RespuestasDelAviso {
   quien: string;
   fecha_ejecucion: string;
   /**
-   * Cuándo se estima que termina. **Opcional**, y por eso no está entre lo que
-   * se pregunta: la real es la de cierre, que una OT recién pedida no tiene.
+   * Cuándo se estima que termina. El aviso no lo sabe: lo estima quien va a
+   * hacer el trabajo, y la real es la de cierre, que una OT recién pedida no
+   * tiene. Que sea obligatoria lo decide `loQueFaltaParaCrear`, no este tipo.
    */
   fecha_fin: string;
   /** Lo que el aviso propone y se puede corregir. */
@@ -94,21 +116,31 @@ export interface RespuestasDelAviso {
   gut_tendencia: string;
 }
 
-export const RESPUESTAS_VACIAS: RespuestasDelAviso = {
-  especialidad: "", quien: "", fecha_ejecucion: "", fecha_fin: "",
-  descripcion: "", tipo: "", prioridad: "",
-  sector_id: "", sector_raw: "", equipment_id: "", equipo_raw: "", equipo_code: "",
-  gut_gravedad: "", gut_urgencia: "", gut_tendencia: "",
-};
-
 /**
  * Con qué arranca el formulario.
  *
  * **Correctiva siempre**: alguien reportó una falla, no es un preventivo
  * programado. Y la prioridad sale de la urgencia del aviso por
  * `prioridadDeUrgencia`, que es la traducción que ya existía — no una segunda.
- * Esa función devuelve la palabra pelada («MEDIA»); el emoji se lo pone la
- * ruta con `prioridadParaLaPlanilla`, una sola vez y antes de sus dos usos.
+ *
+ * ── Y SALE CON EL EMOJI, PORQUE ACÁ YA NO TERMINA EN LA RUTA ────────────────
+ *
+ * `prioridadDeUrgencia` devuelve la palabra pelada —"MEDIA"— y eso alcanzaba
+ * mientras esto llenaba un formulario propio, que ofrecía esas mismas tres
+ * palabras. Desde que el aviso siembra el formulario completo, quien muestra
+ * este valor es el desplegable de `NuevaOTModal`, que ofrece
+ * `PRIORIDADES_DE_OT` —"🟠 Alta", "🟡 Media", "🟢 Baja"—: con la palabra pelada
+ * **ninguna opción coincide y el campo se abre en blanco**. Si nadie lo toca el
+ * dato igual sale bien, porque la ruta normaliza; si alguien lo toca, elige a
+ * ciegas sobre una urgencia que nunca llegó a ver.
+ *
+ * Por eso la segunda traducción —`prioridadParaLaPlanilla`, la misma que corre
+ * la ruta— se aplica acá y no se inventa un emoji al lado: sigue habiendo una
+ * sola tabla de equivalencias, y la ruta la vuelve a aplicar sin efecto porque
+ * es idempotente ("🟡 Media" entra y sale igual). Lo ata el test «el valor
+ * sembrado existe en el desplegable», que pregunta por `PRIORIDADES_DE_OT` y no
+ * por la función de la que sale: comparar el sembrado contra su propia fuente
+ * da verde pase lo que pase, y es lo que dejó pasar esto.
  *
  * Los tres que el aviso no puede contestar quedan como se los pase quien
  * llama: la especialidad vacía —el aviso no da ni un indicio y acertarle de
@@ -144,7 +176,12 @@ export function loQuePropone(
 
     descripcion: aviso.descripcion?.trim() || `Aviso ${aviso.oa_number ?? ""}`.trim(),
     tipo: "CORRECTIVO",
-    prioridad: prioridadDeUrgencia(aviso.urgencia),
+    // El `??` no se alcanza: `prioridadDeUrgencia` devuelve siempre ALTA,
+    // MEDIA o BAJA, y las tres están en la tabla. Está porque el tipo de
+    // `prioridadParaLaPlanilla` admite null —se la llama también con lo que
+    // venga de la planilla— y un `!` acá sería afirmar sin red lo que el
+    // desplegable no puede mostrar: Media es su valor por defecto.
+    prioridad: prioridadParaLaPlanilla(prioridadDeUrgencia(aviso.urgencia)) ?? PRIORIDAD_MEDIA,
     sector_id: aviso.sector_id ?? "",
     sector_raw: aviso.sector_raw ?? "",
     equipment_id: aviso.equipment_id ?? "",
@@ -158,89 +195,76 @@ export function loQuePropone(
   };
 }
 
-/** El valor del desplegable de una nota: "" es null, y lo demás es el número. */
-const notaOnull = (v: string) => (v.trim() === "" ? null : Number(v));
+/**
+ * Un equipo como lo necesita el desplegable del formulario. Vive acá y no en
+ * el modal porque la página de avisos también lo importa, y ese archivo no
+ * tiene por qué conocer al formulario.
+ */
+export interface EquipoDelAviso {
+  id: string; name: string; code: string | null; sector_id: string | null;
+}
 
 /**
- * El cuerpo que se le manda a `POST /api/mantenimiento/ordenes`.
+ * Lo que el aviso le propone al formulario completo: **sólo las claves que
+ * llena**, para que se extiendan sobre los valores por defecto del formulario.
  *
- * Del aviso quedan sólo dos cosas: **a cuál pertenece** —para que el aviso
- * quede apuntando a su orden y nadie genere una segunda— y el repuesto, que no
- * se edita acá porque la orden tiene su propia pantalla de repuestos, con
- * renglones y cantidades.
+ * Sale de `loQuePropone` y no de una segunda regla: dos reglas de sembrado
+ * fueron el bug de octubre. No devuelve `especialidad`, `fecha_fin` ni las
+ * notas GUT porque el aviso no las sabe, y devolverlas en "" pisaría el
+ * valor por defecto con un vacío que nadie eligió.
+ *
+ * El tipo de retorno nombra las diez claves a propósito: un `Record<string,
+ * string>` dejaría pasar en silencio una clave mal escrita o que falte, que es
+ * la forma de separación entre dos mitades que este archivo existe para evitar.
  */
-export function cuerpoDeLaOT(
+export function sembradoDesdeElAviso(
   aviso: AvisoParaLaOT,
-  respuestas: RespuestasDelAviso
-): Record<string, unknown> & DatosDelAltaDeOT {
-  // Tolera el campo ausente, y no es por prolijidad: una carga sin señal se
-  // guarda como cuerpo y se reenvía más tarde, así que una encolada **antes**
-  // de que existiera `fecha_fin` vuelve sin esa clave.
-  const texto = (v: string | undefined) => (v ?? "").trim();
-
+  hoy: string
+): Pick<
+  RespuestasDelAviso,
+  | "descripcion" | "tipo" | "prioridad" | "sector_id" | "sector_raw"
+  | "equipment_id" | "equipo_raw" | "equipo_code" | "quien" | "fecha_ejecucion"
+> {
+  const p = loQuePropone(aviso, { quien: "INTERNO", fecha_ejecucion: hoy });
   return {
-    aviso_id: aviso.id,
-    repuesto: aviso.repuesto,
-    estado: "POR_HACER",
-
-    equipment_id: texto(respuestas.equipment_id) || null,
-    sector_id: texto(respuestas.sector_id) || null,
-    sector_raw: texto(respuestas.sector_raw) || null,
-    equipo_raw: texto(respuestas.equipo_raw) || null,
-    equipo_code: texto(respuestas.equipo_code) || null,
-    descripcion: texto(respuestas.descripcion),
-    tipo: texto(respuestas.tipo),
-    prioridad: texto(respuestas.prioridad),
-
-    // Lo que la persona eligió y nada más: este cuerpo no deduce ninguna nota
-    // del aviso ni de `prioridad` —ver `loQuePropone`—. Un desplegable sin
-    // elegir va como null, que es como la ruta distingue «sin nota» de una
-    // nota; con una o dos la orden queda sin puntaje y se completa después.
-    gut_gravedad: notaOnull(respuestas.gut_gravedad),
-    gut_urgencia: notaOnull(respuestas.gut_urgencia),
-    gut_tendencia: notaOnull(respuestas.gut_tendencia),
-
-    especialidad: texto(respuestas.especialidad),
-    quien: texto(respuestas.quien),
-    fecha_ejecucion: texto(respuestas.fecha_ejecucion),
-    fecha_fin: texto(respuestas.fecha_fin),
-
-    // Una OT que nace de un aviso no nace cerrada: se está pidiendo trabajo,
-    // no cargando trabajo hecho. Van explícitos para que `loQueFaltaParaCrear`
-    // vea lo mismo acá que en el servidor.
-    fecha_cierre: "",
-    // Sin fecha de cierre la regla del cierre adelantado no se dispara nunca.
-    cierre_justificacion: "",
-    horas: "",
-    contratista: "",
-    operario_1: "",
-    operario_2: "",
-    operario_3: "",
+    descripcion: p.descripcion,
+    tipo: p.tipo,
+    prioridad: p.prioridad,
+    sector_id: p.sector_id,
+    sector_raw: p.sector_raw,
+    equipment_id: p.equipment_id,
+    equipo_raw: p.equipo_raw,
+    equipo_code: p.equipo_code,
+    quien: p.quien,
+    fecha_ejecucion: p.fecha_ejecucion,
   };
 }
 
 /**
- * Qué le falta a la orden, con lo que haya escrito hasta ahora.
+ * Lo que viaja en el cuerpo además de los campos del formulario: a cuál aviso
+ * pertenece la orden, para que el aviso quede apuntando a ella y nadie genere
+ * una segunda. No vive en el estado del formulario —ver la prop `aviso` de
+ * `NuevaOTModal`— y por eso se suma recién al armar el cuerpo.
  *
- * Delega en la regla compartida. **No hay una lista de campos acá**: ése es el
- * punto de todo el archivo.
- */
-export function loQueFaltaDelAviso(
-  aviso: AvisoParaLaOT,
-  respuestas: RespuestasDelAviso
-): string[] {
-  return loQueFaltaParaCrear(cuerpoDeLaOT(aviso, respuestas));
-}
-
-/**
- * Lo que el aviso **no puede** contestar ni con la mejor voluntad.
+ * ── POR QUÉ NO MANDA EL `repuesto` DEL AVISO, AUNQUE LO MANDABA ─────────────
  *
- * Es lo mismo de arriba con el formulario en blanco: lo que quede nombrado es
- * lo que no viene de ningún lado. Así, el día que la regla cambie, el
- * formulario cambia con ella sin que nadie se acuerde.
+ * Lo mandaba el formulario recortado, que no tenía lista de repuestos: ahí
+ * `repuesto` era el único campo del tema y la ruta lo leía. El formulario
+ * completo manda **`repuestos`** —un arreglo, siempre, aunque sea el renglón
+ * vacío con el que arranca—, y `repuestosDelCuerpo` (`repuestosDeLaOT.ts`)
+ * mira `body.repuesto` **sólo cuando no hay arreglo**. O sea que mandarlo era
+ * mandar un campo que la ruta descarta: un contrato que el test afirmaba y
+ * nadie honraba, que es peor que no tenerlo.
+ *
+ * Hoy no se pierde nada: medido el 19/11/2026, **0 de 254 avisos tienen
+ * `repuesto` cargado**. El día que alguien empiece a usar esa columna, lo que
+ * corresponde **no es revivir este campo** —volvería a caer en la rama que la
+ * ruta no mira— sino sembrarlo como **primer renglón de `repuestos`**, que es
+ * por donde el formulario completo los manda y donde además se puede ver y
+ * corregir antes de crear la orden.
  */
-export function loQueHayQuePreguntar(aviso: AvisoParaLaOT): string[] {
-  return loQueFaltaDelAviso(aviso, RESPUESTAS_VACIAS);
+export function extrasDelAviso(aviso: AvisoParaLaOT): { aviso_id: string } {
+  return { aviso_id: aviso.id };
 }
 
 /**

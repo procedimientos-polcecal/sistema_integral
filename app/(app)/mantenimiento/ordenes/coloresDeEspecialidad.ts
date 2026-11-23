@@ -45,6 +45,22 @@ export const TEXTO_SOBRE_EL_COLOR: Record<string, string> = {
 export const COLOR_SIN_ESPECIALIDAD = "#6b7280";
 
 /**
+ * El rojo de una orden atrasada, y el texto que va sobre él.
+ *
+ * **Va de relleno y no de franja encima del color de la especialidad**, y no es
+ * una preferencia: medido, este rojo contra los cinco rellenos da de 1,20:1 a
+ * 2,03:1 (el ámbar es el más cercano), por debajo del 3:1 que WCAG pide para
+ * algo que no es texto: una franja o un borde rojo encima no se distingue. De relleno con texto blanco da 6,47:1. La especialidad queda en el borde.
+ *
+ * No está en `LEYENDA_DE_ESPECIALIDADES` a propósito: esa lista es de
+ * especialidades —un test exige que todo color sea un relleno de especialidad o
+ * el gris— y «atrasada» es un estado, no una especialidad. La pantalla dibuja su
+ * propio recuadro al lado.
+ */
+export const COLOR_ATRASADA = "#b91c1c";
+export const TEXTO_SOBRE_ATRASADA = "#ffffff";
+
+/**
  * El color de una especialidad, comparada sin tilde ni mayúsculas porque la
  * celda de la planilla trae `Lubricacion` tanto como `LUBRICACIÓN`.
  */

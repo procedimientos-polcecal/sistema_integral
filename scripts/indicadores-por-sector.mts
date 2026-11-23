@@ -15,7 +15,9 @@
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { indicadoresPorSectorDeLaPlanta } from "../lib/mantenimiento/porSectorDatos.ts";
-import { resumirLaSemana, hoyISO, type DeLaSemana } from "../lib/mantenimiento/alertas.ts";
+import {
+  resumirLaSemana, hoyISO, condicionDeAtrasada, CERRADAS, type DeLaSemana,
+} from "../lib/mantenimiento/alertas.ts";
 import { duracionLegible } from "../lib/mantenimiento/historialDeSectores.ts";
 import {
   conComa, diasCorridos, porcentajeDeConfiabilidad,
@@ -89,11 +91,14 @@ for (const s of d.paradas.sectores) {
 }
 
 console.log("\n── Atrasadas de esta semana ───────────────────────────────");
-// La misma lectura que `page.tsx`, con las mismas columnas y el mismo `.or`.
+// La misma lectura que `page.tsx`: las mismas columnas, el mismo
+// `condicionDeAtrasada` y el mismo `.not(estado, in, CERRADAS)`. Si se separan,
+// esto deja de medir lo que la pantalla muestra, que es toda su razón de ser.
 const { data: candidatas } = await sb
   .from("ordenes_trabajo")
-  .select("ot_number, estado, proxima_fecha, fecha_ejecucion, sector_id, sector_raw, equipment_id, descripcion, equipo_raw")
-  .or(`estado.eq.ATRASADO,proxima_fecha.lt.${hasta}`)
+  .select("ot_number, estado, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, sector_id, sector_raw, equipment_id, descripcion, equipo_raw")
+  .not("estado", "in", `(${CERRADAS.join(",")})`)
+  .or(condicionDeAtrasada(hasta))
   .limit(500);
 
 const semana = resumirLaSemana((candidatas ?? []) as DeLaSemana[], hasta);

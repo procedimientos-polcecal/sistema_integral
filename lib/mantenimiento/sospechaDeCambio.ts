@@ -169,7 +169,7 @@ export interface CicloSinArrancar {
  * depende de que alguien se acuerde, no pasa**. Es la misma lección del
  * preventivo —pantalla, botón y cero OT generadas en toda la historia— y un
  * ciclo sin arrancar es invisible: no genera órdenes, así que nada se atrasa y
- * `mant-atrasadas` no puede verlo.
+ * `mant-atrasadas-por-fecha` no puede verlo.
  *
  * Así que acá el texto sí decide, al revés que en todo el resto del mecanismo.
  * Lo que lo vuelve aceptable son tres cosas, y conviene tenerlas juntas:

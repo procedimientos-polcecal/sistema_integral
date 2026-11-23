@@ -43,7 +43,9 @@ import { traerTodo } from "@/lib/core/paginado";
  *     esperando, y su `cantidad` cuenta umbrales, no cosas;
  *   - `sheets_pendiente`: lo reintenta la próxima sincronización sola, y avisar
  *     de lo que se arregla solo es enseñar a ignorar los avisos;
- *   - las OT atrasadas: es un estado, no un evento;
+ *   - el **stock** de OT atrasadas (el aviso de la campana): es un estado, no
+ *     un evento. Lo que sí es un evento es **el día en que una cruza**, y ése
+ *     sí avisa: es el recordatorio de más abajo, que recorta justo ese día;
  *   - las facturas del buzón sin vincular y las ausencias sin clasificar: son
  *     cola de trabajo de una persona sobre su módulo, no una decisión que
  *     destraba a otro.
@@ -66,6 +68,13 @@ import { traerTodo } from "@/lib/core/paginado";
  * tres condiciones siguen valiendo, y «ya hay uno que cumple sólo dos» no
  * convierte en válido al siguiente. Si agregás un emisor instantáneo, sea por
  * acá o por afuera, anotalo en este renglón.
+ *
+ * El segundo emisor de afuera es el recordatorio de las órdenes de trabajo
+ * (`avisarDeLasOT`, en `lib/mantenimiento/recordatorioDeOT.ts`), un push por
+ * día a quienes administran Mantenimiento: cumple la 1 y la 3 y **tampoco la
+ * 2** —nada se frena hasta que alguien reprograme—. Se mandó porque se pidió, y
+ * es **otro precedente y no un permiso**: que ya haya dos que cumplen sólo dos
+ * condiciones no vuelve válido al tercero.
  *
  * ── UNA POR CORRIDA, NO UNA POR ÍTEM ─────────────────────────────────────────
  *

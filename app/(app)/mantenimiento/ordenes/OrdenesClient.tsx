@@ -133,6 +133,8 @@ export default function OrdenesClient({
   const [proveedor, setProveedor] = useState(arranque.proveedor);
   const [sector, setSector] = useState(arranque.sector);
   const [equipo, setEquipo] = useState(arranque.equipo);
+  // Un sí o un no y no un valor de `estado`: ver `FiltrosOt.atrasada`.
+  const [atrasada, setAtrasada] = useState(arranque.atrasada);
   // No es un filtro —no saca filas— pero viaja igual que ellos, porque el
   // orden lo resuelve la base. Por eso queda afuera de `hayAlgunFiltro` y de
   // «Limpiar»: no es algo que esconda órdenes.
@@ -208,9 +210,9 @@ export default function OrdenesClient({
 
   const filtros: FiltrosOt = useMemo(() => ({
     busqueda: busquedaAplicada, campoFecha, orden, desde, hasta,
-    estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo,
+    estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo, atrasada,
   }), [busquedaAplicada, campoFecha, orden, desde, hasta,
-       estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo]);
+       estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo, atrasada]);
 
   const hayFiltros = hayAlgunFiltro(filtros);
 
@@ -221,6 +223,7 @@ export default function OrdenesClient({
     setCampoFecha(""); setDesde(""); setHasta("");
     setEstado([]); setEspecialidad([]); setTipo([]); setQuien([]);
     setPrioridad([]); setProveedor([]); setSector([]); setEquipo([]);
+    setAtrasada(false);
   }
 
   // La búsqueda espera un momento para no consultar en cada tecla.
@@ -572,6 +575,24 @@ export default function OrdenesClient({
                 </button>
               );
             })}
+
+            {/* «Sólo atrasadas» es otra pregunta que los estados: es que se le
+                pasó la fecha, no lo que dice la columna de la planilla. Por eso
+                es un interruptor aparte y no un quinto botón de arriba, y el
+                enlace de la campana y del push cae acá con `?atrasada=1`. */}
+            <button
+              type="button"
+              aria-pressed={atrasada}
+              onClick={() => setAtrasada(!atrasada)}
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold border transition-all"
+              style={{
+                color:       atrasada ? "#B91C1C" : "#64748B",
+                background:  atrasada ? "#FEE2E2" : "#fff",
+                borderColor: atrasada ? "#B91C1C" : "#E2E8F0",
+              }}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: atrasada ? "#DC2626" : "#CBD5E1" }} />
+              Sólo atrasadas
+            </button>
 
             <input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar equipo, sector, descripción..."

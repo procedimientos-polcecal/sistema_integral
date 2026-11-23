@@ -214,6 +214,8 @@ export interface OrdenTrabajo {
   // a las abiertas. Columna generada, nunca se escribe. No se muestra: el
   // puntaje sale de `puntajeGut()` con las tres notas.
   gut_orden: number;
+  // La orden de servicio que cubre esta OT. Null si no tiene o si la OS se borró.
+  os_id: string | null;
 }
 
 export interface PlanificacionDiaria {

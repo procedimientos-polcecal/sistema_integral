@@ -141,7 +141,7 @@ function OtsQueExigenParar({ ots, sectorId }: {
               <span className="min-w-0 flex-1 truncate text-red-900" title={que}>
                 {que}
               </span>
-              {o.estado === "ATRASADO" && (
+              {o.atrasada && (
                 <span className="shrink-0 text-[10px] font-bold uppercase text-red-600">
                   atrasada
                 </span>
@@ -196,7 +196,7 @@ function OrdenesAtrasadas({ resumen, hoy }: {
           )}
         </h2>
         <Link
-          href="/mantenimiento/ordenes?estado=ATRASADO"
+          href="/mantenimiento/ordenes?atrasada=1"
           className="text-xs font-semibold text-red-700 hover:underline"
         >
           Verlas todas →

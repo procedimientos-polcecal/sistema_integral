@@ -5,7 +5,9 @@ import { lunesDe } from "@/lib/mantenimiento/produccion";
 import {
   ultimosMeses, paradasExigidas, ventanasDeReparacion, nombreDelMes,
 } from "@/lib/mantenimiento/dashboard";
-import { resumirAtrasadas, resumirLaSemana, hoyISO } from "@/lib/mantenimiento/alertas";
+import {
+  resumirAtrasadas, resumirLaSemana, hoyISO, condicionDeAtrasada, CERRADAS,
+} from "@/lib/mantenimiento/alertas";
 import { sumarDias } from "@/lib/core/fechas";
 import DashboardClient from "./DashboardClient";
 import { sectoresDePlanta, empresaDelSector } from "@/lib/mantenimiento/sectores";
@@ -140,7 +142,7 @@ export default async function MantenimientoDashboardPage() {
       // esto crezca, va `traerTodo()`.
       supabase
         .from("ordenes_trabajo")
-        .select("sector_id, requiere_parada_sector, ot_number, estado, descripcion, equipo_raw")
+        .select("sector_id, requiere_parada_sector, ot_number, estado, descripcion, equipo_raw, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin")
         .in("estado", ["POR_HACER", "EN_PROCESO", "ATRASADO"])
         .not("sector_id", "is", null),
       supabase
@@ -164,20 +166,19 @@ export default async function MantenimientoDashboardPage() {
 
   const ventanas = ventanasDeReparacion(conEmpresa, planes ?? [], pendientes);
 
-  // Las que podrían estar atrasadas: la marca de la planilla o una fecha
-  // vencida. El filtro fino lo hace `resumirAtrasadas`, que sabe que una
-  // realizada tarde ya no está atrasada.
+  // Las atrasadas: la marca de la planilla o una fecha vencida, con la misma
+  // definición que `estaAtrasada` (`condicionDeAtrasada`). `resumirAtrasadas`
+  // vuelve a filtrar por si las dos se separaran.
   //
-  // `fecha_ejecucion`, `sector_id` y `equipment_id` son para «las de esta
-  // semana». La primera es la que decide: ninguna de las OT abiertas tiene
-  // `proxima_fecha` —medido el 19/11/2026, las 61— así que sin ella no hay
-  // ventana semanal ni días de atraso que mostrar. Las otras dos son para
-  // filtrar por empresa cruzando ids en vez de texto y para poder enlazar
-  // cada equipo a su listado.
+  // `sector_id` y `equipment_id` son lo único que suman «las de esta semana»:
+  // el primero para recortar por empresa cruzando ids en vez de texto —el
+  // `sector_raw` de la planilla no se puede cruzar con el catálogo— y el
+  // segundo para enlazar cada equipo a su listado.
   const { data: candidatas } = await supabase
     .from("ordenes_trabajo")
-    .select("ot_number, estado, proxima_fecha, fecha_ejecucion, sector_id, sector_raw, equipment_id, descripcion, equipo_raw, quien, gut_gravedad, gut_urgencia, gut_tendencia")
-    .or(`estado.eq.ATRASADO,proxima_fecha.lt.${hoy}`)
+    .select("ot_number, estado, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, sector_id, sector_raw, equipment_id, descripcion, equipo_raw, quien, gut_gravedad, gut_urgencia, gut_tendencia")
+    .not("estado", "in", `(${CERRADAS.join(",")})`)
+    .or(condicionDeAtrasada(hoy))
     .limit(500);
 
   // Las dos cuentas salen de **la misma lista**: el «8 de 19» tiene que
@@ -185,7 +186,7 @@ export default async function MantenimientoDashboardPage() {
   // distintas darían dos números que no cierran entre sí.
   const atrasadas = resumirAtrasadas(candidatas ?? [], hoy);
   const laSemana = resumirLaSemana(candidatas ?? [], hoy);
-  const paradas = paradasExigidas(pendientes);
+  const paradas = paradasExigidas(pendientes, hoy);
 
   const nivel = await nivelMantenimientoDe(supabase, user.id);
   const canEdit = nivel === "edicion" || nivel === "admin";

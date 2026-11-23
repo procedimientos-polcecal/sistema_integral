@@ -1,4 +1,5 @@
 import { fechaEnArgentina, sumarDias } from "@/lib/core/fechas";
+import { fechaParaElCalendario } from "@/lib/agenda/evento";
 import { esGutAlto, type NotasGut } from "./gut";
 
 /**
@@ -8,6 +9,20 @@ import { esGutAlto, type NotasGut } from "./gut";
  * `ATRASADO` a mano, o que se le haya pasado la fecha en que tenía que hacerse.
  * La primera la decide una persona; la segunda, el calendario.
  *
+ * **La fecha es la de la ejecución y no `proxima_fecha`.** Esa columna está en
+ * null en las 2.531 filas (medido el 19/11/2026; una foto y no un
+ * invariante: al cierre de la rama eran 2.532, 19 marcadas y 32 atrasadas): la sincronización la lee de la
+ * planilla —es la pareja de `frecuencia` en el master— pero nadie la llena, así
+ * que decidir con ella reducía esta función a `estado === "ATRASADO"` y contaba
+ * 21 donde las fechas dicen 34 (cifras de esa primera foto). Se sigue sincronizando; sólo se dejó de usar
+ * para decidir.
+ *
+ * El inicio es el que ve el calendario (`fechaParaElCalendario`: la pendiente
+ * si hay, si no la de la planilla) y el vencimiento es `fecha_fin` cuando es
+ * posterior al inicio: una orden que arrancó ayer y termina mañana está en
+ * curso. Una `fecha_fin` anterior al inicio es un dato sucio y vale «dura un
+ * día», no adelanta el vencimiento.
+ *
  * Lo que **no** cuenta: una orden realizada —aunque se haya hecho tarde, ya no
  * hay nada que hacer con ella— y una cancelada, que no se va a hacer nunca y
  * avisarla todos los días es ruido.
@@ -16,15 +31,9 @@ import { esGutAlto, type NotasGut } from "./gut";
 /** Lo mínimo para saber si una orden está atrasada. */
 export interface Atrasable {
   estado?: string | null;
-  proxima_fecha?: string | null;
-  /**
-   * El día en que la orden decía que había que hacerla.
-   *
-   * En una orden **abierta** es la fecha prevista; en una cerrada, cuándo se
-   * hizo. Acá sólo llegan abiertas, porque todo pasa antes por
-   * `estaAtrasada()`.
-   */
   fecha_ejecucion?: string | null;
+  fecha_ejecucion_pendiente?: string | null;
+  fecha_fin?: string | null;
 }
 
 /**
@@ -34,8 +43,10 @@ export interface Atrasable {
  * **otro dueño**: aquella espeja la migración de `gut_orden` y ésta no espeja
  * nada, sólo decide qué cuenta como atrasada. No se unifican a propósito. Si un
  * día aparece un estado nuevo, hay que mirar las dos y decidir en cada una.
+ * Se exporta para que quien consulta la base arme su `.not("estado", "in", ...)`
+ * con la misma lista que usa la decisión.
  */
-export const CERRADAS = ["REALIZADO", "CANCELADA"];
+export const CERRADAS: readonly string[] = ["REALIZADO", "CANCELADA"];
 
 /**
  * El día de hoy como `aaaa-mm-dd`, en hora de Argentina.
@@ -52,6 +63,33 @@ export const CERRADAS = ["REALIZADO", "CANCELADA"];
  */
 export const hoyISO = fechaEnArgentina;
 
+/** El día en que la orden arranca para el calendario, recortado a `aaaa-mm-dd`. */
+function inicioDe(orden: Atrasable): string {
+  const inicio = fechaParaElCalendario({
+    fecha_ejecucion: orden.fecha_ejecucion ?? null,
+    fecha_ejecucion_pendiente: orden.fecha_ejecucion_pendiente,
+  });
+  return (inicio ?? "").slice(0, 10);
+}
+
+/**
+ * El día en que la orden vencía: `fecha_fin` cuando es posterior al inicio y,
+ * si no, el inicio mismo. Cadena vacía cuando no tiene ninguna fecha.
+ *
+ * Está sacado aparte —`estaAtrasada` lo tenía adentro— porque
+ * `resumirLaSemana` necesita **la misma** fecha para recortar su ventana de
+ * siete días. Escribirla dos veces es cómo se separan dos definiciones de lo
+ * mismo: una orden que arrancó hace tres semanas y vencía ayer es de esta
+ * semana, y mirando sólo el inicio no lo sería.
+ */
+function vencimientoDe(orden: Atrasable): string {
+  const inicio = inicioDe(orden);
+  if (!inicio) return "";
+
+  const fechaFin = String(orden.fecha_fin ?? "").slice(0, 10);
+  return fechaFin && fechaFin > inicio ? fechaFin : inicio;
+}
+
 /** Si la orden está atrasada al día de hoy. */
 export function estaAtrasada(orden: Atrasable, hoy: string): boolean {
   const estado = String(orden.estado ?? "").toUpperCase();
@@ -59,51 +97,56 @@ export function estaAtrasada(orden: Atrasable, hoy: string): boolean {
 
   if (estado === "ATRASADO") return true;
 
-  const fecha = String(orden.proxima_fecha ?? "").slice(0, 10);
+  const fin = vencimientoDe(orden);
+  if (!fin) return false;
+
   // Se comparan los textos: `aaaa-mm-dd` ordena igual que la fecha, y no hay
   // huso horario que pueda correr el día.
-  return Boolean(fecha) && fecha < hoy;
+  return fin < hoy;
 }
 
 /**
- * El día contra el que se mide el atraso: el vencimiento y, si no hay, el día
- * previsto de ejecución.
+ * Hace cuántos días venció, contado desde el inicio efectivo.
  *
- * **La segunda mitad hace casi todo el trabajo.** Medido el 19/11/2026:
- * ninguna de las 61 OT abiertas tiene `proxima_fecha` —las 19 atrasadas están
- * marcadas a mano desde la planilla—, así que sin este respaldo
- * `diasDeAtraso` devolvía `null` en las 19 y el panel del tablero mostraba
- * «—» en todas, con un orden «de la más vieja a la más nueva» que no ordenaba
- * nada. Las 19 sí tienen `fecha_ejecucion`.
- *
- * El vencimiento manda cuando están las dos: lo puso una persona para esa
- * orden, y el día previsto es lo que se esperaba antes.
+ * `null` cuando la marcaron atrasada a mano y no dice desde cuándo: no se
+ * sabe, y poner cero la haría parecer recién vencida.
  *
  * **El riesgo asumido**: `fecha_ejecucion` trae errores de carga. La #2726
  * dice 06/02/2026 con la orden cargada el 05/10/2026 —un año mal tipeado— y
- * va a salir con un atraso enorme. Se acepta: el número grande señala la fila
- * que hay que ir a corregir, que es más útil que un guión.
- */
-function laFechaQueVencio(orden: Atrasable): string {
-  return (
-    String(orden.proxima_fecha ?? "").slice(0, 10) ||
-    String(orden.fecha_ejecucion ?? "").slice(0, 10)
-  );
-}
-
-/**
- * Hace cuántos días venció.
- *
- * `null` cuando la marcaron atrasada a mano y no dice desde cuándo por
- * ninguna de las dos vías: no se sabe, y poner cero la haría parecer recién
- * vencida.
+ * sale con un atraso enorme. Se acepta: el número grande señala la fila que
+ * hay que ir a corregir, que es más útil que un guión.
  */
 export function diasDeAtraso(orden: Atrasable, hoy: string): number | null {
-  const fecha = laFechaQueVencio(orden);
+  const fecha = inicioDe(orden);
   if (!fecha) return null;
 
   const dias = Math.round((fechaLocal(hoy) - fechaLocal(fecha)) / 86400000);
   return Math.max(0, dias);
+}
+
+/**
+ * La misma decisión de `estaAtrasada`, escrita como filtro `.or()` de PostgREST
+ * para traer de la base sólo las atrasadas. Verificada contra producción el
+ * 19/11/2026: devuelve las mismas 34 órdenes que la versión en TypeScript.
+ *
+ * Se aplica junto con `.not("estado", "in", ...CERRADAS)`. El caso sucio
+ * `fecha_fin <= inicio` no se escribe a propósito: junto con `inicio < hoy` ya
+ * implica `fecha_fin < hoy`, y la rama `or(fecha_fin.is.null, fecha_fin.lt.hoy)`
+ * lo cubre.
+ *
+ * **Supone `estado` not null**, y es la última divergencia entre las dos
+ * escrituras: `estaAtrasada` trata un estado null como «no cerrada» y sigue a
+ * las fechas, pero `.not("estado","in",...)` evalúa `NOT (NULL IN (...))` →
+ * NULL y descarta la fila. Hoy no muerde: hay 0 filas con `estado` null
+ * (medido el 19/11/2026).
+ */
+export function condicionDeAtrasada(hoy: string): string {
+  const sinVentana = `or(fecha_fin.is.null,fecha_fin.lt.${hoy})`;
+  return [
+    "estado.eq.ATRASADO",
+    `and(fecha_ejecucion_pendiente.not.is.null,fecha_ejecucion_pendiente.lt.${hoy},${sinVentana})`,
+    `and(fecha_ejecucion_pendiente.is.null,fecha_ejecucion.lt.${hoy},${sinVentana})`,
+  ].join(",");
 }
 
 /** Una fecha `aaaa-mm-dd` en milisegundos, sin que el huso corra el día. */
@@ -237,16 +280,21 @@ function agrupar(
  * semana es una máquina que está pidiendo algo, y eso no se ve en el total
  * del sector.
  *
- * La fecha que decide es `fecha_ejecucion` y no `proxima_fecha`: ninguna de
- * las abiertas tiene vencimiento cargado. El porqué medido está en
- * `laFechaQueVencio`.
+ * **La fecha que recorta la ventana es `vencimientoDe()`, la misma con la que
+ * `estaAtrasada` decide**, y no `fecha_ejecucion` cruda. Son dos cosas
+ * distintas en dos casos reales: una orden recién postergada tiene su día en
+ * `fecha_ejecucion_pendiente` —la planilla tarda de 3 a 53 horas en
+ * devolverlo— y una con `fecha_fin` posterior al inicio vence el último día y
+ * no el primero. Leer la columna cruda la mandaría a la semana equivocada sin
+ * error y sin aviso, y dejaría a esta función diciendo «atrasada esta semana»
+ * sobre un día que `estaAtrasada` no mira.
  */
 export function resumirLaSemana<T extends DeLaSemana>(ordenes: T[], hoy: string) {
   const atrasadas = ordenes.filter((o) => estaAtrasada(o, hoy));
   const desde = sumarDias(hoy, -(DIAS_DE_LA_SEMANA - 1));
 
   const deLaSemana = atrasadas.filter((o) => {
-    const fecha = String(o.fecha_ejecucion ?? "").slice(0, 10);
+    const fecha = vencimientoDe(o);
     // Lo del futuro queda afuera: hay órdenes con el año mal tipeado, y una
     // fecha que todavía no llegó no se pasó esta semana.
     return Boolean(fecha) && fecha >= desde && fecha <= hoy;
