@@ -1,5 +1,58 @@
 import { describe, it, expect } from "vitest";
-import { fotosDelAviso } from "./fotoDelAviso";
+import { fotosDelAviso, linksDeFotos, urlsDeLasFotos } from "./fotoDelAviso";
+
+describe("linksDeFotos", () => {
+  // El formulario de Google deja TODAS las fotos de una respuesta en una sola
+  // celda, separadas por coma. Medido el 23/11/2026 sobre la planilla real:
+  // 24 celdas con algo, 6 con más de un link, 31 fotos en total — o sea que
+  // leer la celda como un link solo pierde 13 fotos de 31.
+  it("una celda con un link da un link", () => {
+    expect(linksDeFotos("https://drive.google.com/open?id=abc1234567")).toEqual([
+      "https://drive.google.com/open?id=abc1234567",
+    ]);
+  });
+
+  it("una celda con varios links separados por coma los da todos", () => {
+    const celda =
+      "https://drive.google.com/open?id=1d76RKqrkXT, https://drive.google.com/open?id=1H1B9nZvZQF";
+    expect(linksDeFotos(celda)).toEqual([
+      "https://drive.google.com/open?id=1d76RKqrkXT",
+      "https://drive.google.com/open?id=1H1B9nZvZQF",
+    ]);
+  });
+
+  it("tres links, y aunque los separe un salto de línea", () => {
+    expect(linksDeFotos("https://a.com/1.jpg,https://b.com/2.jpg\nhttps://c.com/3.jpg")).toEqual([
+      "https://a.com/1.jpg", "https://b.com/2.jpg", "https://c.com/3.jpg",
+    ]);
+  });
+
+  it("una celda que no tiene ningún link no da ninguno", () => {
+    // `#REF!` es lo que tuvo esa columna durante meses: sin esto se guardaba
+    // como si fuera una foto.
+    for (const celda of [null, undefined, "", "   ", "#REF!", "sin foto", "C:\\fotos\\a.jpg"]) {
+      expect(linksDeFotos(celda)).toEqual([]);
+    }
+  });
+
+  it("rescata el link aunque venga pegado a texto", () => {
+    expect(linksDeFotos("foto: https://a.com/1.jpg (la de la cinta)")).toEqual([
+      "https://a.com/1.jpg",
+    ]);
+  });
+});
+
+describe("urlsDeLasFotos", () => {
+  it("aplana las celdas en una sola lista", () => {
+    expect(urlsDeLasFotos(["https://a.com/1.jpg, https://b.com/2.jpg", "https://c.com/3.jpg"]))
+      .toEqual(["https://a.com/1.jpg", "https://b.com/2.jpg", "https://c.com/3.jpg"]);
+  });
+
+  it("sin fotos, lista vacía", () => {
+    expect(urlsDeLasFotos(null)).toEqual([]);
+    expect(urlsDeLasFotos(["", null, "#REF!"])).toEqual([]);
+  });
+});
 
 describe("fotosDelAviso", () => {
   it("sin fotos no hay nada que mostrar", () => {
@@ -74,13 +127,35 @@ describe("fotosDelAviso", () => {
     expect(fotosDelAviso([url], "av-1")).toEqual([{ tipo: "imagen", url }]);
   });
 
-  it("el `n` es la posición en reference_photos, no en lo que se muestra", () => {
-    // Si contara sobre la salida filtrada, la ruta serviría otra foto: entra
-    // al arreglo crudo con ese número.
+  it("el `n` es la posición en la lista aplanada, la misma que usa la ruta", () => {
+    // Pantalla y ruta tienen que contar igual o la ruta sirve otra foto. Las
+    // dos entran por `urlsDeLasFotos`, así que el número significa lo mismo
+    // de los dos lados aunque las celdas traigan varias fotos o basura.
     const drive = "https://drive.google.com/open?id=1IZS7xcwoEgR4hX";
     const fotos = fotosDelAviso(["", null, drive], "av-1");
     expect(fotos).toEqual([
-      { tipo: "imagen", url: "/api/mantenimiento/avisos/foto?aviso=av-1&n=2", respaldo: drive },
+      { tipo: "imagen", url: "/api/mantenimiento/avisos/foto?aviso=av-1&n=0", respaldo: drive },
+    ]);
+    expect(urlsDeLasFotos(["", null, drive])[0]).toBe(drive);
+  });
+
+  it("una celda con dos fotos de Drive se muestra como dos fotos", () => {
+    // Los 6 avisos que el formulario dejó con varias fotos mostraban UNA
+    // imagen rota: el link pegado no es una URL de nada.
+    const celda =
+      "https://drive.google.com/open?id=1d76RKqrkXT, https://drive.google.com/open?id=1H1B9nZvZQF";
+    const fotos = fotosDelAviso([celda], "av-140");
+    expect(fotos).toEqual([
+      {
+        tipo: "imagen",
+        url: "/api/mantenimiento/avisos/foto?aviso=av-140&n=0",
+        respaldo: "https://drive.google.com/open?id=1d76RKqrkXT",
+      },
+      {
+        tipo: "imagen",
+        url: "/api/mantenimiento/avisos/foto?aviso=av-140&n=1",
+        respaldo: "https://drive.google.com/open?id=1H1B9nZvZQF",
+      },
     ]);
   });
 

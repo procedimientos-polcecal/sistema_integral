@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { idDeDrive, traerFotoDeDrive, esProblema } from "@/lib/mantenimiento/fotoDeDrive";
+import { urlsDeLasFotos } from "@/lib/mantenimiento/fotoDelAviso";
 
 /**
  * La foto de un aviso que vive en Drive, servida desde el SdG.
@@ -63,7 +64,10 @@ export async function GET(request: Request) {
   // cualquiera qué ids de aviso existen.
   if (!fila) return NextResponse.json({ error: "No se encontró esa foto" }, { status: 404 });
 
-  const id = idDeDrive((fila.reference_photos ?? [])[n]);
+  // La MISMA lista que arma la pantalla, y por eso `urlsDeLasFotos` y no un
+  // índice crudo: una celda del formulario puede traer varias fotos, y si
+  // cada punta contara a su manera la ruta serviría otra foto sin fallar.
+  const id = idDeDrive(urlsDeLasFotos(fila.reference_photos)[n]);
   if (!id) {
     return NextResponse.json(
       { error: "Esa foto no está en Drive; se abre con su propio link" },
