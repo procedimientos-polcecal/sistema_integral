@@ -24,12 +24,22 @@
 --
 -- LO QUE HAY QUE SABER
 --
--- - Hoy nada apunta a `ordenes_servicio` por clave foránea, así que esta columna
---   no crea un segundo camino entre dos tablas que ya estuvieran enlazadas: no
---   hay `select()` con embed entre ellas que pueda empezar a dar `PGRST201`.
---   Cuando alguien embeba una desde la otra, que nombre la FK
---   (`ordenes_servicio!os_id(...)`).
+-- - Nada apunta a `ordenes_servicio` por clave foránea, así que esta columna no
+--   crea un segundo camino entre dos tablas que ya estuvieran enlazadas: no hay
+--   `select()` con embed entre ellas que pueda empezar a dar `PGRST201`. Eso
+--   está **medido contra la base** con `node scripts/que-cuelga-de.mjs
+--   ordenes_servicio` el 23/11/2026 («Nada apunta a "ordenes_servicio" por clave
+--   foránea»), y **no deducido de las migraciones**: `ordenes_servicio` la creó
+--   un delta aplicado a mano y no tiene `create table` en ningún archivo de
+--   `supabase/migrations/`, así que un grep ahí no puede contestar esta
+--   pregunta —una FK creada en el delta le es invisible—. (El script termina con
+--   un assert de libuv en Windows al cerrar el proceso, después de imprimir: la
+--   respuesta sale igual.) Cuando alguien embeba una desde la otra, que nombre
+--   la FK (`ordenes_servicio!os_id(...)`).
 -- - No hace falta policy nueva: es una columna de una tabla que ya tiene las suyas.
+-- - `ordenes_trabajo` figura en `lib/asistente/catalogo.generado.json`: después de
+--   aplicar esta migración hay que correr `npm run catalogo`, o el Asistente
+--   queda ciego a `os_id`.
 -- - **Hasta que esta migración esté aplicada, ninguna cadena `select()` puede
 --   nombrar `os_id`.** El deploy es automático con el push y el SQL lo corre una
 --   persona después: nombrarla antes rompe lo que ya andaba.
