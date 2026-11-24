@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Select from "@/components/Select";
+import MultiSelect from "@/components/MultiSelect";
 import type { ProveedorElegible } from "@/lib/compras/comparativa";
 
 /**
@@ -36,7 +36,31 @@ interface Resultado {
   avisoDeOdoo: string | null;
 }
 
-const FORMAS_DE_PAGO = ["Transferencia", "Cheque", "Efectivo", "Tarjeta"];
+/**
+ * El vocabulario sale del padrón, no de la cabeza de quien escribe el modal.
+ *
+ * Medido el 24/11/2026 sobre las 113 filas de `proveedores` con `forma_pago`
+ * cargada: `ECHEQ` 37, `CTA CTE` 28, `TRANSFERENCIA` 10, `CONTADO` 7,
+ * `CHEQUE` 2, `EFECTIVO` 1. La primera versión de este modal ofrecía
+ * «Transferencia, Cheque, Efectivo, **Tarjeta**» en minúscula: `Tarjeta` no
+ * aparece ni una vez, y los **dos más usados —65 de 113— no estaban**. O sea
+ * que quien daba de alta al proveedor más común no podía elegir su forma de
+ * pago y la dejaba vacía, justo el campo que después se autocompleta solo en
+ * el presupuesto siguiente y que `datosDePagoDe()` concatena en Condiciones.
+ *
+ * Van en MAYÚSCULA porque así están las 113, y de a varias porque **24 de
+ * ellas tienen más de una** separadas por coma: `ECHEQ, CHEQUE` es la tercera
+ * combinación más frecuente. Un desplegable de uno solo obligaría a elegir
+ * cuál de las dos mentir.
+ */
+const FORMAS_DE_PAGO: [string, string][] = [
+  ["ECHEQ", "ECHEQ"],
+  ["CTA CTE", "CTA CTE"],
+  ["TRANSFERENCIA", "TRANSFERENCIA"],
+  ["CONTADO", "CONTADO"],
+  ["CHEQUE", "CHEQUE"],
+  ["EFECTIVO", "EFECTIVO"],
+];
 
 export default function NuevoProveedorModal({
   requerimientoId, onCerrar, onCreado, onUsarExistente,
@@ -57,7 +81,7 @@ export default function NuevoProveedorModal({
   const [esContratista, setEsContratista] = useState(false);
   const [plazo, setPlazo] = useState("");
   const [condicion, setCondicion] = useState("");
-  const [formaPago, setFormaPago] = useState("");
+  const [formasPago, setFormasPago] = useState<string[]>([]);
 
   const [guardando, setGuardando] = useState(false);
   const [problemas, setProblemas] = useState<ProblemaDelAlta[]>([]);
@@ -71,6 +95,13 @@ export default function NuevoProveedorModal({
     setGuardando(true);
     setError("");
     setProblemas([]);
+    /*
+     * Los parecidos del intento anterior **también** se limpian. Si no, quien
+     * cambia el nombre después del 409 sigue viendo la lista vieja, y como el
+     * botón principal vuelve a mandar `confirmar_parecidos: false`, un segundo
+     * intento con el mismo nombre repinta lo mismo y parece que no pasó nada.
+     */
+    setParecidos([]);
 
     const res = await fetch("/api/compras/proveedores/con-odoo", {
       method: "POST",
@@ -86,7 +117,7 @@ export default function NuevoProveedorModal({
         es_contratista: esContratista,
         plazo_pago_dias: plazo.trim() === "" ? null : Number(plazo),
         condicion_pago: condicion.trim() || null,
-        forma_pago: formaPago || null,
+        forma_pago: formasPago.join(", ") || null,
         requerimiento_id: requerimientoId,
         confirmar_parecidos: confirmarParecidos,
       }),
@@ -190,10 +221,13 @@ export default function NuevoProveedorModal({
             </Campo>
 
             <Campo label="Forma de pago">
-              <Select value={formaPago} onChange={(e) => setFormaPago(e.target.value)}>
-                <option value="">Sin especificar</option>
-                {FORMAS_DE_PAGO.map((f) => <option key={f} value={f}>{f}</option>)}
-              </Select>
+              <MultiSelect
+                valores={formasPago}
+                onCambio={setFormasPago}
+                vacio="Sin especificar"
+                plural="formas"
+                opciones={FORMAS_DE_PAGO}
+              />
             </Campo>
             <Campo label="Condición de pago" ancho="sm:col-span-2">
               <Texto valor={condicion} set={setCondicion} />

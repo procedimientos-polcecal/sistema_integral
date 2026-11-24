@@ -16,6 +16,18 @@ describe("validarAlta", () => {
     ).toBe(true);
   });
 
+  /*
+   * «Falta» y «está mal escrito» mandan a hacer cosas distintas: al que se
+   * comió un dígito decirle que el campo es obligatorio es falso —lo llenó— y
+   * lo deja mirando un campo lleno que el sistema dice que está vacío.
+   */
+  it("un CUIT de diez dígitos dice que está mal escrito, no que falte", () => {
+    const p = validarAlta({ nombre: "Nuevo", cuit: "3070801757" }, padron)
+      .find((x) => x.campo === "cuit");
+    expect(p?.mensaje).toContain("once dígitos");
+    expect(p?.mensaje).not.toContain("obligatorio");
+  });
+
   it("el CUIT es obligatorio", () => {
     expect(validarAlta({ nombre: "Nuevo", cuit: "" }, padron).map((p) => p.campo)).toContain("cuit");
   });

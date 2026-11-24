@@ -50,12 +50,55 @@ interface PartnerCrudo {
 /**
  * El dominio para encontrar a un proveedor por CUIT, con guiones o sin ellos.
  *
- * El `ilike` de los últimos seis dígitos es lo que atrapa al guardado con
- * guiones; trae de más, y de eso se ocupa `candidatosDelCuit`.
+ * Son tres términos en OR y cada uno cubre una forma distinta de escribirlo,
+ * porque Odoo guarda el `vat` como lo tipeó quien cargó el partner:
+ *
+ * 1. **Los once dígitos pelados**, que es como está la enorme mayoría.
+ * 2. **Los últimos seis contiguos**, que atrapa al que lleva un solo guion
+ *    (`30-689471524`): son los 2 de 1.639 medidos el 23/11/2026. Trae de más,
+ *    y de eso se ocupa `candidatosDelCuit`.
+ * 3. **El canónico argentino `XX-XXXXXXXX-X`**, que necesita término propio
+ *    justamente porque el guion del final **parte los últimos seis** y el
+ *    `ilike` del punto 2 no lo ve. Hoy no hay ninguno así en Odoo, pero es la
+ *    forma en que una persona tipea un CUIT: el día que alguien cargue uno a
+ *    mano, no encontrarlo significa crear el duplicado que toda esta búsqueda
+ *    existe para evitar, que es el anti-objetivo número uno de este trabajo.
  */
 export function dominioPorCuit(cuit: string): unknown[] {
-  const digitos = normalizarCuit(cuit) ?? "";
-  return ["|", ["vat", "=", digitos], ["vat", "ilike", `%${digitos.slice(-6)}%`]];
+  const d = normalizarCuit(cuit) ?? "";
+  const canonico = d.length === 11 ? `${d.slice(0, 2)}-${d.slice(2, 10)}-${d.slice(10)}` : d;
+
+  // Notación polaca: dos `|` para encadenar tres términos en OR.
+  return [
+    "|", "|",
+    ["vat", "=", d],
+    ["vat", "ilike", `%${d.slice(-6)}%`],
+    ["vat", "=", canonico],
+  ];
+}
+
+/**
+ * Si hay que crear el `res.partner` de este CUIT **en esta empresa**.
+ *
+ * La pregunta no es «¿existe este CUIT en Odoo?» sino «¿existe **acá**?», y
+ * confundirlas fue un bug de verdad: `res.partner` es por empresa, así que con
+ * un RI de AMBAS la primera vuelta creaba el partner en POLCECAL y la segunda
+ * lo encontraba al buscar por CUIT, daba por hecho que ya estaba y no creaba
+ * nada en POLYSAN. La orden de POLYSAN quedaba sin proveedor, `armarOrdenes`
+ * la frenaba, y como se frenan todas juntas **tampoco salía la de POLCECAL** —
+ * dejando un partner recién creado en la contabilidad real sin ninguna orden
+ * detrás, que es exactamente lo que no se quería—. El reintento repetía lo
+ * mismo para siempre.
+ *
+ * Se crea sólo cuando **ningún** partner con ese CUIT podría servir acá: ni
+ * propio de esta empresa ni compartido. Y se mira al candidato entero, no sólo
+ * al utilizable, porque un partner archivado o un contacto hijo de esta
+ * empresa **frenan la creación**: ahí el duplicado ya existe y lo que hace
+ * falta es que alguien lo desarchive, no un segundo registro. Lo mismo con un
+ * empate sin resolver: tres registros con el mismo CUIT son peor que dos.
+ */
+export function hayQueCrearlo(candidatos: PartnerCandidato[], odooCompanyId: number): boolean {
+  return !candidatos.some((c) => c.empresa === odooCompanyId || c.empresa === null);
 }
 
 /** Los candidatos cuyo `vat`, normalizado, es exactamente ese CUIT. */

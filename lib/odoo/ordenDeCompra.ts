@@ -73,6 +73,20 @@ export interface EmpresaParaOrden {
   odooCompanyId: number;
   /** El `res.partner` del proveedor **en esta empresa**, de `proveedores_odoo`. */
   odooPartnerId: number | null;
+  /**
+   * Con `odooPartnerId` en null: si el sistema lo va a crear solo.
+   *
+   * Lo decide `hayQueCrearlo()` y lo contesta quien llama, porque depende de
+   * algo que esta función no tiene: los candidatos que Odoo devolvió para ese
+   * CUIT **en esta empresa**. Son dos situaciones que se parecen y mandan a
+   * lugares distintos: «no está, lo creo solo» no pide nada a nadie, y «está
+   * pero archivado / en la otra empresa / hay dos» pide que alguien lo
+   * resuelva en Odoo. Prometer la creación en el segundo caso deja a la
+   * persona generando la orden una y otra vez contra el mismo cartel.
+   */
+  seVaACrear?: boolean;
+  /** Con `seVaACrear` en false: por qué el partner que hay no sirve. */
+  motivoSinPartner?: string | null;
   /** `stock.picking.type` de recepción de esta empresa. */
   pickingTypeId: number;
   /**
@@ -248,14 +262,19 @@ export function armarOrdenes(
           `se lo reconoce en Odoo. Cargáselo en la ficha del proveedor y volvé a intentar.`,
       });
     } else if (empresa.odooPartnerId === null) {
+      // El mensaje dice qué hacer, no que algo falló: pasa seguido, porque de
+      // los proveedores de Odoo sólo 147 están en las dos empresas. Y dice
+      // cosas distintas según si el sistema lo resuelve solo o no — ver
+      // `seVaACrear`.
+      const comun = `El proveedor del RI ${ri.nroRi} no está en ${empresa.nombre} dentro de Odoo.`;
       problemas.push({
         tipo: "sin proveedor enlazado",
         empresa: empresa.nombre,
-        // El mensaje dice qué hacer, no que algo falló: pasa seguido, porque de
-        // los proveedores de Odoo sólo 147 están en las dos empresas.
-        detalle:
-          `El proveedor del RI ${ri.nroRi} no existe en ${empresa.nombre} dentro de Odoo. ` +
-          `Se va a crear al generar la orden.`,
+        detalle: empresa.seVaACrear
+          ? `${comun} Se va a crear al generar la orden.`
+          : empresa.motivoSinPartner
+            ? `${comun} ${empresa.motivoSinPartner}`
+            : `${comun} Hay que enlazarlo o darlo de alta allá antes de generar la orden.`,
       });
     }
 
