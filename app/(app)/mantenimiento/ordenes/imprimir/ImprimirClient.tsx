@@ -201,7 +201,19 @@ function tituloDeLaHoja(p: PedidoDeHoja): string {
     const medio = mesDelMedio(p.desde, p.hasta);
     partes.push(`${MESES[Number(medio.slice(5, 7)) - 1]} de ${medio.slice(0, 4)}`);
   }
-  return partes.join(" · ");
+  return conMayusculaInicial(partes.join(" · "));
+}
+
+/**
+ * Mayúscula sólo en la primera letra.
+ *
+ * No es `text-transform: capitalize`, que la pone en **cada palabra**: eso daba
+ * «Noviembre De 2026» y «Semana Del 16/11/2026 Al 22/11/2026». En castellano un
+ * título no lleva mayúscula en cada palabra, y en una hoja impresa el error se
+ * queda ahí.
+ */
+function conMayusculaInicial(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
 }
 
 /** El mes que la grilla está mostrando: el del día que cae en la mitad del rango. */
@@ -217,7 +229,7 @@ function Encabezado({ pedido }: { pedido: PedidoDeHoja }) {
       <div style={{ fontSize: "9pt", letterSpacing: "0.08em", textTransform: "uppercase" }}>
         Órdenes de trabajo · Mantenimiento
       </div>
-      <div style={{ fontSize: "15pt", fontWeight: 700, textTransform: "capitalize" }}>
+      <div style={{ fontSize: "15pt", fontWeight: 700 }}>
         {tituloDeLaHoja(pedido)}
       </div>
     </div>
@@ -465,13 +477,24 @@ function HojaDeTabla({ pedido, dias, franjas, falloDelTaller }: {
       )}
 
       {delRango.map((d) => (
-        <TablaDeUnDia key={d.dia} dia={d} filtros={pedido.filtros} />
+        <TablaDeUnDia
+          key={d.dia}
+          dia={d}
+          filtros={pedido.filtros}
+          // En la hoja de un día el título ya dice qué día es: repetirlo arriba
+          // de la tabla es la misma línea dos veces.
+          conFecha={pedido.periodo !== "dia"}
+        />
       ))}
     </div>
   );
 }
 
-function TablaDeUnDia({ dia, filtros }: { dia: DiaDelCalendario; filtros: PedidoDeHoja["filtros"] }) {
+function TablaDeUnDia({ dia, filtros, conFecha }: {
+  dia: DiaDelCalendario;
+  filtros: PedidoDeHoja["filtros"];
+  conFecha: boolean;
+}) {
   const todas = dia.ordenes
     .filter((o) => pasaElFiltro(o, filtros))
     // Los inicios primero y después por número: el mismo orden que la pantalla.
@@ -482,9 +505,11 @@ function TablaDeUnDia({ dia, filtros }: { dia: DiaDelCalendario; filtros: Pedido
 
   return (
     <div style={{ marginTop: "3mm", pageBreakInside: "auto" }}>
-      <div style={{ fontSize: "9pt", fontWeight: 700, textTransform: "capitalize", marginBottom: "1mm" }}>
-        {DIAS_DE_LA_SEMANA[diaDeLaSemana(dia.dia)]} {comoSeLee(dia.dia)} — {todas.length}{" "}
-        {todas.length === 1 ? "orden" : "órdenes"}
+      <div style={{ fontSize: "9pt", fontWeight: 700, marginBottom: "1mm" }}>
+        {conFecha
+          ? `${conMayusculaInicial(DIAS_DE_LA_SEMANA[diaDeLaSemana(dia.dia)])} ${comoSeLee(dia.dia)} — `
+          : ""}
+        {todas.length} {todas.length === 1 ? "orden" : "órdenes"}
       </div>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "8pt" }}>
         <thead>
