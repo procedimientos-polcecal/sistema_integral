@@ -7,6 +7,7 @@ import {
   LEYENDA_DE_ESPECIALIDADES,
   TEXTO_SOBRE_EL_COLOR,
   textoSobreLaEspecialidad,
+  estiloDeLaFicha,
 } from "./coloresDeEspecialidad";
 
 /**
@@ -68,5 +69,76 @@ describe("el rojo de la orden atrasada", () => {
       expect(contraste(COLOR_ATRASADA, color)).toBeLessThan(3);
     }
     expect(contraste(COLOR_ATRASADA, COLOR_SIN_ESPECIALIDAD)).toBeLessThan(3);
+  });
+});
+
+/**
+ * Cómo se pinta una ficha, en las cuatro combinaciones.
+ *
+ * **Esto no tenía cómo comprobarse hasta hoy.** Era un ternario anidado dentro
+ * de `CalendarioDeOT.tsx`, y ese componente trae sus datos en un `useEffect`:
+ * renderizarlo en un test da el estado vacío y ni una ficha, así que el rojo
+ * —que es toda la razón de la función— sólo se podía ver en un navegador, y la
+ * pantalla está detrás del login. Sacada la decisión a este archivo, se prueba
+ * como todo lo demás.
+ *
+ * Lo que fija cada caso es **cuál de las dos cosas gana**, que es la única
+ * decisión de verdad que hay acá.
+ */
+describe("estiloDeLaFicha", () => {
+  const MECANICO = COLORES_DE_ESPECIALIDAD.MECANICO;
+
+  it("una orden normal va rellena de su especialidad", () => {
+    expect(estiloDeLaFicha({ especialidad: "MECANICO", atrasada: false, arrastre: false })).toEqual({
+      background: MECANICO,
+      color: textoSobreLaEspecialidad("MECANICO"),
+      border: `1.5px solid ${MECANICO}`,
+    });
+  });
+
+  // La que importa: atrasada gana sobre la especialidad, y gana **en el
+  // relleno**. Si alguna vez el rojo volviera al borde, este test cae.
+  it("atrasada manda sobre la especialidad y va de relleno, con la especialidad en el borde", () => {
+    expect(estiloDeLaFicha({ especialidad: "MECANICO", atrasada: true, arrastre: false })).toEqual({
+      background: COLOR_ATRASADA,
+      color: TEXTO_SOBRE_ATRASADA,
+      border: `1.5px solid ${MECANICO}`,
+    });
+  });
+
+  it("un día de arrastre va hueco, con la especialidad en el borde y el número oscuro", () => {
+    const e = estiloDeLaFicha({ especialidad: "MECANICO", atrasada: false, arrastre: true });
+    expect(e.background).toBe("#ffffff");
+    expect(e.border).toBe(`1.5px dashed ${MECANICO}`);
+    // Oscuro y no del color: el ámbar sobre blanco no se lee a 10 px.
+    expect(e.color).toBe("#0f172a");
+  });
+
+  /*
+   * La única de las cuatro donde la especialidad se pierde, y es a propósito:
+   * en un día que la orden sólo ocupa, decir que está atrasada vale más que
+   * decir de qué especialidad es. Queda escrito como test para que el día que
+   * alguien lo lea como un olvido, encuentre que fue una decisión.
+   */
+  it("atrasada y de arrastre: hueca, con el rojo en el borde y en el número", () => {
+    expect(estiloDeLaFicha({ especialidad: "MECANICO", atrasada: true, arrastre: true })).toEqual({
+      background: "#ffffff",
+      color: COLOR_ATRASADA,
+      border: `1.5px dashed ${COLOR_ATRASADA}`,
+    });
+  });
+
+  it("una especialidad sin color propio cae en el gris, y atrasada le sigue ganando", () => {
+    expect(estiloDeLaFicha({ especialidad: null, atrasada: false, arrastre: false }).background)
+      .toBe(COLOR_SIN_ESPECIALIDAD);
+    expect(estiloDeLaFicha({ especialidad: null, atrasada: true, arrastre: false }).background)
+      .toBe(COLOR_ATRASADA);
+  });
+
+  // El relleno rojo sólo sirve si el número se lee encima: es el contenido de
+  // la ficha, no un adorno. El 4,5:1 es el mínimo de WCAG para texto chico.
+  it("el número se lee sobre el rojo", () => {
+    const e = estiloDeLaFicha({ especialidad: "MECANICO", atrasada: true, arrastre: false });
+    expect(contraste(e.color, e.background)).toBeGreaterThan(4.5);
   });
 });

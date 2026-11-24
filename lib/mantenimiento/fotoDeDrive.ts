@@ -25,17 +25,54 @@
  * ya está en la base. Si el id llegara por la URL, cualquiera con sesión
  * podría leerse la contabilidad pidiéndola por id.
  *
- * Y por lo mismo acá se corta todo lo que no sea una imagen: la columna K de
- * la planilla es texto libre, y alguien podría pegar ahí el link de un
- * documento. Un aviso tiene fotos; cualquier otra cosa no se sirve.
+ * Y por lo mismo acá se corta todo lo que no sea una foto o un video: la
+ * columna K de la planilla es texto libre, y alguien podría pegar ahí el link
+ * de un documento. Lo decide `sePuedeServir`, que es donde está escrito el
+ * porqué de cada tipo y de cada tope.
  */
 
 import {
   obtenerToken, mensajeDeGoogle, cuentaDeServicio, SCOPE_DRIVE_LECTURA,
 } from "@/lib/core/google";
 
-/** Diez megas, el mismo tope que `POST /api/mantenimiento/fotos`. */
-const MAXIMO = 10 * 1024 * 1024;
+/** Diez megas para una foto, el mismo tope que `POST /api/mantenimiento/fotos`. */
+const MAXIMO_IMAGEN = 10 * 1024 * 1024;
+
+/**
+ * Veinticinco para un video.
+ *
+ * Los dos que hay pesan 0,9 y 3,2 MB —medido el 23/11/2026—, así que hoy
+ * sobra. El tope existe por los que no están todavía: uno de WhatsApp no
+ * pasa de 16 MB porque los corta la app, y arriba de eso conviene el link a
+ * Drive antes que una función sirviendo cien megas por una red de planta.
+ */
+const MAXIMO_VIDEO = 25 * 1024 * 1024;
+
+/**
+ * Si este archivo se puede servir desde el SdG, y si no, por qué no.
+ *
+ * **Fotos y videos sí; documentos no, y eso no es una omisión.** La columna
+ * "Imagen" de la planilla es texto libre, y del otro lado de esta función hay
+ * una credencial que ve todas las planillas y carpetas del grupo: si sirviera
+ * cualquier tipo, pegar ahí el link de un documento lo volvería legible para
+ * cualquiera con sesión, aunque esa persona no tenga permiso sobre él. Una
+ * foto y un video son lo que un aviso adjunta; un `.pdf` o un `.xlsx` no.
+ *
+ * Hoy eso deja afuera un solo archivo real: el PDF del A137.
+ */
+export function sePuedeServir(tipo: string, tamaño: number): string | null {
+  const esImagen = tipo.startsWith("image/");
+  const esVideo = tipo.startsWith("video/");
+  if (!esImagen && !esVideo) {
+    return `Eso no es una foto ni un video, es ${tipo || "un archivo sin tipo"}.`;
+  }
+  const maximo = esImagen ? MAXIMO_IMAGEN : MAXIMO_VIDEO;
+  if (tamaño > maximo) {
+    const mb = Math.round(tamaño / 1024 / 1024);
+    return `${esImagen ? "La foto" : "El video"} pesa ${mb} MB y el máximo desde acá son ${maximo / 1024 / 1024}.`;
+  }
+  return null;
+}
 
 export interface FotoTraida {
   bytes: ArrayBuffer;
@@ -115,12 +152,8 @@ export async function traerFotoDeDrive(id: string): Promise<FotoTraida | Problem
 
   const datos = (await meta.json()) as { name?: string; mimeType?: string; size?: string };
   const tipo = datos.mimeType ?? "";
-  if (!tipo.startsWith("image/")) {
-    return { codigo: 415, error: `Eso no es una foto, es ${tipo || "un archivo sin tipo"}.` };
-  }
-  if (Number(datos.size ?? 0) > MAXIMO) {
-    return { codigo: 415, error: "La foto pesa más de 10 MB y no se sirve desde acá." };
-  }
+  const problema = sePuedeServir(tipo, Number(datos.size ?? 0));
+  if (problema) return { codigo: 415, error: problema };
 
   const archivo = await fetch(
     `https://www.googleapis.com/drive/v3/files/${id}?alt=media&${comun}`,

@@ -1,4 +1,4 @@
-import { fechaEnArgentina } from "@/lib/core/fechas";
+import { fechaEnArgentina, sumarDias } from "@/lib/core/fechas";
 import { fechaParaElCalendario } from "@/lib/agenda/evento";
 import { esGutAlto, type NotasGut } from "./gut";
 
@@ -72,6 +72,24 @@ function inicioDe(orden: Atrasable): string {
   return (inicio ?? "").slice(0, 10);
 }
 
+/**
+ * El día en que la orden vencía: `fecha_fin` cuando es posterior al inicio y,
+ * si no, el inicio mismo. Cadena vacía cuando no tiene ninguna fecha.
+ *
+ * Está sacado aparte —`estaAtrasada` lo tenía adentro— porque
+ * `resumirLaSemana` necesita **la misma** fecha para recortar su ventana de
+ * siete días. Escribirla dos veces es cómo se separan dos definiciones de lo
+ * mismo: una orden que arrancó hace tres semanas y vencía ayer es de esta
+ * semana, y mirando sólo el inicio no lo sería.
+ */
+function vencimientoDe(orden: Atrasable): string {
+  const inicio = inicioDe(orden);
+  if (!inicio) return "";
+
+  const fechaFin = String(orden.fecha_fin ?? "").slice(0, 10);
+  return fechaFin && fechaFin > inicio ? fechaFin : inicio;
+}
+
 /** Si la orden está atrasada al día de hoy. */
 export function estaAtrasada(orden: Atrasable, hoy: string): boolean {
   const estado = String(orden.estado ?? "").toUpperCase();
@@ -79,11 +97,9 @@ export function estaAtrasada(orden: Atrasable, hoy: string): boolean {
 
   if (estado === "ATRASADO") return true;
 
-  const inicio = inicioDe(orden);
-  if (!inicio) return false;
+  const fin = vencimientoDe(orden);
+  if (!fin) return false;
 
-  const fechaFin = String(orden.fecha_fin ?? "").slice(0, 10);
-  const fin = fechaFin && fechaFin > inicio ? fechaFin : inicio;
   // Se comparan los textos: `aaaa-mm-dd` ordena igual que la fecha, y no hay
   // huso horario que pueda correr el día.
   return fin < hoy;
@@ -92,8 +108,13 @@ export function estaAtrasada(orden: Atrasable, hoy: string): boolean {
 /**
  * Hace cuántos días venció, contado desde el inicio efectivo.
  *
- * `null` cuando la marcaron atrasada a mano y no dice desde cuándo: no se sabe,
- * y poner cero la haría parecer recién vencida.
+ * `null` cuando la marcaron atrasada a mano y no dice desde cuándo: no se
+ * sabe, y poner cero la haría parecer recién vencida.
+ *
+ * **El riesgo asumido**: `fecha_ejecucion` trae errores de carga. La #2726
+ * dice 06/02/2026 con la orden cargada el 05/10/2026 —un año mal tipeado— y
+ * sale con un atraso enorme. Se acepta: el número grande señala la fila que
+ * hay que ir a corregir, que es más útil que un guión.
  */
 export function diasDeAtraso(orden: Atrasable, hoy: string): number | null {
   const fecha = inicioDe(orden);
@@ -187,5 +208,107 @@ export function resumirAtrasadas<T extends ParaResumir>(ordenes: T[], hoy: strin
     porSector: [...porSector.entries()]
       .map(([sector, cuantas]) => ({ sector, cuantas }))
       .sort((a, b) => b.cuantas - a.cuantas),
+  };
+}
+
+// ── LAS ATRASADAS DE ESTA SEMANA ────────────────────────────────────────────
+
+/**
+ * Cuántos días hacia atrás mira «esta semana», **contando hoy**.
+ *
+ * Siete días: `[hoy − 6, hoy]`. Hoy entra porque una orden que vencía hoy y ya
+ * está marcada atrasada es de esta semana; terminar ayer la dejaría afuera el
+ * día que más se la mira.
+ */
+export const DIAS_DE_LA_SEMANA = 7;
+
+/** Lo que hace falta para agrupar una atrasada. */
+export interface DeLaSemana extends Atrasable {
+  ot_number?: number | null;
+  sector_id?: string | null;
+  sector_raw?: string | null;
+  equipment_id?: string | null;
+  equipo_raw?: string | null;
+}
+
+export interface GrupoDeLaSemana {
+  /** El id cuando lo hay; si no, el texto, que es como se lo nombra. */
+  clave: string;
+  nombre: string;
+  /** `null` cuando no hay id al que enlazar. */
+  id: string | null;
+  cuantas: number;
+}
+
+/** Agrupa por id si lo hay y por texto si no, de mayor a menor. */
+function agrupar(
+  ordenes: DeLaSemana[],
+  id: (o: DeLaSemana) => string | null | undefined,
+  texto: (o: DeLaSemana) => string | null | undefined,
+  sinNombre: string
+): GrupoDeLaSemana[] {
+  const grupos = new Map<string, GrupoDeLaSemana>();
+
+  for (const o of ordenes) {
+    const suId = id(o) ?? null;
+    const nombre = texto(o) ?? sinNombre;
+    // La clave es el id cuando lo hay: dos órdenes del mismo equipo escrito de
+    // dos maneras son el mismo equipo, y dos equipos sin id que se llaman
+    // igual no se pueden distinguir de todos modos.
+    const clave = suId ?? nombre;
+
+    const grupo = grupos.get(clave);
+    if (grupo) grupo.cuantas += 1;
+    else grupos.set(clave, { clave, nombre, id: suId, cuantas: 1 });
+  }
+
+  return [...grupos.values()].sort(
+    (a, b) => b.cuantas - a.cuantas || a.nombre.localeCompare(b.nombre)
+  );
+}
+
+/**
+ * Las atrasadas que tenían que hacerse esta semana, por equipo y por sector.
+ *
+ * Es el recorte reciente del panel de atrasadas, no otra cosa: pasa por
+ * `estaAtrasada()` igual que él, así que una realizada o una cancelada no
+ * entran. La diferencia es la ventana, y que acá se agrupa también por equipo.
+ *
+ * **Por qué por equipo**: el panel de atrasadas agrupa por sector porque es a
+ * quién se le reclama. Esto agrupa además por equipo porque lo reciente se
+ * mira para otra cosa — una máquina con dos órdenes vencidas en la misma
+ * semana es una máquina que está pidiendo algo, y eso no se ve en el total
+ * del sector.
+ *
+ * **La fecha que recorta la ventana es `vencimientoDe()`, la misma con la que
+ * `estaAtrasada` decide**, y no `fecha_ejecucion` cruda. Son dos cosas
+ * distintas en dos casos reales: una orden recién postergada tiene su día en
+ * `fecha_ejecucion_pendiente` —la planilla tarda de 3 a 53 horas en
+ * devolverlo— y una con `fecha_fin` posterior al inicio vence el último día y
+ * no el primero. Leer la columna cruda la mandaría a la semana equivocada sin
+ * error y sin aviso, y dejaría a esta función diciendo «atrasada esta semana»
+ * sobre un día que `estaAtrasada` no mira.
+ */
+export function resumirLaSemana<T extends DeLaSemana>(ordenes: T[], hoy: string) {
+  const atrasadas = ordenes.filter((o) => estaAtrasada(o, hoy));
+  const desde = sumarDias(hoy, -(DIAS_DE_LA_SEMANA - 1));
+
+  const deLaSemana = atrasadas.filter((o) => {
+    const fecha = vencimientoDe(o);
+    // Lo del futuro queda afuera: hay órdenes con el año mal tipeado, y una
+    // fecha que todavía no llegó no se pasó esta semana.
+    return Boolean(fecha) && fecha >= desde && fecha <= hoy;
+  });
+
+  return {
+    /** Las de la semana. */
+    total: deLaSemana.length,
+    /** Todas las atrasadas, para poder decir «8 de 19». */
+    deTodas: atrasadas.length,
+    /** El primer día de la ventana, para escribirlo en pantalla. */
+    desde,
+    ordenes: ordenarPorAtraso(deLaSemana, hoy),
+    porEquipo: agrupar(deLaSemana, (o) => o.equipment_id, (o) => o.equipo_raw, "Sin equipo"),
+    porSector: agrupar(deLaSemana, (o) => o.sector_id, (o) => o.sector_raw, "Sin sector"),
   };
 }

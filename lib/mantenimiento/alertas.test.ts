@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { cumpleElOr } from "@/lib/core/supabaseDeMentira";
 import {
   estaAtrasada, diasDeAtraso, ordenarPorAtraso, resumirAtrasadas,
-  condicionDeAtrasada, CERRADAS,
+  condicionDeAtrasada, CERRADAS, resumirLaSemana, DIAS_DE_LA_SEMANA,
 } from "./alertas";
 
 const HOY = "2026-11-19";
@@ -171,6 +171,131 @@ describe("resumirAtrasadas", () => {
     const r = resumirAtrasadas([ordenes[2]], HOY);
     expect(r.total).toBe(0);
     expect(r.masVieja).toBeNull();
+  });
+});
+
+describe("resumirLaSemana", () => {
+  const dela = (p: Record<string, unknown>) => ({
+    ot_number: 1, estado: "ATRASADO",
+    sector_id: "s1", sector_raw: "Calcinación",
+    equipment_id: "e1", equipo_raw: "PO-B1-02", ...p,
+  });
+
+  it("la ventana son siete días contando hoy", () => {
+    expect(DIAS_DE_LA_SEMANA).toBe(7);
+    expect(resumirLaSemana([], HOY).desde).toBe("2026-11-13");
+  });
+
+  it("entra la que vencía hoy", () => {
+    // Ya está marcada atrasada: es de esta semana.
+    expect(resumirLaSemana([dela({ fecha_ejecucion: HOY })], HOY).total).toBe(1);
+  });
+
+  it("entra la del séptimo día hacia atrás y no la del octavo", () => {
+    const r = resumirLaSemana([
+      dela({ ot_number: 1, fecha_ejecucion: "2026-11-13" }),
+      dela({ ot_number: 2, fecha_ejecucion: "2026-11-12" }),
+    ], HOY);
+    expect(r.ordenes.map((o) => o.ot_number)).toEqual([1]);
+  });
+
+  it("no entra una con fecha_ejecucion futura", () => {
+    // Hay errores de carga con el año mal tipeado.
+    expect(resumirLaSemana([dela({ fecha_ejecucion: "2027-11-14" })], HOY).total).toBe(0);
+  });
+
+  // ── Las dos fechas que `estaAtrasada` mira y la columna cruda no ──────────
+  // Si la ventana se recortara con `fecha_ejecucion` a secas, estos dos casos
+  // caerían en la semana equivocada sin error y sin aviso.
+
+  it("la pendiente manda sobre la de la planilla", () => {
+    // Postergada: la planilla todavía dice la vieja —tarda de 3 a 53 horas en
+    // devolverla— y el día que vale es el que la persona acaba de elegir.
+    const r = resumirLaSemana([dela({
+      ot_number: 1, fecha_ejecucion: "2026-01-15", fecha_ejecucion_pendiente: "2026-11-14",
+    })], HOY);
+    expect(r.total).toBe(1);
+  });
+
+  it("la pendiente futura la saca de la semana aunque la vieja caiga adentro", () => {
+    const r = resumirLaSemana([dela({
+      ot_number: 1, fecha_ejecucion: "2026-11-14", fecha_ejecucion_pendiente: "2026-12-20",
+    })], HOY);
+    expect(r.total).toBe(0);
+    expect(r.deTodas).toBe(1);
+  });
+
+  it("con ventana, la que decide es fecha_fin y no el inicio", () => {
+    // Arrancó hace un mes y venció anteayer: es de esta semana.
+    const r = resumirLaSemana([dela({
+      ot_number: 1, fecha_ejecucion: "2026-10-15", fecha_fin: "2026-11-17",
+    })], HOY);
+    expect(r.total).toBe(1);
+  });
+
+  it("una fecha_fin anterior al inicio no adelanta el vencimiento", () => {
+    // Dato sucio: vale «duró un día», así que manda el inicio.
+    const r = resumirLaSemana([dela({
+      ot_number: 1, fecha_ejecucion: "2026-11-14", fecha_fin: "2026-01-02",
+    })], HOY);
+    expect(r.total).toBe(1);
+  });
+
+  it("no entra una realizada ni una cancelada", () => {
+    const r = resumirLaSemana([
+      dela({ ot_number: 1, estado: "REALIZADO", fecha_ejecucion: "2026-11-14" }),
+      dela({ ot_number: 2, estado: "CANCELADA", fecha_ejecucion: "2026-11-14" }),
+    ], HOY);
+    expect(r.total).toBe(0);
+  });
+
+  it("agrupa por equipo, con id cuando lo hay", () => {
+    const r = resumirLaSemana([
+      dela({ ot_number: 1, equipment_id: "e1", equipo_raw: "Tolva", fecha_ejecucion: "2026-11-14" }),
+      dela({ ot_number: 2, equipment_id: "e1", equipo_raw: "Tolva", fecha_ejecucion: "2026-11-15" }),
+      dela({ ot_number: 3, equipment_id: "e2", equipo_raw: "Cinta", fecha_ejecucion: "2026-11-16" }),
+    ], HOY);
+    expect(r.porEquipo).toEqual([
+      { clave: "e1", nombre: "Tolva", id: "e1", cuantas: 2 },
+      { clave: "e2", nombre: "Cinta", id: "e2", cuantas: 1 },
+    ]);
+  });
+
+  it("un equipo sin id se nombra por su texto y no se puede enlazar", () => {
+    const r = resumirLaSemana([
+      dela({ equipment_id: null, equipo_raw: "Sala de balanza", fecha_ejecucion: "2026-11-14" }),
+    ], HOY);
+    expect(r.porEquipo).toEqual([
+      { clave: "Sala de balanza", nombre: "Sala de balanza", id: null, cuantas: 1 },
+    ]);
+  });
+
+  it("agrupa por sector, de mayor a menor", () => {
+    const r = resumirLaSemana([
+      dela({ ot_number: 1, sector_id: "s1", sector_raw: "Calcinación", fecha_ejecucion: "2026-11-14" }),
+      dela({ ot_number: 2, sector_id: "s2", sector_raw: "Hidratación", fecha_ejecucion: "2026-11-15" }),
+      dela({ ot_number: 3, sector_id: "s2", sector_raw: "Hidratación", fecha_ejecucion: "2026-11-16" }),
+    ], HOY);
+    expect(r.porSector.map((s) => [s.nombre, s.cuantas])).toEqual([
+      ["Hidratación", 2], ["Calcinación", 1],
+    ]);
+  });
+
+  it("deTodas cuenta las atrasadas y total las de la semana", () => {
+    const r = resumirLaSemana([
+      dela({ ot_number: 1, fecha_ejecucion: "2026-11-14" }),
+      dela({ ot_number: 2, fecha_ejecucion: "2026-01-15" }),
+      dela({ ot_number: 3, estado: "REALIZADO", fecha_ejecucion: "2026-11-14" }),
+    ], HOY);
+    expect(r.total).toBe(1);
+    expect(r.deTodas).toBe(2);
+  });
+
+  it("una atrasada sin ninguna fecha no es de esta semana", () => {
+    // Que no se sepa cuándo vencía no la vuelve reciente.
+    const r = resumirLaSemana([dela({ fecha_ejecucion: null })], HOY);
+    expect(r.total).toBe(0);
+    expect(r.deTodas).toBe(1);
   });
 });
 

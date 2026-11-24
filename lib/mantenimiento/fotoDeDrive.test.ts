@@ -1,5 +1,44 @@
 import { describe, it, expect } from "vitest";
-import { idDeDrive } from "./fotoDeDrive";
+import { idDeDrive, sePuedeServir } from "./fotoDeDrive";
+
+const MB = 1024 * 1024;
+
+describe("sePuedeServir", () => {
+  it("una foto y un video sí", () => {
+    expect(sePuedeServir("image/jpeg", 6 * MB)).toBeNull();
+    expect(sePuedeServir("image/png", 1)).toBeNull();
+    expect(sePuedeServir("image/heic", 1)).toBeNull();
+    // Los dos que hay de verdad, medidos el 23/11/2026.
+    expect(sePuedeServir("video/mp4", Math.round(0.9 * MB))).toBeNull();
+    expect(sePuedeServir("video/mp4", Math.round(3.2 * MB))).toBeNull();
+    expect(sePuedeServir("video/quicktime", 10 * MB)).toBeNull();
+  });
+
+  it("un documento no, y no es una omisión", () => {
+    // Del otro lado hay una credencial que ve todas las planillas del grupo:
+    // servir cualquier tipo volvería legible para cualquiera con sesión un
+    // documento que esa persona no tiene permiso de abrir.
+    for (const tipo of [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.google-apps.spreadsheet",
+      "text/plain",
+      "",
+    ]) {
+      expect(sePuedeServir(tipo, 1)).toMatch(/no es una foto ni un video/);
+    }
+  });
+
+  it("cada uno tiene su propio tope", () => {
+    expect(sePuedeServir("image/jpeg", 10 * MB)).toBeNull();
+    expect(sePuedeServir("image/jpeg", 10 * MB + 1)).toMatch(/La foto pesa 10 MB/);
+    // 11 MB es una foto demasiado grande y un video perfectamente normal.
+    expect(sePuedeServir("image/jpeg", 11 * MB)).toMatch(/máximo desde acá son 10/);
+    expect(sePuedeServir("video/mp4", 11 * MB)).toBeNull();
+    expect(sePuedeServir("video/mp4", 25 * MB)).toBeNull();
+    expect(sePuedeServir("video/mp4", 26 * MB)).toMatch(/El video pesa 26 MB.*son 25/);
+  });
+});
 
 describe("idDeDrive", () => {
   it("lo saca de la forma que escribe el formulario", () => {
