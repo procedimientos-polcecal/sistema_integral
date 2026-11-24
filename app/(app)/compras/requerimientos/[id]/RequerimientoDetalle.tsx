@@ -18,6 +18,9 @@ import type { CotizacionDolar } from "@/lib/compras/dolar";
 import type { ProveedorElegible } from "@/lib/compras/comparativa";
 import SelectorProveedor from "../../SelectorProveedor";
 import type { EntradaAlPanol } from "@/lib/inventario/types";
+import type { SalidasDeLaFicha } from "@/lib/inventario/salidasDelRepuesto";
+import { textoDelOrigen } from "@/lib/compras/origenEnLaOT";
+import type { OrigenEnLaOT } from "@/lib/compras/origenEnLaOT";
 import { justificacionQueExplica } from "@/lib/core/justificacion";
 import { linkDeLaComparativa } from "@/lib/compras/vincular";
 import Select from "@/components/Select";
@@ -29,8 +32,16 @@ import MarcaMontoAlto from "../../MarcaMontoAlto";
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
   esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [], ordenesOdoo = [], odoo, umbralMontoAlto, historicoDelArticulo,
+  origenEnLaOT = null, salidasDelPanol = null,
 }: {
+  /**
+   * Lo que salió del pañol y a qué orden se declaró. Null si quien mira no puede
+   * editar Compras (la sección no se dibuja): no es lo mismo que «no hay salidas».
+   */
+  salidasDelPanol?: SalidasDeLaFicha | null;
   requerimiento: RequerimientoConRelaciones;
+  /** La OT para la que se pidió, ya resuelta. Null si no nació de una o la orden se borró. */
+  origenEnLaOT?: OrigenEnLaOT | null;
   /** Lo que el pañol registró contra este RI. Vacío si no entró nada todavía. */
   entradasAlPanol?: EntradaAlPanol[];
   historial: HistorialItem[];
@@ -121,6 +132,8 @@ export default function RequerimientoDetalle({
   const dias = diasRestantes(r.fecha_necesidad);
   const total = (r.costo_iva ?? 0) + (r.costo_envio ?? 0);
   const resuelto = r.estado_aprobacion === "APROBADA" || r.estado_aprobacion === "DENEGADA";
+  /** Para qué OT se pidió, ya en texto: lo miran tres lugares del JSX. */
+  const paraQueOT = textoDelOrigen(origenEnLaOT);
 
   return (
     <div className="space-y-4">
@@ -590,53 +603,154 @@ export default function RequerimientoDetalle({
             odoo={odoo}
           />
 
-          {/* ── Lo que entró al pañol ─────────────────────────
-              Una entrada al pañol con este N° de RI es la recepción de este
-              pedido. El sistema lo informa y ofrece marcarlo; **no lo decide
-              solo**: una entrega parcial cerraría un pedido entero, y si esto
-              está completo lo sabe quien lo recibió. Mismo criterio que los
-              proveedores sin reconocer y las ubicaciones sin enlazar. */}
-          {entradasAlPanol.length > 0 && (
+          {/* ── Trazabilidad ──────────────────────────────────
+              Tres renglones y cada uno dice de qué habla: para qué OT se pidió
+              (la intención), qué entró al pañol y qué salió de ahí (el hecho).
+              «Se pidió para» nunca se funde con «aplicado a»: haber pedido para
+              una orden no dice que la pieza se haya usado en ella. Sin nada
+              que mostrar la sección no se dibuja.
+
+              Los dos primeros los ve cualquiera que abra la ficha; el tercero
+              sólo llega si quien mira puede editar Compras (ver `page.tsx`). */}
+          {(paraQueOT || entradasAlPanol.length > 0) && (
             <section className="rounded-xl border border-slate-200 bg-white p-5">
               <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Entró al pañol
+                Trazabilidad
               </h2>
-              <ul className="space-y-2">
-                {entradasAlPanol.map((e) => (
-                  <li key={e.id} className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="text-slate-700">
-                      <span className="font-mono text-xs text-slate-500">{e.codigo}</span>{" "}
-                      {e.descripcion ?? ""}
-                    </span>
-                    <span className="shrink-0 text-slate-500">
-                      {e.cantidad} · {e.fecha ? fecha(e.fecha) : "sin fecha"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
 
-              {r.estado_compra !== "RECIBIDO" ? (
-                puedeEditar && (
-                  <div className="mt-4 border-t border-slate-100 pt-3">
-                    <p className="text-xs text-slate-500">
-                      El pañol registró la entrada de este material. Si el pedido
-                      está completo, marcalo como recibido — puede haber venido
-                      sólo una parte, así que lo decidís vos.
+              {paraQueOT && (
+                <div className="mb-4">
+                  <h3 className="mb-1 text-xs font-semibold text-slate-500">Se pidió para</h3>
+                  <p className="text-sm text-slate-700">{paraQueOT}</p>
+                  {origenEnLaOT?.repuesto_nombre && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      desde el repuesto «{origenEnLaOT.repuesto_nombre}»
                     </p>
-                    <button
-                      onClick={() => guardar({ estado_compra: "RECIBIDO" })}
-                      disabled={guardando}
-                      className="mt-2 rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
-                    >
-                      {guardando ? "Guardando…" : "Marcar como recibido"}
-                    </button>
-                  </div>
-                )
-              ) : (
-                <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-green-700">
-                  Marcado como recibido
-                  {r.fecha_recepcion ? ` el ${fecha(r.fecha_recepcion)}` : ""}.
-                </p>
+                  )}
+                </div>
+              )}
+
+              {/* ── Lo que entró al pañol ─────────────────────────
+                  Una entrada al pañol con este N° de RI es la recepción de este
+                  pedido. El sistema lo informa y ofrece marcarlo; **no lo decide
+                  solo**: una entrega parcial cerraría un pedido entero, y si esto
+                  está completo lo sabe quien lo recibió. Mismo criterio que los
+                  proveedores sin reconocer y las ubicaciones sin enlazar. */}
+              {entradasAlPanol.length > 0 && (
+                <div>
+                  <h3 className="mb-1 text-xs font-semibold text-slate-500">Entró al pañol</h3>
+                  <ul className="space-y-2">
+                    {entradasAlPanol.map((e) => (
+                      <li key={e.id} className="flex items-baseline justify-between gap-3 text-sm">
+                        <span className="text-slate-700">
+                          <span className="font-mono text-xs text-slate-500">{e.codigo}</span>{" "}
+                          {e.descripcion ?? ""}
+                        </span>
+                        <span className="shrink-0 text-slate-500">
+                          {e.cantidad} · {e.fecha ? fecha(e.fecha) : "sin fecha"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {r.estado_compra !== "RECIBIDO" ? (
+                    puedeEditar && (
+                      <div className="mt-4 border-t border-slate-100 pt-3">
+                        <p className="text-xs text-slate-500">
+                          El pañol registró la entrada de este material. Si el pedido
+                          está completo, marcalo como recibido — puede haber venido
+                          sólo una parte, así que lo decidís vos.
+                        </p>
+                        <button
+                          onClick={() => guardar({ estado_compra: "RECIBIDO" })}
+                          disabled={guardando}
+                          className="mt-2 rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
+                        >
+                          {guardando ? "Guardando…" : "Marcar como recibido"}
+                        </button>
+                      </div>
+                    )
+                  ) : (
+                    <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-green-700">
+                      Marcado como recibido
+                      {r.fecha_recepcion ? ` el ${fecha(r.fecha_recepcion)}` : ""}.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* ── Lo que salió del pañol ────────────────────────
+                  Sólo lectura, y a propósito: lo que prueba que la pieza fue a una
+                  orden lo declara Mantenimiento en el renglón de repuesto de esa
+                  OT, que es quien sabe en qué se usó. Acá no hay botón. «Sin
+                  justificar» es el estado normal de toda salida que nadie declaró
+                  y no un pendiente de nadie, así que no se pinta como alerta.
+
+                  `salidasDelPanol` es null si quien mira no puede editar Compras:
+                  no es lo mismo que «no hay salidas». */}
+              {salidasDelPanol && entradasAlPanol.length > 0 && (
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <h3 className="mb-1 text-xs font-semibold text-slate-500">Salió del pañol</h3>
+                  {salidasDelPanol.lectura === "fallida" ? (
+                    <p className="text-sm text-slate-500">No se pudieron leer las salidas del pañol.</p>
+                  ) : salidasDelPanol.salidas.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      El pañol no registró salidas en los 90 días siguientes a la entrada.
+                    </p>
+                  ) : (
+                    <>
+                      <ul className="space-y-3">
+                        {salidasDelPanol.salidas.map((s) => (
+                          <li key={s.id} className="text-sm">
+                            <div className="text-slate-700">
+                              {s.fecha ? fecha(s.fecha) : "sin fecha"} · {s.cantidad} un.
+                              {[s.solicitante, s.sector_raw, s.equipo_raw].filter(Boolean).map((t) => ` · ${t}`).join("")}
+                            </div>
+                            {salidasDelPanol.lectura === "sin-las-declaraciones" ? (
+                              <div className="text-xs text-slate-500">
+                                → no se pudo leer qué orden la declaró
+                              </div>
+                            ) : (
+                              <>
+                                {s.aplicadoA.map((o) => (
+                                  <div key={o.ot_number} className="text-xs text-slate-700">
+                                    → aplicado a la OT #{o.ot_number}
+                                    {o.descripcion?.trim() ? ` «${o.descripcion.trim()}»` : ""}
+                                  </div>
+                                ))}
+                                {s.otraPieza.map((n) => (
+                                  <div key={`otra-${n}`} className="text-xs text-amber-800">
+                                    → la OT #{n} la declaró, pero ese repuesto es de otro artículo: no
+                                    cuenta como aplicada
+                                  </div>
+                                ))}
+                                {s.aplicadoA.length === 0 && s.otraPieza.length === 0 && (
+                                  <div className="text-xs text-slate-500">
+                                    → sin justificar (lo declara Mantenimiento en la OT, no desde acá)
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      {/* Que son CANDIDATAS, y por qué, va primero: el stock es
+                          fungible y nada prueba que esas unidades salgan de esta
+                          compra. Sin esa frase, «Entró 17/11 · 10 un.» seguido de
+                          «Salió 18/11 · 2 un. → aplicado a la OT #2983» se lee como
+                          que lo que se compró fue a esa orden, que es el
+                          anti-objetivo textual del diseño. */}
+                      <p className="mt-2 text-xs text-slate-400">
+                        Son salidas candidatas, no la trazabilidad de estas unidades: el stock del pañol
+                        es fungible, así que haber entrado por este RI y haber salido después no prueba
+                        que sea el mismo material. Son las posteriores a cada entrada de arriba, hasta 10
+                        por entrada; si el pedido trajo artículos distintos, se muestran juntas. «Sin
+                        justificar» no es un pendiente: es el estado de toda salida que Mantenimiento
+                        no declaró en una orden.
+                      </p>
+                    </>
+                  )}
+                </div>
               )}
             </section>
           )}

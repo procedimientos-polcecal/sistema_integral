@@ -150,7 +150,7 @@ const tieneTexto = (v: string | null | undefined): boolean => String(v ?? "").tr
  * nombre del que vino. Cuando los dos no coinciden, el que tiene el dato es
  * éste.
  */
-export function esDeUnTercero(ot: OtReparacion): boolean {
+export function esDeUnTercero(ot: Pick<OtReparacion, "contratista">): boolean {
   return tieneTexto(ot.contratista);
 }
 

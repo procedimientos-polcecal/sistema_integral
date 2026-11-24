@@ -111,6 +111,33 @@ export async function POST(request: Request) {
     }
   }
 
+  // ── De qué OT y de qué renglón sale el pedido ──
+  //
+  // Mismo criterio que el equipo: se comprueba del lado del servidor y lo que
+  // no resuelve queda en null sin fallar. Un pedido no se pierde por su
+  // procedencia. Las dos van juntas o ninguna: un renglón sin su OT, o una OT
+  // con un renglón que no es suyo, no cuentan una historia que se pueda creer.
+  //
+  // Se lee con el cliente admin a propósito: `ordenes_trabajo` está cerrada con
+  // `mant_puede_ver()` y cargar un pedido no pide Mantenimiento. Con la sesión,
+  // quien no lo tiene vería «no existe» y la procedencia se perdería en
+  // silencio. Es sólo una comprobación de existencia: nada de esto vuelve al
+  // cliente.
+  let ot_id: string | null = null;
+  let ot_repuesto_id: string | null = null;
+  if (body.ot_id && body.ot_repuesto_id) {
+    const { data: renglon } = await createAdminClient()
+      .from("ordenes_trabajo_repuestos")
+      .select("id, work_order_id")
+      .eq("id", body.ot_repuesto_id)
+      .eq("work_order_id", body.ot_id)
+      .maybeSingle();
+    if (renglon) {
+      ot_id = renglon.work_order_id as string;
+      ot_repuesto_id = renglon.id as string;
+    }
+  }
+
   const registro = {
     descripcion,
     area_id: body.area_id ?? null,
@@ -119,6 +146,13 @@ export async function POST(request: Request) {
     ubicacion_id: body.ubicacion_id ?? null,
     equipo_id,
     equipo_raw,
+    // Sólo viajan cuando hay procedencia, así que en la ventana entre el deploy
+    // y la migración un alta común sigue andando. **Lo que no sobrevive es
+    // justo el alta que esta rama vino a mejorar:** «Pedir a Compras» desde el
+    // repuesto de una OT manda las dos, el insert las nombra y falla entero con
+    // un 42703 hasta que alguien corra `20261123212344`. Por eso esa migración va
+    // antes del push, no después (ver «Orden de despliegue» en el plan).
+    ...(ot_id && ot_repuesto_id ? { ot_id, ot_repuesto_id } : {}),
     fecha_necesidad: body.fecha_necesidad ?? null,
     detalle_extra: body.detalle_extra ?? null,
     imagen_url: body.imagen_url ?? null,

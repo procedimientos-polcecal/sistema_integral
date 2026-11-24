@@ -21,6 +21,10 @@ import {
 import {
   abrirCaja, cambiarCaja as cambiarLaCaja, cerrarCaja as cerrarLaCaja, type Caja,
 } from "@/lib/mantenimiento/cajasDePregunta";
+import {
+  aplicacionDelRenglon, DIAS_DE_LA_VENTANA, TOPE_DE_CANDIDATAS,
+  type SalidaDelPanol,
+} from "@/lib/inventario/salidasDelRepuesto";
 import type { UbicacionEnlazada } from "@/lib/compras/ubicaciones";
 import { COMPRA_LABELS } from "@/lib/compras/constants";
 import type { EstadoCompra } from "@/lib/compras/types";
@@ -73,8 +77,17 @@ interface Repuesto {
   nombre: string;
   codigo: string | null;
   cantidad: string | null;
-  /** El artículo del pañol que una persona eligió para este renglón, si eligió. */
+  /** El artículo del pañol que una persona eligió para este renglón, si eligió.
+      `articulo_id` es la columna de la propia fila y `articulo` el embed de
+      `inventario_articulos`: manda la primera, porque la segunda viaja por una
+      tabla cerrada con `tiene_acceso_inventario()` y a quien tenga Mantenimiento
+      y no Inventario le llega `null` sin ningún error. */
+  articulo_id?: string | null;
   articulo?: ArticuloDelPanol | null;
+  /** La salida del pañol que una persona declaró como la de este repuesto. Antes
+      de que se aplique la migración la columna no existe y ambos vienen sin valor. */
+  movimiento_id?: string | null;
+  movimiento?: SalidaDelPanol | null;
   /** Los requerimientos en curso que podrian ser este mismo repuesto. */
   ris?: { porCodigo: RiEnVuelo[]; porNombre: RiEnVuelo[] };
 }
@@ -433,6 +446,8 @@ export default function RepuestosOTModal({
                       onCambioDelArticulo={traer}
                     />
 
+                    <SalidaDelPanolDelRenglon repuesto={r} puedeEditar={puedeEditar} onCambio={traer} />
+
                     {/* Cuando no hay, lo que sigue es pedirlo. El formulario
                         abre con el nombre, el código y la cantidad que ya están
                         acá: volver a escribirlos es donde el código se pierde y
@@ -459,7 +474,7 @@ export default function RepuestosOTModal({
                         <button
                           onClick={() => setPidiendo({
                             pedido: pedidoSugerido(
-                              { nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad },
+                              { id: r.id, nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad },
                               d, orden, ubicaciones, areas
                             ),
                             ris: r.ris,
@@ -971,6 +986,286 @@ function ArticuloYRi({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** «2025-11-18» → «18/11». `fecha` es un `date` de Postgres: sin hora ni huso. */
+function diaYMes(fecha: string | null): string {
+  const m = fecha?.match(/^\d{4}-(\d{2})-(\d{2})/);
+  return m ? `${m[2]}/${m[1]}` : "sin fecha";
+}
+
+/** «18/11, 2 un. (ORTIZ, Facundo)»: lo que alcanza para reconocer una salida. */
+function resumenDeLaSalida(s: SalidaDelPanol): string {
+  const quien = s.solicitante?.trim();
+  return `${diaYMes(s.fecha)}, ${numero.format(s.cantidad)} un.${quien ? ` (${quien})` : ""}`;
+}
+
+/**
+ * De qué salida del pañol salió el repuesto: lo que prueba que la pieza se
+ * aplicó. Pedirla no es usarla; la salida sí, y acá una persona dice cuál.
+ *
+ * **El estado lo decide `aplicacionDelRenglon()` y no una comprobación de acá**:
+ * es lo único de esta parte que tiene tests, y deducirlo en el JSX los dejaría
+ * sin nada que proteger. Lo único que se mira antes es el renglón sin artículo
+ * y sin vínculo, que no es un estado de la función sino su ausencia: hoy es el
+ * de los 37 renglones que hay (0 de 37 tienen artículo), así que es la cara
+ * habitual y no un borde.
+ *
+ * Si hay vínculo y no se pudo leer la salida (`sin-ver`: quien mira no tiene
+ * Inventario, o falló la lectura) se dice eso y **se deja el botón de sacar**:
+ * soltar el vínculo no necesita leer el movimiento. Sin esa rama, un renglón bien
+ * vinculado se leería como «sin movimiento» y alguien declararía dos veces.
+ *
+ * Las candidatas las trae el servidor, recién al abrir el selector. Es una lista
+ * de botones y no un `<Select>`: son diez como máximo y cada una lleva cinco
+ * datos que hay que ver para reconocerla, cosa que una opción de desplegable no
+ * deja. No es un selector de OT: la orden es el contexto.
+ */
+function SalidaDelPanolDelRenglon({
+  repuesto, puedeEditar, onCambio,
+}: {
+  repuesto: Repuesto;
+  puedeEditar: boolean;
+  /** Se declaró o se sacó: hay que volver a leer los renglones. */
+  onCambio: () => void;
+}) {
+  const [eligiendo, setEligiendo] = useState(false);
+  const [candidatas, setCandidatas] = useState<SalidaDelPanol[] | null>(null);
+  const [motivo, setMotivo] = useState("");
+  const [error, setError] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  /** Si la lista que se está mirando es la acotada o la que levantó la ventana. */
+  const [verTodas, setVerTodas] = useState(false);
+
+  const url = `/api/mantenimiento/repuestos/${repuesto.id}/movimiento`;
+  // El artículo sale de la **fila** y sólo después del embed: la fila se lee
+  // detrás de `mant_puede_ver()` y el embed detrás de `tiene_acceso_inventario()`,
+  // así que a quien tenga Mantenimiento y no Inventario el embed le llega `null`
+  // sin error y el renglón pasaría por «sin artículo» — con un vínculo puesto eso
+  // da `otra-pieza`, o sea acusar de apuntar a otra pieza un vínculo perfecto.
+  const articuloId = repuesto.articulo_id ?? repuesto.articulo?.id ?? null;
+  const movimientoId = repuesto.movimiento_id ?? null;
+
+  /** Un fallo se dice con lo que contestó el servidor, sin traducir. */
+  async function escribir(init: RequestInit): Promise<boolean> {
+    setOcupado(true);
+    setError("");
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) {
+        setError((await res.json().catch(() => ({}))).error ?? "No se pudo completar la acción.");
+        return false;
+      }
+      return true;
+    } catch {
+      setError("No hay conexión con el servidor. Probá de nuevo.");
+      return false;
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  /**
+   * Trae las candidatas. Con `todas` el servidor ancla en la primera entrada del
+   * artículo y no corta por días: es la misma lista, sin el recorte. Lo que no
+   * levanta es el tope de diez.
+   */
+  async function abrir(todas = false) {
+    setEligiendo(true);
+    setCandidatas(null);
+    setMotivo("");
+    setError("");
+    setVerTodas(todas);
+    try {
+      const res = await fetch(todas ? `${url}?todas=1` : url);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(body.error ?? "No se pudieron traer las salidas del pañol."); return; }
+      setCandidatas(body.candidatas ?? []);
+      setMotivo(body.motivo ?? "");
+    } catch {
+      setError("No se pudieron traer las salidas del pañol: no hay conexión con el servidor.");
+    }
+  }
+
+  async function declarar(movimiento: SalidaDelPanol) {
+    const ok = await escribir({
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ movimiento_id: movimiento.id }),
+    });
+    if (!ok) return;
+    setEligiendo(false);
+    setVerTodas(false);
+    onCambio();
+  }
+
+  async function sacarElVinculo() {
+    if (!(await escribir({ method: "DELETE" }))) return;
+    onCambio();
+  }
+
+  const botonDeSacar = puedeEditar && (
+    <>
+      {" "}
+      <button
+        onClick={sacarElVinculo}
+        disabled={ocupado}
+        className="underline text-slate-500 enabled:hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        Sacar
+      </button>
+    </>
+  );
+
+  let linea: React.ReactNode;
+  if (!movimientoId && !articuloId) {
+    linea = <span className="text-slate-400">Salió del pañol: elegí primero el artículo</span>;
+  } else {
+    const aplicacion = aplicacionDelRenglon(
+      { articulo_id: articuloId, movimiento_id: movimientoId },
+      repuesto.movimiento ?? null,
+    );
+    switch (aplicacion.estado) {
+      case "aplicado":
+        linea = (
+          <>
+            <span className="text-slate-600">
+              Salió del pañol: {resumenDeLaSalida(repuesto.movimiento!)}
+            </span>
+            {botonDeSacar}
+          </>
+        );
+        break;
+      case "otra-pieza":
+        linea = (
+          <>
+            <span className="text-amber-700">
+              {/* No dice «es de otro artículo» a secas: también cae acá el renglón
+                  al que le sacaron el artículo después de declarar, y ahí no hay
+                  con qué comparar. Lo cierto en los dos casos es la negación. */}
+              Salió del pañol: la salida declarada no es del artículo de este repuesto
+            </span>
+            {botonDeSacar}
+          </>
+        );
+        break;
+      case "sin-ver":
+        linea = (
+          <>
+            <span className="text-amber-700">
+              Salió del pañol: hay una salida declarada que no se pudo leer
+            </span>
+            {botonDeSacar}
+          </>
+        );
+        break;
+      case "sin-justificar":
+        linea = (
+          <>
+            <span className="text-slate-400">Salió del pañol: —</span>
+            {puedeEditar && !eligiendo && (
+              <>
+                {" "}
+                {/* `() => abrir()` y no `abrir`: React le pasaría el evento al
+                    primer parámetro y `todas` quedaría en «sí» sin que nadie lo pida. */}
+                <button
+                  onClick={() => abrir()}
+                  disabled={ocupado}
+                  className="underline text-[var(--primary)] disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Declarar la salida
+                </button>
+              </>
+            )}
+          </>
+        );
+        break;
+    }
+  }
+
+  return (
+    <div className="mt-1 space-y-1 text-xs">
+      <p>{linea}</p>
+
+      {puedeEditar && eligiendo && (
+        <div className="rounded-lg border border-slate-200 px-2 py-1.5">
+          {!candidatas && !error && <p className="text-slate-400">Buscando las salidas del pañol…</p>}
+          {candidatas && candidatas.length === 0 && (
+            <p className="text-slate-600">{motivo || "No hay salidas del pañol para elegir."}</p>
+          )}
+          {candidatas && candidatas.length > 0 && (
+            <>
+              <p className="text-slate-600">
+                Elegí la salida que se usó para esta orden:
+                {verTodas && (
+                  <span className="text-slate-400">
+                    {" "}ya no está acotada a los {DIAS_DE_LA_VENTANA} días — son las posteriores a la
+                    primera entrada del artículo.
+                  </span>
+                )}
+              </p>
+              <ul className="mt-1 space-y-1">
+                {candidatas.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      onClick={() => declarar(c)}
+                      disabled={ocupado}
+                      className="block w-full rounded-lg border border-slate-200 px-2 py-1.5 text-left hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <span className="font-medium text-slate-800">
+                        {diaYMes(c.fecha)} · {numero.format(c.cantidad)} un.
+                      </span>
+                      {c.solicitante && <span className="text-slate-600"> · {c.solicitante}</span>}
+                      {/* Con rótulo cada uno: «Planta 0-2 · Molino 3» no dice cuál es
+                          el sector y cuál la máquina, y los dos textos son libres. */}
+                      {(c.sector_raw || c.equipo_raw) && (
+                        <span className="block text-slate-500">
+                          {c.sector_raw && <>Sector: {c.sector_raw}</>}
+                          {c.sector_raw && c.equipo_raw && " · "}
+                          {c.equipo_raw && <>Máquina: {c.equipo_raw}</>}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {/* «Ver todas» cuando la lista volvió vacía o volvió topeada: son los dos
+              casos en los que lo que se busca puede estar fuera del recorte. La
+              ficha de un RI arranca en la entrada de *ese* pedido, y 400 de las 766
+              entradas con RI tienen una entrada posterior del mismo artículo: sin
+              esto, una salida que allá dice «sin justificar» acá no se puede
+              declarar. El tope de diez sigue puesto, así que en un artículo con más
+              de diez salidas nuevas una vieja sigue sin alcanzarse — es el
+              consumible, que no es lo que esta función traza. */}
+          {candidatas && !verTodas && (candidatas.length === 0 || candidatas.length === TOPE_DE_CANDIDATAS) && (
+            <p className="mt-1">
+              <button
+                onClick={() => abrir(true)}
+                disabled={ocupado}
+                className="underline text-[var(--primary)] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Ver todas
+              </button>
+              <span className="text-slate-400">
+                {" "}— sin el corte de los {DIAS_DE_LA_VENTANA} días, desde la primera entrada del artículo.
+              </span>
+            </p>
+          )}
+
+          <button
+            onClick={() => { setEligiendo(false); setVerTodas(false); }}
+            className="mt-1 underline text-slate-500"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {error && <p className="text-red-600">{error}</p>}
     </div>
   );
 }

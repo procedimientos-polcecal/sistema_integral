@@ -3139,6 +3139,16 @@
         "columna": "clave_articulo",
         "tipo": "text",
         "nuleable": true
+      },
+      {
+        "columna": "ot_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "ot_repuesto_id",
+        "tipo": "uuid",
+        "nuleable": true
       }
     ],
     "compras_sincronizaciones": [
@@ -6690,6 +6700,21 @@
       {
         "columna": "articulo_id",
         "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "movimiento_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "movimiento_puesto_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "movimiento_puesto_en",
+        "tipo": "timestamptz",
         "nuleable": true
       }
     ],

@@ -52,6 +52,7 @@ export function convienePedir(estado: EstadoDeStock): boolean {
 
 /** Lo que hace falta saber de la orden para armar el pedido. */
 export interface OrdenDelPedido {
+  id: string;
   ot_number: number | null;
   descripcion: string | null;
   equipment_id: string | null;
@@ -62,6 +63,8 @@ export interface OrdenDelPedido {
 
 /** Un repuesto de la lista de la orden. */
 export interface RepuestoPedido {
+  /** El renglón de la lista de la orden: de qué repuesto nace el pedido. */
+  id: string;
   nombre: string;
   codigo: string | null;
   /** Como se anotó: texto libre, porque en la planilla lo es. */
@@ -80,6 +83,10 @@ export interface PedidoSugerido {
   equipoId: string;
   /** Mantenimiento, cuando el catálogo tiene un área con ese nombre. */
   areaId: string;
+  /** La orden de la que nace el pedido, para que Compras sepa para qué era. */
+  otId: string;
+  /** El renglón de repuesto de esa orden. */
+  otRepuestoId: string;
 }
 
 /**
@@ -213,5 +220,7 @@ export function pedidoSugerido(
     ubicacionId: ubicacionDeLaOrden(orden, ubicaciones),
     equipoId: orden.equipment_id ?? "",
     areaId: areaDeMantenimiento(areas),
+    otId: orden.id,
+    otRepuestoId: repuesto.id,
   };
 }

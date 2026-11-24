@@ -66,6 +66,22 @@ export const MODULO_DE_TABLA: Record<string, Ambito> = {
   // sus filas**, y por eso tiene nota en `notas.ts`: a cualquier otro le
   // devuelve cero filas, que no es lo mismo que "no pasó".
   auditoria: "nucleo",
+  // La Agenda y la mensajería **son transversales y no módulos**: no están en
+  // `MODULOS_ORDEN` y las ven los catorce, así que su lugar es el núcleo y no
+  // un módulo que tendría que elegirse a dedo. Las cuatro las paga en el
+  // prompt todo el mundo, y es correcto: todo el mundo las usa.
+  //
+  // La barrera sigue siendo RLS y acá es fina, no de módulo: un evento lo ve
+  // su dueño o quien está invitado (`agenda_veo_evento`), y un mensaje lo gatea
+  // un `case entidad_tipo` que espeja la tabla de destino —`mant_puede_ver()`
+  // para una OT, `tiene_acceso_syh()` para una condición insegura—.
+  agenda_eventos: "nucleo",
+  agenda_invitados: "nucleo",
+  mensajes: "nucleo",
+  // Hace falta además de `mensajes` para poder contestar «a mí me mencionaron»:
+  // sin ella no hay con qué cruzar. Su policy cuelga de la de `mensajes`, así
+  // que no abre nada que aquélla no abra.
+  mensajes_menciones: "nucleo",
 
   // ── RRHH ──
   rrhh_empleados_datos: "rrhh",
@@ -81,6 +97,11 @@ export const MODULO_DE_TABLA: Record<string, Ambito> = {
   francos: "rrhh",
   liquidaciones: "rrhh",
   rrhh_dias_corregidos: "rrhh",
+  rrhh_horas_a_realizar: "rrhh",
+  // Una fila: a quiénes sale el correo de novedades de RR.HH. y con qué texto.
+  // Es configuración, como `config_liquidacion` y `remises_config`, y va con
+  // ellas y no afuera.
+  rrhh_correo_novedades: "rrhh",
 
   // ── Remises ──
   choferes: "remises",
@@ -115,9 +136,6 @@ export const MODULO_DE_TABLA: Record<string, Ambito> = {
   mant_partes_contratista: "mantenimiento",
   mant_partes_contratista_renglones: "mantenimiento",
   mant_contratista_lugares: "mantenimiento",
-  // Cada vez que a una OT se le corrió la fecha de inicio. Tiene nota: no
-  // cubre a las cerradas, así que contar sobre ella subcuenta a propósito.
-  mant_reprogramaciones_ot: "mantenimiento",
   planificacion_diaria: "mantenimiento",
   planificacion_diaria_items: "mantenimiento",
   avisos: "mantenimiento",
@@ -128,6 +146,29 @@ export const MODULO_DE_TABLA: Record<string, Ambito> = {
   // La produccion semanal la gatea mant_puede_ver(), no produccion: es el
   // parte que Mantenimiento usa para calcular disponibilidad de equipos.
   produccion_semanal: "mantenimiento",
+  // El ciclo que genera la OT siguiente al cerrarse la anterior, y el catálogo
+  // al que apunta en vez de copiar los nombres.
+  mant_ciclos_de_ot: "mantenimiento",
+  mant_tareas_preventivas: "mantenimiento",
+  // El cuaderno de un contratista: la carga del mes, sus renglones y las fotos
+  // o el Excel de los que salió.
+  mant_cuadernos: "mantenimiento",
+  mant_cuadernos_renglones: "mantenimiento",
+  mant_cuadernos_fotos: "mantenimiento",
+  // La programación del taller: el padrón, la semana de referencia y las
+  // pisadas que mueven a alguien un día suelto.
+  mant_personal_taller: "mantenimiento",
+  mant_programacion_referencia: "mantenimiento",
+  mant_programacion_pisadas: "mantenimiento",
+  // Mover una OT de fecha: el catálogo de razones y el historial de cada
+  // postergación, con la fecha de antes y la de después. El historial **no
+  // cubre a las cerradas** a propósito, así que contar sobre él subcuenta;
+  // está en `notas.ts`, que es donde el modelo lo lee.
+  mant_razones_de_postergacion: "mantenimiento",
+  mant_reprogramaciones_ot: "mantenimiento",
+  // Qué dice distinto la planilla de lo que dice el sistema, campo por campo.
+  mantenimiento_divergencias: "mantenimiento",
+  planificacion_diaria_operarios: "mantenimiento",
 
   // ── Compras ──
   compras_areas: "compras",
@@ -160,6 +201,12 @@ export const MODULO_DE_TABLA: Record<string, Ambito> = {
   produccion_renglones_papel: "produccion",
   produccion_deposito: "produccion",
   produccion_despachos: "produccion",
+  // Los molinos que carga el robot. Es otra medición que el parte de
+  // fábrica —piedra que entra al molino contra producto terminado— y sus
+  // cuatro «turnos» son los cortes del contador, no los dos del parte.
+  produccion_molinos: "produccion",
+  produccion_molino_turnos: "produccion",
+  produccion_molino_paradas: "produccion",
 
   // ── Despacho ──
   despacho_ordenes_carga: "despacho",
@@ -186,6 +233,7 @@ export const MODULO_DE_TABLA: Record<string, Ambito> = {
   cantera_destape: "cantera",
   cantera_cubicaciones: "cantera",
   cantera_costo_maquina_mensual: "cantera",
+  cantera_cubicaciones_material: "cantera",
 
   // ── Calidad ──
   calidad_conteos: "calidad",
@@ -220,6 +268,21 @@ export const MODULO_DE_TABLA: Record<string, Ambito> = {
   // ── Trituración ──
   trituracion_partes: "trituracion",
   trituracion_plantas: "trituracion",
+
+  // ── Seguridad e Higiene ──
+  syh_condiciones: "seguridad_higiene",
+  syh_peligros: "seguridad_higiene",
+  syh_fotos: "seguridad_higiene",
+
+  // ── Ventas ──
+  ventas_clientes: "ventas",
+  ventas_contactos: "ventas",
+  ventas_oportunidades: "ventas",
+  ventas_actividades: "ventas",
+  // El enlace con el `res.partner` de Odoo, que lo hace una persona: el
+  // cliente del CRM **no es** el de Odoo —acá están además los prospectos—,
+  // así que sin esta tabla no hay forma de contestar cuál es cuál.
+  ventas_clientes_odoo: "ventas",
 };
 
 /**
@@ -253,6 +316,22 @@ export const SIN_MAPEAR_A_PROPOSITO: Record<string, string> = {
   notificaciones_descartes:
     "Qué aviso descartó cada persona. No es dato del negocio y es de cada " +
     "uno; nadie le va a preguntar al asistente qué descartó su compañero.",
+  avisos_vistos:
+    "El vistazo anterior de cada aviso, contra el que se calcula «cuánto más " +
+    "hay desde la última vez». Es la gemela de `avisos_fotos` y queda afuera " +
+    "por lo mismo: es andamiaje de la campana, se pisa unas 56 veces por día " +
+    "y su `cantidad` no cuenta cosas en varios avisos —en los de salud es una " +
+    "racha de fallos y en los de ritmo, umbrales sin cargar—, así que " +
+    "mostrarla invita a contestar «cuántos hay» con un número que no es eso.",
+  agenda_canales:
+    "Los canales de aviso que la Agenda abre contra Google para enterarse de " +
+    "que alguien movió un evento. Son plomería y además **guardan un " +
+    "secreto**: la columna `secreto` es con lo que se valida que un webhook " +
+    "viene de Google. Lo que alguien querría preguntar está en " +
+    "`agenda_eventos`.",
+  agenda_divergencias_vistas:
+    "Quién ya miró la divergencia de qué evento. Es de cada uno y no es dato " +
+    "del negocio, el mismo caso que `notificaciones_descartes`.",
 };
 
 /** Null si nadie la mapeó — y entonces no se le muestra a nadie. */

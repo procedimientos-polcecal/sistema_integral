@@ -5,7 +5,9 @@ import { lunesDe } from "@/lib/mantenimiento/produccion";
 import {
   ultimosMeses, paradasExigidas, ventanasDeReparacion, nombreDelMes,
 } from "@/lib/mantenimiento/dashboard";
-import { resumirAtrasadas, hoyISO, condicionDeAtrasada, CERRADAS } from "@/lib/mantenimiento/alertas";
+import {
+  resumirAtrasadas, resumirLaSemana, hoyISO, condicionDeAtrasada, CERRADAS,
+} from "@/lib/mantenimiento/alertas";
 import { sumarDias } from "@/lib/core/fechas";
 import DashboardClient from "./DashboardClient";
 import { sectoresDePlanta, empresaDelSector } from "@/lib/mantenimiento/sectores";
@@ -167,14 +169,23 @@ export default async function MantenimientoDashboardPage() {
   // Las atrasadas: la marca de la planilla o una fecha vencida, con la misma
   // definición que `estaAtrasada` (`condicionDeAtrasada`). `resumirAtrasadas`
   // vuelve a filtrar por si las dos se separaran.
+  //
+  // `sector_id` y `equipment_id` son lo único que suman «las de esta semana»:
+  // el primero para recortar por empresa cruzando ids en vez de texto —el
+  // `sector_raw` de la planilla no se puede cruzar con el catálogo— y el
+  // segundo para enlazar cada equipo a su listado.
   const { data: candidatas } = await supabase
     .from("ordenes_trabajo")
-    .select("ot_number, estado, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, sector_raw, descripcion, equipo_raw, quien, gut_gravedad, gut_urgencia, gut_tendencia")
+    .select("ot_number, estado, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, sector_id, sector_raw, equipment_id, descripcion, equipo_raw, quien, gut_gravedad, gut_urgencia, gut_tendencia")
     .not("estado", "in", `(${CERRADAS.join(",")})`)
     .or(condicionDeAtrasada(hoy))
     .limit(500);
 
+  // Las dos cuentas salen de **la misma lista**: el «8 de 19» tiene que
+  // contarse contra la misma foto que el panel de abajo, y dos lecturas
+  // distintas darían dos números que no cierran entre sí.
   const atrasadas = resumirAtrasadas(candidatas ?? [], hoy);
+  const laSemana = resumirLaSemana(candidatas ?? [], hoy);
   const paradas = paradasExigidas(pendientes, hoy);
 
   const nivel = await nivelMantenimientoDe(supabase, user.id);
@@ -194,6 +205,7 @@ export default async function MantenimientoDashboardPage() {
       tipoTally={tipoTally}
       quienTally={quienTally}
       atrasadas={atrasadas}
+      laSemana={laSemana}
       hoy={hoy}
       otPorMes={otPorMes}
       otMes={otMes}

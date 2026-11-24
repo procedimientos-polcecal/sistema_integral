@@ -254,6 +254,18 @@ Cómo está conectada, en cuatro hechos que no se deducen de un archivo suelto:
   `avisarAQuienDecide()`: ver la fila de la mensajería en
   [CLAUDE.md](../CLAUDE.md).
 
+### `mantenimiento/repuestos/[id]`: artículo, RI y salida del pañol
+
+Tres rutas hermanas sobre un renglón de repuesto de una OT: `articulo` (a qué
+artículo del pañol se refiere), `ri` (qué RI de Compras lo cubre) y
+`movimiento` (de qué salida del pañol salió: el hecho, no la intención).
+`movimiento` ofrece con `GET` las salidas candidatas del artículo —permiso de
+**ver** Mantenimiento—, y con `PATCH {movimiento_id}` y `DELETE` declara o saca el
+vínculo —permiso de **editar**—. Lee `inventario_movimientos` con el **cliente
+admin**: está cerrada con `tiene_acceso_inventario()` y con la sesión alguien de
+Mantenimiento sin Inventario recibiría `null` sin error, así que el permiso lo
+pone la ruta. `movimiento_puesto_por` sale de la sesión y nunca del cuerpo.
+
 ---
 
 ## 5. Antes de escribir una ruta nueva

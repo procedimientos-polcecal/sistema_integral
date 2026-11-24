@@ -43,6 +43,10 @@ export interface ValoresIniciales {
   equipoId?: string;
   /** Sólo cuando quien precarga lo sabe de verdad. Ver arriba. */
   areaId?: string;
+  /** De qué OT y de qué renglón de repuesto sale el pedido. Los manda sólo
+   *  quien precarga desde una OT; las otras cinco pantallas no los mandan nunca. */
+  otId?: string;
+  otRepuestoId?: string;
 }
 
 /**
@@ -459,6 +463,10 @@ export default function NuevoRequerimientoModal({
           // desde el catálogo, así que no depende de lo que tenga cargado la
           // pantalla ni de que alguien lo escriba a mano.
           equipo_id: equipoId || null,
+          // No son campos del formulario y nadie los edita: salen de `inicial`.
+          // El servidor comprueba que existan y que el renglón sea de esa OT.
+          ot_id: inicial?.otId || null,
+          ot_repuesto_id: inicial?.otRepuestoId || null,
         }),
       });
     } catch {

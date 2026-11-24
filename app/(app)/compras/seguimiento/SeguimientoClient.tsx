@@ -4,12 +4,27 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { comoLeLlego, ETIQUETA_CUMPLIO } from "@/lib/compras/seguimiento";
-import { fecha } from "@/lib/compras/constants";
+import { fecha, ordenarRequerimientos } from "@/lib/compras/constants";
 import FormularioRecepcion from "./FormularioRecepcion";
 import type { RequerimientoConRelaciones, Cumplio } from "@/lib/compras/types";
 import Select from "@/components/Select";
 
 const SIN_FILTRO = "TODAS";
+
+/**
+ * Cómo se ordena la lista.
+ *
+ * `PEDIDO_RECIENTE` es lo que la pantalla hizo siempre, y **no ordena nada**:
+ * respeta el orden en que `page.tsx` trajo las filas (`fecha_pedido` desc,
+ * nulos al final). Reordenar acá para dejar lo mismo sería escribir dos veces
+ * el mismo criterio, y el día que uno de los dos cambie van a decir cosas
+ * distintas.
+ *
+ * `NUMERO` delega en `ordenarRequerimientos()`, el mismo ayudante que ordena
+ * las columnas del tablero: así "por número" quiere decir lo mismo en las dos
+ * pantallas —del más nuevo al más viejo— y ya tiene sus tests.
+ */
+type Orden = "PEDIDO_RECIENTE" | "NUMERO";
 
 /**
  * Seguimiento de la compra: qué está esperando llegar y qué ya llegó.
@@ -30,6 +45,7 @@ export default function SeguimientoClient({
   const [busqueda, setBusqueda] = useState("");
   const [area, setArea] = useState(SIN_FILTRO);
   const [proveedor, setProveedor] = useState(SIN_FILTRO);
+  const [orden, setOrden] = useState<Orden>("PEDIDO_RECIENTE");
   const [abierto, setAbierto] = useState<string | null>(null);
   // Vive acá y no en el formulario: cerrar la tarjeta desmonta el formulario,
   // y con el aviso adentro se perdía antes de que alguien lo leyera. Acá
@@ -61,7 +77,9 @@ export default function SeguimientoClient({
 
   const esperando = filtrados.filter((r) => r.estado_compra === "PEDIDO");
   const recibidos = filtrados.filter((r) => r.estado_compra === "RECIBIDO");
-  const visibles = solapa === "PEDIDO" ? esperando : recibidos;
+  const enLaSolapa = solapa === "PEDIDO" ? esperando : recibidos;
+  const visibles =
+    orden === "NUMERO" ? ordenarRequerimientos(enLaSolapa, "numero") : enLaSolapa;
 
   function guardado(avisoSheets: string | null) {
     setAbierto(null);
@@ -130,6 +148,15 @@ export default function SeguimientoClient({
           >
             <option value={SIN_FILTRO}>Todos los proveedores</option>
             {proveedores.map((p) => <option key={p} value={p}>{p}</option>)}
+          </Select>
+          <Select
+            aria-label="Ordenar"
+            value={orden}
+            onChange={(e) => setOrden(e.target.value as Orden)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="PEDIDO_RECIENTE">Pedido más reciente</option>
+            <option value="NUMERO">N° de RI, del más nuevo al más viejo</option>
           </Select>
         </div>
       </div>
