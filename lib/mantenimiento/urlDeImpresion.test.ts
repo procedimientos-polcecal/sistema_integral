@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { SIN_FILTROS, type Filtros } from "./filtrosDelCalendario";
-import { armarUrlDeImpresion, leerParametros, MAXIMO_DE_DIAS } from "./urlDeImpresion";
+import { armarUrlDeImpresion, leerParametros } from "./urlDeImpresion";
+import { DIAS_DEL_RANGO_MAS_LARGO } from "./rangoDelCalendario";
 
 function filtros(p: Partial<Filtros> = {}): Filtros {
   return { ...SIN_FILTROS, ...p };
@@ -85,15 +86,37 @@ describe("leerParametros", () => {
   });
 
   it("da error con un rango de 64 días, nombrando el máximo", () => {
-    // 2026-11-01 + 63 días = 2027-01-03, uno más que el tope de 62.
+    // 2026-11-01 … 2027-01-03 son 64 contando los dos extremos: uno más del tope.
     const r = leerParametros(new URLSearchParams("periodo=mes&desde=2026-11-01&hasta=2027-01-03"));
-    expect(r).toEqual({ error: expect.stringContaining(String(MAXIMO_DE_DIAS)) });
+    expect(r).toEqual({ error: expect.stringContaining(String(DIAS_DEL_RANGO_MAS_LARGO)) });
   });
 
   it("acepta un rango de exactamente 63 días", () => {
     // Los dos extremos contados: desde + 62 días.
     const r = leerParametros(new URLSearchParams("periodo=mes&desde=2026-11-01&hasta=2027-01-02"));
     expect("error" in r).toBe(false);
+  });
+
+  it("el mensaje del tope nombra los días que de verdad entran", () => {
+    /*
+     * El número del mensaje es lo único que ve quien abrió la hoja, así que
+     * tiene que ser el mismo que la comprobación acepta. El desplazamiento que
+     * se le suma a `desde` es uno menos —62 contra 63— y nombrarlo a él deja un
+     * mensaje que contradice al rango de al lado, que sí entró.
+     */
+    const acepta = (hasta: string) =>
+      !("error" in leerParametros(
+        new URLSearchParams(`periodo=mes&desde=2026-11-01&hasta=${hasta}`)
+      ));
+
+    // 63 días contando los dos extremos; el 64º ya no entra.
+    expect(acepta("2027-01-02")).toBe(true);
+    expect(acepta("2027-01-03")).toBe(false);
+
+    const r = leerParametros(new URLSearchParams("periodo=mes&desde=2026-11-01&hasta=2027-01-03"));
+    const mensaje = "error" in r ? r.error : "";
+    expect(mensaje).toContain("63");
+    expect(mensaje).not.toContain("62");
   });
 
   it("da error si periodo no es mes, semana ni dia", () => {

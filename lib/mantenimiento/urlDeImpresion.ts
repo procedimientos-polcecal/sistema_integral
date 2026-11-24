@@ -13,23 +13,13 @@
  * módulo puede tipear esa URL, así que las dos condiciones van juntas: la hoja
  * dibuja la franja sólo si la pidieron **y** quien mira está autorizado.
  */
-import { esFechaIso, sumarDias } from "@/lib/core/fechas";
+import { esFechaIso } from "@/lib/core/fechas";
 import { SIN_FILTROS, type Filtros } from "./filtrosDelCalendario";
+import { elRangoEsDemasiadoLargo, ERROR_DE_RANGO_LARGO } from "./rangoDelCalendario";
 
 export type Periodo = "mes" | "semana" | "dia";
 
 const PERIODOS: Periodo[] = ["mes", "semana", "dia"];
-
-/**
- * El mismo tope que `/api/mantenimiento/calendario`, y la misma expresión para
- * comprobarlo: la hoja tiene que rechazar exactamente lo que la ruta
- * rechazaría, o manda a pedir datos que vuelven con un 400 que nadie mira.
- *
- * Un mes con las semanas parciales de los bordes llega a 42 días; 62 deja
- * margen para dos meses corridos. Admite `hasta` = `desde` + 62, o sea 63 días
- * contando los dos extremos.
- */
-export const MAXIMO_DE_DIAS = 62;
 
 export interface PedidoDeHoja {
   periodo: Periodo;
@@ -72,8 +62,10 @@ export function leerParametros(params: URLSearchParams): PedidoDeHoja | { error:
   if (desde > hasta) {
     return { error: "desde no puede ser posterior a hasta" };
   }
-  if (sumarDias(desde, MAXIMO_DE_DIAS) < hasta) {
-    return { error: `El rango no puede pasar de ${MAXIMO_DE_DIAS} días` };
+  // El mismo tope y la misma expresión que las dos rutas del calendario: la
+  // hoja tiene que rechazar exactamente lo que ellas rechazarían.
+  if (elRangoEsDemasiadoLargo(desde, hasta)) {
+    return { error: ERROR_DE_RANGO_LARGO };
   }
 
   return {

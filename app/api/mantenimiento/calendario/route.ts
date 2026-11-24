@@ -16,6 +16,10 @@ import {
   type OrdenDelCalendario,
 } from "@/lib/mantenimiento/calendarioDeOT";
 import { ordenesDelRango } from "@/lib/mantenimiento/ordenesDelRango";
+import {
+  elRangoEsDemasiadoLargo,
+  ERROR_DE_RANGO_LARGO,
+} from "@/lib/mantenimiento/rangoDelCalendario";
 
 /**
  * El calendario de selección: un mes (o el rango que pida la grilla) de órdenes
@@ -30,15 +34,6 @@ import { ordenesDelRango } from "@/lib/mantenimiento/ordenesDelRango";
  * rango** y de ahí se arma el mapa por día: una consulta por día serían treinta
  * viajes para un mes que casi siempre está vacío.
  */
-
-/**
- * La grilla pide un mes, y un mes con las semanas parciales de los bordes llega
- * a 42 días (seis semanas). 62 deja margen sobre ese caso, para quien pida dos
- * meses corridos; más que eso es un pedido que no es de la grilla. La
- * comparación admite `hasta` = `desde` + 62 días, o sea 63 días contando los
- * dos extremos.
- */
-const MAXIMO_DE_DIAS = 62;
 
 /** Una fecha de la base como `YYYY-MM-DD` pelado, igual que en las rutas hermanas. */
 function soloElDia(v: unknown): string {
@@ -70,11 +65,11 @@ export async function GET(request: Request) {
   if (desde > hasta) {
     return NextResponse.json({ error: "desde no puede ser posterior a hasta" }, { status: 400 });
   }
-  if (sumarDias(desde, MAXIMO_DE_DIAS) < hasta) {
-    return NextResponse.json(
-      { error: `El rango no puede pasar de ${MAXIMO_DE_DIAS} días` },
-      { status: 400 }
-    );
+  // El tope lo pone `rangoDelCalendario`, compartido con la ruta del taller y
+  // con la hoja impresa: la grilla pide un mes, que con las semanas parciales
+  // de los bordes llega a 42 días, y el resto es margen.
+  if (elRangoEsDemasiadoLargo(desde, hasta)) {
+    return NextResponse.json({ error: ERROR_DE_RANGO_LARGO }, { status: 400 });
   }
 
   // ── Las órdenes, con el cliente de la sesión para que corran las policies ──
