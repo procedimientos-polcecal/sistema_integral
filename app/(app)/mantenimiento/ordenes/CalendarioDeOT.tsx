@@ -15,6 +15,7 @@ import {
 import type { DiaDelCalendario } from "@/lib/mantenimiento/calendarioDeOT";
 import { porQueNoSePuedeMover, porQueNoSePuedeMoverA } from "@/lib/mantenimiento/moverLaOT";
 import { porQueNoSePuedeAsignar } from "@/lib/mantenimiento/asignarOperario";
+import { armarUrlDeImpresion, type Periodo } from "@/lib/mantenimiento/urlDeImpresion";
 import type { Oficio } from "@/lib/mantenimiento/programacion";
 import {
   colorDeEspecialidad, textoSobreLaEspecialidad, LEYENDA_DE_ESPECIALIDADES,
@@ -178,6 +179,34 @@ export interface EstadoDelCalendario {
 
 /** Identidad estable para «todavía no hay días»: ver el efecto que llama a `onEstado`. */
 const SIN_DIAS: DiaDelCalendario[] = [];
+
+/**
+ * El enlace que abre una hoja para imprimir, en una pestaña nueva.
+ *
+ * Es un `<a>` y no un `onClick` con `window.open` para que el clic del medio y
+ * «abrir en otra pestaña» anden, y porque un enlace lo lee el lector de
+ * pantalla como lo que es.
+ *
+ * Lleva `no-print` porque la hoja no se pide desde la hoja. Hoy desde esta
+ * pantalla nadie imprime, así que no cambia nada; el día que alguien apriete
+ * Ctrl+P acá, sí.
+ */
+function EnlaceDeImpresion({ href, children, className = "" }: {
+  href: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`no-print ${className}`}
+    >
+      {children}
+    </a>
+  );
+}
 
 function fondoDelDia(n: number): string {
   if (n === 0) return "#ffffff";
@@ -381,6 +410,26 @@ export default function CalendarioDeOT({
 
   const [anio, nroMes] = mes.split("-").map(Number);
 
+  /*
+   * ── LOS ENLACES DE IMPRIMIR ───────────────────────────────────────────────
+   *
+   * Los arma este componente y no el padre, aunque la hoja sea de otra página:
+   * el mes, los tres filtros y el día abierto son estado de acá, y subirlos
+   * tocaría las tres pantallas que montan el calendario.
+   *
+   * **Sólo en modo `programar`.** El otro modo es el campo de fecha del alta de
+   * una OT: ahí el calendario es un selector adentro de un formulario, y un
+   * botón que abre otra pestaña en el medio de una carga no es una ayuda.
+   *
+   * `taller` es un pedido y no un permiso: dice que esta pantalla está
+   * mostrando la rotación —o sea que recibió `franjaDeLaSemana`— y la hoja lo
+   * vuelve a autorizar del lado del servidor.
+   */
+  const seImprime = modo.tipo === "programar";
+  const pideElTaller = Boolean(franjaDeLaSemana);
+  const urlDeLaHoja = (periodo: Periodo, d: string, h: string) =>
+    armarUrlDeImpresion({ periodo, desde: d, hasta: h, filtros, taller: pideElTaller });
+
   return (
     <div className="space-y-2">
       {/* La barra de «estoy moviendo una orden». Arriba de todo y pegajosa:
@@ -469,6 +518,14 @@ export default function CalendarioDeOT({
                 : `${totalDelMes} ${totalDelMes === 1 ? "orden" : "órdenes"} en el mes${hayFiltro ? ", con ese filtro" : ""}`}
             </div>
           )}
+          {seImprime && (
+            <EnlaceDeImpresion
+              href={urlDeLaHoja("mes", desde, hasta)}
+              className="mt-1 inline-block text-[11px] text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+            >
+              Imprimir el mes
+            </EnlaceDeImpresion>
+          )}
         </div>
         <button
           type="button"
@@ -530,6 +587,16 @@ export default function CalendarioDeOT({
                 {semanas.map((semana) => (
                   <div key={semana[0]}>
                     {franjaDeLaSemana?.(semana[0])}
+                    {seImprime && (
+                      <div className="flex justify-end">
+                        <EnlaceDeImpresion
+                          href={urlDeLaHoja("semana", semana[0], semana[6])}
+                          className="px-1 text-[11px] text-slate-400 underline-offset-2 hover:text-slate-800 hover:underline"
+                        >
+                          Imprimir esta semana
+                        </EnlaceDeImpresion>
+                      </div>
+                    )}
                     <div className="grid grid-cols-7 gap-px rounded-lg overflow-hidden bg-slate-200 border border-slate-200">
                       {semana.map((dia) => (
                         <CeldaDelDia
@@ -582,6 +649,7 @@ export default function CalendarioDeOT({
               dia={porDia.get(diaAbierto) ?? null}
               diaIso={diaAbierto}
               filtros={filtros}
+              urlDeImpresion={seImprime ? urlDeLaHoja("dia", diaAbierto, diaAbierto) : null}
               elegirElDia={modo.tipo === "elegir" ? modo.onElegir : null}
               onMover={modo.tipo === "programar" && modo.puedeMover ? empezarAMover : null}
               onAsignar={modo.tipo === "programar" ? modo.onAsignar : null}
@@ -707,11 +775,13 @@ function CeldaDelDia({
 // ─── El panel del día ───────────────────────────────────────────────────────
 
 function PanelDelDia({
-  dia, diaIso, filtros, elegirElDia, onMover, onAsignar, onCerrar,
+  dia, diaIso, filtros, elegirElDia, onMover, onAsignar, onCerrar, urlDeImpresion,
 }: {
   dia: DiaDelCalendario | null;
   diaIso: string;
   filtros: Filtros;
+  /** La hoja de ese día, o `null` si desde esta pantalla no se imprime. */
+  urlDeImpresion: string | null;
   /** El pie que manda la fecha al campo, en el modo `elegir`. */
   elegirElDia: ((dia: string) => void) | null;
   /** Empezar a mover una orden, en el modo `programar`. */
@@ -752,6 +822,14 @@ function PanelDelDia({
               ? "Sin órdenes ese día"
               : `${ordenes.length} ${ordenes.length === 1 ? "orden" : "órdenes"}`}
           </div>
+          {urlDeImpresion && (
+            <EnlaceDeImpresion
+              href={urlDeImpresion}
+              className="mt-1 inline-block text-[11px] text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+            >
+              Imprimir este día
+            </EnlaceDeImpresion>
+          )}
         </div>
         <button
           type="button"
