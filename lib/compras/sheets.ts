@@ -759,8 +759,8 @@ export async function importarDesdeSheets(
         hoja_origen: registro.hoja,
         sheets_fila: registro.fila,
         sheets_sincronizado_en: sincronizadoEn,
-        // Las nueve columnas que la planilla puede no traer. La regla —y por
-        // qué cada una está en la lista— vive en `fusionarConLoQueYaHabia`.
+        // Las columnas que la planilla puede no traer. La lista, la regla y
+        // el porqué de cada una viven en `fusionarConLoQueYaHabia`.
         ...fusion,
       });
     }
