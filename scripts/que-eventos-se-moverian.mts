@@ -111,7 +111,9 @@ for (const c of noCreibles) console.log(`  ${c}`);
 console.log(
   sinInvariante.length === 0
     ? `
-Invariante: las ${cambian.length + noCreibles.length} órdenes listadas tienen fecha_cierre anterior a su fecha de inicio. OK.`
+Invariante: las ${cambian.length} órdenes de «Se moverían» tienen fecha_cierre anterior a su fecha de inicio. OK.` +
+      `
+  (Sólo comprueba esas: es una verificación cruzada de la regla, casi tautológica porque elCierreQueAdelanta ya comparó esas fechas, y no revisa las ${noCreibles.length} «no creíbles». Lo que detecta es una excepción que agarre órdenes que no cumplen la regla, no que el criterio sea el correcto.)`
     : `
 INVARIANTE ROTO: ${sinInvariante.join(", ")} no tienen fecha_cierre anterior a su inicio: la excepción está agarrando cerradas normales.`
 );

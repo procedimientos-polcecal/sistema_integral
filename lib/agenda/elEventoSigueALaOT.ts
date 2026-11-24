@@ -83,7 +83,7 @@ export const AVISO_DE_CIERRE_NO_CREIBLE = "La orden se cerró el";
 
 function avisoDeUnCierreNoCreible(c: { cierre: string; inicio: string; dias: number }): string {
   return (
-    `${AVISO_DE_CIERRE_NO_CREIBLE} el ${c.cierre}, ${c.dias} días antes de su fecha de ejecución ` +
+    `${AVISO_DE_CIERRE_NO_CREIBLE} ${c.cierre}, ${c.dias} días antes de su fecha de ejecución ` +
     `(${c.inicio}): es más de un año y parece un error de carga, así que el evento no se movió. ` +
     `Hay que corregir la fecha de cierre o la de ejecución.`
   );

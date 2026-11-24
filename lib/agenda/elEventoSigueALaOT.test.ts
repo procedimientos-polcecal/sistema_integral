@@ -212,6 +212,12 @@ describe("una OT cerrada antes de empezar", () => {
     expect(p.aviso).toContain("2026-11-10");
   });
 
+  it("el aviso del cierre no creible empieza exactamente asi y no repite el articulo", () => {
+    const p = planDelEvento(fila({}, { fecha_cierre: "2016-11-04" }));
+    expect(p.aviso!.startsWith("La orden se cerró el 2016-11-04, ")).toBe(true);
+    expect(p.aviso).not.toContain("el el");
+  });
+
   it("el aviso del cierre no creible no se reescribe en cada corrida", () => {
     const primero = planDelEvento(fila({}, { fecha_cierre: "2016-11-04" }));
     expect(planDelEvento(fila({ aviso: primero.aviso }, { fecha_cierre: "2016-11-04" })))
