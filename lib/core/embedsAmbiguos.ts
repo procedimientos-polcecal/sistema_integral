@@ -50,6 +50,15 @@ export const AMBIGUOS: ParAmbiguo[] = [
       "a cotizar ese pedido, que son muchos, contra el proveedor elegido, que es uno.",
   },
   {
+    origen: "compras_requerimientos",
+    destino: "empresas",
+    fk: "empresa_id",
+    porque:
+      "`compras_odoo_ordenes` es el segundo camino: un RI de AMBAS tiene una orden por " +
+      "empresa. Éste ya estaba bien escrito y comprobado en la pantalla del RI; entra al " +
+      "registro para que siga estándolo.",
+  },
+  {
     origen: "mensajes",
     destino: "usuarios",
     fk: "mensajes_creado_por_fkey",

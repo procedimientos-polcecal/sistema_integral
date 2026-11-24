@@ -34,11 +34,13 @@ import ComparativaDecision from "./ComparativaDecision";
  * eligió ese precio.
  */
 export default function Comparativa({
-  requerimiento: r, cotizaciones, proveedores, puedeEditar, esAsignado, dolar,
+  requerimiento: r, cotizaciones, proveedores, empresas, puedeEditar, esAsignado, dolar,
 }: {
   requerimiento: RequerimientoConRelaciones;
   cotizaciones: Cotizacion[];
   proveedores: ProveedorElegible[];
+  /** Para el alta de un proveedor desde el presupuesto. */
+  empresas: { id: string; nombre: string }[];
   puedeEditar: boolean;
   esAsignado: boolean;
   /** Con qué convertir los presupuestos que vinieron en dólares. */
@@ -306,6 +308,9 @@ export default function Comparativa({
             dolar={dolar}
             requerimientoId={r.id}
             proveedores={proveedores}
+            empresas={empresas}
+            empresaDelPedido={r.empresa_id}
+            pedidoPagaAmbas={r.paga_ambas}
             cantidadSugerida={r.cantidad}
             onListo={(a) => refrescar(a)}
             onCancelar={() => setCargando(false)}

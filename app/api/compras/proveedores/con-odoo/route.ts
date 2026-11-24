@@ -5,7 +5,7 @@ import { puedeEditarCompras } from "@/lib/compras/auth";
 import { traerTodo } from "@/lib/core/paginado";
 import { normalizarCuit } from "@/lib/core/cuit";
 import {
-  validarAlta, parecidosEnElPadron, empresasDelRequerimiento,
+  validarAlta, parecidosEnElPadron, destinoDelAlta, empresaParaGuardar,
   type ProveedorDelPadron,
 } from "@/lib/compras/altaDeProveedor";
 import { buscarCandidatos } from "@/lib/odoo/partnerDeProveedor";
@@ -85,6 +85,17 @@ export async function POST(request: Request) {
   const cuit = String(body?.cuit ?? "").trim();
   const requerimientoId = String(body?.requerimiento_id ?? "").trim();
 
+  /*
+   * De qué empresa es el proveedor. En Odoo funcionan dos perfiles y en el
+   * SdG el padrón es uno solo, así que es la pantalla la que tiene que decir
+   * a cuál va. Las dos columnas son excluyentes por un check de la base, y
+   * acá se fuerza antes de escribir: con `ambas` marcada, `empresa_id` viaja
+   * en null y no en lo que haya quedado tildado antes en el formulario.
+   */
+  const deQueEmpresa = empresaParaGuardar(body ?? {});
+  const trabajaConAmbas = deQueEmpresa.trabaja_con_ambas;
+  const empresaElegida = deQueEmpresa.empresa_id;
+
   const admin = createAdminClient();
 
   const padron = await traerTodo<ProveedorDelPadron>((desde, hasta) =>
@@ -105,7 +116,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ parecidos }, { status: 409 });
   }
 
-  const registro: Record<string, unknown> = { nombre, cuit };
+  const registro: Record<string, unknown> = { nombre, cuit, ...deQueEmpresa };
   for (const campo of CAMPOS_OPCIONALES) {
     if (body && campo in body) registro[campo] = body[campo];
   }
@@ -144,17 +155,18 @@ export async function POST(request: Request) {
       admin.from("empresas").select("id, nombre, odoo_company_id"),
     ]);
 
-    const destino = ri
-      ? empresasDelRequerimiento(ri, empresas ?? [])
-      : // Sin requerimiento no hay empresa que mande, así que se mira en las
-        // dos: enlazar de más no es un riesgo, el partner ya existe allá.
-        empresasDelRequerimiento({ empresa_id: null, paga_ambas: true }, empresas ?? []);
+    const destino = destinoDelAlta(
+      { empresaId: empresaElegida, ambas: trabajaConAmbas },
+      ri,
+      empresas ?? []
+    );
 
     const nombrePorId = new Map((empresas ?? []).map((e) => [e.id as string, e.nombre as string]));
 
     if (!destino.length) {
       avisoDeOdoo =
-        "El pedido no dice qué empresa paga, así que no se pudo buscar el proveedor en Odoo.";
+        "No se indicó de qué empresa es el proveedor y el pedido tampoco lo dice, " +
+        "así que no se pudo buscarlo en Odoo.";
     } else {
       const candidatos = await buscarCandidatos(cuit);
       const nombresEnOdoo = new Set<string>();

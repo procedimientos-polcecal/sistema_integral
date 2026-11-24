@@ -26,9 +26,14 @@ import Select from "@/components/Select";
  */
 export default function PresupuestoForm({
   requerimientoId, proveedores, cantidadSugerida, dolar, onListo, onCancelar,
+  empresas, empresaDelPedido, pedidoPagaAmbas,
 }: {
   requerimientoId: string;
   proveedores: ProveedorElegible[];
+  /** Para el alta de un proveedor: a qué perfil de Odoo va. */
+  empresas: { id: string; nombre: string }[];
+  empresaDelPedido: string | null;
+  pedidoPagaAmbas: boolean;
   cantidadSugerida: number | null;
   /** Con qué convertir si el proveedor cotiza en dólares. */
   dolar: { venta: number; fecha: string; alDia: boolean } | null;
@@ -287,6 +292,9 @@ export default function PresupuestoForm({
       {abrirAlta && (
         <NuevoProveedorModal
           requerimientoId={requerimientoId}
+          empresas={empresas}
+          empresaDelPedido={empresaDelPedido}
+          pedidoPagaAmbas={pedidoPagaAmbas}
           onCerrar={() => setAbrirAlta(false)}
           onUsarExistente={(id) => {
             elegirProveedor(id);
@@ -330,7 +338,13 @@ function avisoDelResultado(r: {
   if (!r.enlaces.length && !r.sinEnlazar.length) {
     partes.push("El proveedor quedó creado.");
   }
-  if (!r.enlaces.length) {
+  /*
+   * La promesa se hace **sólo** cuando no hay ningún obstáculo anotado. Si
+   * `sinEnlazar` trae motivos —archivado, en la otra empresa, hay que elegir—
+   * el que decide es ese motivo: prometer la creación ahí deja a la persona
+   * generando la orden contra el mismo cartel una y otra vez.
+   */
+  if (!r.enlaces.length && !r.sinEnlazar.length) {
     partes.push("Se va a crear en Odoo cuando se genere la orden de compra.");
   }
   return partes.join(" ");
