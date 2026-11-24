@@ -1077,13 +1077,17 @@ function SalidaDelPanolDelRenglon({
     setCandidatas(null);
     setMotivo("");
     setError("");
-    setVerTodas(todas);
     try {
       const res = await fetch(todas ? `${url}?todas=1` : url);
       const body = await res.json().catch(() => ({}));
       if (!res.ok) { setError(body.error ?? "No se pudieron traer las salidas del pañol."); return; }
       setCandidatas(body.candidatas ?? []);
       setMotivo(body.motivo ?? "");
+      // El estado sale de lo que el servidor **hizo** y no de lo que se le pidió.
+      // La ruta devuelve `todas` justamente para esto: fijarlo antes del fetch
+      // dejaba la pantalla afirmando «estás viendo todas» aunque el pedido
+      // fallara, y es lo que decide cuál de los dos botones se ofrece.
+      setVerTodas(body.todas ?? todas);
     } catch {
       setError("No se pudieron traer las salidas del pañol: no hay conexión con el servidor.");
     }

@@ -4181,6 +4181,27 @@ dejaría de cargar hasta que alguien corra el SQL. Si falla, la sección dice «
 pudo leer qué orden la declaró» —no «sin justificar», que sería una afirmación
 falsa— y deja un `console.error`.
 
+**7. Una trampa latente que hoy no muerde, medida el 24/11/2026 y por eso escrita
+en vez de arreglada.** El nombre del artículo que el modal de la OT muestra sale
+de un **embed** —`select("*, articulo:inventario_articulos(id, codigo,
+descripcion)")` en `app/api/mantenimiento/ordenes/[id]/repuestos/route.ts`, leído
+con **la sesión** y no con el cliente admin—, e `inventario_articulos` está
+cerrada con `tiene_acceso_inventario()`. O sea que a quien tenga Mantenimiento y
+**no** Inventario el embed le devuelve `articulo: null` **sin error**, y la
+pantalla diría «sin artículo» sobre un renglón que sí lo tiene — el mismo modo de
+fallo que obligó a `/mis-avisos` a leer el estado por una ruta aparte. Hoy no le
+pasa a nadie: de los 17 usuarios, 3 son `admin_sistema` —a los que RLS no frena—
+y **los 7 que tienen Mantenimiento tienen también Inventario**, así que los
+afectados son **0**. Por eso no se tocó: mudarlo al cliente admin es ensanchar
+una lectura para nadie. **Lo que hay que saber es cuándo deja de ser cierto**: el
+día que alguien reciba Mantenimiento sin Inventario —un grant perfectamente
+razonable— esa pantalla empieza a mentir en silencio para esa persona. Lo que
+**no** se rompe es el vínculo: el `articulo_id` que el modal usa para decidir sale
+de la **columna del renglón** y no del embed (ése fue un arreglo del 23/11), así
+que cambiar o soltar el artículo sigue chocando contra su 409. Miente la
+etiqueta, no la acción. Se vuelve a medir con la consulta de
+`usuario_modulos` cruzada contra `usuarios.rol`.
+
 ## Los datos: qué está y qué no
 
 **Todo lo que viene de las planillas está.** Avisos 138, órdenes de trabajo
