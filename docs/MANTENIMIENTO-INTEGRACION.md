@@ -4012,13 +4012,16 @@ entre las que elegir y elegir no significa nada. Por eso la lista es acotada
 (90 días desde la entrada, 10 salidas) y **el mismo día cuenta**: la `fecha` es un
 `date` sin hora, y «llegó y se usó hoy» es la candidata más probable.
 
-**4. Al desplegar, la sección «Salió del pañol» va a estar vacía en todas las
-fichas, y es lo correcto.** Sin artículo en el renglón no se ofrece ninguna
-salida —buscar por parecido de nombre sería enlazar al que se le parece—, y hoy
-**0 de 37** renglones tienen `articulo_id`. La precondición no es código: que
-Mantenimiento enlace el renglón con su artículo del pañol. «Sin justificar» no
-es un pendiente ni genera aviso: es el estado normal de toda salida (3.897 de
-3.897 el 23/11/2026).
+**4. Al desplegar, la ficha de cada RI con entradas va a listar hasta 10 salidas
+por entrada y todas van a decir «sin justificar», y es lo correcto.** La ficha
+parte del artículo de la **entrada** (`inventario_movimientos.articulo_id`) y no
+mira el renglón de la OT, así que lista aunque nadie haya declarado nada. Lo que
+sí está vacío es la **ayuda del modal de la OT**: sin artículo en el renglón no
+se ofrece ninguna salida —buscar por parecido de nombre sería enlazar al que se
+le parece—, y hoy **0 de 37** renglones tienen `articulo_id`. La precondición
+para que alguna salida diga «aplicado a» no es código: que Mantenimiento enlace
+el renglón con su artículo del pañol y declare la salida. «Sin justificar» no es
+un pendiente ni genera aviso: es el estado de toda salida no declarada.
 
 **5. El kardex llega tarde.** `inventario_movimientos` espeja la pestaña del
 kardex y el 23/11/2026 iba **73 filas detrás** de su planilla (5.063 contra
