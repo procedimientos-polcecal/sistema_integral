@@ -9,6 +9,9 @@ import {
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { oficioDeLaEspecialidad } from "@/lib/mantenimiento/genteDelDia";
+import {
+  SIN_ESPECIALIDAD, SIN_FILTROS, pasaElFiltro, type Filtros,
+} from "@/lib/mantenimiento/filtrosDelCalendario";
 import type { DiaDelCalendario } from "@/lib/mantenimiento/calendarioDeOT";
 import { porQueNoSePuedeMover, porQueNoSePuedeMoverA } from "@/lib/mantenimiento/moverLaOT";
 import { porQueNoSePuedeAsignar } from "@/lib/mantenimiento/asignarOperario";
@@ -75,16 +78,6 @@ export const OFICIOS: Record<Oficio, { uno: string; varios: string }> = {
 };
 const ORDEN_DE_OFICIOS: Oficio[] = ["mecanico", "electricista", "lubricador"];
 
-/** El valor del filtro de especialidad que busca las órdenes que no la tienen. */
-const SIN_ESPECIALIDAD = "__SIN__";
-
-interface Filtros {
-  especialidad: string;
-  tipo: string;
-  quien: string;
-}
-const SIN_FILTROS: Filtros = { especialidad: "", tipo: "", quien: "" };
-
 /**
  * Qué hace la pantalla con el día que se toca. Es una unión y no dos props
  * sueltas a propósito: «elegir una fecha» y «mover una orden» no pueden estar
@@ -126,18 +119,6 @@ export type ModoDelCalendario =
        */
       onAsignar: ((orden: OrdenDelDia, dia: string) => void) | null;
     };
-
-function pasaElFiltro(o: OrdenDelDia, f: Filtros): boolean {
-  if (f.especialidad) {
-    const vacia = !norm(o.especialidad);
-    if (f.especialidad === SIN_ESPECIALIDAD ? !vacia : norm(o.especialidad) !== norm(f.especialidad)) {
-      return false;
-    }
-  }
-  if (f.tipo && norm(o.tipo) !== norm(f.tipo)) return false;
-  if (f.quien && norm(o.quien) !== norm(f.quien)) return false;
-  return true;
-}
 
 /** Los inicios primero: son los que se ven en las tres fichas y los que importan al elegir. */
 function ordenadas(ordenes: OrdenDelDia[]): OrdenDelDia[] {
