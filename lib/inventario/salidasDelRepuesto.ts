@@ -90,3 +90,77 @@ export function aplicacionDelRenglon(
   }
   return { estado: "aplicado" };
 }
+
+/**
+ * Los números de las órdenes que declararon una salida, sin repetir y de menor
+ * a mayor. Son varias a propósito: el vínculo vive en el renglón de repuesto y
+ * no en el movimiento, así que una entrega de 10 puede estar declarada por dos
+ * órdenes y la ficha no puede mostrar una sola. Una orden con dos renglones que
+ * apuntan a la misma salida cuenta una vez.
+ */
+export function ordenesQueDeclararon(
+  movimientoId: string,
+  renglones: { movimiento_id: string | null; ot_number: number | null }[],
+): number[] {
+  const numeros = new Set<number>();
+  for (const r of renglones) {
+    if (r.movimiento_id === movimientoId && r.ot_number != null) numeros.add(r.ot_number);
+  }
+  return [...numeros].sort((a, b) => a - b);
+}
+
+/**
+ * Qué dicen los renglones de repuesto de una salida, mirado desde la salida.
+ *
+ * Reusa `aplicacionDelRenglon` para decidir cada renglón, así que la regla de
+ * «sólo es aplicado si el artículo coincide» vive en un solo lugar. `sin-ver`
+ * no puede darse acá —la salida está en la mano— y cuenta del lado de la pieza
+ * que no se pudo confirmar, que es lo más cauto que se puede decir.
+ *
+ * `{ [], [] }` es «ningún renglón la declaró», o sea «sin justificar». Eso es
+ * cierto sólo si quien llama pudo leer los renglones: si la lectura falló, lo
+ * que corresponde es no llamar a esto y decir que no se pudo leer.
+ */
+export function lecturaDeLaSalida(
+  salida: SalidaDelPanol,
+  renglones: { articulo_id: string | null; movimiento_id: string | null; ot_number: number | null }[],
+): { aplicadoA: number[]; otraPieza: number[] } {
+  const delMismoArticulo: typeof renglones = [];
+  const deOtraPieza: typeof renglones = [];
+  for (const r of renglones) {
+    if (r.movimiento_id !== salida.id) continue;
+    (aplicacionDelRenglon(r, salida).estado === "aplicado" ? delMismoArticulo : deOtraPieza).push(r);
+  }
+  return {
+    aplicadoA: ordenesQueDeclararon(salida.id, delMismoArticulo),
+    otraPieza: ordenesQueDeclararon(salida.id, deOtraPieza),
+  };
+}
+
+/** Una salida del pañol tal como la dibuja la ficha de un RI. */
+export interface SalidaParaLaFicha {
+  id: string;
+  fecha: string | null;
+  cantidad: number;
+  solicitante: string | null;
+  sector_raw: string | null;
+  equipo_raw: string | null;
+  /** Las órdenes que la declararon como suya, con su texto para mostrar. */
+  aplicadoA: { ot_number: number; descripcion: string | null }[];
+  /** Órdenes cuyo renglón la declaró pero es de otro artículo. */
+  otraPieza: number[];
+}
+
+/**
+ * Lo que la ficha sabe de las salidas, y hasta dónde lo sabe. Tres lecturas
+ * porque «no hay» y «no se pudo leer» no pueden verse iguales:
+ * - `completa`: se leyeron las salidas y quién las declaró.
+ * - `sin-las-declaraciones`: hay salidas, pero no se pudo leer qué órdenes las
+ *   declararon (típicamente, la migración de `movimiento_id` sin aplicar), así
+ *   que no se puede decir «sin justificar».
+ * - `fallida`: no se pudieron leer ni las salidas.
+ */
+export interface SalidasDeLaFicha {
+  lectura: "completa" | "sin-las-declaraciones" | "fallida";
+  salidas: SalidaParaLaFicha[];
+}

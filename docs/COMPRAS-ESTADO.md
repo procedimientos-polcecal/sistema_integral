@@ -993,6 +993,16 @@ ser el serial de Sheets en vez de `d/m/aaaa`— así que toca todo el parseo de 
 sincronización. Son 4 filas sobre 1.965 y ninguna es de plata: queda anotado,
 no hecho.
 
+## La trazabilidad del repuesto en la ficha (23/11/2026)
+
+La ficha de un RI tiene una sección **Trazabilidad** con tres renglones: «Se pidió
+para» (la OT de la que nació, columna del propio RI), «Entró al pañol» y «Salió
+del pañol». Este último **lo muestra y no lo deja editar**: quien declara de qué
+salida salió el repuesto es Mantenimiento, en la OT, y la ficha dice «sin
+justificar» sin botón. Sólo lo ve quien puede editar Compras, y se lee con el
+cliente admin. El porqué y lo que no se deduce está en la sección `## De qué salida
+del pañol salió un repuesto` de [MANTENIMIENTO-INTEGRACION.md](MANTENIMIENTO-INTEGRACION.md).
+
 ## Lo que quedó pendiente
 
 1. **Seguimiento de compra** — la recepción, `RECIBIDO`, y el análisis de

@@ -3972,6 +3972,66 @@ cierto cuando se escribió y dejó de serlo con el punto 2. La migración
 `20261116082907` **ya está aplicada y una migración aplicada no se edita**: se
 corrige con un `comment on` en otra. Hasta que eso pase, manda lo que dice acá.
 
+## De qué salida del pañol salió un repuesto (23/11/2026)
+
+El renglón de repuesto de una OT puede decir **de qué salida del pañol salió la
+pieza**, y la ficha del RI de Compras lo lee junto con la orden para la que se
+pidió y la entrada al pañol. Es la mitad B de la trazabilidad; la mitad A (el RI
+recuerda de qué OT nació) está en [COMPRAS.md](COMPRAS.md), sección `## Para qué OT
+se pidió un RI`. [Spec](superpowers/specs/2026-11-23-compras-trazabilidad-del-repuesto-design.md)
+y [plan](superpowers/plans/2026-11-23-compras-trazabilidad-del-repuesto.md). La
+decisión vive en `lib/inventario/salidasDelRepuesto.ts`, la ruta en
+`app/api/mantenimiento/repuestos/[id]/movimiento`, la línea de la OT en
+`RepuestosOTModal.tsx` y la lectura de la ficha en
+`app/(app)/compras/requerimientos/[id]/page.tsx`. La migración es
+`20261123214811` y **va antes del código**.
+
+### Lo que no se deduce del código
+
+**1. Pedir no es usar, y por eso el vínculo es un dato aparte.** Que un RI recuerde
+su OT dice de dónde nació el pedido; lo que prueba que la pieza fue a esa orden
+es **una salida del pañol, y alguien tiene que decir cuál**. La ficha tiene los dos
+renglones —«Se pidió para» y «aplicado a»— y no los funde nunca.
+
+**2. El vínculo vive en el renglón de repuesto y no en el movimiento.**
+`ordenes_trabajo_repuestos.movimiento_id` apunta a la salida, y
+`inventario_movimientos` no cambia en nada. Por eso la sincronización de
+Inventario no se toca, el permiso es el de Mantenimiento —quien sabe en qué
+orden se usó la pieza— y el riesgo de que el kardex reuse una `sheets_fila` pasa
+de invisible a detectable: si el artículo del renglón y el de la salida no
+coinciden, la línea dice que el vínculo apunta a otra pieza en vez de «aplicado».
+**Un renglón apunta a una salida y una salida puede estar declarada por dos
+órdenes**: una entrega de 10 puede cubrir dos, y la ficha las nombra a las dos.
+La cantidad no se reparte (`ordenes_trabajo_repuestos.cantidad` es texto libre,
+hoy con cosas como «23 Grillas de 2mm»).
+
+**3. Esto sirve para el repuesto y no para el consumible.** Medido el 23/11/2026,
+la mediana de salidas posteriores a una entrada es **2** y el máximo **454**: un
+repuesto se compra, entra y sale una o dos veces; un consumible tiene cientos
+entre las que elegir y elegir no significa nada. Por eso la lista es acotada
+(90 días desde la entrada, 10 salidas) y **el mismo día cuenta**: la `fecha` es un
+`date` sin hora, y «llegó y se usó hoy» es la candidata más probable.
+
+**4. Al desplegar, la sección «Salió del pañol» va a estar vacía en todas las
+fichas, y es lo correcto.** Sin artículo en el renglón no se ofrece ninguna
+salida —buscar por parecido de nombre sería enlazar al que se le parece—, y hoy
+**0 de 37** renglones tienen `articulo_id`. La precondición no es código: que
+Mantenimiento enlace el renglón con su artículo del pañol. «Sin justificar» no
+es un pendiente ni genera aviso: es el estado normal de toda salida (3.897 de
+3.897 el 23/11/2026).
+
+**5. El kardex llega tarde.** `inventario_movimientos` espeja la pestaña del
+kardex y el 23/11/2026 iba **73 filas detrás** de su planilla (5.063 contra
+5.136): una salida cargada en la planilla y todavía no importada no aparece entre
+las candidatas, sin error, y se resuelve sola con la próxima sincronización.
+
+**6. La ficha degrada sola mientras la migración no esté aplicada.** La lectura de
+qué renglones declararon una salida es una consulta aparte, a propósito: si
+nombrara `movimiento_id` dentro de las que hacen andar la ficha, la de todos los RI
+dejaría de cargar hasta que alguien corra el SQL. Si falla, la sección dice «no se
+pudo leer qué orden la declaró» —no «sin justificar», que sería una afirmación
+falsa— y deja un `console.error`.
+
 ## Los datos: qué está y qué no
 
 **Todo lo que viene de las planillas está.** Avisos 138, órdenes de trabajo

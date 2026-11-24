@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   aplicacionDelRenglon,
+  lecturaDeLaSalida,
+  ordenesQueDeclararon,
   salidasCandidatas,
   type SalidaDelPanol,
 } from "./salidasDelRepuesto";
@@ -137,5 +139,53 @@ describe("que dice un vinculo", () => {
       salida("m1", "2026-11-18", { articulo_id: null }),
     );
     expect(r.estado).toBe("otra-pieza");
+  });
+});
+
+describe("que ordenes declararon una salida", () => {
+  it("una misma salida puede estar declarada por dos ordenes, y se nombran las dos", () => {
+    // Una entrega de 10 puede cubrir dos ordenes, y nada lo impide: el vinculo
+    // vive en el renglon, no en el movimiento. La ficha no puede mostrar una
+    // sola.
+    expect(ordenesQueDeclararon("m1", [
+      { movimiento_id: "m1", ot_number: 2983 }, { movimiento_id: "m1", ot_number: 3001 },
+      { movimiento_id: "m2", ot_number: 2999 },
+    ])).toEqual([2983, 3001]);
+  });
+
+  it("una orden con dos renglones que apuntan a la misma salida se nombra una vez", () => {
+    expect(ordenesQueDeclararon("m1", [
+      { movimiento_id: "m1", ot_number: 2983 }, { movimiento_id: "m1", ot_number: 2983 },
+    ])).toEqual([2983]);
+  });
+
+  it("sin renglones que la declaren, la lista es vacia", () => {
+    expect(ordenesQueDeclararon("m1", [{ movimiento_id: "m2", ot_number: 2999 }])).toEqual([]);
+  });
+});
+
+describe("como lee la ficha una salida", () => {
+  const s = salida("m1", "2026-11-18");
+
+  it("sin ningun renglon que la declare, no hay ni orden ni aviso", () => {
+    expect(lecturaDeLaSalida(s, [{ articulo_id: "a1", movimiento_id: "m2", ot_number: 2999 }]))
+      .toEqual({ aplicadoA: [], otraPieza: [] });
+  });
+
+  it("un renglon del mismo articulo la aplica a su orden", () => {
+    expect(lecturaDeLaSalida(s, [{ articulo_id: "a1", movimiento_id: "m1", ot_number: 2983 }]))
+      .toEqual({ aplicadoA: [2983], otraPieza: [] });
+  });
+
+  it("un renglon de otro articulo no dice aplicado: avisa, y nombra la orden", () => {
+    expect(lecturaDeLaSalida(s, [{ articulo_id: "a2", movimiento_id: "m1", ot_number: 2983 }]))
+      .toEqual({ aplicadoA: [], otraPieza: [2983] });
+  });
+
+  it("dos ordenes la declaran y una es de otra pieza: salen las dos lecturas", () => {
+    expect(lecturaDeLaSalida(s, [
+      { articulo_id: "a1", movimiento_id: "m1", ot_number: 3001 },
+      { articulo_id: null, movimiento_id: "m1", ot_number: 2983 },
+    ])).toEqual({ aplicadoA: [3001], otraPieza: [2983] });
   });
 });

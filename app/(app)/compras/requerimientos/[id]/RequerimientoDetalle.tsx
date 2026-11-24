@@ -18,6 +18,7 @@ import type { CotizacionDolar } from "@/lib/compras/dolar";
 import type { ProveedorElegible } from "@/lib/compras/comparativa";
 import SelectorProveedor from "../../SelectorProveedor";
 import type { EntradaAlPanol } from "@/lib/inventario/types";
+import type { SalidasDeLaFicha } from "@/lib/inventario/salidasDelRepuesto";
 import { textoDelOrigen } from "@/lib/compras/origenEnLaOT";
 import type { OrigenEnLaOT } from "@/lib/compras/origenEnLaOT";
 import { justificacionQueExplica } from "@/lib/core/justificacion";
@@ -31,8 +32,13 @@ import MarcaMontoAlto from "../../MarcaMontoAlto";
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
   esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [], ordenesOdoo = [], odoo, umbralMontoAlto, historicoDelArticulo,
-  origenEnLaOT = null,
+  origenEnLaOT = null, salidasDelPanol = null,
 }: {
+  /**
+   * Lo que salió del pañol y a qué orden se declaró. Null si quien mira no puede
+   * editar Compras (la sección no se dibuja): no es lo mismo que «no hay salidas».
+   */
+  salidasDelPanol?: SalidasDeLaFicha | null;
   requerimiento: RequerimientoConRelaciones;
   /** La OT para la que se pidió, ya resuelta. Null si no nació de una o la orden se borró. */
   origenEnLaOT?: OrigenEnLaOT | null;
@@ -595,22 +601,32 @@ export default function RequerimientoDetalle({
             odoo={odoo}
           />
 
-          {/* ── Para qué OT se pidió ──────────────────────────
-              Sólo dice de dónde nació el pedido; no dice que el repuesto se
-              haya aplicado. Sin OT, o con la orden borrada, no se dibuja. */}
-          {textoDelOrigen(origenEnLaOT) && (
+          {/* ── Trazabilidad ──────────────────────────────────
+              Tres renglones y cada uno dice de qué habla: para qué OT se pidió
+              (la intención), qué entró al pañol y qué salió de ahí (el hecho).
+              «Se pidió para» nunca se funde con «aplicado a»: haber pedido para
+              una orden no dice que la pieza se haya usado en ella. Sin nada
+              que mostrar la sección no se dibuja.
+
+              Los dos primeros los ve cualquiera que abra la ficha; el tercero
+              sólo llega si quien mira puede editar Compras (ver `page.tsx`). */}
+          {(textoDelOrigen(origenEnLaOT) || entradasAlPanol.length > 0) && (
             <section className="rounded-xl border border-slate-200 bg-white p-5">
               <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Se pidió para
+                Trazabilidad
               </h2>
-              <p className="text-sm text-slate-700">{textoDelOrigen(origenEnLaOT)}</p>
-              {origenEnLaOT?.repuesto_nombre && (
-                <p className="mt-1 text-xs text-slate-500">
-                  desde el repuesto «{origenEnLaOT.repuesto_nombre}»
-                </p>
+
+              {textoDelOrigen(origenEnLaOT) && (
+                <div className="mb-4">
+                  <h3 className="mb-1 text-xs font-semibold text-slate-500">Se pidió para</h3>
+                  <p className="text-sm text-slate-700">{textoDelOrigen(origenEnLaOT)}</p>
+                  {origenEnLaOT?.repuesto_nombre && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      desde el repuesto «{origenEnLaOT.repuesto_nombre}»
+                    </p>
+                  )}
+                </div>
               )}
-            </section>
-          )}
 
           {/* ── Lo que entró al pañol ─────────────────────────
               Una entrada al pañol con este N° de RI es la recepción de este
@@ -619,10 +635,8 @@ export default function RequerimientoDetalle({
               está completo lo sabe quien lo recibió. Mismo criterio que los
               proveedores sin reconocer y las ubicaciones sin enlazar. */}
           {entradasAlPanol.length > 0 && (
-            <section className="rounded-xl border border-slate-200 bg-white p-5">
-              <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Entró al pañol
-              </h2>
+            <div>
+              <h3 className="mb-1 text-xs font-semibold text-slate-500">Entró al pañol</h3>
               <ul className="space-y-2">
                 {entradasAlPanol.map((e) => (
                   <li key={e.id} className="flex items-baseline justify-between gap-3 text-sm">
@@ -660,6 +674,73 @@ export default function RequerimientoDetalle({
                   {r.fecha_recepcion ? ` el ${fecha(r.fecha_recepcion)}` : ""}.
                 </p>
               )}
+            </div>
+          )}
+
+          {/* ── Lo que salió del pañol ────────────────────────
+              Sólo lectura, y a propósito: lo que prueba que la pieza fue a una
+              orden lo declara Mantenimiento en el renglón de repuesto de esa
+              OT, que es quien sabe en qué se usó. Acá no hay botón. «Sin
+              justificar» es el estado normal —hoy son todas— y no un pendiente
+              de nadie, así que no se pinta como alerta.
+
+              `salidasDelPanol` es null si quien mira no puede editar Compras:
+              no es lo mismo que «no hay salidas». */}
+          {salidasDelPanol && entradasAlPanol.length > 0 && (
+            <div className="mt-4 border-t border-slate-100 pt-3">
+              <h3 className="mb-1 text-xs font-semibold text-slate-500">Salió del pañol</h3>
+              {salidasDelPanol.lectura === "fallida" ? (
+                <p className="text-sm text-slate-500">No se pudieron leer las salidas del pañol.</p>
+              ) : salidasDelPanol.salidas.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  El pañol no registró salidas de este artículo en los 90 días siguientes a su entrada.
+                </p>
+              ) : (
+                <>
+                  <ul className="space-y-3">
+                    {salidasDelPanol.salidas.map((s) => (
+                      <li key={s.id} className="text-sm">
+                        <div className="text-slate-700">
+                          {s.fecha ? fecha(s.fecha) : "sin fecha"} · {s.cantidad} un.
+                          {[s.solicitante, s.sector_raw, s.equipo_raw].filter(Boolean).map((t) => ` · ${t}`).join("")}
+                        </div>
+                        {salidasDelPanol.lectura === "sin-las-declaraciones" ? (
+                          <div className="text-xs text-slate-500">
+                            → no se pudo leer qué orden la declaró
+                          </div>
+                        ) : (
+                          <>
+                            {s.aplicadoA.map((o) => (
+                              <div key={o.ot_number} className="text-xs text-slate-700">
+                                → aplicado a la OT #{o.ot_number}
+                                {o.descripcion?.trim() ? ` «${o.descripcion.trim()}»` : ""}
+                              </div>
+                            ))}
+                            {s.otraPieza.map((n) => (
+                              <div key={`otra-${n}`} className="text-xs text-amber-800">
+                                → la OT #{n} la declaró, pero ese repuesto es de otro artículo: no
+                                cuenta como aplicada
+                              </div>
+                            ))}
+                            {s.aplicadoA.length === 0 && s.otraPieza.length === 0 && (
+                              <div className="text-xs text-slate-500">
+                                → sin justificar (lo declara Mantenimiento en la OT, no desde acá)
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-xs text-slate-400">
+                    Son las salidas del mismo artículo desde que entró, las 10 más recientes. «Sin
+                    justificar» no es un pendiente: es el estado de toda salida que Mantenimiento
+                    no declaró en una orden.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
             </section>
           )}
 
