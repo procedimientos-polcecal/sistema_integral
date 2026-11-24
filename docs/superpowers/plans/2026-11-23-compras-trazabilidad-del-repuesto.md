@@ -88,7 +88,7 @@ Inventario.
 
 ## Parte A — el pedido recuerda de qué OT nació
 
-### Tarea 1: La migración de Compras
+### Task 1: La migración de Compras
 
 **Files:**
 - Create: `supabase/migrations/<ts>_compras_el_pedido_recuerda_su_ot.sql` (el nombre lo da `npm run migracion "compras el pedido recuerda su ot"`)
@@ -137,7 +137,7 @@ git commit -m "feat(compras): el pedido recuerda de que OT nacio (migracion por 
 
 ---
 
-### Tarea 2: La sincronización no borra el origen
+### Task 2: La sincronización no borra el origen
 
 **Files:**
 - Modify: `lib/compras/fusionDeLaPlanilla.ts`
@@ -209,10 +209,11 @@ git commit -m "fix(compras): la sincronizacion no borra de que OT nacio el pedid
 
 ---
 
-### Tarea 3: El pedido sugerido lleva la OT y el renglón
+### Task 3: El pedido sugerido lleva la OT y el renglón
 
 **Files:**
 - Modify: `lib/mantenimiento/pedirRepuesto.ts`
+- Modify: `app/(app)/mantenimiento/ordenes/RepuestosOTModal.tsx` (el único sitio de llamada)
 - Test: `lib/mantenimiento/pedirRepuesto.test.ts`
 
 **Interfaces:**
@@ -249,16 +250,29 @@ Expected: FAIL
 Run: `npx vitest run lib/mantenimiento/pedirRepuesto.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Pasar los ids en el único sitio de llamada**
+
+En `RepuestosOTModal`, la llamada queda
+`pedidoSugerido({ id: r.id, nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad }, d, orden, ubicaciones, areas)`,
+y el objeto `orden` que ese modal ya tiene lleva su `id`. **Va en esta tarea y no
+en la 4**: `id` es obligatorio en los dos tipos, así que sin esto el árbol deja de
+typechequear en cuanto se commitea el paso 3.
+
+- [ ] **Step 6: Verificar tipos**
+
+Run: `npx tsc --noEmit`
+Expected: sin errores.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add lib/mantenimiento/pedirRepuesto.ts lib/mantenimiento/pedirRepuesto.test.ts
+git add lib/mantenimiento/pedirRepuesto.ts lib/mantenimiento/pedirRepuesto.test.ts "app/(app)/mantenimiento/ordenes/RepuestosOTModal.tsx"
 git commit -m "feat(mantenimiento): el pedido sugerido lleva su OT y su renglon"
 ```
 
 ---
 
-### Tarea 4: El alta guarda el origen
+### Task 4: El alta guarda el origen
 
 **Files:**
 - Modify: `app/(app)/compras/requerimientos/NuevoRequerimientoModal.tsx` (`ValoresIniciales` y el cuerpo del POST)
@@ -280,7 +294,7 @@ Como `ot_id` y `ot_repuesto_id` —snake_case, que es la convención del cuerpo�
 con `|| null`. Los lee de `inicial`, no del estado: no son campos del formulario
 y nadie los edita.
 
-- [ ] **Step 3: La llamada de `RepuestosOTModal` pasa los ids**
+- [ ] **Step 3: (movido a la tarea 3 por el ruling 1 del pre-flight — nada que hacer acá)**
 
 `pedidoSugerido({ id: r.id, nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad }, d, orden, ubicaciones, areas)`
 y `orden` tiene que llevar su `id`.
@@ -306,7 +320,7 @@ git commit -m "feat(compras): el RI nacido de una OT guarda de donde vino"
 
 ---
 
-### Tarea 5: La ficha dice «Se pidió para»
+### Task 5: La ficha dice «Se pidió para»
 
 **Files:**
 - Modify: `app/(app)/compras/requerimientos/[id]/page.tsx`
@@ -388,7 +402,7 @@ git commit -m "feat(compras): la ficha del RI dice para que OT se pidio"
 
 ## Parte B — el repuesto dice de qué salida salió
 
-### Tarea 6: La migración de Mantenimiento
+### Task 6: La migración de Mantenimiento
 
 **Files:**
 - Create: `supabase/migrations/<ts>_mant_el_repuesto_dice_de_que_salida_salio.sql`
@@ -429,7 +443,7 @@ git commit -m "feat(mantenimiento): el repuesto dice de que salida del panol sal
 
 ---
 
-### Tarea 7: Qué salidas son candidatas, y qué dice un vínculo
+### Task 7: Qué salidas son candidatas, y qué dice un vínculo
 
 **Files:**
 - Create: `lib/inventario/salidasDelRepuesto.ts`
@@ -508,7 +522,7 @@ git commit -m "feat(inventario): que salidas del panol pueden ser la de un repue
 
 ---
 
-### Tarea 8: La ruta que declara la salida
+### Task 8: La ruta que declara la salida
 
 **Files:**
 - Create: `app/api/mantenimiento/repuestos/[id]/movimiento/route.ts`
@@ -558,7 +572,7 @@ git commit -m "feat(mantenimiento): declarar de que salida del panol salio un re
 
 ---
 
-### Tarea 9: La línea «Salió del pañol» en el modal de la OT
+### Task 9: La línea «Salió del pañol» en el modal de la OT
 
 **Files:**
 - Modify: `app/(app)/mantenimiento/ordenes/RepuestosOTModal.tsx`
@@ -597,7 +611,7 @@ git commit -m "feat(mantenimiento): el repuesto de una OT dice de que salida sal
 
 ---
 
-### Tarea 10: La sección Trazabilidad en la ficha del RI
+### Task 10: La sección Trazabilidad en la ficha del RI
 
 **Files:**
 - Modify: `app/(app)/compras/requerimientos/[id]/page.tsx`
