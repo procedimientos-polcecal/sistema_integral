@@ -137,7 +137,19 @@ describe("indicadoresDelMes", () => {
 describe("indicadoresDeHoy", () => {
   it("devuelve null si hoy no está entre los días que llegaron", () => {
     const dias = [dia("2026-11-10", []), dia("2026-11-11", [])];
-    expect(indicadoresDeHoy(dias, "2026-12-01", SIN_FILTROS)).toBeNull();
+    expect(indicadoresDeHoy(dias, "2026-11", "2026-12-01", SIN_FILTROS)).toBeNull();
+  });
+
+  it("devuelve null si hoy llegó sólo como relleno del mes de al lado", () => {
+    /*
+     * La grilla de diciembre arranca el lunes 30/11, así que ese día llega con
+     * sus órdenes aunque el mes que se está mirando sea diciembre. Decidir por
+     * «hoy está entre los días que llegaron» pone el bloque «Hoy» —con datos
+     * correctos— abajo de un encabezado que dice diciembre, y de paso esconde
+     * el botón «Ir a hoy», que es justo el que haría falta ahí.
+     */
+    const dias = [dia("2026-11-30", [orden({ ot_number: 1 })]), dia("2026-12-01", [])];
+    expect(indicadoresDeHoy(dias, "2026-12", "2026-11-30", SIN_FILTROS)).toBeNull();
   });
 
   it("cuenta las de hoy, las atrasadas de hoy y las que no tienen ningún operario", () => {
@@ -149,19 +161,19 @@ describe("indicadoresDeHoy", () => {
         orden({ ot_number: 3 }),
       ]),
     ];
-    expect(indicadoresDeHoy(dias, "2026-11-11", SIN_FILTROS)).toEqual({
+    expect(indicadoresDeHoy(dias, "2026-11", "2026-11-11", SIN_FILTROS)).toEqual({
       total: 3, atrasadas: 1, sinOperario: 2,
     });
   });
 
   it("una orden con operario_2 puesto y los otros dos en null NO cuenta como sin operario", () => {
     const dias = [dia("2026-11-11", [orden({ ot_number: 1, operario_2: "GÓMEZ" })])];
-    expect(indicadoresDeHoy(dias, "2026-11-11", SIN_FILTROS)?.sinOperario).toBe(0);
+    expect(indicadoresDeHoy(dias, "2026-11", "2026-11-11", SIN_FILTROS)?.sinOperario).toBe(0);
   });
 
   it("un operario que es sólo espacios cuenta como sin operario", () => {
     const dias = [dia("2026-11-11", [orden({ ot_number: 1, operario_1: "   " })])];
-    expect(indicadoresDeHoy(dias, "2026-11-11", SIN_FILTROS)?.sinOperario).toBe(1);
+    expect(indicadoresDeHoy(dias, "2026-11", "2026-11-11", SIN_FILTROS)?.sinOperario).toBe(1);
   });
 
   it("respeta el filtro", () => {
@@ -171,7 +183,7 @@ describe("indicadoresDeHoy", () => {
         orden({ ot_number: 2, especialidad: "ELÉCTRICO", atrasada: true }),
       ]),
     ];
-    expect(indicadoresDeHoy(dias, "2026-11-11", filtros({ especialidad: "ELÉCTRICO" }))).toEqual({
+    expect(indicadoresDeHoy(dias, "2026-11", "2026-11-11", filtros({ especialidad: "ELÉCTRICO" }))).toEqual({
       total: 1, atrasadas: 1, sinOperario: 1,
     });
   });

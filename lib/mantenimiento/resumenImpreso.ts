@@ -125,12 +125,20 @@ export interface IndicadoresDeHoy {
  *
  * El `null` es lo que distingue «hoy no hay nada» de «este mes no es el de
  * hoy»: un cero en diciembre mirando marzo sería una mentira tranquilizadora.
+ *
+ * **El mes se pregunta aparte y no se deduce de `dias`.** La grilla trae las
+ * semanas parciales de los bordes, así que mirando diciembre un 30 de
+ * noviembre hoy *está* entre los días que llegaron: buscarlo ahí ponía el
+ * bloque «Hoy» —con datos correctos— abajo de un encabezado que decía
+ * diciembre, y escondía el botón «Ir a hoy», que es el que hacía falta.
  */
 export function indicadoresDeHoy(
   dias: DiaDelCalendario[],
+  mes: string,
   hoy: string,
   f: Filtros,
 ): IndicadoresDeHoy | null {
+  if (!hoy.startsWith(mes)) return null;
   const d = dias.find((x) => x.dia === hoy);
   if (!d) return null;
   let total = 0;

@@ -223,7 +223,7 @@ export default function MesDeOrdenes({ puedeMover, puedeAsignar }: {
     [estado]
   );
   const deHoy = useMemo(
-    () => (estado ? indicadoresDeHoy(estado.dias, hoy, estado.filtros) : null),
+    () => (estado ? indicadoresDeHoy(estado.dias, estado.mes, hoy, estado.filtros) : null),
     [estado, hoy]
   );
   const hayFiltro = Boolean(
