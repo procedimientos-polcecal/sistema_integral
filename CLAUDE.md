@@ -100,7 +100,7 @@ tabla de control. Un agente puede escribir la migración y, si es sólo DML,
 aplicar el equivalente por PostgREST — pero **no puede correr DDL**. Cuando una
 tarea depende de una tabla o columna nueva, hay que decirlo y quedar a la espera.
 
-Antes de escribir una, leer las ocho trampas del
+Antes de escribir una, leer las once trampas del
 [README de migraciones](supabase/migrations/README.md). Dos de ellas ya pasaron
 **dos veces**:
 
@@ -1361,11 +1361,22 @@ la obligación de anotar se mudó a quien llama.
 
 Cada corrida **lista las `pantalla`**, que son la excepción a la regla y lo
 primero que hay que mirar cuando un dato se pierde. Eran cinco; desde que los
-avisos tienen su cola (29/10/2026) **son dos**: las notas de una OT y el libro
-de comparativa de un RI, las dos con su porqué medido. Sale 1 si hay algún
-ROMPE, hoy da **ROMPE 0 · MIRAR 0**, y **todavía no está en el CI** por lo
-mismo que `revisar-responsive`: primero conviene que el registro aguante unas
-semanas de cambios.
+avisos tienen su cola (29/10/2026) **son tres**: las notas de una OT, la
+respuesta de Compras a una consulta por un repuesto —que escribe la misma
+columna X y por el mismo motivo— y el libro de comparativa de un RI, las tres
+con su porqué medido. Sale 1 si hay algún ROMPE, y **hoy da ROMPE 1 · MIRAR 0**:
+es `lib/mantenimiento/altaDeOS.ts`, que escribe en la planilla del formulario de
+OS y no está declarado en el registro del script. **No se declaró a propósito, y
+eso es lo que hay que saber antes de cerrarlo**: ese módulo nació el 19/11/2026
+en dos commits (`669dec76` y `4c7c1ca6`) y **todavía no lo llama nadie** —sólo
+su propio test—, así que es un alta a medio cablear. Hoy la escritura **es** el
+alta y todos sus caminos de fallo devuelven `ok: false` sin dejar nada, o sea
+`aborta`; pero el día que se la cablee a una ruta que inserte en la base antes
+de escribir, esa declaración pasa a ser falsa **sin que nada avise**, que es
+exactamente lo que el script existe para impedir. Lo contesta quien termine esa
+alta, no quien pase por al lado. Y **todavía no está en el CI** por lo mismo que
+`revisar-responsive`: primero conviene que el registro aguante unas semanas de
+cambios.
 
 **Las tres colas no son iguales, y la de los avisos es la rara.** Las OT y las
 OS rearman el registro entero desde la fila; los avisos guardan además **qué

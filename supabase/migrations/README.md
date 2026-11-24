@@ -43,7 +43,7 @@ El orden entre los dos formatos funciona solo: alfabéticamente `0…` va antes 
 
 ## Antes de escribir una migración
 
-Diez trampas que esta base ya pisó; una de ellas **tres veces**:
+Once trampas que esta base ya pisó; una de ellas **tres veces**:
 
 **Un valor de enum nuevo viaja solo.** Postgres no deja usar un valor de enum
 hasta que la transacción que lo agregó commiteó, y el editor de Supabase corre
