@@ -18,6 +18,8 @@ import type { CotizacionDolar } from "@/lib/compras/dolar";
 import type { ProveedorElegible } from "@/lib/compras/comparativa";
 import SelectorProveedor from "../../SelectorProveedor";
 import type { EntradaAlPanol } from "@/lib/inventario/types";
+import { textoDelOrigen } from "@/lib/compras/origenEnLaOT";
+import type { OrigenEnLaOT } from "@/lib/compras/origenEnLaOT";
 import { justificacionQueExplica } from "@/lib/core/justificacion";
 import { linkDeLaComparativa } from "@/lib/compras/vincular";
 import Select from "@/components/Select";
@@ -29,8 +31,11 @@ import MarcaMontoAlto from "../../MarcaMontoAlto";
 export default function RequerimientoDetalle({
   requerimiento: r, historial, cotizaciones, proveedores, empresas, puedeEditar, puedeAprobar,
   esAsignado, aprobadores, dolar, volverA, entradasAlPanol = [], ordenesOdoo = [], odoo, umbralMontoAlto, historicoDelArticulo,
+  origenEnLaOT = null,
 }: {
   requerimiento: RequerimientoConRelaciones;
+  /** La OT para la que se pidió, ya resuelta. Null si no nació de una o la orden se borró. */
+  origenEnLaOT?: OrigenEnLaOT | null;
   /** Lo que el pañol registró contra este RI. Vacío si no entró nada todavía. */
   entradasAlPanol?: EntradaAlPanol[];
   historial: HistorialItem[];
@@ -589,6 +594,23 @@ export default function RequerimientoDetalle({
             puedeEditar={puedeEditar}
             odoo={odoo}
           />
+
+          {/* ── Para qué OT se pidió ──────────────────────────
+              Sólo dice de dónde nació el pedido; no dice que el repuesto se
+              haya aplicado. Sin OT, o con la orden borrada, no se dibuja. */}
+          {textoDelOrigen(origenEnLaOT) && (
+            <section className="rounded-xl border border-slate-200 bg-white p-5">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Se pidió para
+              </h2>
+              <p className="text-sm text-slate-700">{textoDelOrigen(origenEnLaOT)}</p>
+              {origenEnLaOT?.repuesto_nombre && (
+                <p className="mt-1 text-xs text-slate-500">
+                  desde el repuesto «{origenEnLaOT.repuesto_nombre}»
+                </p>
+              )}
+            </section>
+          )}
 
           {/* ── Lo que entró al pañol ─────────────────────────
               Una entrada al pañol con este N° de RI es la recepción de este

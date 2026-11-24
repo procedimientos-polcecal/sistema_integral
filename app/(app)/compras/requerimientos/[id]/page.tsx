@@ -7,6 +7,8 @@ import { permisosComprasActuales } from "@/lib/compras/sesion";
 import { cotizacionDeHoy } from "@/lib/compras/dolar";
 import { volverAlListado } from "@/lib/compras/filtrosUrl";
 import { umbralDeMontoAlto } from "@/lib/compras/ajustes";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { OrigenEnLaOT } from "@/lib/compras/origenEnLaOT";
 import RequerimientoDetalle from "./RequerimientoDetalle";
 import { dondeApuntaOdoo, enlaceAOdoo } from "@/lib/odoo/client";
 import type { RequerimientoConRelaciones, HistorialItem, Cotizacion } from "@/lib/compras/types";
@@ -91,6 +93,37 @@ export default async function RequerimientoPage({
     .eq("tipo", "entrada")
     .order("fecha", { ascending: false });
 
+  /*
+   * Para qué OT se pidió. PERMISO: lo ve cualquiera que pueda abrir la ficha,
+   * porque es la procedencia de su propio pedido. Por eso se lee con el
+   * cliente admin: `ordenes_trabajo` está cerrada con `mant_puede_ver()` y con
+   * la sesión la línea desaparecería para casi todos los de Compras.
+   *
+   * `ot_id` es undefined mientras la migración no esté aplicada (el `select("*")`
+   * no la trae): la ficha sigue andando y simplemente no muestra la línea.
+   */
+  // La aserción: los tipos generados todavía no conocen la columna nueva.
+  const otId = (requerimiento as { ot_id?: string | null }).ot_id ?? null;
+  const otRepuestoId = (requerimiento as { ot_repuesto_id?: string | null }).ot_repuesto_id ?? null;
+  let origenEnLaOT: OrigenEnLaOT | null = null;
+  if (otId) {
+    const admin = createAdminClient();
+    const [{ data: orden }, { data: renglon }] = await Promise.all([
+      admin.from("ordenes_trabajo").select("ot_number, descripcion, equipo_raw").eq("id", otId).maybeSingle(),
+      otRepuestoId
+        ? admin.from("ordenes_trabajo_repuestos").select("nombre").eq("id", otRepuestoId).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    if (orden) {
+      origenEnLaOT = {
+        ot_number: (orden.ot_number ?? null) as number | null,
+        descripcion: (orden.descripcion ?? null) as string | null,
+        equipo_raw: (orden.equipo_raw ?? null) as string | null,
+        repuesto_nombre: (renglon?.nombre ?? null) as string | null,
+      };
+    }
+  }
+
   // Las órdenes de compra que este RI ya tiene en Odoo. Son una o dos: un
   // requerimiento que pagan las dos empresas son dos órdenes, porque el
   // proveedor factura a cada CUIT por separado.
@@ -163,6 +196,7 @@ export default async function RequerimientoPage({
         // El número solo no alcanza: se repite entre instancias.
         enlace: enlaceAOdoo("purchase.order", o.odoo_order_id as number),
       }))}
+      origenEnLaOT={origenEnLaOT}
       entradasAlPanol={(entradasAlPanol ?? []).map((e) => ({
         id: e.id as string,
         codigo: e.codigo as string | null,

@@ -257,6 +257,23 @@ Y una decisión de palabras que es una decisión de datos: el renglón dice
 **«último mensaje»** y no «reclamado». El hilo guarda cualquier conversación
 sobre el pedido, y el dato no sabe cuál fue un reclamo.
 
+## Para qué OT se pidió un RI
+
+Un RI puede recordar de qué orden de trabajo nació (`ot_id`) y de qué renglón de
+repuesto (`ot_repuesto_id`), y la ficha lo dice arriba de «Entró al pañol».
+Tres cosas que no se deducen del código:
+
+- **Recordar el origen no dice que el repuesto se haya aplicado.** Eso es otra
+  pregunta (la mitad B de la trazabilidad); esta línea sólo cuenta de dónde vino
+  el pedido.
+- **La planilla no trae nunca esas dos columnas**, así que la fusión las
+  conserva y `fusionDeLaPlanilla` no tiene rama de planilla para ellas: no es un
+  olvido. Sacarles la protección haría que la sincronización las borre.
+- **La OT se lee con el cliente admin** porque `ordenes_trabajo` está cerrada
+  con `mant_puede_ver()`; lo ve cualquiera que abra la ficha, que es la
+  procedencia de su propio pedido. Si la orden se borró (`on delete set null`)
+  la línea no se dibuja.
+
 ## Integración con el resto del SdG
 
 - **Proveedores viven en el núcleo**, no dentro de Compras. Mantenimiento ya
