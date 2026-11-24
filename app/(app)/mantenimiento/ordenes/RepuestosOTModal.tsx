@@ -21,7 +21,10 @@ import {
 import {
   abrirCaja, cambiarCaja as cambiarLaCaja, cerrarCaja as cerrarLaCaja, type Caja,
 } from "@/lib/mantenimiento/cajasDePregunta";
-import { aplicacionDelRenglon, type SalidaDelPanol } from "@/lib/inventario/salidasDelRepuesto";
+import {
+  aplicacionDelRenglon, DIAS_DE_LA_VENTANA, TOPE_DE_CANDIDATAS,
+  type SalidaDelPanol,
+} from "@/lib/inventario/salidasDelRepuesto";
 import type { UbicacionEnlazada } from "@/lib/compras/ubicaciones";
 import { COMPRA_LABELS } from "@/lib/compras/constants";
 import type { EstadoCompra } from "@/lib/compras/types";
@@ -74,7 +77,12 @@ interface Repuesto {
   nombre: string;
   codigo: string | null;
   cantidad: string | null;
-  /** El artículo del pañol que una persona eligió para este renglón, si eligió. */
+  /** El artículo del pañol que una persona eligió para este renglón, si eligió.
+      `articulo_id` es la columna de la propia fila y `articulo` el embed de
+      `inventario_articulos`: manda la primera, porque la segunda viaja por una
+      tabla cerrada con `tiene_acceso_inventario()` y a quien tenga Mantenimiento
+      y no Inventario le llega `null` sin ningún error. */
+  articulo_id?: string | null;
   articulo?: ArticuloDelPanol | null;
   /** La salida del pañol que una persona declaró como la de este repuesto. Antes
       de que se aplique la migración la columna no existe y ambos vienen sin valor. */
@@ -1028,9 +1036,16 @@ function SalidaDelPanolDelRenglon({
   const [motivo, setMotivo] = useState("");
   const [error, setError] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  /** Si la lista que se está mirando es la acotada o la que levantó la ventana. */
+  const [verTodas, setVerTodas] = useState(false);
 
   const url = `/api/mantenimiento/repuestos/${repuesto.id}/movimiento`;
-  const articuloId = repuesto.articulo?.id ?? null;
+  // El artículo sale de la **fila** y sólo después del embed: la fila se lee
+  // detrás de `mant_puede_ver()` y el embed detrás de `tiene_acceso_inventario()`,
+  // así que a quien tenga Mantenimiento y no Inventario el embed le llega `null`
+  // sin error y el renglón pasaría por «sin artículo» — con un vínculo puesto eso
+  // da `otra-pieza`, o sea acusar de apuntar a otra pieza un vínculo perfecto.
+  const articuloId = repuesto.articulo_id ?? repuesto.articulo?.id ?? null;
   const movimientoId = repuesto.movimiento_id ?? null;
 
   /** Un fallo se dice con lo que contestó el servidor, sin traducir. */
@@ -1052,13 +1067,19 @@ function SalidaDelPanolDelRenglon({
     }
   }
 
-  async function abrir() {
+  /**
+   * Trae las candidatas. Con `todas` el servidor ancla en la primera entrada del
+   * artículo y no corta por días: es la misma lista, sin el recorte. Lo que no
+   * levanta es el tope de diez.
+   */
+  async function abrir(todas = false) {
     setEligiendo(true);
     setCandidatas(null);
     setMotivo("");
     setError("");
+    setVerTodas(todas);
     try {
-      const res = await fetch(url);
+      const res = await fetch(todas ? `${url}?todas=1` : url);
       const body = await res.json().catch(() => ({}));
       if (!res.ok) { setError(body.error ?? "No se pudieron traer las salidas del pañol."); return; }
       setCandidatas(body.candidatas ?? []);
@@ -1076,6 +1097,7 @@ function SalidaDelPanolDelRenglon({
     });
     if (!ok) return;
     setEligiendo(false);
+    setVerTodas(false);
     onCambio();
   }
 
@@ -1120,7 +1142,10 @@ function SalidaDelPanolDelRenglon({
         linea = (
           <>
             <span className="text-amber-700">
-              Salió del pañol: la salida declarada es de otro artículo, no del de este repuesto
+              {/* No dice «es de otro artículo» a secas: también cae acá el renglón
+                  al que le sacaron el artículo después de declarar, y ahí no hay
+                  con qué comparar. Lo cierto en los dos casos es la negación. */}
+              Salió del pañol: la salida declarada no es del artículo de este repuesto
             </span>
             {botonDeSacar}
           </>
@@ -1143,8 +1168,10 @@ function SalidaDelPanolDelRenglon({
             {puedeEditar && !eligiendo && (
               <>
                 {" "}
+                {/* `() => abrir()` y no `abrir`: React le pasaría el evento al
+                    primer parámetro y `todas` quedaría en «sí» sin que nadie lo pida. */}
                 <button
-                  onClick={abrir}
+                  onClick={() => abrir()}
                   disabled={ocupado}
                   className="underline text-[var(--primary)] disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -1170,7 +1197,15 @@ function SalidaDelPanolDelRenglon({
           )}
           {candidatas && candidatas.length > 0 && (
             <>
-              <p className="text-slate-600">Elegí la salida que se usó para esta orden:</p>
+              <p className="text-slate-600">
+                Elegí la salida que se usó para esta orden:
+                {verTodas && (
+                  <span className="text-slate-400">
+                    {" "}ya no está acotada a los {DIAS_DE_LA_VENTANA} días — son las posteriores a la
+                    primera entrada del artículo.
+                  </span>
+                )}
+              </p>
               <ul className="mt-1 space-y-1">
                 {candidatas.map((c) => (
                   <li key={c.id}>
@@ -1183,9 +1218,13 @@ function SalidaDelPanolDelRenglon({
                         {diaYMes(c.fecha)} · {numero.format(c.cantidad)} un.
                       </span>
                       {c.solicitante && <span className="text-slate-600"> · {c.solicitante}</span>}
+                      {/* Con rótulo cada uno: «Planta 0-2 · Molino 3» no dice cuál es
+                          el sector y cuál la máquina, y los dos textos son libres. */}
                       {(c.sector_raw || c.equipo_raw) && (
                         <span className="block text-slate-500">
-                          {[c.sector_raw, c.equipo_raw].filter(Boolean).join(" · ")}
+                          {c.sector_raw && <>Sector: {c.sector_raw}</>}
+                          {c.sector_raw && c.equipo_raw && " · "}
+                          {c.equipo_raw && <>Máquina: {c.equipo_raw}</>}
                         </span>
                       )}
                     </button>
@@ -1194,7 +1233,33 @@ function SalidaDelPanolDelRenglon({
               </ul>
             </>
           )}
-          <button onClick={() => setEligiendo(false)} className="mt-1 underline text-slate-500">
+          {/* «Ver todas» cuando la lista volvió vacía o volvió topeada: son los dos
+              casos en los que lo que se busca puede estar fuera del recorte. La
+              ficha de un RI arranca en la entrada de *ese* pedido, y 400 de las 766
+              entradas con RI tienen una entrada posterior del mismo artículo: sin
+              esto, una salida que allá dice «sin justificar» acá no se puede
+              declarar. El tope de diez sigue puesto, así que en un artículo con más
+              de diez salidas nuevas una vieja sigue sin alcanzarse — es el
+              consumible, que no es lo que esta función traza. */}
+          {candidatas && !verTodas && (candidatas.length === 0 || candidatas.length === TOPE_DE_CANDIDATAS) && (
+            <p className="mt-1">
+              <button
+                onClick={() => abrir(true)}
+                disabled={ocupado}
+                className="underline text-[var(--primary)] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Ver todas
+              </button>
+              <span className="text-slate-400">
+                {" "}— sin el corte de los {DIAS_DE_LA_VENTANA} días, desde la primera entrada del artículo.
+              </span>
+            </p>
+          )}
+
+          <button
+            onClick={() => { setEligiendo(false); setVerTodas(false); }}
+            className="mt-1 underline text-slate-500"
+          >
             Cancelar
           </button>
         </div>

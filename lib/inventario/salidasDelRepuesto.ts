@@ -19,6 +19,16 @@ export interface SalidaDelPanol {
 
 const MS_POR_DIA = 86_400_000;
 
+/** Los días de la ventana por omisión, y el tope de filas que se ofrecen. */
+export const DIAS_DE_LA_VENTANA = 90;
+export const TOPE_DE_CANDIDATAS = 10;
+
+/**
+ * La ventana levantada: «todas las posteriores, sin corte de días». El tope
+ * sigue valiendo — lo que se levanta es el plazo, no el número de filas.
+ */
+export const SIN_VENTANA = Number.POSITIVE_INFINITY;
+
 function diaDe(fecha: string): number {
   // `date` de Postgres: AAAA-MM-DD. En UTC para que el huso no mueva el día.
   return Date.parse(`${fecha.slice(0, 10)}T00:00:00Z`) / MS_POR_DIA;
@@ -44,7 +54,7 @@ export function salidasCandidatas(
   salidas: SalidaDelPanol[],
   opciones: { dias?: number; tope?: number } = {},
 ): SalidaDelPanol[] {
-  const { dias = 90, tope = 10 } = opciones;
+  const { dias = DIAS_DE_LA_VENTANA, tope = TOPE_DE_CANDIDATAS } = opciones;
   if (!entrada.articulo_id || !entrada.fecha) return [];
   const desde = diaDe(entrada.fecha);
   return salidas

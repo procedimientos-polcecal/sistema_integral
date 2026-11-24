@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { puedeEditarMantenimiento, puedeVerMantenimiento } from "@/lib/mantenimiento/auth";
+import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
 import { traerTodo } from "@/lib/core/paginado";
-import { salidasCandidatas, type SalidaDelPanol } from "@/lib/inventario/salidasDelRepuesto";
+import {
+  salidasCandidatas, DIAS_DE_LA_VENTANA, SIN_VENTANA,
+  type SalidaDelPanol,
+} from "@/lib/inventario/salidasDelRepuesto";
 
 /**
  * De qué salida del pañol salió el repuesto de una OT: ofrecer las candidatas y
@@ -17,9 +20,9 @@ import { salidasCandidatas, type SalidaDelPanol } from "@/lib/inventario/salidas
  * sesión, alguien de Mantenimiento sin Inventario recibe `null` sin ningún error
  * —la misma forma que el valor hora de RRHH, que le da 0 a quien no tiene el
  * módulo—, y ni siquiera se podría comprobar que el movimiento exista. Como RLS
- * no corre, **el permiso lo pone esta ruta**: ver Mantenimiento para el GET,
- * editarlo para el PATCH y el DELETE. Con sólo la sesión, cualquiera con el id de
- * un repuesto leería el kardex del pañol.
+ * no corre, **el permiso lo pone esta ruta**: editar Mantenimiento, los tres
+ * verbos. Con sólo la sesión, cualquiera con el id de un repuesto leería el
+ * kardex del pañol.
  *
  * **`movimiento_puesto_por` sale de la sesión y nunca del cuerpo.** La policy de
  * esa tabla es `for all` con `mant_puede_editar()`: si el id viniera del cuerpo,
@@ -63,16 +66,38 @@ async function conPermiso() {
 
 const COLUMNAS = "id, articulo_id, fecha, cantidad, solicitante, sector_raw, equipo_raw, tipo";
 
-/** GET — las salidas del pañol que pueden ser la de este repuesto. */
-export async function GET(_request: Request, { params }: Params) {
+/**
+ * GET — las salidas del pañol que pueden ser la de este repuesto.
+ *
+ * **`?todas=1` levanta la ventana y mueve el ancla.** Sin él la lista arranca en
+ * la entrada **más reciente** del artículo y llega hasta 90 días después; con él
+ * arranca en la **más vieja** y no corta por días. Las dos cosas van juntas
+ * porque son el mismo recorte visto de dos lados, y sin la segunda la ficha de
+ * un RI puede ofrecer una salida que acá no se podría declarar: medido el
+ * 23/11/2026, **400 de las 766 entradas con RI tienen una entrada posterior del
+ * mismo artículo**, así que toda salida entre medio aparecía allá diciendo «sin
+ * justificar» y acá no se ofrecía — la pantalla mandaba a declarar algo donde
+ * declararlo era imposible.
+ *
+ * **El tope de 10 no se levanta nunca**, y eso deja un agujero dicho a
+ * propósito: en un artículo con más de diez salidas nuevas, una vieja sigue sin
+ * alcanzarse. Es el consumible, que es justo lo que esta función no es (la
+ * mediana son 2 salidas posteriores y el máximo 454).
+ */
+export async function GET(request: Request, { params }: Params) {
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (!(await puedeVerMantenimiento(supabase, user.id))) {
+  // Editar y no sólo ver: lo único que se hace con esta lista es declarar una
+  // salida, y quien no puede hacerlo no tiene por qué recibir filas del kardex
+  // —que está cerrado con `tiene_acceso_inventario()` y acá se lee con admin—.
+  // La pantalla ya la abre sólo si `puedeEditar`.
+  if (!(await puedeEditarMantenimiento(supabase, user.id))) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 
+  const todas = new URL(request.url).searchParams.get("todas") === "1";
   const admin = createAdminClient();
   const { data: renglon } = await admin
     .from("ordenes_trabajo_repuestos")
@@ -98,7 +123,10 @@ export async function GET(_request: Request, { params }: Params) {
     // 23/11/2026: 0 de 1.166 entradas y 0 de 3.897 salidas sin fecha), pero el
     // fallo sería mudo.
     .not("fecha", "is", null)
-    .order("fecha", { ascending: false })
+    // Con `todas` el ancla es la entrada más vieja: es lo que hace que la lista
+    // sea un superconjunto de la de la ficha del RI, que arranca en la entrada
+    // de *ese* pedido y no en la última del artículo.
+    .order("fecha", { ascending: todas })
     .range(0, 0);
   if (errEntrada) return NextResponse.json({ error: errEntrada.message }, { status: 500 });
   const entrada = entradas?.[0];
@@ -109,6 +137,8 @@ export async function GET(_request: Request, { params }: Params) {
   // Se filtra por artículo y por fecha **en la base**: PostgREST corta en 1.000
   // filas sin avisar, y el kardex tiene 3.897 salidas. El orden (fecha desc, id)
   // es el que decide cuáles sobreviven al tope cuando un día trae más de diez.
+  // Con `todas` el `gte` arranca de la primera entrada, así que puede traer
+  // cientos de filas (máximo medido: 454); de paginarlas se ocupa `traerTodo`.
   let salidas: SalidaDelPanol[];
   try {
     salidas = await traerTodo<SalidaDelPanol>((d, h) =>
@@ -126,14 +156,24 @@ export async function GET(_request: Request, { params }: Params) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "No se pudo leer el pañol" }, { status: 500 });
   }
 
-  const candidatas = salidasCandidatas(entrada, salidas);
+  const candidatas = salidasCandidatas(entrada, salidas, todas ? { dias: SIN_VENTANA } : {});
   if (candidatas.length === 0) {
+    // Dos motivos y no uno, porque mandan a lugares distintos: «no hay ninguna»
+    // no se arregla con nada, y «las hay y quedaron fuera de la ventana» se
+    // levanta con «ver todas». El segundo salía antes con el texto del primero,
+    // que es decir que no hay salidas cuando sí las hay. Con la ventana ya
+    // levantada el segundo no puede darse: el `gte` de arriba ya pidió
+    // posteriores y no queda corte de días que las descarte.
     return NextResponse.json({
       candidatas,
-      motivo: "Ese artículo no tiene salidas del pañol desde su última entrada.",
+      todas,
+      motivo:
+        salidas.length === 0
+          ? `Ese artículo no tiene salidas del pañol desde su ${todas ? "primera" : "última"} entrada.`
+          : `Ese artículo tiene salidas del pañol, pero ninguna en los ${DIAS_DE_LA_VENTANA} días siguientes a esa entrada.`,
     });
   }
-  return NextResponse.json({ candidatas });
+  return NextResponse.json({ candidatas, todas });
 }
 
 /** PATCH — `{ movimiento_id }`. Declara con qué salida se cumplió el renglón. */

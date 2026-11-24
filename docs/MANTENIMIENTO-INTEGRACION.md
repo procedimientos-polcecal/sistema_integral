@@ -4012,6 +4012,19 @@ entre las que elegir y elegir no significa nada. Por eso la lista es acotada
 (90 días desde la entrada, 10 salidas) y **el mismo día cuenta**: la `fecha` es un
 `date` sin hora, y «llegó y se usó hoy» es la candidata más probable.
 
+**Y por eso el selector lleva un «Ver todas», que no es un adorno: sin él las dos
+pantallas no miran la misma ventana.** La ficha del RI arranca en la entrada de
+*ese* pedido y el selector de la OT en la **última** entrada del artículo, y
+medido el 23/11/2026 **400 de las 766 entradas con RI tienen una entrada posterior
+del mismo artículo** — así que toda salida de en medio aparecía en la ficha
+diciendo «sin justificar» y en la OT no se ofrecía: la pantalla mandaba a declarar
+algo donde declararlo era imposible. «Ver todas» pide `?todas=1`, que **mueve el
+ancla a la primera entrada y levanta el corte de días a la vez** (las dos cosas
+juntas, porque son el mismo recorte visto de dos lados). **El tope de diez no se
+levanta nunca**, y eso deja un agujero dicho a propósito: en un artículo con más
+de diez salidas nuevas, una vieja sigue sin alcanzarse. Es el consumible otra vez,
+que es justo lo que esto no traza.
+
 **4. Al desplegar, la ficha de cada RI con entradas va a listar hasta 10 salidas
 por entrada y todas van a decir «sin justificar», y es lo correcto.** La ficha
 parte del artículo de la **entrada** (`inventario_movimientos.articulo_id`) y no

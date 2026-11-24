@@ -4,6 +4,8 @@ import {
   lecturaDeLaSalida,
   ordenesQueDeclararon,
   salidasCandidatas,
+  SIN_VENTANA,
+  TOPE_DE_CANDIDATAS,
   type SalidaDelPanol,
 } from "./salidasDelRepuesto";
 
@@ -70,13 +72,29 @@ describe("que salidas son candidatas de una entrada", () => {
   });
 
   it("muestra 10 como mucho", () => {
-    // Medido: el maximo real es 454 salidas posteriores. (Review Focus 3.)
+    // Medido: el maximo real es 454 salidas posteriores.
     const cien = Array.from({ length: 100 }, (_, i) => salida(`s${i}`, mas("2026-01-02", i)));
     const r = salidasCandidatas(entrada("2026-01-01"), cien, { dias: 10_000 });
     expect(r).toHaveLength(10);
     // El tope corta despues de ordenar: quedan las 10 mas nuevas.
     expect(r[0].id).toBe("s99");
     expect(r[9].id).toBe("s90");
+  });
+
+  it("SIN_VENTANA saca el corte de dias y deja el tope", () => {
+    // Es lo que pide el «ver todas» del selector de la OT: la ficha de un RI
+    // ancla en la entrada de ESE pedido y el selector en la ultima entrada del
+    // articulo, asi que sin esto hay salidas que la ficha ofrece y la OT no deja
+    // declarar (400 de 766 entradas con RI tienen una entrada posterior). Lo que
+    // NO se levanta es el tope: un consumible no se traza.
+    const lejos = [salida("vieja", mas("2026-01-01", 300)), salida("cerca", mas("2026-01-01", 5))];
+    expect(salidasCandidatas(entrada("2026-01-01"), lejos).map((s) => s.id)).toEqual(["cerca"]);
+    expect(salidasCandidatas(entrada("2026-01-01"), lejos, { dias: SIN_VENTANA }).map((s) => s.id))
+      .toEqual(["vieja", "cerca"]);
+
+    const muchas = Array.from({ length: 40 }, (_, i) => salida(`s${i}`, mas("2026-01-02", i * 10)));
+    expect(salidasCandidatas(entrada("2026-01-01"), muchas, { dias: SIN_VENTANA }))
+      .toHaveLength(TOPE_DE_CANDIDATAS);
   });
 
   it("una entrada sin fecha no lista nada", () => {
@@ -122,7 +140,7 @@ describe("que dice un vinculo", () => {
   it("si el articulo no coincide, no dice aplicado", () => {
     // Pasa si le sacan el articulo al renglon despues de declarar, o si el
     // kardex reuso una `sheets_fila`. Afirmar "aplicado" ahi es el
-    // anti-objetivo del diseno. (Review Focus 2.)
+    // anti-objetivo del diseno.
     expect(aplicacionDelRenglon({ articulo_id: "a1", movimiento_id: "m1" },
       { ...salida("m1", "2026-11-18"), articulo_id: "a2" }).estado).toBe("otra-pieza");
   });
