@@ -112,6 +112,22 @@ Antes de escribir una, leer las ocho trampas del
   Usar `traerTodo()` de `lib/core/paginado.ts` en cualquier tabla que pueda
   crecer. No razonar "esta tabla es chica": el tablero de Compras parecía una
   cola acotada y arrastra 1.900 filas.
+- **Un embed de PostgREST con dos caminos contesta 300 y no lo ve nada.**
+  Cuando entre dos tablas hay más de una relación, `select("…, destino(…)")`
+  falla entero con `PGRST201` — y eso no lo atrapan ni `vitest`, ni `tsc`, ni
+  el build, ni `revisar-arbol-commiteado`: lo resuelve el servidor del otro
+  lado del cable. Ya pasó dos veces: `mensajes` → `usuarios` por
+  `mensajes_menciones` (el hilo no se podía leer ni por el autor), y
+  `compras_requerimientos` → `proveedores` por
+  `compras_requerimiento_proveedores` el 24/11/2026, que dejó **sin poder
+  generar ninguna orden de compra, tampoco las que ya funcionaban**. Se
+  escribe `destino!el_fkey(…)`, y el `hint` del propio 300 trae el nombre.
+  Los pares conocidos —hoy tres— viven en
+  [lib/core/embedsAmbiguos.ts](lib/core/embedsAmbiguos.ts) con un test que
+  recorre `app/` y `lib/`. **No descubre pares nuevos**: uno entra cuando
+  alguien lo encuentra, igual que las entradas de `revisar-exportaciones`.
+  Antes de commitear un embed sobre una tabla que tenga una tabla de unión,
+  probarlo con un `curl`.
 - **Un `.in()` con muchos ids** arma una URL que PostgREST rechaza con un 400 sin
   decir por qué. Filtrar por una condición, o de a lotes de 200.
 - **Un `select()` armado en una variable** pierde la inferencia de tipos de

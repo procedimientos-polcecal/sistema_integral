@@ -332,6 +332,7 @@ export default function RequerimientoDetalle({
             requerimiento={r}
             cotizaciones={cotizaciones}
             proveedores={proveedores}
+            empresas={empresas}
             puedeEditar={puedeEditar}
             esAsignado={esAsignado}
           />

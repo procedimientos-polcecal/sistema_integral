@@ -129,3 +129,77 @@ export function empresasDelRequerimiento(
     .filter((e) => e.odoo_company_id !== null)
     .map((e) => ({ id: e.id, odooCompanyId: e.odoo_company_id! }));
 }
+
+/**
+ * De qué empresas es un proveedor: de una, de las dos, o no se sabe.
+ *
+ * Es la misma forma que `compras_requerimientos` usa para decir quién paga
+ * (`empresa_id` + `paga_ambas`), y por eso las dos puntas las resuelve la
+ * misma función. Las dos columnas de `proveedores` son excluyentes por un
+ * check, así que `ambas: true` con `empresaId` cargado no existe en la base.
+ */
+export interface DeQueEmpresas {
+  empresaId: string | null;
+  ambas: boolean;
+}
+
+/**
+ * A qué perfiles de Odoo apunta el alta de un proveedor.
+ *
+ * En Odoo funcionan dos empresas —POLCECAL es la `res.company` 1 y POLYSAN la
+ * 2— y un `res.partner` pertenece a una. En el SdG el padrón es uno solo y
+ * compartido, así que al dar de alta hay que decir a cuál de las dos va, y de
+ * eso depende dónde se lo busca ahora y dónde se lo crea al generar la orden.
+ *
+ * El orden de precedencia es el que importa y no es obvio:
+ *
+ * 1. **Lo que la persona eligió en el alta**, que es lo único que sabe si este
+ *    proveedor le vende a una sola o a las dos. 39 de los 130 proveedores
+ *    enlazados a Odoo están en una sola empresa, así que la pregunta tiene
+ *    respuestas distintas de verdad.
+ * 2. **Lo que dice el pedido**, para cuando no eligió. Es lo que hacía el
+ *    sistema entero antes del 24/11/2026.
+ * 3. **Las dos**, cuando no hay pedido. Enlazar no escribe nada en Odoo —el
+ *    partner ya existe allá—, así que mirar de más no arriesga nada y dejar
+ *    el enlace sin hacer obliga a resolverlo después a mano.
+ *
+ * Y un cuarto caso que **no** cae en el 3: un pedido que existe pero no dice
+ * empresa ni AMBAS (17 de 1.024) devuelve vacío. Que el pedido no conteste no
+ * es lo mismo que no tener pedido: ahí la ruta lo dice en vez de elegir una.
+ */
+export function destinoDelAlta(
+  elegido: DeQueEmpresas,
+  ri: { empresa_id: string | null; paga_ambas: boolean } | null,
+  todas: { id: string; odoo_company_id: number | null }[]
+): { id: string; odooCompanyId: number }[] {
+  if (elegido.ambas || elegido.empresaId) {
+    return empresasDelRequerimiento(
+      { empresa_id: elegido.empresaId, paga_ambas: elegido.ambas },
+      todas
+    );
+  }
+
+  if (ri) return empresasDelRequerimiento(ri, todas);
+
+  return empresasDelRequerimiento({ empresa_id: null, paga_ambas: true }, todas);
+}
+
+/**
+ * Las dos columnas de empresa, normalizadas antes de escribirlas.
+ *
+ * `proveedores` tiene un check —`proveedores_empresa_o_ambas`— que prohíbe
+ * decir «es de POLCECAL» y «es de las dos» a la vez. Un formulario puede
+ * mandar las dos sin querer: se tilda «las dos» después de haber elegido una,
+ * y el valor viejo sigue en el estado. Si eso llega a la base, Postgres
+ * contesta un 23514 crudo que no le dice nada a nadie.
+ *
+ * Acá gana «las dos», que es lo que la persona acaba de marcar, y la cadena
+ * vacía del desplegable se lee como «no se sabe» y no como un id.
+ */
+export function empresaParaGuardar(
+  body: { empresa_id?: unknown; trabaja_con_ambas?: unknown }
+): { empresa_id: string | null; trabaja_con_ambas: boolean } {
+  const ambas = body.trabaja_con_ambas === true;
+  const id = typeof body.empresa_id === "string" && body.empresa_id !== "" ? body.empresa_id : null;
+  return { empresa_id: ambas ? null : id, trabaja_con_ambas: ambas };
+}

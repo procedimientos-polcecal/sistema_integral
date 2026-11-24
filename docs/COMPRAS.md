@@ -259,6 +259,50 @@ sobre el pedido, y el dato no sabe cuál fue un reclamo.
 
 ## Dar de alta un proveedor desde el presupuesto (24/11/2026)
 
+### De qué empresa es el proveedor (24/11/2026)
+
+En Odoo funcionan **dos perfiles** —POLCECAL es la `res.company` 1 y POLYSAN la
+2— y en el SdG el padrón de proveedores es **uno solo**, compartido por los
+catorce módulos. Esa unificación no se toca: lo que faltaba no era partir el
+padrón, era que cada proveedor dijera con cuál de las dos trabaja. Hasta esta
+fecha eso **no existía como dato** y lo decidía el pedido que estuviera
+cotizando, que es otra cosa: el pedido dice quién paga **esa** compra.
+
+Vive en dos columnas de `proveedores` —`empresa_id` y `trabaja_con_ambas`—,
+excluyentes por el check `proveedores_empresa_o_ambas`. Se elige en el alta
+(arranca en lo que dice el pedido y se puede cambiar) y se corrige después en
+`/compras/proveedores`, que además filtra por empresa.
+
+Cuatro cosas que no se deducen del código:
+
+- **Son dos columnas y no un enum de tres valores**, para que sea la misma
+  forma que `compras_requerimientos` (`empresa_id` + `paga_ambas`) y la
+  traducción a company_ids de Odoo la haga **una sola función** en vez de dos
+  que se parecen. Un enum `('POLCECAL','POLYSAN','AMBAS')` habría metido los
+  nombres de las empresas dentro de un check constraint, que es justo lo que
+  `empresas.odoo_company_id` existe para evitar.
+- **Null quiere decir «no se sabe» y no rompe nada**: quien lo lea cae en el
+  comportamiento anterior, deducir la empresa del pedido. Por eso la columna
+  pudo nacer con 393 de las 484 filas vacías.
+- **El backfill escribió sólo lo probado.** De los 130 proveedores con enlace
+  en `proveedores_odoo`, **91 lo tienen en las dos empresas**: que exista un
+  `res.partner` suyo en los dos perfiles prueba que las dos le compraron, así
+  que ésos quedaron en `trabaja_con_ambas`. Los otros 39 —24 sólo en POLCECAL
+  y 15 sólo en POLYSAN— **quedaron en null a propósito**: un enlace en una
+  empresa prueba que ésa le compró, no que la otra no pueda, y escribir «sólo
+  POLCECAL» ahí es enlazar al que se le parece.
+- **Pedir una empresa en el filtro trae también a los de las dos**, porque el
+  que le vende a las dos le vende a ésa. Lo que no entra es el que no lo
+  declaró, que tiene su propia opción —«Sin declarar»—, y que es la lista que
+  hay que mirar para completarlos.
+
+La precedencia al buscar en Odoo está en `destinoDelAlta()`: manda lo que la
+persona eligió, después lo que dice el pedido, y sin pedido se miran las dos
+—enlazar no escribe nada allá—. Con un pedido que existe pero no dice empresa
+ni AMBAS (17 de 1.024) **no** se miran las dos: se avisa, porque que el pedido
+no conteste no es lo mismo que no tener pedido.
+
+
 Cargando un presupuesto, el proveedor que no está en la lista se da de alta ahí
 mismo, con el botón **Nuevo** al lado del selector. No es una comodidad de
 pantalla: es el primer eslabón de la cadena «cargo la cotización y, si avanza,

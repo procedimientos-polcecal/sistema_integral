@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  validarAlta, parecidosEnElPadron, empresasDelRequerimiento,
+  validarAlta, parecidosEnElPadron, empresasDelRequerimiento, destinoDelAlta, empresaParaGuardar,
   type ProveedorDelPadron,
 } from "./altaDeProveedor";
 
@@ -98,5 +98,83 @@ describe("empresasDelRequerimiento", () => {
     expect(
       empresasDelRequerimiento({ empresa_id: "x", paga_ambas: false }, [{ id: "x", odoo_company_id: null }])
     ).toEqual([]);
+  });
+});
+
+/*
+ * En Odoo funcionan dos perfiles —POLCECAL (`res.company` 1) y POLYSAN (2)— y
+ * el padrón del SdG es uno solo. Hasta el 24/11/2026 a qué perfil iba el
+ * proveedor nuevo lo decidía el pedido que lo estaba cotizando y nadie más;
+ * desde que el alta lo pregunta, lo que la persona elige manda, y el pedido
+ * queda de respaldo para cuando no eligió.
+ */
+describe("destinoDelAlta", () => {
+  const empresas = [
+    { id: "pol", odoo_company_id: 1 },
+    { id: "pys", odoo_company_id: 2 },
+  ];
+  const sinElegir = { empresaId: null, ambas: false };
+
+  it("lo que se eligió manda sobre lo que dice el pedido", () => {
+    expect(
+      destinoDelAlta(
+        { empresaId: "pys", ambas: false },
+        { empresa_id: "pol", paga_ambas: false },
+        empresas
+      )
+    ).toEqual([{ id: "pys", odooCompanyId: 2 }]);
+  });
+
+  it("elegir las dos da las dos aunque el pedido diga una", () => {
+    expect(
+      destinoDelAlta({ empresaId: null, ambas: true }, { empresa_id: "pol", paga_ambas: false }, empresas)
+    ).toHaveLength(2);
+  });
+
+  it("sin elegir, manda el pedido", () => {
+    expect(destinoDelAlta(sinElegir, { empresa_id: "pol", paga_ambas: false }, empresas))
+      .toEqual([{ id: "pol", odooCompanyId: 1 }]);
+  });
+
+  /*
+   * Sin pedido no hay nada que mande, y enlazar no crea nada en Odoo: el
+   * partner ya existe allá. Se mira en las dos en vez de no mirar.
+   */
+  it("sin elegir y sin pedido, se miran las dos", () => {
+    expect(destinoDelAlta(sinElegir, null, empresas)).toHaveLength(2);
+  });
+
+  // 17 de 1.024 RI no dicen empresa ni AMBAS: ahí no hay dónde buscar, y la
+  // ruta lo dice en vez de inventar una.
+  it("sin elegir y con un pedido que no dice nada, no hay destino", () => {
+    expect(destinoDelAlta(sinElegir, { empresa_id: null, paga_ambas: false }, empresas)).toEqual([]);
+  });
+});
+
+/*
+ * Las dos columnas son excluyentes por un check de la base
+ * (`proveedores_empresa_o_ambas`). Si llegaran las dos cargadas, Postgres
+ * contesta un 23514 crudo que nadie entiende; es más barato que ninguna ruta
+ * pueda mandarlas así.
+ */
+describe("empresaParaGuardar", () => {
+  it("con las dos marcadas, gana «las dos» y la empresa viaja en null", () => {
+    expect(empresaParaGuardar({ empresa_id: "pol", trabaja_con_ambas: true }))
+      .toEqual({ empresa_id: null, trabaja_con_ambas: true });
+  });
+
+  it("una empresa sola viaja tal cual", () => {
+    expect(empresaParaGuardar({ empresa_id: "pol", trabaja_con_ambas: false }))
+      .toEqual({ empresa_id: "pol", trabaja_con_ambas: false });
+  });
+
+  it("sin nada es «no se sabe», que es un estado válido", () => {
+    expect(empresaParaGuardar({})).toEqual({ empresa_id: null, trabaja_con_ambas: false });
+  });
+
+  // Una cadena vacía es lo que manda un desplegable sin elegir, y no es un id.
+  it("la cadena vacía del desplegable no es una empresa", () => {
+    expect(empresaParaGuardar({ empresa_id: "" }))
+      .toEqual({ empresa_id: null, trabaja_con_ambas: false });
   });
 });

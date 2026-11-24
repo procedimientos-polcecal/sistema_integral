@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import MultiSelect from "@/components/MultiSelect";
+import Select from "@/components/Select";
 import type { ProveedorElegible } from "@/lib/compras/comparativa";
 
 /**
@@ -62,15 +63,37 @@ const FORMAS_DE_PAGO: [string, string][] = [
   ["EFECTIVO", "EFECTIVO"],
 ];
 
+/** Lo que vale el desplegable de empresa cuando el proveedor es de las dos. */
+const AMBAS = "ambas";
+
 export default function NuevoProveedorModal({
-  requerimientoId, onCerrar, onCreado, onUsarExistente,
+  requerimientoId, empresas, empresaDelPedido, pedidoPagaAmbas,
+  onCerrar, onCreado, onUsarExistente,
 }: {
   requerimientoId: string;
+  /** Las empresas del grupo, para elegir a cuál va el proveedor. */
+  empresas: { id: string; nombre: string }[];
+  /** Qué empresa paga este pedido, que es con lo que arranca el desplegable. */
+  empresaDelPedido: string | null;
+  pedidoPagaAmbas: boolean;
   onCerrar: () => void;
   onCreado: (proveedor: ProveedorElegible, resultado: Resultado) => void;
   /** Elegir uno del padrón en vez de crear: el camino que evita el duplicado. */
   onUsarExistente: (id: string) => void;
 }) {
+  /*
+   * De qué empresa es el proveedor.
+   *
+   * Arranca en lo que dice el pedido porque es lo que acierta casi siempre
+   * —de los 130 proveedores ya enlazados con Odoo, 91 trabajan con las dos—,
+   * pero se puede cambiar: el pedido dice quién paga **esta** compra, no con
+   * quién trabaja el proveedor, y son dos cosas distintas que hasta hoy el
+   * sistema confundía porque sólo tenía una.
+   */
+  const [empresa, setEmpresa] = useState(
+    pedidoPagaAmbas ? AMBAS : (empresaDelPedido ?? "")
+  );
+
   const [nombre, setNombre] = useState("");
   const [cuit, setCuit] = useState("");
   const [rubro, setRubro] = useState("");
@@ -118,6 +141,8 @@ export default function NuevoProveedorModal({
         plazo_pago_dias: plazo.trim() === "" ? null : Number(plazo),
         condicion_pago: condicion.trim() || null,
         forma_pago: formasPago.join(", ") || null,
+        empresa_id: empresa === AMBAS || empresa === "" ? null : empresa,
+        trabaja_con_ambas: empresa === AMBAS,
         requerimiento_id: requerimientoId,
         confirmar_parecidos: confirmarParecidos,
       }),
@@ -150,7 +175,8 @@ export default function NuevoProveedorModal({
           <h2 className="text-lg font-bold text-slate-900">Nuevo proveedor</h2>
           <p className="text-sm text-slate-500">
             El CUIT es obligatorio: es con lo que se lo reconoce en Odoo para poder
-            generarle después la orden de compra.
+            generarle después la orden de compra. En Odoo hay un perfil por empresa,
+            así que la empresa decide dónde se lo busca y dónde se lo crea.
           </p>
         </div>
 
@@ -211,6 +237,13 @@ export default function NuevoProveedorModal({
               <Texto valor={cuit} set={setCuit} />
             </Campo>
 
+            <Campo label="Empresa">
+              <Select value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
+                <option value="">No se sabe</option>
+                <option value={AMBAS}>Las dos</option>
+                {empresas.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+              </Select>
+            </Campo>
             <Campo label="Rubro"><Texto valor={rubro} set={setRubro} /></Campo>
             <Campo label="Contacto"><Texto valor={contacto} set={setContacto} /></Campo>
             <Campo label="Teléfono"><Texto valor={telefono} set={setTelefono} /></Campo>
