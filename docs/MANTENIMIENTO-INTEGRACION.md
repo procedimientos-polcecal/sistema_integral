@@ -4114,6 +4114,20 @@ levanta nunca**, y eso deja un agujero dicho a propósito: en un artículo con m
 de diez salidas nuevas, una vieja sigue sin alcanzarse. Es el consumible otra vez,
 que es justo lo que esto no traza.
 
+**Y de ahí sale lo que obliga a que «Ver todas» tenga vuelta, que se midió recién
+el 24/11/2026 y hasta entonces estaba sólo razonado.** El corte de días limita
+**hacia adelante** y el orden es «la más nueva primero», así que levantarlo deja
+entrar salidas *posteriores*, que ordenan **antes** y —con el tope de diez
+puesto— empujan afuera a las que la lista corta mostraba. O sea que «ver todas»
+no es «las mismas y algunas más»: puede ser **otras diez**. Medido con
+`npx tsx scripts/que-mostraria-la-trazabilidad.mts` sobre las 766 entradas con
+RI: de las **545** que ofrecen candidatas, «ver todas» pierde alguna de las que
+mostraba en **168**, y en **121 no queda ninguna** — el 22 %. Por eso al lado hay
+un **«Volver a las últimas»**: sin él, quien apretó buscando una más perdía de
+vista la que estaba mirando y no tenía cómo recuperarla. El botón no arregla el
+recorte —eso sigue siendo el agujero del párrafo de arriba— sino la trampa de un
+camino de ida.
+
 **4. Al desplegar, la ficha de cada RI con entradas va a listar hasta 10 salidas
 por entrada y todas van a decir «sin justificar», y es lo correcto.** La ficha
 parte del artículo de la **entrada** (`inventario_movimientos.articulo_id`) y no

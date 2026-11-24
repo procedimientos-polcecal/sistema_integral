@@ -1255,6 +1255,30 @@ function SalidaDelPanolDelRenglon({
               </span>
             </p>
           )}
+          {/* Y la vuelta, que no es prolijidad. Levantar la ventana la levanta
+              **hacia adelante**, y el orden es «la más nueva primero»: las
+              salidas posteriores que entran ordenan ANTES y empujan afuera a las
+              que la lista corta mostraba, porque el tope de diez sigue puesto.
+              Medido el 24/11/2026 sobre las 766 entradas con RI
+              (`scripts/que-mostraria-la-trazabilidad.mts`): de las 545 que
+              ofrecen candidatas, «ver todas» pierde alguna de las que mostraba
+              en 168, y en **121 no queda ninguna**. Sin este botón, quien
+              apretó «ver todas» buscando una más perdía de vista la que estaba
+              mirando y no tenía cómo recuperarla. */}
+          {candidatas && verTodas && (
+            <p className="mt-1">
+              <button
+                onClick={() => abrir(false)}
+                disabled={ocupado}
+                className="underline text-[var(--primary)] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Volver a las últimas
+              </button>
+              <span className="text-slate-400">
+                {" "}— las de los {DIAS_DE_LA_VENTANA} días desde la entrada.
+              </span>
+            </p>
+          )}
 
           <button
             onClick={() => { setEligiendo(false); setVerTodas(false); }}
