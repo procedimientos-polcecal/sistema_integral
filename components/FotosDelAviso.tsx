@@ -4,7 +4,7 @@ import { useState } from "react";
 import { fotosDelAviso } from "@/lib/mantenimiento/fotoDelAviso";
 
 /**
- * Las fotos de un aviso de Mantenimiento.
+ * Lo que un aviso de Mantenimiento trae adjunto: fotos y videos.
  *
  * Existe porque la pantalla de avisos **guardaba la foto y no la mostraba
  * nunca**: `avisos.reference_photos` se llenaba desde las dos puntas —el alta
@@ -13,12 +13,27 @@ import { fotosDelAviso } from "@/lib/mantenimiento/fotoDelAviso";
  * máquina era el único que la veía.
  *
  * Qué se puede dibujar y qué sólo se puede enlazar lo decide
- * `fotosDelAviso()`, con el porqué medido. Acá queda la otra mitad: **si el
- * navegador no puede con la imagen, se cae al enlace.** Es una red y no un
- * adorno — cubre el HEIC que Chrome no dibuja, el link firmado que venció, el
- * archivo que ya no está en el bucket y el día que dejen de compartir la
- * carpeta de Drive con la cuenta de servicio—, y es lo que permite que la
- * función de arriba sea generosa sin arriesgar un cuadro roto.
+ * `fotosDelAviso()`, con el porqué medido.
+ *
+ * ── POR QUÉ SE PRUEBA EN VEZ DE PREGUNTAR QUÉ ES ──────────────────────────
+ *
+ * El adjunto puede ser un video: medido el 23/11/2026, de 31 archivos hay 28
+ * fotos y 2 videos. **Pero de este lado no se sabe cuál es cuál**: lo que hay
+ * es un link de Drive sin extensión, y el tipo lo conoce únicamente el
+ * servidor cuando lo va a buscar. Preguntárselo antes sería una consulta por
+ * adjunto —treinta y pico en una pantalla, cada una con su viaje a Drive—
+ * sólo para elegir una etiqueta.
+ *
+ * Así que se prueba lo más probable y se baja un escalón cuando falla:
+ * **`<img>` → `<video>` → enlace**. Cada escalón lo decide el navegador con
+ * el archivo en la mano, que sabe más que cualquier suposición nuestra, y no
+ * cuesta descargas de más porque la ruta responde con `max-age=3600` y el
+ * segundo intento sale del caché.
+ *
+ * El último escalón es la red que vale por todo lo demás: el HEIC que Chrome
+ * no dibuja, el link firmado que venció, el archivo que ya no está en el
+ * bucket, el PDF que la ruta no sirve y el día que dejen de compartir la
+ * carpeta de Drive con la cuenta de servicio.
  */
 export default function FotosDelAviso({
   fotos,
@@ -32,41 +47,76 @@ export default function FotosDelAviso({
    * mostrarse: la ruta que la trae necesita saber de qué fila sacar el id.
    */
   avisoId?: string | null;
-  /** El N° de OA, sólo para el texto alternativo de la imagen. */
+  /** El N° de OA, sólo para el texto alternativo. */
   oa?: string | null;
   className?: string;
 }) {
-  /** Las que el navegador no pudo dibujar: pasan a mostrarse como enlace. */
-  const [fallaron, setFallaron] = useState<string[]>([]);
+  /** Hasta qué escalón bajó cada adjunto. Sin entrada, se intenta la imagen. */
+  const [cayeron, setCayeron] = useState<Record<string, "video" | "enlace">>({});
+  const bajar = (url: string, a: "video" | "enlace") =>
+    setCayeron((c) => (c[url] === a ? c : { ...c, [url]: a }));
 
   const lista = fotosDelAviso(fotos, avisoId);
   if (lista.length === 0) return null;
 
+  const deQuien = oa ? ` del aviso ${oa}` : " del aviso";
+
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className}`}>
       {lista.map((foto) => {
-        const rota = fallaron.includes(foto.url);
+        const escalon = foto.tipo === "imagen" ? cayeron[foto.url] : "enlace";
 
-        if (foto.tipo === "imagen" && !rota) {
+        if (foto.tipo === "imagen" && !escalon) {
           return (
             <a key={foto.url} href={foto.url} target="_blank" rel="noreferrer" title="Abrir la foto">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={foto.url}
-                alt={oa ? `Foto del aviso ${oa}` : "Foto del aviso"}
+                alt={`Foto${deQuien}`}
                 loading="lazy"
-                onError={() => setFallaron((f) => (f.includes(foto.url) ? f : [...f, foto.url]))}
+                onError={() => bajar(foto.url, "video")}
                 className="h-16 w-16 rounded-lg border border-slate-200 object-cover"
               />
             </a>
           );
         }
 
-        const porQue = rota
-          ? "No se pudo mostrar la foto acá; se abre aparte."
-          : foto.tipo === "enlace"
+        if (foto.tipo === "imagen" && escalon === "video") {
+          return (
+            <a
+              key={foto.url}
+              href={foto.url}
+              target="_blank"
+              rel="noreferrer"
+              title="Abrir el video"
+              className="relative inline-block"
+            >
+              {/* El `#t=0.1` le pide al navegador que busque el primer
+                  fotograma: sin eso el recuadro queda negro y no se entiende
+                  qué es. El fragmento no viaja al servidor. */}
+              <video
+                src={`${foto.url}#t=0.1`}
+                preload="metadata"
+                muted
+                playsInline
+                aria-label={`Video${deQuien}`}
+                onError={() => bajar(foto.url, "enlace")}
+                className="h-16 w-16 rounded-lg border border-slate-200 object-cover"
+              />
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/35 text-sm text-white"
+              >
+                ▶
+              </span>
+            </a>
+          );
+        }
+
+        const porQue =
+          foto.tipo === "enlace"
             ? foto.porQue
-            : "";
+            : "No se pudo mostrar acá; se abre aparte.";
 
         // Si lo que falló fue la ruta que trae la de Drive, el enlace tiene
         // que ir al link original y no a la ruta que acaba de fallar.
@@ -80,7 +130,7 @@ export default function FotosDelAviso({
               rel="noreferrer"
               className="text-xs font-medium text-slate-700 underline"
             >
-              Ver la foto
+              Ver el adjunto
             </a>
             <span className="text-[11px] text-slate-400">{porQue}</span>
           </span>
