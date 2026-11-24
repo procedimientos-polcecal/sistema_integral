@@ -511,6 +511,11 @@
         "columna": "sheets_intentado_en",
         "tipo": "timestamptz",
         "nuleable": true
+      },
+      {
+        "columna": "ot_resuelta_en",
+        "tipo": "timestamptz",
+        "nuleable": true
       }
     ],
     "avisos_fotos": [
@@ -527,6 +532,23 @@
       {
         "columna": "cantidad",
         "tipo": "int4",
+        "nuleable": false
+      }
+    ],
+    "avisos_vistos": [
+      {
+        "columna": "notificacion_id",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "cantidad",
+        "tipo": "int4",
+        "nuleable": false
+      },
+      {
+        "columna": "visto_en",
+        "tipo": "timestamptz",
         "nuleable": false
       }
     ],
@@ -5686,6 +5708,58 @@
         "nuleable": false
       }
     ],
+    "mant_reprogramaciones_ot": [
+      {
+        "columna": "id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "ot_id",
+        "tipo": "uuid",
+        "nuleable": false
+      },
+      {
+        "columna": "fecha_anterior",
+        "tipo": "date",
+        "nuleable": true
+      },
+      {
+        "columna": "fecha_nueva",
+        "tipo": "date",
+        "nuleable": false
+      },
+      {
+        "columna": "origen",
+        "tipo": "text",
+        "nuleable": false
+      },
+      {
+        "columna": "razon",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "razon_etiqueta",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "justificacion",
+        "tipo": "text",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_por",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "creado_en",
+        "tipo": "timestamptz",
+        "nuleable": false
+      }
+    ],
     "mant_ri_de_repuesto": [
       {
         "columna": "id",
@@ -6475,11 +6549,6 @@
         "nuleable": true
       },
       {
-        "columna": "gut_orden",
-        "tipo": "int4",
-        "nuleable": true
-      },
-      {
         "columna": "gut_puntaje",
         "tipo": "int4",
         "nuleable": true
@@ -6528,6 +6597,21 @@
         "columna": "cierre_justificacion",
         "tipo": "text",
         "nuleable": true
+      },
+      {
+        "columna": "gut_orden",
+        "tipo": "int4",
+        "nuleable": true
+      },
+      {
+        "columna": "os_id",
+        "tipo": "uuid",
+        "nuleable": true
+      },
+      {
+        "columna": "reprogramada_veces",
+        "tipo": "int4",
+        "nuleable": false
       }
     ],
     "ordenes_trabajo_notas": [
@@ -7967,7 +8051,7 @@
       {
         "columna": "sector_id",
         "tipo": "uuid",
-        "nuleable": false
+        "nuleable": true
       },
       {
         "columna": "old_status",
@@ -7992,6 +8076,11 @@
       {
         "columna": "changed_at",
         "tipo": "timestamptz",
+        "nuleable": false
+      },
+      {
+        "columna": "sector_nombre",
+        "tipo": "text",
         "nuleable": false
       }
     ],
