@@ -34,6 +34,11 @@ export interface RequerimientoParaOrden {
   empresaId: string | null;
   pagaAmbas: boolean;
   fechaNecesidad: string | null;
+  /**
+   * El CUIT del proveedor, para distinguir «falta enlazarlo» de «no sabemos
+   * quién es». Sin CUIT no hay partner que crear ni que buscar.
+   */
+  proveedorCuit: string | null;
 }
 
 /**
@@ -137,6 +142,7 @@ export interface OrdenParaOdoo {
 
 export type Problema =
   | { tipo: "sin proveedor enlazado"; empresa: string; detalle: string }
+  | { tipo: "sin cuit"; detalle: string }
   | { tipo: "sin impuesto"; empresa: string; detalle: string }
   | { tipo: "sin precio"; detalle: string }
   | { tipo: "sin cantidad"; detalle: string }
@@ -225,7 +231,23 @@ export function armarOrdenes(
   }
 
   for (const empresa of empresas) {
-    if (empresa.odooPartnerId === null) {
+    /*
+     * Faltar el partner y faltar el CUIT son dos problemas distintos, y
+     * confundirlos manda a buscar al lugar equivocado. Medido el 23/11/2026:
+     * de los 45 proveedores cotizados en 180 días que no llegan a una orden,
+     * **40 no tienen CUIT**. Con CUIT el partner lo crea el push solo; sin
+     * CUIT no hay nada que crear, porque es lo único con que Odoo reconoce a
+     * un proveedor. Por eso el `sin cuit` va primero y excluye al otro: decir
+     * los dos sería decirle a alguien que haga dos cosas cuando hay una sola.
+     */
+    if (empresa.odooPartnerId === null && !ri.proveedorCuit) {
+      problemas.push({
+        tipo: "sin cuit",
+        detalle:
+          `El proveedor del RI ${ri.nroRi} no tiene CUIT cargado, que es lo único con que ` +
+          `se lo reconoce en Odoo. Cargáselo en la ficha del proveedor y volvé a intentar.`,
+      });
+    } else if (empresa.odooPartnerId === null) {
       problemas.push({
         tipo: "sin proveedor enlazado",
         empresa: empresa.nombre,
@@ -233,7 +255,7 @@ export function armarOrdenes(
         // los proveedores de Odoo sólo 147 están en las dos empresas.
         detalle:
           `El proveedor del RI ${ri.nroRi} no existe en ${empresa.nombre} dentro de Odoo. ` +
-          `Hay que darlo de alta ahí, o revisar su CUIT en el padrón del SdG.`,
+          `Se va a crear al generar la orden.`,
       });
     }
 
