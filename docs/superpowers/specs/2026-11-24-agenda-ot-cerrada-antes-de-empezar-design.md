@@ -100,7 +100,7 @@ sola definición de qué día es un evento de OT.
 «y el evento es de hoy o más adelante»: hoy movería 1 de los 7, justo el que se
 vio. Descartada porque **la regla pasaría a depender de cuándo mire el cron**:
 si una sincronización se atrasa a después de medianoche, el mismo evento deja
-de moverse y nada lo dice. Además deja los seis ya pasados diciendo lo que no
+de moverse y nada lo dice. Además deja los siete ya pasados diciendo lo que no
 pasó, y las vistas de semana y lista de `/agenda` miran también hacia atrás.
 
 **C. Dejar el evento quieto en Google y dibujarlo en el día del cierre sólo en
@@ -158,8 +158,10 @@ no va al calendario. El cambio vive en las dos puntas de la sincronización y en
 ningún lado más.
 
 **5. La primera corrida mueve siete** —las 2970, 3096, 3097, 3122, 3149, 3152 y
-3162—, seis de ellas a un día ya pasado, y después queda en régimen. Que mueva
-siete y no más es lo que hay que comprobar en la primera corrida real.
+3162—, las siete a un día ya pasado (seis venían de un día pasado; la 3149, de
+hoy), y después queda en régimen. Lo que hay que comprobar no es que sean siete
+—seis son del ciclo de martillos y eso crece— sino que toda orden listada tenga
+`fecha_cierre` anterior a su inicio, que es lo que imprime el script.
 
 ### Lo que se prueba
 

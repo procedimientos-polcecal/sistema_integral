@@ -677,18 +677,24 @@ midió contra producción el 04/11/2026.
   transacción. **No lo está**: el insert de la primera ya está confirmado y la lectura
   de la segunda lo ve. Adelantar los huecos encima de eso los contaba dos veces —medido:
   **08:00 y 11:00 en vez de 08:00 y 09:30**—.
-- **El `aviso` de un evento de OT tiene tres escritores y cada uno limpia sólo lo
+- **El `aviso` de un evento de OT tiene cuatro escritores y cada uno limpia sólo lo
   suyo; el del borrado gana siempre.** Son el aviso de un **borrado que Google
   rechazó** (`AVISO_DE_BORRADO`, que se reconoce por **prefijo** porque le agrega lo
-  que dijo Google), el del **tope** (`AVISO_DE_TOPE`, por **igualdad**) y los que escribe
-  el barrido de OT cuando la fecha se vació o el evento divergió. El del borrado es el
+  que dijo Google), el del **tope** (`AVISO_DE_TOPE`, por **igualdad**), los que escribe
+  el barrido de OT cuando la fecha se vació o el evento divergió y —el cuarto, del
+  24/11/2026— el del **cierre no creíble** (`AVISO_DE_CIERRE_NO_CREIBLE`, por **prefijo**). El del borrado es el
   único registro de que **quedó un evento vivo en cinco calendarios que ninguna fila
   nombra**, y no se recupera de ningún lado: el del tope se deduce de nuevo mirando el
   horario. Por eso `mandarLaOTAlCalendario` y `avisoDeUnMovimiento` no lo pisan ni lo
   limpian, topee o no. Dónde está cada mitad de la regla: `limpiable` y
   `avisoDeUnMovimiento` en `elEventoSigueALaOT.ts`, `delTope` en `mandarLaOT.ts`. **Si
-  agregás un cuarto aviso, definí si es por prefijo o por igualdad y decile a
-  `limpiable` que no es suyo.**
+  agregás un quinto aviso, definí si es por prefijo o por igualdad y, si no lo escribe
+  esta lógica, decile a `limpiable` que no es suyo.** El cuarto **no** se le dijo a
+  `limpiable` a propósito: **sí es de esta lógica** —lo escribe `planDelEvento`—, así que
+  limpiarlo cuando el cierre deja de adelantarse es lo correcto. Lo que sí tuvo que
+  aprender es la otra mitad: **la rama `no-creible` no pisa un `AVISO_DE_BORRADO`**
+  guardado (el del borrado gana siempre, también contra éste), y por eso su prefijo es
+  «La orden se cerró el» y no «La orden se cerró», que otro aviso podría compartir.
 - **`fecha_fin` vacía quiere decir «duró un día»**, no que el dato falte: es la misma
   convención que `fecha_hasta` en el cuaderno del contratista. Las órdenes anteriores
   al 04/11/2026 la tienen vacía **y no hay backfill**, porque hasta entonces el valor
@@ -796,15 +802,28 @@ Lo que **no** cambió: `problemasDeMandarLaOT` y `esCandidataAlCalendario` sigue
 que una orden cerrada no va al calendario. El cambio vive en las dos puntas de la
 sincronización y en ningún lado más.
 
-**Qué mueve la primera corrida, y cómo se ve sin esperarla:** siete eventos, seis de ellos
-a un día ya pasado. Se comprueba con `npx tsx scripts/que-eventos-se-moverian.mts`, que
+**Qué mueve la primera corrida, y cómo se ve sin esperarla:** siete eventos, **los siete a
+un día ya pasado** (del 04/11 al 20/11, todos anteriores al 24/11); lo que es cierto de seis
+y no del séptimo es que su *origen* ya era pasado: el de la OT 3149 es el de hoy. Se comprueba con `npx tsx scripts/que-eventos-se-moverian.mts`, que
 lee `agenda_eventos` y `ordenes_trabajo` y no escribe nada; el 24/11/2026 dio **siete, las
 mismas OT, y cero «no creíbles»**: 3097 y 3152 (21/11 → 19/11), 2970 (07/11 → 04/11), 3162
-(22/11 → 20/11), 3122 y 3096 (20/11 → 18/11) y 3149 (24/11 → 18/11, el de hoy). Si da más
-de siete, la excepción está agarrando cerradas normales y hay que parar antes de desplegar.
+(22/11 → 20/11), 3122 y 3096 (20/11 → 18/11) y 3149 (24/11 → 18/11, el de hoy). **El número no
+es la señal:** seis de los siete son del ciclo de martillos y eso crece, así que ocho es
+lo esperado si entre la medición y el despliegue se cierra una más antes de empezar. Lo
+que distingue el bug es el invariante, y el script lo imprime al final: **toda orden
+listada tiene `fecha_cierre` anterior a su fecha de inicio**. Si nombra alguna que no,
+la excepción está agarrando cerradas normales y hay que parar antes de desplegar.
 Lo que sólo se comprueba escribiendo en producción: que Google acepte el `PATCH` hacia un
-día pasado sin devolver nada raro (no hay motivo para que no), y que los seis ya pasados
-queden ahí sin volver a moverse en la corrida siguiente.
+día pasado sin devolver nada raro (no hay motivo para que no), y que los siete queden
+ahí sin volver a moverse en la corrida siguiente. Dos cosas para mirar en esa corrida:
+
+- **`sinAlcanzar` y `pendientes`, además de `movidos`, en `sincronizaciones`.** Siete
+  movimientos en una pasada es más de lo que esta maquinaria hizo nunca de una vez, y el
+  presupuesto de Google para mover son ~15 s: si Google va lento, parte se va a la
+  corrida siguiente. Es lo esperado, pero conviene verlo escrito y no suponerlo.
+- **Después de esa corrida, volver a correr el script: tiene que dar 0**, o sólo las
+  nuevas que hayan cerrado antes mientras tanto. **Dos corridas seguidas con las mismas
+  siete querrían decir que la idempotencia no agarró.**
 
 ## Lo que se decidió no hacer, y lo que queda abierto
 

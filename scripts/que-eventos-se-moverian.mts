@@ -10,14 +10,26 @@
 // (`elCierreQueAdelanta`): una cerrada normal no se toca, aunque su evento y su
 // fecha no coincidan, y listarla acá haría parecer que la excepción la agarra.
 // Lo esperado el 24/11/2026 son siete —las OT 2970, 3096, 3097, 3122, 3149, 3152
-// y 3162—, ninguno con más de un año de brecha y cero «no creíbles». Si da más,
-// la excepción está agarrando órdenes que no debería.
+// y 3162—, ninguno con más de un año de brecha y cero «no creíbles». **El número
+// no es la señal**: seis de los siete son del ciclo de martillos, que crece solo,
+// así que ocho puede ser lo correcto. Lo que distingue el bug es el invariante
+// que el script imprime al final: toda orden listada tiene `fecha_cierre`
+// anterior a su fecha de inicio. Una que no lo cumpla es una cerrada normal que
+// la excepción no debería agarrar.
+//
+// `ENV_PATH` permite correrlo desde un worktree (ver `que-haria-el-ciclo.mts`).
 //
 //   npx tsx scripts/que-eventos-se-moverian.mts
 
 import { readFileSync, existsSync } from "node:fs";
 
-const env = new URL("../.env.local", import.meta.url);
+// `ENV_PATH` existe para correrlo desde un worktree, que no tiene `.env.local`
+// propio: se le pasa el del checkout principal. Nunca exportar las variables
+// por el shell — el JSON de la cuenta de servicio se rompe y el error lo
+// imprime entero, clave privada incluida (24/11/2026).
+const env = process.env.ENV_PATH
+  ? new URL(`file://${process.env.ENV_PATH}`)
+  : new URL("../.env.local", import.meta.url);
 if (existsSync(env)) {
   for (const line of readFileSync(env, "utf-8").split("\n")) {
     const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
@@ -25,7 +37,7 @@ if (existsSync(env)) {
   }
 }
 
-const { elCierreQueAdelanta, laFechaQueMandaEnElEvento } = await import("../lib/agenda/evento.ts");
+const { elCierreQueAdelanta, laFechaQueMandaEnElEvento, fechaParaElCalendario } = await import("../lib/agenda/evento.ts");
 const { fechaDelEvento } = await import("../lib/agenda/elEventoSigueALaOT.ts");
 
 const URL_BASE = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -62,6 +74,7 @@ for (let desde = 0; ; desde += PAGINA) {
 }
 
 const cambian: string[] = [];
+const sinInvariante: string[] = [];
 const noCreibles: string[] = [];
 let sinOrden = 0;
 
@@ -75,8 +88,15 @@ for (const f of filas) {
     noCreibles.push(`OT ${o.ot_number}: cierre ${cierre.cierre}, inicio ${cierre.inicio}, ${cierre.dias} días`);
     continue;
   }
+  // El invariante: lo listado cerró antes de su inicio (fecha que manda en el calendario).
+  if (!(cierre.fecha < (fechaParaElCalendario(o) ?? ""))) sinInvariante.push(`OT ${o.ot_number}`);
   const manda = laFechaQueMandaEnElEvento(o);
   if (manda && manda !== hoy) {
+    if (hoy === null) {
+      // Un inicio ilegible es justo lo que este script existe para encontrar.
+      cambian.push(`OT ${o.ot_number}: el inicio del evento no se lee («${f.inicio}») -> ${manda}`);
+      continue;
+    }
     const dias = Math.round((Date.parse(`${hoy}T00:00:00Z`) - Date.parse(`${manda}T00:00:00Z`)) / 86_400_000);
     cambian.push(`OT ${o.ot_number}: ${hoy} -> ${manda} (${dias} días antes)`);
   }
@@ -87,3 +107,11 @@ console.log(`\nSe moverían: ${cambian.length}`);
 for (const c of cambian) console.log(`  ${c}`);
 console.log(`\nCierre no creíble (sólo avisa, no mueve): ${noCreibles.length}`);
 for (const c of noCreibles) console.log(`  ${c}`);
+
+console.log(
+  sinInvariante.length === 0
+    ? `
+Invariante: las ${cambian.length + noCreibles.length} órdenes listadas tienen fecha_cierre anterior a su fecha de inicio. OK.`
+    : `
+INVARIANTE ROTO: ${sinInvariante.join(", ")} no tienen fecha_cierre anterior a su inicio: la excepción está agarrando cerradas normales.`
+);

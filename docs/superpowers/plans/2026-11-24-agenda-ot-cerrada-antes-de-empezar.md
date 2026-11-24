@@ -349,6 +349,6 @@ git commit -m "docs(agenda): la OT que se cerro antes de empezar"
 
 ## Lo que sólo se puede comprobar en la primera corrida real
 
-- Que la sincronización mueva **siete** eventos y no más, y que los seis que van a un día ya pasado queden ahí sin volver a moverse en la corrida siguiente.
+- Que la sincronización mueva **siete** eventos y no más, y que los siete que van a un día ya pasado queden ahí sin volver a moverse en la corrida siguiente.
 - Que Google acepte el `PATCH` de un evento hacia atrás sin devolver nada raro. No hay motivo para que no —la fecha pasada no es un caso especial para la API—, pero no se puede medir sin escribir en producción.
 - Que el evento movido no le llegue a nadie como notificación: los de OT se escriben con `sendUpdates=none`, así que no debería salir ninguna invitación. Lo que esto **no** apaga es el recordatorio propio del calendario, que para un día ya pasado no suena.
