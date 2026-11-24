@@ -22,6 +22,27 @@ describe("filaDeAviso", () => {
     expect(a.sheets_row).toBe(139);
   });
 
+  it("una celda con varias fotos da varias fotos", () => {
+    // El formulario deja TODAS las fotos de una respuesta en la misma celda,
+    // separadas por coma. Medido el 23/11/2026: 6 de las 24 celdas con foto
+    // traen más de un link, y leerlas como una sola perdía 13 de 31 fotos.
+    const fila = [...FILA];
+    fila[10] =
+      "https://drive.google.com/open?id=1d76RKqrkXT, https://drive.google.com/open?id=1H1B9nZvZQF";
+    expect(filaDeAviso(fila, 141)!.reference_photos).toEqual([
+      "https://drive.google.com/open?id=1d76RKqrkXT",
+      "https://drive.google.com/open?id=1H1B9nZvZQF",
+    ]);
+  });
+
+  it("un `#REF!` en la columna de la foto no se guarda como si fuera una", () => {
+    // Esa columna estuvo en `#REF!` durante meses por una fórmula que no
+    // podía expandirse; sin esto, el error entraba a la base como una foto.
+    const fila = [...FILA];
+    fila[10] = "#REF!";
+    expect(filaDeAviso(fila, 141)!.reference_photos).toBeNull();
+  });
+
   it("no confunde la imagen con las observaciones", () => {
     // El código de origen leía las observaciones de la K, que es la imagen.
     expect(filaDeAviso(FILA, 139)!.observaciones).not.toContain("drive.google");
@@ -124,6 +145,16 @@ describe("filaParaLaPlanilla", () => {
 
   it("sin foto, la K queda vacía", () => {
     expect(filaParaLaPlanilla({ oa_number: "A186" })[10]).toBe("");
+  });
+
+  it("varias fotos vuelven a la planilla separadas por coma, como vinieron", () => {
+    // Ida y vuelta: lo que escribe esto tiene que poder leerlo `filaDeAviso`.
+    // Escribir sólo la primera perdía las demás en el viaje de ida.
+    const fotos = ["https://ejemplo/a.jpg", "https://ejemplo/b.jpg"];
+    const fila = filaParaLaPlanilla({ oa_number: "A187", reference_photos: fotos });
+    expect(fila[10]).toBe("https://ejemplo/a.jpg, https://ejemplo/b.jpg");
+
+    expect(filaDeAviso(fila, 1)!.reference_photos).toEqual(fotos);
   });
 
   // `agregarFila()` escribe con USER_ENTERED: lo que entra lo interpreta la

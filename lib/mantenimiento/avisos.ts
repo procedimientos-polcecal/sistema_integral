@@ -19,6 +19,7 @@
 import { texto, fechaDeSheets, codigoDeEquipo } from "@/lib/mantenimiento/planilla";
 import { fechaDeTexto, comoSeLee } from "@/lib/core/fechas";
 import { textoParaLaCelda } from "@/lib/core/sheets";
+import { linksDeFotos } from "@/lib/mantenimiento/fotoDelAviso";
 
 /** Columna de cada dato, contando desde A = 0. */
 const COL = {
@@ -56,7 +57,11 @@ export function filaDeAviso(fila: unknown[], numeroFila: number): AvisoLeido | n
   if (!oa) return null;
 
   const equipoRaw = texto(fila[COL.equipo]);
-  const imagen = texto(fila[COL.imagen]);
+  // La celda puede traer VARIAS fotos separadas por coma —el formulario mete
+  // ahí todas las de una respuesta— y también basura como el `#REF!` que esa
+  // columna tuvo durante meses. `linksDeFotos` saca los links y descarta el
+  // resto: ver el porqué medido en `fotoDelAviso.ts`.
+  const fotos = linksDeFotos(texto(fila[COL.imagen]));
 
   return {
     oa_number: oa,
@@ -69,7 +74,7 @@ export function filaDeAviso(fila: unknown[], numeroFila: number): AvisoLeido | n
     quien_aviso: texto(fila[COL.quien]),
     ot_asignada: texto(fila[COL.otAsignada]),
     observaciones: texto(fila[COL.observaciones]),
-    reference_photos: imagen ? [imagen] : null,
+    reference_photos: fotos.length > 0 ? fotos : null,
     sheets_row: numeroFila,
   };
 }
@@ -257,10 +262,11 @@ export function filaParaLaPlanilla(aviso: {
   fila[COL.descripcion] = textoParaLaCelda(aviso.descripcion);
   fila[COL.urgencia] = aviso.urgencia ?? "";
   fila[COL.quien] = textoParaLaCelda(aviso.quien_aviso);
-  // Sólo la primera: la columna es una celda con un link y `filaDeAviso` la
-  // lee como uno solo. Sin escribirla, la próxima sincronización lee la K
-  // vacía y la foto cargada en la app desaparece de los dos lados.
-  fila[COL.imagen] = aviso.reference_photos?.[0] ?? "";
+  // TODAS, separadas por coma, que es como las escribe el formulario y como
+  // las vuelve a leer `filaDeAviso`. Escribir sólo la primera perdía las
+  // demás en el viaje de ida; no escribir ninguna es peor, porque la próxima
+  // sincronización lee la K vacía y la foto desaparece de los dos lados.
+  fila[COL.imagen] = (aviso.reference_photos ?? []).join(", ");
   fila[COL.observaciones] = textoParaLaCelda(aviso.observaciones);
 
   return fila;

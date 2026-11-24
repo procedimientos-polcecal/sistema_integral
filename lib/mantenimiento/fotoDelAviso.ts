@@ -58,6 +58,43 @@ export type FotoDelAviso =
 const DRIVE = /(^|\.)((drive|docs)\.google|googleusercontent)\.com$/i;
 
 /**
+ * Los links que hay en UNA celda de la columna "Imagen".
+ *
+ * **El formulario de Google deja todas las fotos de una respuesta en una sola
+ * celda, separadas por coma**, así que la celda no es "un link" sino una
+ * lista. Medido el 23/11/2026 sobre la planilla real, el día que la columna
+ * volvió a funcionar: 24 celdas con algo, **6 de ellas con más de un link** y
+ * 31 fotos en total. Leer la celda como un link solo perdía 13 de las 31, y
+ * no en silencio: el texto pegado no es la URL de nada, así que esos seis
+ * avisos mostraban una imagen rota.
+ *
+ * Se buscan los links en vez de cortar por la coma: así una celda con texto
+ * alrededor —o con el `#REF!` que esa columna tuvo durante meses— no deja
+ * basura haciéndose pasar por una foto. El corte es en el espacio o la coma,
+ * que es lo que una URL no puede tener sin escapar.
+ */
+export function linksDeFotos(celda: string | null | undefined): string[] {
+  return (celda ?? "").match(/https?:\/\/[^\s,]+/gi) ?? [];
+}
+
+/**
+ * Todas las fotos de un aviso, una por URL.
+ *
+ * **Es la lista que define qué significa el `n`** que viaja a
+ * `/api/mantenimiento/avisos/foto`: la pantalla y la ruta la calculan con
+ * esta misma función, así que el número quiere decir lo mismo de los dos
+ * lados. Contar de distinta forma en cada punta es cómo se sirve la foto de
+ * otro aviso sin que nada falle.
+ */
+export function urlsDeLasFotos(
+  fotos: readonly (string | null | undefined)[] | null | undefined
+): string[] {
+  const salida: string[] = [];
+  for (const celda of fotos ?? []) salida.push(...linksDeFotos(celda));
+  return salida;
+}
+
+/**
  * Lo que un navegador intenta dibujar en un `<img>`.
  *
  * `heic` entra aunque Chrome no lo sepa dibujar: el `<img>` de la pantalla
@@ -77,14 +114,13 @@ export function fotosDelAviso(
   avisoId?: string | null
 ): FotoDelAviso[] {
   const salida: FotoDelAviso[] = [];
-  const lista = fotos ?? [];
+  // Una celda puede traer varias fotos, así que el índice es el de la lista
+  // aplanada y no el de `reference_photos`. La ruta la arma con esta misma
+  // función: ver `urlsDeLasFotos`.
+  const lista = urlsDeLasFotos(fotos);
 
-  // El índice es el de `reference_photos` **sin filtrar**, porque es el que
-  // viaja a la ruta y con el que ella vuelve a entrar al arreglo. Contar sobre
-  // la salida ya filtrada le haría servir otra foto.
   for (let i = 0; i < lista.length; i++) {
-    const texto = (lista[i] ?? "").trim();
-    if (!texto) continue;
+    const texto = lista[i];
 
     let url: URL;
     try {
