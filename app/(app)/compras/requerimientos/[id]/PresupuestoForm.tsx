@@ -7,6 +7,7 @@ import {
   datosDePagoDe, alCambiarDeProveedor, type ProveedorElegible,
 } from "@/lib/compras/comparativa";
 import SelectorProveedor from "../../SelectorProveedor";
+import NuevoProveedorModal from "./NuevoProveedorModal";
 import MultiSelect from "@/components/MultiSelect";
 import Select from "@/components/Select";
 
@@ -55,6 +56,16 @@ export default function PresupuestoForm({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
+  /*
+   * El alta de un proveedor que no está en la lista. La lista vive acá en vez
+   * de recargar la página a propósito: recargar perdería lo que ya se tipeó
+   * del presupuesto, que es justo lo que el botón viene a evitar.
+   */
+  const [abrirAlta, setAbrirAlta] = useState(false);
+  const [nuevos, setNuevos] = useState<ProveedorElegible[]>([]);
+  const [avisoDelAlta, setAvisoDelAlta] = useState<string | null>(null);
+  const lista = [...proveedores, ...nuevos];
+
   // Lo último que puso el autocompletado. Sirve para dos cosas: saber qué se
   // puede reemplazar al cambiar de proveedor sin pisar lo que escribió una
   // persona, y avisar en pantalla de dónde salió cada valor.
@@ -64,7 +75,7 @@ export default function PresupuestoForm({
 
   function elegirProveedor(id: string) {
     setProveedorId(id);
-    const datos = datosDePagoDe(proveedores.find((p) => p.id === id));
+    const datos = datosDePagoDe(lista.find((p) => p.id === id));
     setPlazos((actual) => plazosAlCambiarDeProveedor(actual, traido.plazos, datos.plazos));
     setCondiciones((actual) => alCambiarDeProveedor(actual, traido.condiciones, datos.condiciones));
     setTraido(datos);
@@ -128,13 +139,28 @@ export default function PresupuestoForm({
         </div>
       )}
 
+      {avisoDelAlta && (
+        <div className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">{avisoDelAlta}</div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-3">
         <Campo label="Proveedor" ancho="sm:col-span-2">
-          <SelectorProveedor
-            proveedores={proveedores}
-            valor={proveedorId}
-            onCambio={elegirProveedor}
-          />
+          <div className="flex gap-1.5">
+            <div className="flex-1">
+              <SelectorProveedor
+                proveedores={lista}
+                valor={proveedorId}
+                onCambio={elegirProveedor}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setAbrirAlta(true)}
+              className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Nuevo
+            </button>
+          </div>
         </Campo>
         <Campo label="Marca"><Texto valor={marca} set={setMarca} /></Campo>
 
@@ -251,8 +277,57 @@ export default function PresupuestoForm({
           </button>
         </div>
       </div>
+
+      {abrirAlta && (
+        <NuevoProveedorModal
+          requerimientoId={requerimientoId}
+          onCerrar={() => setAbrirAlta(false)}
+          onUsarExistente={(id) => {
+            elegirProveedor(id);
+            setAbrirAlta(false);
+            setAvisoDelAlta(null);
+          }}
+          onCreado={(proveedor, resultado) => {
+            setNuevos((previos) => [...previos, proveedor]);
+            elegirProveedor(proveedor.id);
+            setAbrirAlta(false);
+            setAvisoDelAlta(avisoDelResultado(resultado));
+          }}
+        />
+      )}
     </div>
   );
+}
+
+/**
+ * Qué decirle a quien acaba de dar de alta un proveedor.
+ *
+ * Los tres desenlaces significan cosas distintas y por eso se dicen distinto:
+ * quedó enlazado, no está en Odoo todavía —y entonces se crea al generar la
+ * orden, que no es un problema sino el plan—, o hay varios candidatos y hace
+ * falta que alguien de administración elija.
+ */
+function avisoDelResultado(r: {
+  enlaces: { empresa: string }[];
+  sinEnlazar: { empresa: string; motivo: string }[];
+  avisoDeOdoo: string | null;
+}): string {
+  if (r.avisoDeOdoo) {
+    return `El proveedor quedó creado, pero no se pudo consultar Odoo: ${r.avisoDeOdoo}`;
+  }
+
+  const partes: string[] = [];
+  if (r.enlaces.length) {
+    partes.push(`Quedó enlazado con Odoo en ${r.enlaces.map((e) => e.empresa).join(" y ")}.`);
+  }
+  for (const s of r.sinEnlazar) partes.push(`${s.empresa}: ${s.motivo}`);
+  if (!r.enlaces.length && !r.sinEnlazar.length) {
+    partes.push("El proveedor quedó creado.");
+  }
+  if (!r.enlaces.length) {
+    partes.push("Se va a crear en Odoo cuando se genere la orden de compra.");
+  }
+  return partes.join(" ");
 }
 
 function Campo({ label, ancho = "", nota, children }: {
