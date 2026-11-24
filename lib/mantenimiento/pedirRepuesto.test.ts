@@ -5,6 +5,7 @@ import {
 import type { Disponibilidad } from "./stock";
 
 const orden = {
+  id: "ot-1",
   ot_number: 2381,
   descripcion: "Cambio de rodamientos del eje",
   equipment_id: "eq-compresor",
@@ -104,7 +105,7 @@ describe("de donde sale el pedido", () => {
 
   it("una orden sin numero ni equipo no inventa nada", () => {
     expect(deDondeSale(
-      { ot_number: null, descripcion: null, equipment_id: null, equipo_raw: null, sector_id: null },
+      { id: "ot-1", ot_number: null, descripcion: null, equipment_id: null, equipo_raw: null, sector_id: null },
       null
     )).toBe("");
   });
@@ -117,7 +118,7 @@ describe("el requerimiento que se sugiere", () => {
    */
   it("usa el nombre y el codigo del articulo cuando se lo reconocio", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: "2" },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: "2" },
       hallado(0), orden, ubicaciones, AREAS
     );
     expect(p.descripcion).toBe("GUANTES DE VAQUETA");
@@ -127,7 +128,7 @@ describe("el requerimiento que se sugiere", () => {
 
   it("y el texto libre cuando no lo reconocio", () => {
     const p = pedidoSugerido(
-      { nombre: "buje especial", codigo: "X-9", cantidad: null },
+      { id: "rep-1", nombre: "buje especial", codigo: "X-9", cantidad: null },
       { codigo: "X-9", nombre: "buje especial", insumo: null, estado: "no_esta" },
       orden, ubicaciones, AREAS
     );
@@ -138,7 +139,7 @@ describe("el requerimiento que se sugiere", () => {
 
   it("enlaza la ubicacion cuando la maquina tiene una sola", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: null },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: null },
       hallado(0), orden, ubicaciones, AREAS
     );
     expect(p.ubicacionId).toBe("u-compresor");
@@ -150,7 +151,7 @@ describe("el requerimiento que se sugiere", () => {
    */
   it("con dos ubicaciones no elige ninguna", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: null },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: null },
       hallado(0), { ...orden, equipment_id: "eq-doosan" }, ubicaciones, AREAS
     );
     expect(p.ubicacionId).toBe("");
@@ -158,7 +159,7 @@ describe("el requerimiento que se sugiere", () => {
 
   it("sin equipo enlazado tampoco", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: null },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: null },
       hallado(0), { ...orden, equipment_id: null, sector_id: null }, ubicaciones, AREAS
     );
     expect(p.ubicacionId).toBe("");
@@ -168,7 +169,7 @@ describe("el requerimiento que se sugiere", () => {
    * pedidos del mismo material. */
   it("el origen va al detalle y no a la descripcion", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: null },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: null },
       hallado(0), orden, ubicaciones, AREAS
     );
     expect(p.descripcion).not.toContain("2381");
@@ -186,7 +187,7 @@ describe("el requerimiento que se sugiere", () => {
 describe("el area y el equipo del pedido que nace de una OT", () => {
   it("el area es Mantenimiento", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: null },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: null },
       hallado(0), orden, ubicaciones, AREAS
     );
     expect(p.areaId).toBe("a-mant");
@@ -196,7 +197,7 @@ describe("el area y el equipo del pedido que nace de una OT", () => {
    * inventa otra: un area equivocada le esconde el pedido a quien lo espera. */
   it("si no hay un area llamada Mantenimiento, queda vacia", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: null },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: null },
       hallado(0), orden, ubicaciones, [{ id: "a-prod", nombre: "Producción" }]
     );
     expect(p.areaId).toBe("");
@@ -204,7 +205,7 @@ describe("el area y el equipo del pedido que nace de una OT", () => {
 
   it("el equipo es el de la orden", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: null },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: null },
       hallado(0), orden, ubicaciones, AREAS
     );
     expect(p.equipoId).toBe("eq-compresor");
@@ -212,7 +213,7 @@ describe("el area y el equipo del pedido que nace de una OT", () => {
 
   it("sin equipo enlazado, vacio", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: null },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: null },
       hallado(0), { ...orden, equipment_id: null }, ubicaciones, AREAS
     );
     expect(p.equipoId).toBe("");
@@ -229,7 +230,7 @@ describe("la ubicacion cuando la maquina no tiene una", () => {
 
   it("cae en la del sector de la orden", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: null },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: null },
       hallado(0), sinUbicacionPropia, ubicaciones, AREAS
     );
     expect(p.ubicacionId).toBe("u-tritu");
@@ -238,7 +239,7 @@ describe("la ubicacion cuando la maquina no tiene una", () => {
   /** La del equipo gana: es mas precisa que la del sector entero. */
   it("pero la de la maquina gana cuando la tiene", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: null },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: null },
       hallado(0), orden, ubicaciones, AREAS
     );
     expect(p.ubicacionId).toBe("u-compresor");
@@ -247,7 +248,7 @@ describe("la ubicacion cuando la maquina no tiene una", () => {
   /** Filler 1 y Filler 2 tienen dos cada uno: Molienda y Silos. */
   it("con dos en el sector tampoco elige", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: null },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: null },
       hallado(0), { ...sinUbicacionPropia, sector_id: "s-filler" }, ubicaciones, AREAS
     );
     expect(p.ubicacionId).toBe("");
@@ -256,7 +257,7 @@ describe("la ubicacion cuando la maquina no tiene una", () => {
   /** Y una maquina con dos NO cae al sector, aunque el sector tenga una sola. */
   it("una maquina con dos no cae al sector", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: null },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: null },
       hallado(0), { ...orden, equipment_id: "eq-doosan" }, ubicaciones, AREAS
     );
     expect(p.ubicacionId).toBe("");
@@ -264,9 +265,23 @@ describe("la ubicacion cuando la maquina no tiene una", () => {
 
   it("sin sector ni equipo, vacia", () => {
     const p = pedidoSugerido(
-      { nombre: "guantes", codigo: null, cantidad: null },
+      { id: "rep-1", nombre: "guantes", codigo: null, cantidad: null },
       hallado(0), { ...orden, equipment_id: null, sector_id: null }, ubicaciones, AREAS
     );
     expect(p.ubicacionId).toBe("");
+  });
+});
+
+describe("de que orden y de que renglon sale", () => {
+  it("el pedido sugerido dice de que orden y de que renglon sale", () => {
+    const p = pedidoSugerido(
+      { id: "rep-1", nombre: "CAJA DE RODAMIENTO UPC 213", codigo: "00185", cantidad: "2" },
+      null,
+      { id: "ot-1", ot_number: 2983, descripcion: "Cambio de rodamiento",
+        equipment_id: "eq-1", equipo_raw: "Molino 2", sector_id: "sec-1" },
+      []
+    );
+    expect(p.otId).toBe("ot-1");
+    expect(p.otRepuestoId).toBe("rep-1");
   });
 });

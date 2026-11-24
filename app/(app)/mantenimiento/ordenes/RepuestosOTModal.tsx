@@ -459,7 +459,7 @@ export default function RepuestosOTModal({
                         <button
                           onClick={() => setPidiendo({
                             pedido: pedidoSugerido(
-                              { nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad },
+                              { id: r.id, nombre: r.nombre, codigo: r.codigo, cantidad: r.cantidad },
                               d, orden, ubicaciones, areas
                             ),
                             ris: r.ris,
