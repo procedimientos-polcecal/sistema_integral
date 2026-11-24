@@ -91,6 +91,13 @@ export async function GET(_request: Request, { params }: Params) {
     .select("articulo_id, fecha")
     .eq("articulo_id", renglon.articulo_id)
     .eq("tipo", "entrada")
+    // `fecha` es nullable a propósito (migración 20260902115220: sin fecha el
+    // movimiento existe igual) y Postgres pone los NULL primero en un orden
+    // descendente: sin este filtro una entrada sin fecha ganaría el «más
+    // reciente» y el GET volvería vacío sin avisar. Hoy no pasa (medido el
+    // 23/11/2026: 0 de 1.166 entradas y 0 de 3.897 salidas sin fecha), pero el
+    // fallo sería mudo.
+    .not("fecha", "is", null)
     .order("fecha", { ascending: false })
     .range(0, 0);
   if (errEntrada) return NextResponse.json({ error: errEntrada.message }, { status: 500 });
@@ -119,7 +126,14 @@ export async function GET(_request: Request, { params }: Params) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "No se pudo leer el pañol" }, { status: 500 });
   }
 
-  return NextResponse.json({ candidatas: salidasCandidatas(entrada, salidas) });
+  const candidatas = salidasCandidatas(entrada, salidas);
+  if (candidatas.length === 0) {
+    return NextResponse.json({
+      candidatas,
+      motivo: "Ese artículo no tiene salidas del pañol desde su última entrada.",
+    });
+  }
+  return NextResponse.json({ candidatas });
 }
 
 /** PATCH — `{ movimiento_id }`. Declara con qué salida se cumplió el renglón. */
@@ -177,8 +191,14 @@ export async function PATCH(request: Request, { params }: Params) {
 
 /**
  * DELETE — saca el vínculo. Lleva también `puesto_por` y `puesto_en`: sin
- * `movimiento_id` dirían «alguien lo vinculó tal día» sobre nada. Se deshace
- * con un PATCH, por eso no se audita.
+ * `movimiento_id` dirían «alguien lo vinculó tal día» sobre nada.
+ *
+ * **No se audita, y conviene saber qué se pierde.** El valor se vuelve a poner
+ * con un PATCH, pero la autoría no: un PATCH sobre un renglón ya vinculado pisa
+ * también quién lo había declarado y cuándo, sin leer lo que había, y eso no
+ * queda registrado en ningún lado. Se decidió así porque `auditoria` se reserva
+ * para lo irreversible y esta es una afirmación que se vuelve a hacer; si se
+ * quiere conservar la autoría anterior, hay que agregar la llamada.
  */
 export async function DELETE(_request: Request, { params }: Params) {
   const { id } = await params;
