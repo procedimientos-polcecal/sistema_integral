@@ -230,6 +230,14 @@ describe("una OT cerrada antes de empezar", () => {
       .toEqual(NADA_ESPERADO);
   });
 
+  it("el aviso de un borrado fallido le gana al del cierre no creible: no se lo pisa", () => {
+    // El del borrado es el unico registro de un evento vivo en cinco calendarios
+    // que ninguna fila nombra; el del cierre se vuelve a deducir de las fechas.
+    const deBorrado = `${AVISO_DE_BORRADO}. Google dijo: 503`;
+    expect(planDelEvento(fila({ aviso: deBorrado }, { fecha_cierre: "2016-11-04" })))
+      .toEqual(NADA_ESPERADO);
+  });
+
   it("un evento divergido no se pisa, tambien cuando la OT cerro antes", () => {
     const p = planDelEvento(fila({ divergencia: "movido" }, { fecha_cierre: "2026-11-04" }));
     expect(p.tipo).toBe("respetar");
@@ -536,6 +544,33 @@ describe("seguirALasOT", () => {
     });
     const r = await seguirALasOT(cliente);
     expect(r).toMatchObject({ movidos: 0, avisados: 0, respetados: 0 });
+    expect(hechos.filter((h) => h.op === "update")).toEqual([]);
+  });
+
+  it("un cierre no creible escribe el aviso en la fila, lo cuenta y no llama a Google", async () => {
+    const { cliente, hechos } = clienteFalso({
+      eventos: [FILA_DE_EVENTO({
+        ordenes_trabajo: { ot_number: 2900, fecha_ejecucion: "2026-11-10", fecha_ejecucion_pendiente: null, fecha_cierre: "2016-11-04" },
+      })],
+    });
+    const r = await seguirALasOT(cliente);
+    expect(r).toMatchObject({ movidos: 0, avisados: 1, respetados: 0 });
+    const updates = hechos.filter((h) => h.op === "update");
+    expect(updates).toHaveLength(1);
+    expect(updates[0].columnas).toEqual({ aviso: expect.stringContaining("2016-11-04") });
+    expect(actualizarEvento).not.toHaveBeenCalled();
+    expect(crearEvento).not.toHaveBeenCalled();
+  });
+
+  it("un cierre no creible no pisa el aviso de un borrado fallido guardado", async () => {
+    const { cliente, hechos } = clienteFalso({
+      eventos: [FILA_DE_EVENTO({
+        aviso: `${AVISO_DE_BORRADO}. Google dijo: 503`,
+        ordenes_trabajo: { ot_number: 2900, fecha_ejecucion: "2026-11-10", fecha_ejecucion_pendiente: null, fecha_cierre: "2016-11-04" },
+      })],
+    });
+    const r = await seguirALasOT(cliente);
+    expect(r).toMatchObject({ movidos: 0, avisados: 0 });
     expect(hechos.filter((h) => h.op === "update")).toEqual([]);
   });
 

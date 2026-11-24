@@ -73,8 +73,13 @@ import { anotarEnLaFila } from "./cargar";
  * por prefijo como `AVISO_DE_BORRADO`: cuando el cierre deja de adelantarse
  * —alguien corrigió el año— la frase deja de ser cierta, y el camino de «cerrada
  * sin nada que mover» salía por `NADA` sin pasar por `limpiable`.
+ *
+ * **El prefijo lleva «el» a propósito**: la rama de «el cierre dejó de adelantarse»
+ * limpia *cualquier* aviso que empiece así, y «La orden se cerró» a secas son
+ * cuatro palabras que otro aviso podría usar. Es el mismo motivo por el que
+ * `AVISO_DE_BORRADO` es una oración entera.
  */
-export const AVISO_DE_CIERRE_NO_CREIBLE = "La orden se cerró";
+export const AVISO_DE_CIERRE_NO_CREIBLE = "La orden se cerró el";
 
 function avisoDeUnCierreNoCreible(c: { cierre: string; inicio: string; dias: number }): string {
   return (
@@ -261,6 +266,11 @@ export function planDelEvento(fila: FilaDeEventoDeOT, ocupados: number = 0): Pla
       return fila.aviso?.startsWith(AVISO_DE_CIERRE_NO_CREIBLE) ? { ...NADA, aviso: null } : NADA;
     }
     if (cierre.tipo === "no-creible") {
+      // El aviso de un borrado fallido gana siempre, también contra éste: es el
+      // único registro de un evento vivo en cinco calendarios que ninguna fila
+      // nombra (ver `limpiable`). `borrarLosEventosDeLasOT` lo escribe y esta
+      // pasada corre justo después, sobre la misma fila.
+      if (fila.aviso?.startsWith(AVISO_DE_BORRADO)) return NADA;
       const motivo = avisoDeUnCierreNoCreible(cierre);
       if (fila.aviso === motivo) return NADA;
       return { tipo: "avisar", mover: null, aviso: motivo, volverAAlertar: false };
@@ -298,8 +308,10 @@ export function planDelEvento(fila: FilaDeEventoDeOT, ocupados: number = 0): Pla
 /**
  * ¿Hay un aviso que esta lógica escribió y que ya no corresponde?
  *
- * **La columna `aviso` de un evento de OT tiene tres escritores y cada uno
- * limpia sólo lo suyo.** Dos no son de esta lógica y por eso están exceptuados:
+ * **La columna `aviso` de un evento de OT tiene cuatro escritores y cada uno
+ * limpia sólo lo suyo.** Dos no son de esta lógica y por eso están exceptuados
+ * (los otros dos, el de la fecha vaciada o el evento divergido y el del cierre
+ * no creíble, sí lo son, y esta función los limpia):
  *
  * - El de un **borrado que Google rechazó** (`AVISO_DE_BORRADO`, por prefijo:
  *   el texto le agrega lo que dijo Google). Lo escribe `borrarLosEventosDeLasOT`

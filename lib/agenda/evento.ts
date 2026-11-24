@@ -216,6 +216,18 @@ export type CierreAdelantado =
  * Las fechas se comparan como texto `AAAA-MM-DD`; lo único que se parsea es el
  * conteo de días de la brecha, con la `Z` para que ninguna zona entre en un día
  * que es de Argentina.
+ *
+ * **`estado` está en la firma y esta función no lo lee**, y no hace falta:
+ * cualquier `fecha_cierre` legible alcanza, y sin ella sale por `null` en la
+ * primera línea, así que el estado no puede cambiar ninguna respuesta. Está para
+ * que quien llama pase la orden entera. Y de ahí sale lo que no es obvio: **una
+ * `CANCELADA` queda afuera por no poder tener `fecha_cierre`, y no porque acá se
+ * mire su estado.** Es un invariante que el alta por la app garantiza
+ * (`estadoSegunElCierre`) y que el importador de la planilla **no** hace cumplir:
+ * toma el estado y la fecha de cierre por separado, y la puerta de la planilla
+ * no se cierra, se detecta. Medido: 0 filas `CANCELADA` en todo el sistema y 0 con
+ * cierre, así que hoy es inalcanzable; el día que una la tenga, esta función
+ * movería el evento de una orden que se decidió no hacer.
  */
 export function elCierreQueAdelanta(o: {
   fecha_ejecucion: string | null;
