@@ -33,14 +33,14 @@ function mas(fecha: string, n: number): string {
 describe("que salidas son candidatas de una entrada", () => {
   it("entran las del mismo articulo posteriores a la entrada, la mas nueva primero", () => {
     const salidas = [
-      salida("vieja", "2026-11-18"),
-      salida("nueva", "2026-11-25"),
+      salida("primera", "2026-11-18"),
+      salida("ultima", "2026-11-25"),
       salida("media", "2026-11-20"),
       salida("anterior", "2026-11-10"),
       salida("otro-articulo", "2026-11-22", { articulo_id: "a2" }),
     ];
     const r = salidasCandidatas(entrada("2026-11-17"), salidas);
-    expect(r.map((s) => s.id)).toEqual(["nueva", "media", "vieja"]);
+    expect(r.map((s) => s.id)).toEqual(["ultima", "media", "primera"]);
   });
 
   it("las que no son salida no cuentan", () => {
@@ -99,6 +99,15 @@ describe("que dice un vinculo", () => {
   it("sin movimiento, sin justificar", () => {
     expect(aplicacionDelRenglon({ articulo_id: "a1", movimiento_id: null }, null).estado)
       .toBe("sin-justificar");
+    // La forma real de hoy: 0 de 37 renglones tienen articulo.
+    expect(aplicacionDelRenglon({ articulo_id: null, movimiento_id: null }, null).estado)
+      .toBe("sin-justificar");
+  });
+
+  it("hay vinculo y el movimiento no se pudo leer: sin-ver, no otra-pieza", () => {
+    // Quien mira sin acceso a Inventario recibe null sin error.
+    expect(aplicacionDelRenglon({ articulo_id: "a1", movimiento_id: "m1" }, null).estado)
+      .toBe("sin-ver");
   });
 
   it("con movimiento del mismo articulo, aplicado", () => {
@@ -118,6 +127,15 @@ describe("que dice un vinculo", () => {
 
   it("un renglon sin articulo con movimiento puesto tampoco dice aplicado", () => {
     const r = aplicacionDelRenglon({ articulo_id: null, movimiento_id: "m1" }, salida("m1", "2026-11-18"));
+    expect(r.estado).toBe("otra-pieza");
+  });
+
+  it("renglon sin articulo y movimiento sin articulo: null no es igual a null", () => {
+    // Sin el guard, null === null diria "aplicado".
+    const r = aplicacionDelRenglon(
+      { articulo_id: null, movimiento_id: "m1" },
+      salida("m1", "2026-11-18", { articulo_id: null }),
+    );
     expect(r.estado).toBe("otra-pieza");
   });
 });

@@ -1,9 +1,10 @@
 // Qué salidas del pañol pueden ser la de un repuesto de una OT, y qué dice un
 // vínculo ya puesto. Funciones puras: quien trae las filas es la ruta.
 //
-// Se razona por fecha porque el kardex (`inventario_movimientos`) sólo crece
-// por el final: medido sobre 5.136 filas, cero retrocesos de fecha. Pero
-// `fecha` es un `date`, así que dentro de un mismo día no hay orden.
+// `inventario_movimientos.fecha` es un `date`, no un timestamp: dentro de un
+// mismo día no hay orden. Por eso el mismo día cuenta como candidato, y por eso
+// «día» se define en un solo lugar (`diaDe`) y lo usan la ventana y el orden.
+// `tipo` toma sólo dos valores en producción: "salida" y "entrada".
 
 export interface SalidaDelPanol {
   id: string;
@@ -32,6 +33,11 @@ function diaDe(fecha: string): number {
  * Una fecha ausente deja afuera: sin ella no se puede decir «posterior». El
  * mismo día entra (`>=`), porque lo típico es comprar un repuesto para usarlo
  * ese día.
+ *
+ * Dentro de un mismo día el orden es el de llegada de `salidas` (el sort es
+ * estable y no hay con qué desempatar). Con más de `tope` salidas en un día,
+ * cuáles sobreviven lo decide quien trae las filas: que las traiga en un orden
+ * que tenga sentido (por ejemplo por id) es cosa suya.
  */
 export function salidasCandidatas(
   entrada: { articulo_id: string | null; fecha: string | null },
@@ -47,14 +53,22 @@ export function salidasCandidatas(
       const d = diaDe(s.fecha) - desde;
       return d >= 0 && d <= dias;
     })
-    .sort((a, b) => (a.fecha! < b.fecha! ? 1 : a.fecha! > b.fecha! ? -1 : 0))
+    .sort((a, b) => diaDe(b.fecha!) - diaDe(a.fecha!))
     .slice(0, tope);
 }
 
 export type Aplicacion =
   | { estado: "aplicado" }
   | { estado: "sin-justificar" }
-  | { estado: "otra-pieza" };
+  | { estado: "otra-pieza" }
+  // El único estado que habla de lo que NO se sabe: hay vínculo y no se pudo
+  // leer la salida (`movimiento_id` puesto y `movimiento === null`). La causa
+  // esperada es que quien mira no tenga Inventario —`inventario_movimientos`
+  // está cerrada con `tiene_acceso_inventario()` y devuelve null sin error—,
+  // no un movimiento borrado: un borrado deja `movimiento_id` en null por el
+  // `on delete set null`, y eso es "sin-justificar". Decir "otra-pieza" ahí
+  // afirmaría algo falso sobre un vínculo que puede estar perfecto.
+  | { estado: "sin-ver" };
 
 /**
  * Qué dice el vínculo de un renglón. Sólo dice «aplicado» si la salida sigue
@@ -68,7 +82,10 @@ export function aplicacionDelRenglon(
   movimiento: SalidaDelPanol | null,
 ): Aplicacion {
   if (!renglon.movimiento_id) return { estado: "sin-justificar" };
-  if (!movimiento || !renglon.articulo_id || movimiento.articulo_id !== renglon.articulo_id) {
+  if (!movimiento) return { estado: "sin-ver" };
+  // Sin artículo en el renglón no hay pieza que comparar: null === null daría
+  // "aplicado", y hoy ningún renglón (0 de 37) tiene artículo.
+  if (!renglon.articulo_id || movimiento.articulo_id !== renglon.articulo_id) {
     return { estado: "otra-pieza" };
   }
   return { estado: "aplicado" };
