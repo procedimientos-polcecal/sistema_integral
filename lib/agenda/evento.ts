@@ -179,6 +179,79 @@ export function laOTEstaCerrada(o: { fecha_cierre?: string | null; estado?: stri
   return Boolean(o.fecha_cierre) || o.estado === "REALIZADO" || o.estado === ESTADO_CANCELADA;
 }
 
+/** Cuánta brecha entre cierre e inicio todavía se cree como un cierre adelantado. */
+export const DIAS_DE_CIERRE_CREIBLE = 365;
+
+export type CierreAdelantado =
+  | { tipo: "manda-el-cierre"; fecha: string }
+  | { tipo: "no-creible"; cierre: string; inicio: string; dias: number }
+  | null;
+
+/**
+ * ¿Esta OT se cerró **antes** del día en que decía empezar? Y si es así, ¿se
+ * puede creer esa fecha de cierre? Tiene **tres respuestas y no dos** a
+ * propósito: un año mal tipeado no es ni «mover el evento» ni «no es el caso».
+ * Sin el tercer valor, `no-creible` se movería al evento diez años atrás, a
+ * cinco calendarios donde nadie lo va a encontrar.
+ *
+ * - `manda-el-cierre`: el cierre es un día válido, anterior al inicio y a no más
+ *   de `DIAS_DE_CIERRE_CREIBLE` de distancia. El evento va al día del cierre.
+ * - `no-creible`: es anterior pero la brecha pasa el corte. No se mueve nada;
+ *   quien llama decide qué avisar.
+ * - `null`: no es el caso (abierta, sin cierre, sin inicio, cierre del mismo día
+ *   o posterior, o una fecha que no es un día).
+ *
+ * **De dónde sale el 365**, medido: de las 73 OT cerradas antes de empezar, 63
+ * tienen 7 días o menos de brecha, 9 van de 14 a 89 —cierres adelantados de
+ * verdad: uno es un CORRECTIVO cerrado 69 días antes de un inicio que la planilla
+ * seguía anunciando— y una sola pasa el año, la OT 953 («2016-01-28» contra un
+ * inicio del 2026-01-27). El corte es el año y no el mes: 30 días dejaría fuera
+ * esos 9 casos que sí son reales.
+ *
+ * **La brecha se mide contra la fecha que manda** (`fechaParaElCalendario`, o sea
+ * la pendiente cuando la hay) y no contra `fecha_ejecucion`: la pendiente es la
+ * que el SdG fijó y la planilla todavía no devolvió, y medir contra la vieja daría
+ * una brecha que no es la que se ve en el calendario.
+ *
+ * Las fechas se comparan como texto `AAAA-MM-DD`; lo único que se parsea es el
+ * conteo de días de la brecha, con la `Z` para que ninguna zona entre en un día
+ * que es de Argentina.
+ */
+export function elCierreQueAdelanta(o: {
+  fecha_ejecucion: string | null;
+  fecha_ejecucion_pendiente?: string | null;
+  fecha_cierre?: string | null;
+  estado?: string | null;
+}): CierreAdelantado {
+  const cierre = o.fecha_cierre?.trim();
+  const inicio = fechaParaElCalendario(o);
+  if (!cierre || !inicio) return null;
+  if (!esFechaDelDia(cierre) || !esFechaDelDia(inicio)) return null;
+  if (!(cierre < inicio)) return null;
+  const dias = Math.round(
+    (Date.parse(`${inicio}T00:00:00Z`) - Date.parse(`${cierre}T00:00:00Z`)) / 86_400_000,
+  );
+  if (dias > DIAS_DE_CIERRE_CREIBLE) return { tipo: "no-creible", cierre, inicio, dias };
+  return { tipo: "manda-el-cierre", fecha: cierre };
+}
+
+/**
+ * El día en que vive el evento de una OT: **la única definición**. Es el cierre
+ * cuando `elCierreQueAdelanta` dice que manda y, si no, `fechaParaElCalendario`.
+ * Si un lado usa ésta y otro usa `fechaParaElCalendario`, el evento se pinta en un
+ * día y el apilado de órdenes se cuenta contra otro.
+ */
+export function laFechaQueMandaEnElEvento(o: {
+  fecha_ejecucion: string | null;
+  fecha_ejecucion_pendiente?: string | null;
+  fecha_cierre?: string | null;
+  estado?: string | null;
+}): string | null {
+  const cierre = elCierreQueAdelanta(o);
+  if (cierre?.tipo === "manda-el-cierre") return cierre.fecha;
+  return fechaParaElCalendario(o);
+}
+
 /**
  * Qué impide mandar esta OT al calendario, todo junto y en castellano. Vacío =
  * se puede. Recibe **la fecha ya resuelta** (`fechaParaElCalendario`).
