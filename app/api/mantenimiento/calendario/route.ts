@@ -15,6 +15,7 @@ import {
   armarElCalendario,
   type OrdenDelCalendario,
 } from "@/lib/mantenimiento/calendarioDeOT";
+import { ordenesDelRango } from "@/lib/mantenimiento/ordenesDelRango";
 
 /**
  * El calendario de selección: un mes (o el rango que pida la grilla) de órdenes
@@ -88,31 +89,7 @@ export async function GET(request: Request) {
    */
   let ordenes: OrdenDelCalendario[];
   try {
-    const filas = await traerTodo((d, h) =>
-      supabase
-        .from("ordenes_trabajo")
-        // `id`, `app_created` y `estado` entran para que la grilla pueda decidir
-        // sola si una orden se puede mover (`porQueNoSePuedeMover`) y llamar a
-        // `postergar` sin otro viaje. No son dato sensible: quien llega acá ya
-        // ve las órdenes enteras en el listado.
-        .select(
-          "id, ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, especialidad, tipo, quien, descripcion, sector_raw, equipo_raw, app_created, estado, operario_1, operario_2, operario_3"
-        )
-        .or(`fecha_ejecucion.lte.${hasta},fecha_ejecucion_pendiente.lte.${hasta}`)
-        .or(
-          `fecha_fin.gte.${desde},fecha_ejecucion.gte.${desde},fecha_ejecucion_pendiente.gte.${desde}`
-        )
-        .order("ot_number")
-        .range(d, h)
-    );
-    ordenes = filas.map((f) => ({
-      ...f,
-      fecha_ejecucion: f.fecha_ejecucion ? soloElDia(f.fecha_ejecucion) : null,
-      fecha_ejecucion_pendiente: f.fecha_ejecucion_pendiente
-        ? soloElDia(f.fecha_ejecucion_pendiente)
-        : null,
-      fecha_fin: f.fecha_fin ? soloElDia(f.fecha_fin) : null,
-    }));
+    ordenes = await ordenesDelRango(supabase, desde, hasta);
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
