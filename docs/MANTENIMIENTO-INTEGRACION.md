@@ -3858,6 +3858,95 @@ planilla el generador termina perfecto y no nace ninguna orden. Quedan afuera
 los estados que no son errores: `trabados`, `sinArrancar`, `sinEstadoTodavia` y
 `sinCalendario`.
 
+**Y ese testigo no vio nada el 24/11/2026**, que es lo que hay que saber de él:
+la corrida que generaba una OT de más cada diez minutos terminaba **bien**, con
+una orden creada y cero fallas. Vigila que el generador corra, no que lo que
+genera tenga sentido. Lo de abajo pasó con el monitor en verde.
+
+### La vuelta al principio: 426 OT en cuatro días (24/11/2026)
+
+El ciclo de **PO-C1-04 (Hidratación)** generó **426 órdenes de «Cambio de
+Martillos»** entre el 20 y el 24/11/2026, de la OT 3166 a la 3594, **una cada
+diez minutos**. Las 426 con la misma descripción, la misma fecha de ejecución
+—23/11— y las 425 últimas en ATRASADO.
+
+**La causa es el orden de `laUltimaEnRango`.** Ordenaba por `ciclo_vuelta`
+ascendente y tomaba la última, que es correcto mientras el ciclo avanza
+1 → 2 → 3 y deja de serlo **justo cuando vuelve a la madre**: la madre es la
+vuelta 0, así que recién creada ordenaba *primera* y no última. «La última»
+seguía siendo la hija 3 —cerrada el 20/11— y cada corrida volvía a decidir
+«crear la madre», sobre una madre que ya existía y que no veía.
+
+La vuelta 0 no es el principio de la lista: **es el final del ciclo**.
+
+**Y la otra mitad, que lo volvía permanente.** `elCorteQueSigue` exige que la
+última sea la madre para mover el corte. Como nunca podía serlo, **el corte
+tampoco se movía nunca**. El ciclo no podía ni ver la madre que acababa de
+crear ni cerrar la vuelta: las dos puntas del mecanismo rotas por el mismo
+orden. Hoy el lugar de la madre se calcula contra **la hija más alta que haya**
+y no contra `repeticiones` a secas, porque ese número se edita en el catálogo y
+bajarlo de 4 a 3 con una hija 4 todavía en rango reabriría el mismo agujero.
+
+**Por qué ningún test lo vio, que es la parte que conviene no repetir:** los
+once tests de `elCorteQueSigue` y los de `queSigueEnElCiclo` pasan **una sola
+OT**. Con una sola, la madre siempre es la última por falta de competencia. El
+defecto necesita la madre **y** una hija de vuelta mayor juntas en el rango, que
+es la situación real de cualquier ciclo que completó su vuelta. Un test que
+pasa un solo elemento no prueba un orden.
+
+**Y por qué le tocó a Hidratación primero:** era el único que había completado
+sus tres rotaciones. Los otros tres tenían el mismo defecto esperando —PY-A1-05
+estaba en vuelta 3 con la OT 3150 por hacer, o sea a un cierre de distancia—.
+
+**El defecto vecino que éste tapaba.** Con el orden arreglado, el corte pasa a
+moverse a la fecha de cierre de la madre; y una madre **cerrada el mismo día que
+nació** empata con el corte, queda dentro del rango nuevo, vuelve a ser la
+última, y como una madre cerrada devuelve `esperar`, el ciclo se congela para
+siempre. Se confirmó con un test antes de tocarlo. Hoy queda fuera del rango la
+madre que fijó el corte. Es el modo de falla silencioso del que ya habla este
+documento: una OT que no nace tampoco se atrasa, así que nada lo denuncia.
+
+**Qué se hizo con las 426.** Se conservó la **3166** —que es la orden legítima:
+el cambio de martillos que de verdad tocaba después de la tercera rotación— y
+se borraron las otras 425, de la base, de «Altas del sistema» y del calendario.
+Dos cosas de esa limpieza que valen para la próxima:
+
+- **No se borra por rango de filas.** Las 427 filas del bloque 272–698 incluían
+  dos órdenes legítimas de otros equipos que cayeron en el medio (las OT 3172 y
+  3176). Se borró por número de OT, en tramos contiguos y **de abajo hacia
+  arriba**, para que los índices de las de arriba siguieran valiendo.
+- **Primero la planilla y después la base.** Al revés, la sincronización
+  siguiente reimporta del master las OT recién borradas —y las trae sin
+  `ciclo_id`, o sea imposibles de volver a encontrar—. En el medio no pasa nada:
+  `borradoDeEspejo` se frena solo pasadas las 50 filas.
+
+- **Y la tercera, que salió mal y hay que saberla:** el borrado de los eventos
+  de calendario falló **376 de 376**, porque la llamada a `borrarEvento` iba
+  con dos argumentos y el tercero —`AvisoAInvitados`— **es obligatorio y sin
+  valor por omisión justamente para que nadie lo herede sin elegirlo**. Google
+  rechazó los 376 enteros, lo cual fue una suerte: con `all` habrían salido 376
+  cancelaciones por correo a cinco personas. Un evento de OT se borra con
+  `none`, igual que se crea.
+
+  Lo caro no fue el error sino lo que pasó mientras tanto: **las OT ya estaban
+  borradas, y `agenda_eventos.ot_id` es `on delete cascade`**, así que las 376
+  filas se fueron con ellas y con ellas los `google_event_id`. Los eventos
+  quedaron vivos en el calendario sin que nada del sistema los nombrara. Se
+  recuperaron buscándolos en Google por el título, que es `OT <número> ·
+  <equipo>` (`scripts/borrar-los-eventos-huerfanos.mts`). **El orden correcto
+  es el calendario primero y la base después**, al revés de lo que se hizo.
+
+  Y ahí el mismo cuidado de la planilla, por segunda vez: filtrar por el rango
+  3167–3594 se llevaba puestas las OT 3172, 3176 y 3177, que son legítimas. El
+  script no las lista a mano: pregunta **qué OT del rango siguen existiendo en
+  la base** y las saltea, porque las del loop ya no están. Una lista escrita a
+  mano se queda corta; una pregunta no.
+
+El script quedó en `scripts/limpiar-el-loop-de-po-c1-04.mts`, con modo plan por
+omisión, y `scripts/simular-po-c1-04.mts` dice qué haría la próxima corrida con
+un ciclo que está inactivo —que es lo que `que-haria-el-ciclo.mts` no puede
+contestar, porque sólo mira los activos—.
+
 ## Pegar un RI a un repuesto y cuánto de lo que viene es de cada OT (13/11/2026)
 
 Mantenimiento escribe el número de un RI sobre el repuesto de una OT, y puede

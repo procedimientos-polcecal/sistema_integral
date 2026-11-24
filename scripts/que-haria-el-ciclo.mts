@@ -15,7 +15,13 @@
 
 import { readFileSync, existsSync } from "node:fs";
 
-const env = new URL("../.env.local", import.meta.url);
+// `ENV_PATH` existe para correrlo desde un worktree, que no tiene `.env.local`
+// propio: se le pasa el del checkout principal. Nunca exportar las variables
+// por el shell — el JSON de la cuenta de servicio se rompe y el error lo
+// imprime entero, clave privada incluida (24/11/2026).
+const env = process.env.ENV_PATH
+  ? new URL(`file://${process.env.ENV_PATH}`)
+  : new URL("../.env.local", import.meta.url);
 if (existsSync(env)) {
   for (const line of readFileSync(env, "utf-8").split("\n")) {
     const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
