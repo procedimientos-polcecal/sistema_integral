@@ -4,7 +4,13 @@ import { idDeDrive, traerFotoDeDrive, esProblema } from "@/lib/mantenimiento/fot
 import { urlsDeLasFotos } from "@/lib/mantenimiento/fotoDelAviso";
 
 /**
- * La foto de un aviso que vive en Drive, servida desde el SdG.
+ * El adjunto de un aviso que vive en Drive —una foto o un video—, servido
+ * desde el SdG.
+ *
+ * Se llama `foto` porque eso es lo que trae el 90% de las veces (28 de 31
+ * archivos, medido el 23/11/2026) y porque la columna de la planilla se llama
+ * "Imagen"; el video entró después, a pedido. Qué tipos se sirven y con qué
+ * tope lo decide `sePuedeServir`, que es donde está el porqué.
  *
  * La foto que deja el formulario de Google queda en una carpeta privada, así
  * que su link no se puede dibujar en un `<img>`: hasta el 19/11/2026 la

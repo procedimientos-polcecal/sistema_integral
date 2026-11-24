@@ -74,6 +74,78 @@ export function textoSobreLaEspecialidad(especialidad: string | null | undefined
   return TEXTO_SOBRE_EL_COLOR[colorDeEspecialidad(especialidad)] ?? "#ffffff";
 }
 
+/** Lo que decide cómo se pinta una ficha del calendario. */
+export interface FichaDelCalendario {
+  especialidad: string | null;
+  /** Si la orden está atrasada: lo decide `estaAtrasada` de `lib/mantenimiento/alertas.ts`. */
+  atrasada: boolean;
+  /** Si este día es parte de la ventana de la orden y no su inicio. */
+  arrastre: boolean;
+}
+
+/** Los tres colores de una ficha, tal como van al `style` del elemento. */
+export interface EstiloDeFicha {
+  background: string;
+  color: string;
+  border: string;
+}
+
+/**
+ * Cómo se pinta una ficha, en las cuatro combinaciones de (atrasada, arrastre).
+ *
+ * **Está acá y no adentro del JSX a propósito.** Era un ternario anidado de
+ * cuatro ramas en `CalendarioDeOT.tsx`, y ahí no lo miraba nadie: el calendario
+ * es un componente de cliente que trae sus datos en un `useEffect`, así que
+ * renderizarlo en un test da el estado vacío y ni una ficha. O sea que el rojo
+ * —que es todo el punto de la función— no tenía forma de comprobarse sin un
+ * navegador, y detrás del login no hay navegador. Sacada acá es una función
+ * pura y se prueba como todo lo demás de esta casa.
+ *
+ * Las reglas, con su porqué medido en `COLOR_ATRASADA` y en
+ * `TEXTO_SOBRE_EL_COLOR`:
+ *
+ * - **Atrasada manda sobre la especialidad**, y va de relleno: encima del
+ *   relleno de especialidad el rojo no se distingue (de 1,20:1 a 2,03:1, bajo
+ *   el 3:1 de WCAG). La especialidad se corre al borde, que es lo que hace que
+ *   no se pierda.
+ * - **El arrastre va hueco** —fondo blanco y borde punteado—, porque un día
+ *   que la orden sólo ocupa no es el día en que arranca.
+ * - **Atrasada y arrastre a la vez**: hueca, pero el rojo pasa al borde y al
+ *   número. Ahí la especialidad sí se pierde, y es la única de las cuatro donde
+ *   pasa: entre decir «esta orden está atrasada» y decir de qué especialidad
+ *   es, en un día de arrastre gana lo primero.
+ * - **Normal**: relleno de especialidad, con el texto que `TEXTO_SOBRE_EL_COLOR`
+ *   elige para que el número se lea a 10 px.
+ */
+export function estiloDeLaFicha(o: FichaDelCalendario): EstiloDeFicha {
+  const color = colorDeEspecialidad(o.especialidad);
+
+  if (o.atrasada && o.arrastre) {
+    return {
+      background: "#ffffff",
+      color: COLOR_ATRASADA,
+      border: `1.5px dashed ${COLOR_ATRASADA}`,
+    };
+  }
+  if (o.atrasada) {
+    return {
+      background: COLOR_ATRASADA,
+      color: TEXTO_SOBRE_ATRASADA,
+      border: `1.5px solid ${color}`,
+    };
+  }
+  if (o.arrastre) {
+    // El número va oscuro y no del color: el ámbar y el verde sobre blanco no
+    // se leen a 10 px.
+    return { background: "#ffffff", color: "#0f172a", border: `1.5px dashed ${color}` };
+  }
+  return {
+    background: color,
+    color: textoSobreLaEspecialidad(o.especialidad),
+    border: `1.5px solid ${color}`,
+  };
+}
+
 /** Para la leyenda: nombre como se lee y su color. */
 export const LEYENDA_DE_ESPECIALIDADES: { nombre: string; color: string }[] = [
   { nombre: "Mecánico", color: COLORES_DE_ESPECIALIDAD.MECANICO },

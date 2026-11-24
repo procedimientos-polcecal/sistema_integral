@@ -82,9 +82,28 @@ const CERRADA = "REALIZADO";
 /**
  * La OT que manda, aplicando el corte.
  *
- * Es la de mayor vuelta, y a igualdad la creada más tarde: la vuelta ordena el
- * ciclo, así que una hija 2 creada antes que una hija 3 reencolada sigue siendo
- * la anterior.
+ * Es la más avanzada de la vuelta, y a igualdad la creada más tarde: el lugar
+ * en la vuelta ordena el ciclo, así que una hija 2 creada antes que una hija 3
+ * reencolada sigue siendo la anterior.
+ *
+ * ── LA VUELTA 0 NO ES EL PRINCIPIO: ES EL FINAL ────────────────────────────
+ *
+ * El ciclo avanza 1 → 2 → … → n y **termina en la madre**, que es la vuelta 0.
+ * Ordenar por el número crudo la pone antes de sus propias hijas, y eso costó
+ * **426 OT en cuatro días** en PO-C1-04 (Hidratación), del 20 al 24/11/2026:
+ * cerrada la hija 3 nació la madre 3166, pero la «última» seguía siendo la
+ * hija 3 —vuelta 3 contra vuelta 0—, así que cada corrida del cron volvía a
+ * decidir «crear la madre». Una cada diez minutos, hasta la 3594.
+ *
+ * Y la otra mitad, que lo volvía permanente: `elCorteQueSigue` exige que la
+ * última sea la madre para mover el corte, así que **el corte tampoco se movía
+ * nunca**. El ciclo no podía ni ver la madre que acababa de crear ni cerrar la
+ * vuelta. Las dos mitades se arreglan con este orden.
+ *
+ * El lugar de la madre se calcula contra **la hija más alta que haya**, y no
+ * contra `repeticiones` a secas: ese número se edita en el catálogo, y bajarlo
+ * de 4 a 3 con una hija 4 todavía en el rango reabriría exactamente el mismo
+ * agujero.
  */
 function laUltimaEnRango(
   ciclo: CicloParaDecidir,
@@ -93,11 +112,26 @@ function laUltimaEnRango(
   const desde = ciclo.desde;
   if (!desde) return undefined;
 
-  return [...ots]
-    .filter((o) => (o.created_at_app ?? "").slice(0, 10) >= desde)
+  const enRango = ots.filter((o) => {
+    if ((o.created_at_app ?? "").slice(0, 10) < desde) return false;
+    // La madre que fijó este corte está detrás de él: `desde` **es** su fecha
+    // de cierre. Casi siempre queda afuera sola, porque se creó antes de
+    // cerrarse; empata sólo cuando se cerró el mismo día que nació, y ahí
+    // dejarla adentro la vuelve «la última» para siempre — y una madre cerrada
+    // devuelve `esperar`, así que el ciclo se congela. Es el modo de falla
+    // silencioso: una OT que no nace tampoco se atrasa, así que nada lo avisa.
+    if (o.ciclo_vuelta === 0 && (o.fecha_cierre ?? o.fecha_ejecucion) === desde) return false;
+    return true;
+  });
+
+  const lugarDeLaMadre =
+    Math.max(ciclo.repeticiones, ...enRango.map((o) => o.ciclo_vuelta)) + 1;
+  const lugar = (o: OTDelCiclo) => (o.ciclo_vuelta === 0 ? lugarDeLaMadre : o.ciclo_vuelta);
+
+  return [...enRango]
     .sort(
       (a, b) =>
-        a.ciclo_vuelta - b.ciclo_vuelta ||
+        lugar(a) - lugar(b) ||
         String(a.created_at_app ?? "").localeCompare(String(b.created_at_app ?? ""))
     )
     .at(-1);
