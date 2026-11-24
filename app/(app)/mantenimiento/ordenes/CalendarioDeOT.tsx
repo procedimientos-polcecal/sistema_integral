@@ -595,18 +595,8 @@ export default function CalendarioDeOT({
                   todo está detrás del login. */}
               <div className="space-y-px">
                 {semanas.map((semana) => (
-                  <div key={semana[0]}>
+                  <div key={semana[0]} className={seImprime ? "pb-2" : undefined}>
                     {franjaDeLaSemana?.(semana[0])}
-                    {seImprime && (
-                      <div className="flex justify-end">
-                        <EnlaceDeImpresion
-                          href={urlDeLaHoja("semana", semana[0], semana[6])}
-                          className="px-1 text-[11px] text-slate-400 underline-offset-2 hover:text-slate-800 hover:underline"
-                        >
-                          Imprimir esta semana
-                        </EnlaceDeImpresion>
-                      </div>
-                    )}
                     <div className="grid grid-cols-7 gap-px rounded-lg overflow-hidden bg-slate-200 border border-slate-200">
                       {semana.map((dia) => (
                         <CeldaDelDia
@@ -623,6 +613,21 @@ export default function CalendarioDeOT({
                         />
                       ))}
                     </div>
+                    {/* Debajo de la grilla y no arriba: la franja del taller
+                        lleva `rounded-t-lg` para pegarse a la grilla, y
+                        cualquier cosa en el medio parte esa unión. Queda a 2px
+                        de la grilla que nombra y a 8px de la semana siguiente,
+                        que es lo que dice de cuál de las dos habla. */}
+                    {seImprime && (
+                      <div className="mt-0.5 flex justify-end">
+                        <EnlaceDeImpresion
+                          href={urlDeLaHoja("semana", semana[0], semana[6])}
+                          className="px-1 text-[11px] text-slate-400 underline-offset-2 hover:text-slate-800 hover:underline"
+                        >
+                          Imprimir esta semana
+                        </EnlaceDeImpresion>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
