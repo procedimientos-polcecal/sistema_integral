@@ -68,6 +68,23 @@ import { anotarEnLaFila } from "./cargar";
  */
 
 /**
+ * Cómo empieza el `aviso` de una orden cuyo cierre quedó a más de un año de su
+ * inicio. **Es el cuarto escritor de la columna `aviso` y limpia sólo lo suyo**,
+ * por prefijo como `AVISO_DE_BORRADO`: cuando el cierre deja de adelantarse
+ * —alguien corrigió el año— la frase deja de ser cierta, y el camino de «cerrada
+ * sin nada que mover» salía por `NADA` sin pasar por `limpiable`.
+ */
+export const AVISO_DE_CIERRE_NO_CREIBLE = "La orden se cerró";
+
+function avisoDeUnCierreNoCreible(c: { cierre: string; inicio: string; dias: number }): string {
+  return (
+    `${AVISO_DE_CIERRE_NO_CREIBLE} el ${c.cierre}, ${c.dias} días antes de su fecha de ejecución ` +
+    `(${c.inicio}): es más de un año y parece un error de carga, así que el evento no se movió. ` +
+    `Hay que corregir la fecha de cierre o la de ejecución.`
+  );
+}
+
+/**
  * Cómo empieza el `aviso` de un borrado que Google rechazó. **Lo escribe
  * `borrarLosEventosDeLasOT` y `planDelEvento` no lo toca**: la sincronización
  * corre `seguirALasOT` justo después del borrado, y sin esta marca limpiaría ese
@@ -238,12 +255,13 @@ export function planDelEvento(fila: FilaDeEventoDeOT, ocupados: number = 0): Pla
   // creíble se avisa sin mover nada.
   if (laOTEstaCerrada(fila.orden)) {
     const cierre = elCierreQueAdelanta(fila.orden);
-    if (cierre === null) return NADA;
+    if (cierre === null) {
+      // El cierre dejó de adelantarse (no que la orden dejó de estar cerrada):
+      // si el aviso era el de «cierre no creíble», ya no es cierto y se limpia.
+      return fila.aviso?.startsWith(AVISO_DE_CIERRE_NO_CREIBLE) ? { ...NADA, aviso: null } : NADA;
+    }
     if (cierre.tipo === "no-creible") {
-      const motivo =
-        `La orden se cerró el ${cierre.cierre}, ${cierre.dias} días antes de su fecha de ejecución ` +
-        `(${cierre.inicio}): es más de un año y parece un error de carga, así que el evento no se movió. ` +
-        `Hay que corregir la fecha de cierre o la de ejecución.`;
+      const motivo = avisoDeUnCierreNoCreible(cierre);
       if (fila.aviso === motivo) return NADA;
       return { tipo: "avisar", mover: null, aviso: motivo, volverAAlertar: false };
     }

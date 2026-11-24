@@ -218,6 +218,18 @@ describe("una OT cerrada antes de empezar", () => {
       .toEqual(NADA_ESPERADO);
   });
 
+  it("corregido el cierre, el aviso del cierre no creible se limpia aunque la OT siga cerrada", () => {
+    const primero = planDelEvento(fila({}, { fecha_cierre: "2016-11-04" }));
+    // Sigue cerrada, pero ahora despues de su inicio: ya no adelanta nada.
+    expect(planDelEvento(fila({ aviso: primero.aviso }, { fecha_cierre: "2026-11-12" })))
+      .toEqual({ tipo: "nada", mover: null, aviso: null, volverAAlertar: false });
+  });
+
+  it("y un aviso que no es el suyo no lo toca", () => {
+    expect(planDelEvento(fila({ aviso: AVISO_DE_TOPE }, { fecha_cierre: "2026-11-12" })))
+      .toEqual(NADA_ESPERADO);
+  });
+
   it("un evento divergido no se pisa, tambien cuando la OT cerro antes", () => {
     const p = planDelEvento(fila({ divergencia: "movido" }, { fecha_cierre: "2026-11-04" }));
     expect(p.tipo).toBe("respetar");
