@@ -303,18 +303,26 @@ async function leerLasSalidas(
     })),
   });
 
-  type Renglon = { ot_id: string | null; articulo_id: string | null; movimiento_id: string | null };
+  // La columna que apunta a la OT se llama `work_order_id` y no `ot_id`: la tabla
+  // tiene siete columnas —`articulo_id, cantidad, codigo, created_at, id, nombre,
+  // work_order_id`— y pedirle `ot_id` contesta 42703 por el camino del `error`,
+  // sin excepción, así que el nombre equivocado no se nota más que por la
+  // ausencia de la línea «aplicado a la OT #…».
+  type Renglon = { work_order_id: string | null; articulo_id: string | null; movimiento_id: string | null };
   const renglones: Renglon[] = [];
   for (const lote of enLotes(candidatas.map((s) => s.id))) {
     const { data, error } = await admin
       .from("ordenes_trabajo_repuestos")
-      .select("ot_id, articulo_id, movimiento_id")
+      .select("work_order_id, articulo_id, movimiento_id")
       .in("movimiento_id", lote);
     if (error || !data) {
+      // Lo que dijo Postgres va primero: la hipótesis de la migración es sólo la
+      // causa más probable (un 42703 por `movimiento_id`), y ponerla delante
+      // mandaba a mirar una migración sana cuando el error era cualquier otro.
       console.error(
-        "[ficha del RI] no se pudo leer qué renglones de repuesto declararon esas salidas " +
-          "(¿está aplicada la migración de ordenes_trabajo_repuestos.movimiento_id?):",
+        "[ficha del RI] no se pudo leer qué renglones de repuesto declararon esas salidas:",
         error?.message,
+        "— si dice que la columna `movimiento_id` no existe, falta aplicar su migración.",
       );
       return sinDeclaraciones();
     }
@@ -322,7 +330,7 @@ async function leerLasSalidas(
   }
 
   const ordenes = new Map<string, { ot_number: number | null; descripcion: string | null }>();
-  const otIds = [...new Set(renglones.map((r) => r.ot_id).filter((x): x is string => !!x))];
+  const otIds = [...new Set(renglones.map((r) => r.work_order_id).filter((x): x is string => !!x))];
   for (const lote of enLotes(otIds)) {
     const { data, error } = await admin.from("ordenes_trabajo").select("id, ot_number, descripcion").in("id", lote);
     if (error || !data) {
@@ -340,7 +348,7 @@ async function leerLasSalidas(
   const conNumero = renglones.map((r) => ({
     articulo_id: r.articulo_id,
     movimiento_id: r.movimiento_id,
-    ot_number: (r.ot_id ? ordenes.get(r.ot_id)?.ot_number : null) ?? null,
+    ot_number: (r.work_order_id ? ordenes.get(r.work_order_id)?.ot_number : null) ?? null,
   }));
   const descripcionDe = new Map<number, string | null>();
   for (const o of ordenes.values()) if (o.ot_number != null) descripcionDe.set(o.ot_number, o.descripcion);
