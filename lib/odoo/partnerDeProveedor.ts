@@ -30,7 +30,7 @@
  * quedan ambiguas: ahí decide una persona.
  */
 
-import { buscarLeer, idDeRelacion } from "./client";
+import { buscarLeer, crearEn, llamar, idDeRelacion } from "./client";
 import { normalizarCuit } from "@/lib/core/cuit";
 import type { PartnerCandidato } from "./proveedores";
 
@@ -94,4 +94,99 @@ export async function buscarCandidatos(cuit: string): Promise<PartnerCandidato[]
   }));
 
   return candidatosDelCuit(candidatos, limpio, vatPorId);
+}
+
+/**
+ * El nombre del tipo de documento en Odoo.
+ *
+ * Va el nombre y no el id, como `NOMBRE_IMPUESTO` en `contexto.ts`: el id es
+ * por base —en staging «CUIT» es el 25— y la regla del repo es que ningún id
+ * de Odoo se escribe en el código.
+ */
+const NOMBRE_TIPO_DOCUMENTO = "CUIT";
+
+/**
+ * El id de «CUIT» en el catálogo de tipos de documento, o `null`.
+ *
+ * `null` no es un fallo: el campo no es `required` en Odoo, así que si el
+ * catálogo de producción no tiene una fila con ese nombre exacto, el partner se
+ * crea sin él. Inventar un id sería peor.
+ */
+export async function tipoDeDocumentoCuit(): Promise<number | null> {
+  const filas = await buscarLeer<{ id: number; name: string }>(
+    "partner.document.type",
+    [["name", "=", NOMBRE_TIPO_DOCUMENTO]],
+    ["name"],
+    { limite: 5 }
+  );
+  return filas[0]?.id ?? null;
+}
+
+/**
+ * Lo que se le manda a Odoo para crear el proveedor.
+ *
+ * Medido el 23/11/2026 sobre los 658 partners con `supplier_rank > 0`: 627
+ * tienen `partner_document_type_id` = CUIT y 656 `income_wh_registration` = "1".
+ *
+ * `supplier_rank: 1` no es cosmético: el cruce masivo de
+ * `/api/odoo/proveedores/enlazar` busca `[["supplier_rank", ">", 0]]`, así que
+ * un partner creado sin eso queda **invisible** para el cruce y volvería a
+ * aparecer como «no está en Odoo» aunque esté.
+ *
+ * Los dos campos que pueden faltar **no viajan en null**: el tipo de documento
+ * porque no es obligatorio en Odoo, y el régimen de ganancias porque sí lo es
+ * —si `default_get` no lo dio, que falle Odoo con su propio mensaje y no el
+ * SdG mandando un vacío—.
+ */
+export function valsDelPartner(p: {
+  nombre: string;
+  cuit: string;
+  tipoDocumentoId: number | null;
+  regimenGanancias: string | null;
+}): Record<string, unknown> {
+  const vals: Record<string, unknown> = {
+    name: p.nombre,
+    vat: normalizarCuit(p.cuit),
+    supplier_rank: 1,
+  };
+  if (p.tipoDocumentoId !== null) vals.partner_document_type_id = p.tipoDocumentoId;
+  if (p.regimenGanancias !== null) vals.income_wh_registration = p.regimenGanancias;
+  return vals;
+}
+
+/**
+ * Crear el proveedor en Odoo, en esa empresa. Devuelve el id del partner.
+ *
+ * El régimen de ganancias se **lee** de Odoo en vez de inventarse: es el
+ * régimen de retenciones, o sea plata, y `default_get` lo contesta por empresa
+ * («1» en las dos, medido). Así el partner queda completo sin que el SdG
+ * afirme por su cuenta un régimen de retención.
+ */
+export async function crearPartnerDeProveedor(
+  datos: { nombre: string; cuit: string },
+  odooCompanyId: number
+): Promise<number> {
+  const contexto = { allowed_company_ids: [odooCompanyId], company_id: odooCompanyId };
+
+  const [tipoDocumentoId, defaults] = await Promise.all([
+    tipoDeDocumentoCuit(),
+    llamar<Record<string, unknown>>(
+      "res.partner",
+      "default_get",
+      [["income_wh_registration"]],
+      { context: contexto }
+    ),
+  ]);
+
+  const regimen = defaults?.income_wh_registration;
+  return crearEn(
+    "res.partner",
+    odooCompanyId,
+    valsDelPartner({
+      nombre: datos.nombre,
+      cuit: datos.cuit,
+      tipoDocumentoId,
+      regimenGanancias: typeof regimen === "string" ? regimen : null,
+    })
+  );
 }
