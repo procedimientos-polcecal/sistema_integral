@@ -50,6 +50,9 @@ function ri(extra: Partial<RequerimientoParaOrden> = {}): RequerimientoParaOrden
     empresaId: "uuid-polcecal",
     pagaAmbas: false,
     fechaNecesidad: null,
+    // El caso normal es un proveedor identificado: sin CUIT el problema es
+    // otro y tiene su propio tipo (`sin cuit`).
+    proveedorCuit: "30711820279",
     ...extra,
   };
 }
@@ -283,7 +286,9 @@ describe("cuando no se puede armar", () => {
     if (r.ok) return;
 
     expect(r.problemas[0].detalle).toContain("POLCECAL");
-    expect(r.problemas[0].detalle).toContain("de alta");
+    // Desde el 24/11/2026 el mensaje ya no manda a darlo de alta a mano:
+    // teniendo CUIT, el push lo crea solo.
+    expect(r.problemas[0].detalle).toContain("Se va a crear");
     // Lo que no tiene que decir: "error al crear la orden".
     expect(r.problemas[0].detalle).not.toMatch(/error/i);
   });
@@ -448,5 +453,33 @@ describe("la advertencia de cantidad fraccionada", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.advertencias).toEqual([]);
+  });
+});
+
+describe("el proveedor que todavía no está en Odoo", () => {
+  const sinPartner: EmpresaParaOrden = { ...POLCECAL, odooPartnerId: null };
+
+  /*
+   * Medido el 23/11/2026: de los 45 proveedores cotizados en 180 días que no
+   * pueden llegar a una orden, **40 no tienen CUIT**. Para ésos el problema no
+   * es el enlace —con CUIT el push lo crea solo— sino que no se sabe quién
+   * son, y el mensaje que decía «no existe en Odoo» mandaba a buscar al lugar
+   * equivocado.
+   */
+  it("sin CUIT el problema es el CUIT, no el enlace", () => {
+    const r = armarOrdenes(ri({ proveedorCuit: null }), cotizacion(), [sinPartner], CONTEXTO);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.problemas.map((p) => p.tipo)).toContain("sin cuit");
+    expect(r.problemas.map((p) => p.tipo)).not.toContain("sin proveedor enlazado");
+  });
+
+  it("con CUIT y sin partner, el problema sigue siendo el enlace", () => {
+    const r = armarOrdenes(
+      ri({ proveedorCuit: "30711820279" }), cotizacion(), [sinPartner], CONTEXTO
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.problemas.map((p) => p.tipo)).toContain("sin proveedor enlazado");
   });
 });
