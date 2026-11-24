@@ -257,6 +257,66 @@ Y una decisión de palabras que es una decisión de datos: el renglón dice
 **«último mensaje»** y no «reclamado». El hilo guarda cualquier conversación
 sobre el pedido, y el dato no sabe cuál fue un reclamo.
 
+## Dar de alta un proveedor desde el presupuesto (24/11/2026)
+
+Cargando un presupuesto, el proveedor que no está en la lista se da de alta ahí
+mismo, con el botón **Nuevo** al lado del selector. No es una comodidad de
+pantalla: es el primer eslabón de la cadena «cargo la cotización y, si avanza,
+le genero la orden de compra», que se cortaba en el último.
+
+**El CUIT es obligatorio acá y no en `/compras/proveedores`.** No es una
+inconsistencia: este camino existe para llegar a una orden de compra y aquél
+no. Medido el 23/11/2026, de los 45 proveedores cotizados en 180 días que no
+pueden llegar a una orden, **40 no tienen CUIT** — y sin CUIT no se puede ni
+buscar si el proveedor ya está en Odoo ni crearlo sin arriesgar un duplicado en
+la contabilidad. En la pantalla de administración sigue siendo opcional, porque
+ahí se cargan también contratistas que nunca van a tener una orden en Odoo.
+
+Seis cosas que no se deducen del código:
+
+- **El alta lee Odoo y no le escribe.** Busca el `res.partner` por CUIT y lo
+  enlaza si ya está; si no está, no crea nada y lo dice. **El partner nuevo se
+  crea al generar la orden**, que es cuando hay una compra de verdad detrás y
+  la empresa ya la decidió el RI. Crear al dar de alta habría puesto en la
+  contabilidad proveedores de presupuestos que no prosperan, y el 40% de los RI
+  son AMBAS, o sea dos partners por alta.
+- **Elegir entre varios candidatos es `elegirPartnerDelEmisor()`**, la de
+  Facturación, y **no elegir es un desenlace válido**. Sabe que un `parent_id`
+  puesto es un contacto hijo —una dirección de entrega, no el proveedor—, que
+  hay que ver los archivados para poder decir «está archivado» en vez de «no
+  existe», y que con un empate real decide una persona. Copiar
+  `cruzarProveedores()` en su lugar enlazaría en silencio a una dirección de
+  entrega.
+- **La búsqueda por CUIT tolera los guiones.** De 1.639 partners con `vat` en
+  Odoo, 1.636 son dígitos puros y **dos tienen guiones**. Un `["vat","in",…]`
+  no los encuentra, la pantalla diría «no está en Odoo» y la orden crearía el
+  partner que ya existía — que no se borra una vez que tiene documentos.
+- **`supplier_rank: 1` al crear no es cosmético.** El cruce masivo de
+  `/api/odoo/proveedores/enlazar` busca `[["supplier_rank", ">", 0]]`: sin eso
+  el partner recién creado queda invisible para el cruce y volvería a aparecer
+  como «no está en Odoo» aunque esté.
+- **`/api/compras/proveedores/con-odoo` escribe `proveedores_odoo`, que es una
+  tabla de `admin`.** Es un ensanche deliberado y acotado: lo que se habilita
+  no es «enlazar» sino «enlazar cuando el CUIT no deja lugar a dudas». El
+  enlace se deriva del CUIT tipeado y lo frenan tres cosas —el CUIT repetido en
+  el padrón, el empate que no se resuelve, y el partner que ya es de otro
+  proveedor del SdG, que llega como un 23505 del `unique (empresa_id,
+  odoo_partner_id)` y se traduce a «puede ser el mismo cargado dos veces»—.
+- **Esto no destraba a los 40 que ya están en la lista sin CUIT.** El modal es
+  para el proveedor que **no está**; los que el importador de la comparativa
+  creó con el nombre y nada más se completan en `/compras/proveedores`. Lo
+  único que ganan es que el cartel del ensayo pase a decir la verdad: que falta
+  el CUIT, no el enlace.
+
+No hizo falta ninguna migración. El diseño está en
+[el spec](superpowers/specs/2026-11-23-compras-alta-de-proveedor-desde-el-presupuesto-design.md)
+y el plan en
+[el plan](superpowers/plans/2026-11-24-compras-alta-de-proveedor-desde-el-presupuesto.md),
+con la lista de lo que **sólo se puede comprobar en la primera corrida real** —
+el Odoo de local es staging y está congelado desde el 11/09/2026—. La primera
+prueba va con un RI de **una sola empresa**, no con uno de AMBAS: si algo sale
+mal, hay un partner que archivar y no dos.
+
 ## Integración con el resto del SdG
 
 - **Proveedores viven en el núcleo**, no dentro de Compras. Mantenimiento ya
