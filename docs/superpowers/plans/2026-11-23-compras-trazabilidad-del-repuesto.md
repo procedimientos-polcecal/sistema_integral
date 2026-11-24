@@ -712,8 +712,9 @@ Tarea 2 después de la migración de la Tarea 1» no es una acción que exista.
    real, así que sólo puede incluir las columnas nuevas **después** de aplicarlas.
 
 **Aplicar primero es inofensivo**, y por eso el orden es éste y no el inverso:
-las dos migraciones son aditivas —tres columnas, dos columnas y un índice
-parcial— y nada en el código viejo nombra ni escribe esas columnas, así que
+las dos migraciones son aditivas —dos columnas y un índice parcial la primera,
+tres columnas y un índice parcial la segunda— y nada en el código viejo nombra
+ni escribe esas columnas, así que
 sobre el despliegue actual no cambian ningún comportamiento.
 
 **Qué se rompe si se pushea primero**, con nombre y no como «falla entera»:

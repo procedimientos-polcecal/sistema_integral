@@ -123,9 +123,12 @@ export async function GET(request: Request, { params }: Params) {
     // 23/11/2026: 0 de 1.166 entradas y 0 de 3.897 salidas sin fecha), pero el
     // fallo sería mudo.
     .not("fecha", "is", null)
-    // Con `todas` el ancla es la entrada más vieja: es lo que hace que la lista
-    // sea un superconjunto de la de la ficha del RI, que arranca en la entrada
-    // de *ese* pedido y no en la última del artículo.
+    // Con `todas` el ancla es la entrada más vieja, que es lo que acerca esta
+    // lista a la de la ficha del RI —ésa arranca en la entrada de *ese* pedido y
+    // no en la última del artículo—. No la alcanza del todo: el tope se aplica
+    // después de reanclar y de ordenar por fecha descendente, así que una
+    // candidata de la ficha con más de `TOPE_DE_CANDIDATAS` salidas más nuevas
+    // encima sigue sin poder declararse desde acá.
     .order("fecha", { ascending: todas })
     .range(0, 0);
   if (errEntrada) return NextResponse.json({ error: errEntrada.message }, { status: 500 });
