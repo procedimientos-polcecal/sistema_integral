@@ -161,6 +161,57 @@ describe("queSigueEnElCiclo", () => {
       .toEqual({ que: "esperar", ot: 3166 });
   });
 
+  /**
+   * ── EL GUARDRAIL: NUNCA DOS ÓRDENES ABIERTAS PARA LA MISMA VUELTA ─────────
+   *
+   * Lo del 24/11/2026 fue un error de orden, y el orden ya está arreglado. Esto
+   * es la segunda línea, y a propósito **no se apoya en nada de lo que falló**:
+   * no mira el orden, no mira el corte y no mira `created_at_app`. Pregunta una
+   * sola cosa sobre el dato —¿este ciclo ya tiene una OT abierta para esta
+   * vuelta?— y si la respuesta es sí, no crea.
+   *
+   * Un guardrail escrito en los mismos términos que la función que vigila no
+   * vigila nada: se equivoca con ella.
+   *
+   * El caso de abajo es real y no una construcción: el corte se movió hacia
+   * adelante —por `elCorteQueSigue`, o porque alguien lo cargó a mano, como se
+   * hizo con Planta 0-2— mientras una orden de una vuelta anterior seguía
+   * abierta. Sin el guardrail nace una segunda orden para el mismo trabajo.
+   */
+  it("no crea una vuelta que ya tiene una OT abierta, aunque haya quedado fuera del corte", () => {
+    const abierta = ot({
+      ot_number: 50, ciclo_vuelta: 1, estado: "POR_HACER",
+      created_at_app: "2026-11-01T12:00:00Z",
+    });
+    expect(queSigueEnElCiclo({ ...CICLO, desde: "2026-11-10", vuelta_desde: 0 }, [abierta]))
+      .toEqual({ que: "esperar", ot: 50 });
+  });
+
+  /**
+   * El otro lado del guardrail, que es lo que lo hace usable: **lo cerrado no
+   * frena**. La hija 1 de la vuelta pasada, ya hecha, es exactamente lo normal
+   * cuando arranca la siguiente; si frenara, el ciclo no daría nunca su
+   * segunda vuelta y volveríamos al modo de falla silencioso.
+   */
+  it("una OT cerrada de esa vuelta no frena la vuelta siguiente", () => {
+    const hecha = ot({
+      ot_number: 51, ciclo_vuelta: 1, estado: "REALIZADO",
+      fecha_cierre: "2026-11-05", created_at_app: "2026-11-01T12:00:00Z",
+    });
+    expect(queSigueEnElCiclo({ ...CICLO, desde: "2026-11-10", vuelta_desde: 0 }, [hecha]))
+      .toEqual({ que: "crear", vuelta: 1, fecha_ejecucion: "2026-11-13" });
+  });
+
+  /** Y una cancelada tampoco: se decidió que no se hace, no que esté pendiente. */
+  it("una OT cancelada de esa vuelta no frena la vuelta siguiente", () => {
+    const cancelada = ot({
+      ot_number: 52, ciclo_vuelta: 1, estado: "CANCELADA",
+      created_at_app: "2026-11-01T12:00:00Z",
+    });
+    expect(queSigueEnElCiclo({ ...CICLO, desde: "2026-11-10", vuelta_desde: 0 }, [cancelada]).que)
+      .toBe("crear");
+  });
+
   /** La misma foto, dicha como lo que importa: no nace una segunda madre. */
   it("con la madre ya creada no crea otra", () => {
     const filas = [

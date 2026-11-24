@@ -3947,6 +3947,36 @@ omisión, y `scripts/simular-po-c1-04.mts` dice qué haría la próxima corrida 
 un ciclo que está inactivo —que es lo que `que-haria-el-ciclo.mts` no puede
 contestar, porque sólo mira los activos—.
 
+### El guardrail: nunca dos órdenes abiertas para la misma vuelta
+
+El defecto de arriba era de orden y el orden está arreglado. Esto es la segunda
+línea, y lo único que la hace valer es que **no se apoya en nada de lo que
+falló**: no mira el orden, no mira `desde` y no mira `created_at_app`. Antes de
+crear, `crearLaSiguiente` pregunta una sola cosa sobre el dato —¿este ciclo ya
+tiene una OT **abierta** para esta vuelta?— y si la hay espera ésa. Un
+guardrail escrito en los mismos términos que la función que vigila se equivoca
+junto con ella.
+
+Tres cosas que no se deducen del código:
+
+- **Mira todas las OT del ciclo y no sólo las del rango del corte**, y ahí está
+  la mitad que importa. Una orden abierta de una vuelta anterior quiere decir
+  que ese trabajo no se hizo, y una vuelta nueva no empieza sobre trabajo
+  pendiente. No es hipotético: pasa cuando el corte se mueve hacia adelante
+  —al cerrarse la madre, o cargado a mano como se hizo con Planta 0-2— dejando
+  atrás una orden que nadie cerró. Sin el guardrail nacía una segunda orden
+  para el mismo trabajo, y es el test que se vio en rojo primero.
+- **Lo cerrado y lo cancelado no frenan.** La hija 1 de la vuelta pasada, ya
+  hecha, es exactamente lo normal cuando arranca la siguiente; si frenara, el
+  ciclo no daría nunca su segunda vuelta y volveríamos al modo de falla
+  silencioso. Está fijado con dos tests que **pasan desde el principio** —acotan
+  el código nuevo en vez de manejarlo—, así que se comprobaron mutando
+  `estaAbierta` a «todo frena»: fallan esos dos y nada más.
+- **No cubre lo que el monitor no ve.** Las 426 se crearon con `ok=true` y
+  `filas=1` en cada corrida, y eso sigue igual: la salud mira que el generador
+  corra, no que lo que genera tenga sentido. Lo que cambió es que ahora el
+  generador se niega.
+
 ## Pegar un RI a un repuesto y cuánto de lo que viene es de cada OT (13/11/2026)
 
 Mantenimiento escribe el número de un RI sobre el repuesto de una OT, y puede
