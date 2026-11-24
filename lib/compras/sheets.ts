@@ -653,13 +653,15 @@ export async function importarDesdeSheets(
       origen: string;
       equipo_raw: string | null;
       equipo_id: string | null;
+      ot_id: string | null;
+      ot_repuesto_id: string | null;
       // El puntero de posición, para no reescribirlo cuando no se movió.
       hoja_origen: string | null;
       sheets_fila: number | null;
     }>((desde, hasta) =>
       admin
         .from("compras_requerimientos")
-        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra, compra_asignada_a, solicitante_nombre, comparativa_drive_id, prioridad, empresa_id, paga_ambas, origen, equipo_raw, equipo_id, hoja_origen, sheets_fila")
+        .select("nro_ri, editado_en_app, estado_aprobacion, estado_compra, compra_asignada_a, solicitante_nombre, comparativa_drive_id, prioridad, empresa_id, paga_ambas, origen, equipo_raw, equipo_id, ot_id, ot_repuesto_id, hoja_origen, sheets_fila")
         .range(desde, hasta)
     );
     const estado = new Map(existentes.map((r) => [r.nro_ri, r.editado_en_app]));

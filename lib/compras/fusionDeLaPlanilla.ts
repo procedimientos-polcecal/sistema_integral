@@ -66,6 +66,9 @@ export interface LoQueYaHabia {
   origen: string;
   equipo_raw: string | null;
   equipo_id: string | null;
+  /** De qué OT nació el pedido. La planilla no lo trae nunca. */
+  ot_id: string | null;
+  ot_repuesto_id: string | null;
 }
 
 /**
@@ -121,5 +124,9 @@ export function fusionarConLoQueYaHabia(
     // cargó se borraba en la primera sincronización y no volvía nunca.
     equipo_raw: dePlanilla.equipo ? dePlanilla.equipo.raw : (previo?.equipo_raw ?? null),
     equipo_id: dePlanilla.equipo ? dePlanilla.equipo.id : (previo?.equipo_id ?? null),
+    // El origen en una OT: la planilla no lo trae nunca y por eso no hay
+    // `dePlanilla`; lo único que puede decir es lo que ya había.
+    ot_id: previo?.ot_id ?? null,
+    ot_repuesto_id: previo?.ot_repuesto_id ?? null,
   };
 }

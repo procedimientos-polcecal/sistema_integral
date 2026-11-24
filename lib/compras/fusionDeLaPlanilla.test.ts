@@ -36,6 +36,8 @@ const DEL_SISTEMA: LoQueYaHabia = {
   origen: "app",
   equipo_raw: "EM6 - CATERPILLAR 950 G",
   equipo_id: "eq-em6",
+  ot_id: null,
+  ot_repuesto_id: null,
 };
 
 describe("lo que se conserva cuando la planilla vuelve a traer un RI", () => {
@@ -44,6 +46,22 @@ describe("lo que se conserva cuando la planilla vuelve a traer un RI", () => {
     // pedidos nuevos, y es el que decide cuando apagar el formulario. Si la
     // sincronizacion lo pisa con "sheets", mide siempre cero.
     expect(fusionarConLoQueYaHabia(NADA, DEL_SISTEMA).origen).toBe("app");
+  });
+
+  it("el origen del pedido sobrevive a la sincronizacion", () => {
+    // La planilla no sabe nada de OT: nunca trae estas dos columnas. Si la
+    // fusion no las conservara, la primera sincronizacion borraria el vinculo
+    // de todo RI nacido de una orden.
+    const previo = { ...DEL_SISTEMA, ot_id: "ot-1", ot_repuesto_id: "rep-1" };
+    const r = fusionarConLoQueYaHabia(NADA, previo);
+    expect(r.ot_id).toBe("ot-1");
+    expect(r.ot_repuesto_id).toBe("rep-1");
+  });
+
+  it("un pedido que la planilla trae y el sistema no conocia no tiene origen", () => {
+    const r = fusionarConLoQueYaHabia(NADA, undefined);
+    expect(r.ot_id).toBeNull();
+    expect(r.ot_repuesto_id).toBeNull();
   });
 
   it("el que no existia entra como de la planilla", () => {
