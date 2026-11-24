@@ -688,14 +688,50 @@ git commit -m "feat(compras): la ficha del RI muestra la trazabilidad del repues
 
 ## Orden de despliegue
 
-Las dos migraciones las corre una persona. **La Tarea 2 no se puede desplegar
-antes que la migración de la Tarea 1**: nombra `ot_id` en el `select` de los
-existentes y en el upsert de la sincronización, y sin la columna la
-sincronización de Compras falla entera. Lo mismo para las tareas 8 a 10 con la
-migración de la Tarea 6.
+**No hay media rama que desplegar: el push despliega todo.** Esta sección decía
+que la Parte A y la Parte B podían ir en dos despliegues y que cada tarea
+esperaba a su migración, y eso no es una secuencia que alguien pueda seguir — el
+deploy de Vercel es automático y sale del merge entero, así que «desplegar la
+Tarea 2 después de la migración de la Tarea 1» no es una acción que exista.
 
-La Parte A (tareas 1 a 5) y la Parte B (tareas 6 a 10) son independientes y
-pueden ir en dos despliegues.
+**La única secuencia que no rompe nada es ésta, en este orden:**
+
+1. **Aplicar los dos `.sql` a mano en el editor SQL de Supabase**, antes de
+   pushear nada:
+   - `supabase/migrations/20261123212344_compras_el_pedido_recuerda_su_ot.sql`
+   - `supabase/migrations/20261123214811_mant_el_repuesto_dice_de_que_salida_salio.sql`
+2. **Comprobar que están**, leyendo el catálogo y no la memoria de nadie: los dos
+   archivos son idempotentes (`add column if not exists`,
+   `create index if not exists`), así que lo que contesta si están aplicados es
+   la base. Alcanza con pedirle las columnas a PostgREST: un `select` de
+   `compras_requerimientos?select=ot_id,ot_repuesto_id` y otro de
+   `ordenes_trabajo_repuestos?select=work_order_id,movimiento_id` tienen que dar
+   **200**, no `42703`.
+3. **Recién entonces pushear el merge.**
+4. **`npm run catalogo`** al final: el catálogo del Asistente lee el esquema
+   real, así que sólo puede incluir las columnas nuevas **después** de aplicarlas.
+
+**Aplicar primero es inofensivo**, y por eso el orden es éste y no el inverso:
+las dos migraciones son aditivas —tres columnas, dos columnas y un índice
+parcial— y nada en el código viejo nombra ni escribe esas columnas, así que
+sobre el despliegue actual no cambian ningún comportamiento.
+
+**Qué se rompe si se pushea primero**, con nombre y no como «falla entera»:
+
+- **`lib/compras/sheets.ts:664` nombra `ot_id, ot_repuesto_id` en el `select` de
+  los existentes**, así que `importarDesdeSheets` **muere entera cada 10
+  minutos** — el espejo de más tráfico del sistema. No pisa ni borra nada: muere
+  antes de los upserts y antes del borrado de espejo, y la corrida queda anotada
+  en `compras_sincronizaciones`. Lo que sí pasa es que **ningún RI nuevo entra** y
+  el push a los aprobadores no sale, hasta que la migración esté aplicada.
+- **`app/api/compras/requerimientos/route.ts:151` nombra las dos columnas justo
+  en el camino nuevo**, así que **«Pedir a Compras» desde el repuesto de una OT
+  falla entero** con un 42703 mientras un alta común sigue andando: se rompe
+  exactamente el alta que esta rama vino a mejorar.
+- De la Parte B, lo que falta hasta aplicar `20261123214811` degrada solo y está
+  previsto: la ficha del RI dice que no pudo leer qué órdenes declararon las
+  salidas, y el PATCH y el DELETE de
+  `/api/mantenimiento/repuestos/[id]/movimiento` contestan 400.
 
 **Y hay una precondición que no es código:** B necesita que Mantenimiento enlace
 el renglón de repuesto con el artículo del pañol (`articulo_id`, hoy **0 de 37**).

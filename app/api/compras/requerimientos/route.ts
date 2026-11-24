@@ -146,8 +146,12 @@ export async function POST(request: Request) {
     ubicacion_id: body.ubicacion_id ?? null,
     equipo_id,
     equipo_raw,
-    // Sólo viajan cuando hay procedencia: un alta común no nombra las columnas
-    // nuevas, así que no se rompe en la ventana entre el deploy y la migración.
+    // Sólo viajan cuando hay procedencia, así que en la ventana entre el deploy
+    // y la migración un alta común sigue andando. **Lo que no sobrevive es
+    // justo el alta que esta rama vino a mejorar:** «Pedir a Compras» desde el
+    // repuesto de una OT manda las dos, el insert las nombra y falla entero con
+    // un 42703 hasta que alguien corra `20261123212344`. Por eso esa migración va
+    // antes del push, no después (ver «Orden de despliegue» en el plan).
     ...(ot_id && ot_repuesto_id ? { ot_id, ot_repuesto_id } : {}),
     fecha_necesidad: body.fecha_necesidad ?? null,
     detalle_extra: body.detalle_extra ?? null,

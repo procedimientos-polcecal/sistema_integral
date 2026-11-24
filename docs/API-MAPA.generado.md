@@ -278,7 +278,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/mantenimiento/ordenes/[id]/gut` | PATCH | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_trabajo` | admin · audita · zod |
 | `/api/mantenimiento/ordenes/[id]/notas` | GET, POST, DELETE | permiso de módulo · `puedeVerMantenimiento` | `ordenes_trabajo`, `ordenes_trabajo_notas`, `ordenes_trabajo_repuestos` | admin · audita |
 | `/api/mantenimiento/ordenes/[id]/postergar` | POST | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_trabajo`, `ordenes_trabajo_notas`, `usuarios` | admin · audita |
-| `/api/mantenimiento/ordenes/[id]/repuestos` | GET, POST, PUT, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `compras_requerimientos`, `ordenes_trabajo_repuestos` | admin |
+| `/api/mantenimiento/ordenes/[id]/repuestos` | GET, POST, PUT, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `compras_requerimientos`, `inventario_movimientos`, `ordenes_trabajo_repuestos` | admin |
 | `/api/mantenimiento/ordenes/justificadas` | GET | permiso de módulo · `puedeVerMantenimiento` | `ordenes_trabajo_notas` | — |
 | `/api/mantenimiento/ordenes/link` | POST | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_trabajo` | admin |
 | `/api/mantenimiento/ordenes/orden` | POST, DELETE | permiso de módulo · `puedeEditarMantenimiento` | `ordenes_trabajo` | admin |
@@ -658,7 +658,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/mantenimiento/ordenes/[id]/gut` | `lib/core/validar`, `lib/mantenimiento/auth`, `lib/mantenimiento/gut`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/[id]/notas` | `lib/core/avisoAlInstante`, `lib/mantenimiento/auth`, `lib/mantenimiento/cancelacion`, `lib/mantenimiento/consultaDeRepuesto`, `lib/mantenimiento/notas`, `lib/mantenimiento/planillaDeOT`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/[id]/postergar` | `lib/core/auditoria`, `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/mantenimiento/formulario`, `lib/mantenimiento/notas`, `lib/mantenimiento/planillaDeOT`, `lib/mantenimiento/postergar`, `lib/supabase/admin`, `lib/supabase/server` |
-| `/api/mantenimiento/ordenes/[id]/repuestos` | `lib/core/paginado`, `lib/mantenimiento/auth`, `lib/mantenimiento/repuestosDeLaOT`, `lib/mantenimiento/riDelRepuesto`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/mantenimiento/ordenes/[id]/repuestos` | `lib/core/paginado`, `lib/inventario/salidasDelRepuesto`, `lib/mantenimiento/auth`, `lib/mantenimiento/repuestosDeLaOT`, `lib/mantenimiento/riDelRepuesto`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/justificadas` | `lib/mantenimiento/auth`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/link` | `lib/core/cuerpo`, `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/mantenimiento/ordenes/orden` | `lib/mantenimiento/auth`, `lib/supabase/admin`, `lib/supabase/server` |

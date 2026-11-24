@@ -31,8 +31,11 @@
 --
 -- QUÉ DEMUESTRA LA MEDICIÓN DEL KARDEX (Y QUÉ NO)
 --
--- El kardex de Inventario tiene **5.136 filas** y **cero retrocesos de fecha**
--- (medido el 23/11/2026): el orden cronológico es confiable, se agrega al final.
+-- La pestaña `Entradas  Salidas` del kardex en la planilla tiene **5.136 filas
+-- con contenido** y **cero retrocesos de fecha** (medido el 23/11/2026): el orden
+-- cronológico es confiable, se agrega al final y no se inserta en el medio. La
+-- tabla `inventario_movimientos` tiene **5.063**, o sea 73 menos: el espejo va
+-- detrás de su planilla, y son dos números de dos cosas distintas.
 -- Eso **no** es lo que mantiene firme al vínculo: una FK identifica la fila por
 -- su id, no por posición ni por fecha, así que ningún reordenamiento puede
 -- redirigirla. Lo que sí la rompería es borrar el movimiento, y de eso se ocupa
@@ -58,9 +61,12 @@
 --
 -- `movimiento_puesto_por` NO LLEVA `on delete set null`, A PROPÓSITO
 --
--- Es lo que decidió el plan
--- (`docs/superpowers/plans/2026-11-23-compras-trazabilidad-del-repuesto.md`,
--- Tarea 6) y se deja tal cual: borrar a una persona con vínculos puestos se
+-- Se deja tal cual, y se nombra la sección y no el número de tarea: la
+-- numeración de un plan no le sobrevive a una reorganización, y entonces la cita
+-- manda a ningún lado. Viene de
+-- `docs/superpowers/specs/2026-11-23-compras-trazabilidad-del-repuesto-design.md`,
+-- sección «B · El consumo: lo declara Mantenimiento en el repuesto de la OT»
+-- (las tres columnas y sus `on delete`). Borrar a una persona con vínculos puestos se
 -- niega. Suponemos —sin medirlo— que los usuarios se desactivan y no se borran;
 -- si algún día se los borra, esta columna lo frena y habrá que decidir si se
 -- anula o se archiva, porque «quién lo dijo» es el dato que no conviene perder.

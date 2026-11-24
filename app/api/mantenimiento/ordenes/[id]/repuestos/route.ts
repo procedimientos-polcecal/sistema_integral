@@ -91,10 +91,19 @@ export async function GET(_request: Request, { params }: Params) {
   if (idsDeMovimientos.length > 0) {
     // Son los renglones de una sola orden (máximo hoy: 4): lejos de los 200 ids
     // que PostgREST tolera en un `.in()`.
-    const { data: leidos } = await createAdminClient()
+    const { data: leidos, error: errMovimientos } = await createAdminClient()
       .from("inventario_movimientos")
       .select("id, articulo_id, fecha, cantidad, solicitante, sector_raw, equipo_raw, tipo")
       .in("id", idsDeMovimientos);
+    // Sin esto, la única falla de todo este camino quedaba sin causa registrada:
+    // la pantalla dice «no se pudo leer» —que es lo correcto— y nadie podría
+    // saber por qué. El renglón sigue saliendo con `movimiento: null`.
+    if (errMovimientos) {
+      console.error(
+        "[repuestos de la OT] no se pudieron leer las salidas del pañol declaradas:",
+        errMovimientos.message,
+      );
+    }
     for (const m of leidos ?? []) movimientos.set(m.id, m as SalidaDelPanol);
   }
 

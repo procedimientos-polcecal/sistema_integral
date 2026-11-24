@@ -132,6 +132,8 @@ export default function RequerimientoDetalle({
   const dias = diasRestantes(r.fecha_necesidad);
   const total = (r.costo_iva ?? 0) + (r.costo_envio ?? 0);
   const resuelto = r.estado_aprobacion === "APROBADA" || r.estado_aprobacion === "DENEGADA";
+  /** Para qué OT se pidió, ya en texto: lo miran tres lugares del JSX. */
+  const paraQueOT = textoDelOrigen(origenEnLaOT);
 
   return (
     <div className="space-y-4">
@@ -610,16 +612,16 @@ export default function RequerimientoDetalle({
 
               Los dos primeros los ve cualquiera que abra la ficha; el tercero
               sólo llega si quien mira puede editar Compras (ver `page.tsx`). */}
-          {(textoDelOrigen(origenEnLaOT) || entradasAlPanol.length > 0) && (
+          {(paraQueOT || entradasAlPanol.length > 0) && (
             <section className="rounded-xl border border-slate-200 bg-white p-5">
               <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Trazabilidad
               </h2>
 
-              {textoDelOrigen(origenEnLaOT) && (
+              {paraQueOT && (
                 <div className="mb-4">
                   <h3 className="mb-1 text-xs font-semibold text-slate-500">Se pidió para</h3>
-                  <p className="text-sm text-slate-700">{textoDelOrigen(origenEnLaOT)}</p>
+                  <p className="text-sm text-slate-700">{paraQueOT}</p>
                   {origenEnLaOT?.repuesto_nombre && (
                     <p className="mt-1 text-xs text-slate-500">
                       desde el repuesto «{origenEnLaOT.repuesto_nombre}»
@@ -681,8 +683,8 @@ export default function RequerimientoDetalle({
                   Sólo lectura, y a propósito: lo que prueba que la pieza fue a una
                   orden lo declara Mantenimiento en el renglón de repuesto de esa
                   OT, que es quien sabe en qué se usó. Acá no hay botón. «Sin
-                  justificar» es el estado normal —hoy son todas— y no un pendiente
-                  de nadie, así que no se pinta como alerta.
+                  justificar» es el estado normal de toda salida que nadie declaró
+                  y no un pendiente de nadie, así que no se pinta como alerta.
 
                   `salidasDelPanol` es null si quien mira no puede editar Compras:
                   no es lo mismo que «no hay salidas». */}
@@ -732,9 +734,17 @@ export default function RequerimientoDetalle({
                           </li>
                         ))}
                       </ul>
+                      {/* Que son CANDIDATAS, y por qué, va primero: el stock es
+                          fungible y nada prueba que esas unidades salgan de esta
+                          compra. Sin esa frase, «Entró 17/11 · 10 un.» seguido de
+                          «Salió 18/11 · 2 un. → aplicado a la OT #2983» se lee como
+                          que lo que se compró fue a esa orden, que es el
+                          anti-objetivo textual del diseño. */}
                       <p className="mt-2 text-xs text-slate-400">
-                        Son salidas del pañol posteriores a cada entrada de arriba, hasta 10 por entrada; si
-                        el pedido trajo artículos distintos, se muestran juntas. «Sin
+                        Son salidas candidatas, no la trazabilidad de estas unidades: el stock del pañol
+                        es fungible, así que haber entrado por este RI y haber salido después no prueba
+                        que sea el mismo material. Son las posteriores a cada entrada de arriba, hasta 10
+                        por entrada; si el pedido trajo artículos distintos, se muestran juntas. «Sin
                         justificar» no es un pendiente: es el estado de toda salida que Mantenimiento
                         no declaró en una orden.
                       </p>
