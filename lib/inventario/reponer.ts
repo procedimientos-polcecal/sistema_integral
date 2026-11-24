@@ -67,6 +67,21 @@ export interface RequerimientoConCodigo {
   estado_compra: string | null;
 }
 
+/**
+ * Una entrada al pañol que nombra el requerimiento que la trajo.
+ *
+ * El `tipo` entra sin filtrar, igual que en `MovimientoDelConsumo` y por el
+ * mismo motivo: que una salida no cuente como recepción es una decisión de
+ * `riConEntrada`, y si la consulta la filtrara no habría nada que probar.
+ * Medido el 24/11/2026: los 766 movimientos con `requerimiento_id` son
+ * entradas, así que hoy el filtro no saca ninguno — existe para el día que la
+ * forma de cargar cambie.
+ */
+export interface EntradaDeRequerimiento {
+  requerimiento_id: string | null;
+  tipo: string;
+}
+
 export interface Candidato {
   articulo: ArticuloConFaltante;
   /** Cuántas salidas tuvo dentro de la ventana. */
@@ -134,16 +149,59 @@ export interface AltaDeReposicion {
 }
 
 /**
+ * Los requerimientos que **ya recibieron mercadería** en el pañol.
+ *
+ * Es la segunda forma de saber que un pedido terminó, y hoy es la que más
+ * contesta. Medido el 24/11/2026: de los 149 RI con código que el estado daba
+ * por abiertos, **85 ya tenían su propia entrada en el kardex**; 128 de esos
+ * 149 estaban en `PEDIDO` y 49 llevaban más de 60 días ahí. El estado
+ * `RECIBIDO` lo escribe una persona en la planilla y casi nadie lo escribe, así
+ * que mirar sólo esa columna deja a «Ya pedidos» lleno de pedidos que llegaron
+ * hace meses — que es justo lo que se reportó con el RI 2082, cuyas 8 correas
+ * entraron el 21/10/2026 nombrándolo.
+ *
+ * El enlace es `requerimiento_id`, o sea el RI **resuelto**, nunca "una entrada
+ * del mismo código después de esa fecha". Esa otra lectura cerraría 96 en vez
+ * de 85, y las 11 de diferencia son entradas que no dicen de qué pedido vienen:
+ * enlazar al que se le parece es peor que dejar en null.
+ */
+export function riConEntrada(movimientos: EntradaDeRequerimiento[]): Set<string> {
+  const recibidos = new Set<string>();
+  for (const m of movimientos) {
+    if (m.tipo !== "entrada") continue;
+    const id = clave(m.requerimiento_id);
+    if (id) recibidos.add(id);
+  }
+  return recibidos;
+}
+
+/**
  * Si un pedido sigue en curso.
  *
- * `estado_compra` en null es un pedido que recién entra, no uno cerrado: la
- * fila nace así hasta que Compras la toma.
+ * Son **tres** condiciones y no dos, y la tercera es la que faltaba:
+ *
+ * 1. no está denegado;
+ * 2. su `estado_compra` no es `RECIBIDO` ni `DENEGADO` —`estado_compra` en null
+ *    es un pedido que recién entra, no uno cerrado: la fila nace así hasta que
+ *    Compras la toma—;
+ * 3. **todavía no llegó nada contra él**.
+ *
+ * La tercera no mira la cantidad a propósito. De los 85 RI con entrada propia,
+ * 78 entraron completos (12 de más) y **7 parciales**, y de esos 7 seis ya no
+ * tienen faltante, o sea que ni siquiera aparecen en la lista. Para el que
+ * queda —el `00802`, que pidió 12 y recibió 6 hace más de 50 días— mostrarlo
+ * como «para pedir» es lo correcto: lo que el RI probaba era que valía la pena
+ * esperar, y eso dejó de ser cierto el día que llegó la primera mitad. Comparar
+ * cantidades agregaría una cuenta cuyo error —una unidad mal contada, una
+ * entrega en dos partes— es mucho menos explicable que esto.
  */
 export function estaAbierto(
-  ri: Pick<RequerimientoConCodigo, "estado_aprobacion" | "estado_compra">
+  ri: Pick<RequerimientoConCodigo, "id" | "estado_aprobacion" | "estado_compra">,
+  yaRecibidos: ReadonlySet<string>
 ): boolean {
   if (ri.estado_aprobacion === "DENEGADA") return false;
-  return !COMPRA_CERRADA.has(String(ri.estado_compra ?? ""));
+  if (COMPRA_CERRADA.has(String(ri.estado_compra ?? ""))) return false;
+  return !yaRecibidos.has(clave(ri.id));
 }
 
 /** Días entre dos fechas ISO, en UTC para que no dependa del huso de quien mire. */
@@ -167,15 +225,23 @@ const clave = (v: string | null | undefined) => String(v ?? "").trim();
  *
  * Los abiertos de cada código vienen **del más nuevo al más viejo**: lo que
  * interesa contestar es "¿esto se pidió recién?", no cuál fue el primero.
+ *
+ * `yaRecibidos` no tiene valor por defecto a propósito. Un conjunto vacío es la
+ * respuesta correcta cuando de verdad no llegó nada, y un parámetro opcional
+ * haría que olvidarse de pasarlo se vea igual: la pantalla volvería callada al
+ * comportamiento que mostraba el RI 2082 cincuenta días después de que sus
+ * correas entraran al pañol. Son dos llamadores y los dos tienen que contestar
+ * de dónde lo sacan.
  */
 export function pedidosAbiertosPorCodigo(
   requerimientos: RequerimientoConCodigo[],
-  hoy: string
+  hoy: string,
+  yaRecibidos: ReadonlySet<string>
 ): Map<string, PedidoAbierto> {
   const abiertos = new Map<string, RequerimientoConCodigo[]>();
   for (const r of requerimientos) {
     const c = clave(r.codigo);
-    if (!c || !estaAbierto(r)) continue;
+    if (!c || !estaAbierto(r, yaRecibidos)) continue;
     if (!abiertos.has(c)) abiertos.set(c, []);
     abiertos.get(c)!.push(r);
   }
@@ -412,7 +478,8 @@ export function clasificarParaReponer(
   articulos: ArticuloConFaltante[],
   movimientos: MovimientoDelConsumo[],
   requerimientos: RequerimientoConCodigo[],
-  hoy: string
+  hoy: string,
+  yaRecibidos: ReadonlySet<string>
 ): Reposicion {
   // El consumo, por código: cuántas salidas y cuál fue la última.
   const consumo = new Map<string, { salidas: number; diasDesdeLaUltima: number }>();
@@ -435,7 +502,7 @@ export function clasificarParaReponer(
 
   // Los pedidos abiertos, por código. La misma función que usa el stock para
   // avisar antes de pedir de nuevo: una sola definición de "ya está pedido".
-  const abiertos = pedidosAbiertosPorCodigo(requerimientos, hoy);
+  const abiertos = pedidosAbiertosPorCodigo(requerimientos, hoy, yaRecibidos);
 
   const paraPedir: Candidato[] = [];
   const yaPedidos: ConPedido[] = [];

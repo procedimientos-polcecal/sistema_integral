@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import {
-  pedidosAbiertosPorCodigo, riAbiertoDe, type RequerimientoConCodigo,
+  pedidosAbiertosPorCodigo, riAbiertoDe, riConEntrada,
+  type RequerimientoConCodigo, type EntradaDeRequerimiento,
 } from "@/lib/inventario/reponer";
 
 /**
@@ -75,9 +76,41 @@ export async function GET(request: Request) {
     return NextResponse.json({ data, errorPedidos: errorRis.message });
   }
 
+  // Qué llegó ya al pañol contra alguno de esos pedidos.
+  //
+  // **Se filtra por los ids de los RI y no por los 50 códigos**, que era lo
+  // cómodo porque ya estaban acotados. Medido el 24/11/2026: de las 766
+  // entradas que nombran un requerimiento, **16 llevan un código distinto al
+  // del RI que dicen traer** —el RI 575 pide el `00109` y la entrada dice
+  // `00110`—, así que filtrar por código se perdería esas y esta pantalla
+  // seguiría diciendo «ya pedido» mientras `/inventario/reponer` dice que
+  // llegó. Dos pantallas que contestan distinto a la misma pregunta es
+  // exactamente lo que `pedidosAbiertosPorCodigo` existe para evitar.
+  //
+  // De a 150 porque un `.in()` largo lo rechaza PostgREST con un 400 sin decir
+  // por qué. Con 50 códigos los RI son unas pocas decenas, así que hoy esto da
+  // una sola vuelta; el lote está para que crecer no lo rompa en silencio.
+  const idsDeLosRi = (ris ?? []).map((r) => r.id);
+  const entradas: EntradaDeRequerimiento[] = [];
+  for (let i = 0; i < idsDeLosRi.length; i += 150) {
+    const { data: lote, error: errorEntradas } = await supabase
+      .from("inventario_movimientos")
+      .select("requerimiento_id, tipo")
+      .in("requerimiento_id", idsDeLosRi.slice(i, i + 150));
+
+    // Un fallo acá se trata como el de los RI: no voltea la búsqueda, pero no
+    // se traga callado. La diferencia importa — sin esto, la fila diría «ya
+    // pedido» de algo que llegó hace meses.
+    if (errorEntradas) {
+      return NextResponse.json({ data, errorPedidos: errorEntradas.message });
+    }
+    entradas.push(...((lote ?? []) as EntradaDeRequerimiento[]));
+  }
+
   const abiertos = pedidosAbiertosPorCodigo(
     (ris ?? []) as RequerimientoConCodigo[],
-    hoyEnArgentina()
+    hoyEnArgentina(),
+    riConEntrada(entradas)
   );
 
   return NextResponse.json({
