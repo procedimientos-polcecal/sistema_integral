@@ -136,6 +136,17 @@ export const REGISTRO = {
       "El alta de una OT escribe la hoja de respuestas primero y relee lo escrito. " +
       "Si no puede, no se crea la orden: una OT sin fila no existe.",
   },
+  "lib/mantenimiento/altaDeOS.ts": {
+    estrategia: "aborta",
+    porque:
+      "La gemela de formulario.ts para las OS: escribe «Altas del sistema» antes de " +
+      "que la OS exista en la base, relee la fila destino para no pisar un alta que " +
+      "entró mientras tanto, y relee lo escrito para distinguir «quedó con su número» " +
+      "de «quedó con el de otro». Si algo falla no se creó nada ni se consumió un " +
+      "número, y devuelve el error sin traducir en vez de lanzar. Hoy no la llama " +
+      "nadie más que su propio test, así que esto declara el contrato del módulo: " +
+      "el día que se cablee el alta de OS hay que releer esta entrada contra la ruta.",
+  },
   "app/api/mantenimiento/avisos/route.ts": {
     estrategia: "aborta",
     porque:
