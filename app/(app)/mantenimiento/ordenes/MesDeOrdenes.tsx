@@ -1,8 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { comoSeLee } from "@/lib/core/fechas";
-import CalendarioDeOT, { type OrdenDelDia } from "./CalendarioDeOT";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { comoSeLee, hoyEnArgentina } from "@/lib/core/fechas";
+import CalendarioDeOT, { type OrdenDelDia, type EstadoDelCalendario } from "./CalendarioDeOT";
+import {
+  indicadoresDelMes, indicadoresDeHoy,
+  type IndicadoresDelMes, type IndicadoresDeHoy,
+} from "@/lib/mantenimiento/resumenImpreso";
+import { LEYENDA_IMPRESA } from "@/lib/mantenimiento/marcasImpresas";
 import FranjaDelTaller from "./FranjaDelTaller";
 import PostergarOTModal from "./PostergarOTModal";
 import AsignarOperariosModal from "./AsignarOperariosModal";
@@ -59,6 +64,103 @@ export interface TallerDelMes {
  *   servidor, no el estado de acá; sin el `recarga` la orden seguiría pintada
  *   en el día viejo hasta que alguien cambiara de mes.
  */
+/** Un número grande con su rótulo abajo. */
+function Tarjeta({ valor, rotulo, alerta = false }: {
+  valor: number | string;
+  rotulo: string;
+  /** Un número que vale la pena mirar: se pinta, pero **sólo si no es cero**. */
+  alerta?: boolean;
+}) {
+  const pintar = alerta && valor !== 0;
+  return (
+    <div className={`rounded-lg border px-3 py-2 ${
+      pintar ? "border-red-200 bg-red-50" : "border-slate-200 bg-white"
+    }`}>
+      <div className={`text-xl font-semibold ${pintar ? "text-red-700" : "text-slate-800"}`}>
+        {valor}
+      </div>
+      <div className="text-xs text-slate-500">{rotulo}</div>
+    </div>
+  );
+}
+
+/**
+ * Los indicadores de arriba del mes.
+ *
+ * **Salen de lo que la grilla ya tiene y respetan el filtro puesto.** No es una
+ * comodidad: el encabezado del calendario ya imprime «N órdenes en el mes»
+ * calculado sobre lo filtrado, así que una barra que dijera otro número para el
+ * mismo mes dejaría a la pantalla contradiciéndose sola a dos centímetros de
+ * distancia.
+ *
+ * El desglose va con las mismas letras que la hoja impresa, a propósito: quien
+ * las ve acá las reconoce en el papel sin tener que leer la leyenda.
+ */
+function BarraDeIndicadores({ delMes, deHoy, hayFiltro, onIrAHoy }: {
+  delMes: IndicadoresDelMes;
+  /** `null` cuando el mes que se está mirando no contiene hoy. */
+  deHoy: IndicadoresDeHoy | null;
+  hayFiltro: boolean;
+  onIrAHoy?: () => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {deHoy ? (
+        <div>
+          <div className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Hoy</div>
+          {/* Dos columnas en el teléfono: 343 px de ancho útil partidos en tres
+              dejan 114 px por tarjeta, que es lo que `revisar-responsive` marca
+              como apretado. La tercera cae abajo y se ve bien. */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Tarjeta valor={deHoy.total} rotulo={deHoy.total === 1 ? "orden" : "órdenes"} />
+            <Tarjeta valor={deHoy.atrasadas} rotulo="atrasadas" alerta />
+            <Tarjeta valor={deHoy.sinOperario} rotulo="sin operario" />
+          </div>
+        </div>
+      ) : (
+        onIrAHoy && (
+          <button type="button" onClick={onIrAHoy} className="btn-secondary text-sm">
+            Ir a hoy
+          </button>
+        )
+      )}
+
+      <div>
+        <div className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+          El mes que se está mirando{hayFiltro ? ", con el filtro puesto" : ""}
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <Tarjeta valor={delMes.total} rotulo={delMes.total === 1 ? "orden" : "órdenes"} />
+          <Tarjeta valor={delMes.atrasadas} rotulo="atrasadas" alerta />
+          <Tarjeta
+            valor={delMes.diaMasCargado ? `${delMes.diaMasCargado.cantidad}` : "—"}
+            rotulo={
+              delMes.diaMasCargado
+                ? `el día más cargado (${comoSeLee(delMes.diaMasCargado.dia)})`
+                : "el día más cargado"
+            }
+          />
+        </div>
+        {delMes.porLetra.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+            {delMes.porLetra.map(({ letra, cantidad }) => (
+              <span key={letra} className="inline-flex items-center gap-1">
+                <span
+                  className="inline-flex h-5 w-5 items-center justify-center rounded border border-slate-400 text-xs font-semibold text-slate-700"
+                  title={LEYENDA_IMPRESA.find((e) => e.letra === letra)?.nombre ?? ""}
+                >
+                  {letra}
+                </span>
+                {cantidad}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function MesDeOrdenes({ puedeMover, puedeAsignar }: {
   /**
    * Si quien mira tiene nivel de edición en Mantenimiento. Es obligatoria y no
@@ -81,14 +183,50 @@ export default function MesDeOrdenes({ puedeMover, puedeAsignar }: {
   const [recarga, setRecarga] = useState(0);
   const [aviso, setAviso] = useState<string | null>(null);
   const [asignando, setAsignando] = useState<{ orden: OrdenDelDia; dia: string } | null>(null);
-  const [rango, setRango] = useState<{ desde: string; hasta: string } | null>(null);
+  const [estado, setEstado] = useState<EstadoDelCalendario | null>(null);
   const [taller, setTaller] = useState<TallerDelMes | null>(null);
   const [falloDelTaller, setFalloDelTaller] = useState<string | null>(null);
+  const hoy = hoyEnArgentina();
 
-  // El rango lo decide el calendario, que es el que tiene el mes.
-  const anotarElRango = useCallback((desde: string, hasta: string) => {
-    setRango((r) => (r && r.desde === desde && r.hasta === hasta ? r : { desde, hasta }));
+  /*
+   * Qué está mirando el calendario, que es el que tiene el mes y los filtros.
+   *
+   * La comparación campo por campo no es prolijidad: `onEstado` va en las
+   * dependencias de un efecto del hijo, así que guardar un objeto nuevo cuando
+   * nada cambió vuelve a renderizar al hijo, que vuelve a llamar, y así. Los
+   * cinco campos se comparan por identidad porque los cinco la conservan del
+   * otro lado (`dias` sale de un estado, `filtros` también).
+   */
+  const anotarElEstado = useCallback((e: EstadoDelCalendario) => {
+    setEstado((v) =>
+      v && v.mes === e.mes && v.desde === e.desde && v.hasta === e.hasta
+        && v.filtros === e.filtros && v.dias === e.dias
+        ? v
+        : e
+    );
   }, []);
+
+  // El rango que mira la grilla, para pedir el taller de las mismas semanas.
+  // Se saca aparte para que el pedido no se repita cada vez que alguien toca un
+  // filtro: eso cambia el estado pero no las semanas.
+  const desde = estado?.desde ?? null;
+  const hasta = estado?.hasta ?? null;
+  const rango = useMemo(
+    () => (desde && hasta ? { desde, hasta } : null),
+    [desde, hasta]
+  );
+
+  const delMes = useMemo(
+    () => (estado ? indicadoresDelMes(estado.dias, estado.mes, estado.filtros) : null),
+    [estado]
+  );
+  const deHoy = useMemo(
+    () => (estado ? indicadoresDeHoy(estado.dias, hoy, estado.filtros) : null),
+    [estado, hoy]
+  );
+  const hayFiltro = Boolean(
+    estado && (estado.filtros.especialidad || estado.filtros.tipo || estado.filtros.quien)
+  );
 
   /*
    * El taller del mes, para las mismas semanas que la grilla.
@@ -157,9 +295,18 @@ export default function MesDeOrdenes({ puedeMover, puedeAsignar }: {
         </div>
       )}
 
+      {delMes && (
+        <BarraDeIndicadores
+          delMes={delMes}
+          deHoy={deHoy}
+          hayFiltro={hayFiltro}
+          onIrAHoy={estado?.irAlMesDeHoy}
+        />
+      )}
+
       <CalendarioDeOT
         recarga={recarga}
-        onRango={puedeAsignar ? anotarElRango : undefined}
+        onEstado={anotarElEstado}
         franjaDeLaSemana={
           puedeAsignar
             ? (lunes) => (

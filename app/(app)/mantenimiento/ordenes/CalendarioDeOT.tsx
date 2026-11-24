@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Select from "@/components/Select";
 import { norm } from "@/lib/core/texto";
 import {
@@ -149,6 +149,36 @@ function cuentaPorSector(ordenes: OrdenDelDia[]): { sector: string; cantidad: nu
 }
 
 /** El fondo del día: se oscurece con la cantidad, porque el color de las fichas no alcanza para contar. */
+/**
+ * Lo que la grilla le cuenta al padre de lo que está mirando. Lleva los filtros
+ * y los días —y no sólo el rango— porque los indicadores y las hojas impresas
+ * se calculan de eso, sin volver a pedirle nada al servidor.
+ */
+export interface EstadoDelCalendario {
+  /** "YYYY-MM". */
+  mes: string;
+  /** El primer y el último día que la grilla pidió: lunes a domingo de las semanas del mes. */
+  desde: string;
+  hasta: string;
+  filtros: Filtros;
+  /** Vacío mientras carga o si el pedido falló. */
+  dias: DiaDelCalendario[];
+  /**
+   * Llevar la grilla al mes de hoy. Va acá y no es una prop de control porque
+   * **el mes es estado de este componente**: un `mes` que entre desde afuera
+   * serían dos dueños de lo mismo, y las flechas dejarían de andar en cuanto el
+   * padre no las escuchara. Así el padre puede ofrecer «Ir a hoy» —la barra de
+   * indicadores lo necesita cuando el mes que se mira no contiene hoy— sin
+   * saber nada de cómo se guarda el mes.
+   *
+   * Su identidad es estable, como la del resto del objeto.
+   */
+  irAlMesDeHoy: () => void;
+}
+
+/** Identidad estable para «todavía no hay días»: ver el efecto que llama a `onEstado`. */
+const SIN_DIAS: DiaDelCalendario[] = [];
+
 function fondoDelDia(n: number): string {
   if (n === 0) return "#ffffff";
   if (n === 1) return "#f1f5f9";
@@ -159,7 +189,7 @@ function fondoDelDia(n: number): string {
 }
 
 export default function CalendarioDeOT({
-  modo, recarga = 0, franjaDeLaSemana, onRango,
+  modo, recarga = 0, franjaDeLaSemana, onEstado,
 }: {
   modo: ModoDelCalendario;
   /**
@@ -177,19 +207,23 @@ export default function CalendarioDeOT({
    */
   franjaDeLaSemana?: (lunes: string) => React.ReactNode;
   /**
-   * Qué rango está pidiendo la grilla. El mes es estado de acá —se cambia con
-   * las flechas— así que el padre no tiene otra forma de saber para qué
-   * semanas traer lo suyo.
+   * Qué está mirando la grilla: el mes, el rango que pidió, los filtros puestos
+   * y los días que llegaron. Todo eso es estado de acá —el mes se cambia con
+   * las flechas y los filtros son tres desplegables de esta barra—, así que el
+   * padre no tiene otra forma de saberlo.
+   *
+   * Lo usan dos cosas de `MesDeOrdenes`: traer el taller para las mismas
+   * semanas, y dibujar los indicadores de arriba **con el filtro puesto**, sin
+   * pedirle nada más al servidor.
    *
    * **Tiene que ser estable entre renders**, o sea un `useCallback` y no una
    * arrow escrita en el JSX: va en las dependencias de un efecto que llama al
    * padre, así que una identidad nueva por render es un bucle infinito. Y lo
-   * que el padre guarde tiene que conservar su identidad cuando el rango no
-   * cambió (`MesDeOrdenes` devuelve el mismo objeto), por lo mismo. La de al
-   * lado, `franjaDeLaSemana`, **sí** puede ir inline: no está en ninguna
-   * dependencia.
+   * que el padre guarde tiene que conservar su identidad cuando nada cambió
+   * (`MesDeOrdenes` compara antes de setear), por lo mismo. La de al lado,
+   * `franjaDeLaSemana`, **sí** puede ir inline: no está en ninguna dependencia.
    */
-  onRango?: (desde: string, hasta: string) => void;
+  onEstado?: (e: EstadoDelCalendario) => void;
 }) {
   const hoy = hoyEnArgentina();
   const valor = modo.tipo === "elegir" ? modo.valor : "";
@@ -248,9 +282,6 @@ export default function CalendarioDeOT({
     return () => { cancelado = true; };
   }, [desde, hasta, mes, intento, recarga]);
 
-  // El rango, para quien quiera traer lo suyo para las mismas semanas.
-  useEffect(() => { onRango?.(desde, hasta); }, [desde, hasta, onRango]);
-
   // En el teléfono el panel queda debajo de la grilla: al abrirlo hay que verlo.
   useEffect(() => {
     if (diaAbierto) panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -265,6 +296,24 @@ export default function CalendarioDeOT({
   const cargando = !laFoto && !elFallo;
   const error = elFallo && elFallo.pedido > (laFoto?.pedido ?? -1) ? elFallo.mensaje : null;
   const dias = laFoto?.dias ?? null;
+
+  /*
+   * Lo que la grilla está mirando, para el padre. Va acá abajo y no arriba
+   * porque necesita `dias`, que sale de la foto.
+   *
+   * `SIN_DIAS` es una constante de módulo y no un `[]` escrito acá: un arreglo
+   * nuevo por render entraría en las dependencias con identidad distinta cada
+   * vez, que es el bucle infinito contra el que advierte la prop.
+   */
+  const irAlMesDeHoy = useCallback(() => {
+    setMes(hoy.slice(0, 7));
+    setDiaAbierto(null);
+    setDiaRechazado(null);
+  }, [hoy]);
+
+  useEffect(() => {
+    onEstado?.({ mes, desde, hasta, filtros, dias: dias ?? SIN_DIAS, irAlMesDeHoy });
+  }, [onEstado, mes, desde, hasta, filtros, dias, irAlMesDeHoy]);
 
   const porDia = useMemo(() => {
     const m = new Map<string, DiaDelCalendario>();
