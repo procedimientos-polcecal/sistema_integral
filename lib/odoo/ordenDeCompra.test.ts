@@ -281,7 +281,9 @@ describe("cuando no se puede armar", () => {
   });
 
   it("el mensaje del proveedor faltante dice qué hacer y en qué empresa", () => {
-    const r = armarOrdenes(ri(), cotizacion(), [{ ...POLCECAL, odooPartnerId: null }], CONTEXTO);
+    const r = armarOrdenes(
+      ri(), cotizacion(), [{ ...POLCECAL, odooPartnerId: null, seVaACrear: true }], CONTEXTO
+    );
     expect(r.ok).toBe(false);
     if (r.ok) return;
 
@@ -291,6 +293,40 @@ describe("cuando no se puede armar", () => {
     expect(r.problemas[0].detalle).toContain("Se va a crear");
     // Lo que no tiene que decir: "error al crear la orden".
     expect(r.problemas[0].detalle).not.toMatch(/error/i);
+  });
+
+  /*
+   * «No está en Odoo» y «no se puede usar el que está» son dos cosas
+   * distintas, y prometer la creación en el segundo caso deja a la persona en
+   * un lazo: genera, falla, el cartel vuelve a prometer, genera de nuevo. Pasa
+   * de verdad —39 de los 130 proveedores enlazados están en una sola empresa—.
+   */
+  it("si el partner existe pero no sirve, el mensaje dice el obstáculo y no promete crearlo", () => {
+    const r = armarOrdenes(
+      ri(),
+      cotizacion(),
+      [{
+        ...POLCECAL,
+        odooPartnerId: null,
+        seVaACrear: false,
+        motivoSinPartner: "Ese CUIT existe en Odoo pero en la otra empresa.",
+      }],
+      CONTEXTO
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+
+    expect(r.problemas[0].detalle).toContain("en la otra empresa");
+    expect(r.problemas[0].detalle).not.toContain("Se va a crear");
+  });
+
+  it("sin saber si se va a crear, el mensaje no lo promete", () => {
+    const r = armarOrdenes(ri(), cotizacion(), [{ ...POLCECAL, odooPartnerId: null }], CONTEXTO);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+
+    expect(r.problemas[0].detalle).toContain("POLCECAL");
+    expect(r.problemas[0].detalle).not.toContain("Se va a crear");
   });
 
   it("sin precio no se arma", () => {

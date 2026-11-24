@@ -55,12 +55,19 @@ export function validarAlta(
     problemas.push({ campo: "nombre", mensaje: "El nombre es obligatorio" });
   }
 
+  /*
+   * «Falta» y «está mal escrito» se dicen distinto a propósito.
+   * `normalizarCuit` devuelve null en los dos casos, y contestar «es
+   * obligatorio» a quien escribió diez dígitos es falso: llenó el campo. El
+   * mensaje tiene que decirle qué le falta al número, no al formulario.
+   */
   const cuit = normalizarCuit(datos.cuit);
   if (!cuit) {
     problemas.push({
       campo: "cuit",
-      mensaje:
-        "El CUIT es obligatorio: es con lo único que se reconoce al proveedor en Odoo",
+      mensaje: datos.cuit.trim()
+        ? "El CUIT tiene que tener once dígitos"
+        : "El CUIT es obligatorio: es con lo único que se reconoce al proveedor en Odoo",
     });
     return problemas;
   }

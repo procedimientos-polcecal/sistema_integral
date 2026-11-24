@@ -144,24 +144,30 @@ export default function PresupuestoForm({
       )}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Campo label="Proveedor" ancho="sm:col-span-2">
-          <div className="flex gap-1.5">
-            <div className="flex-1">
+        {/*
+          El botón va **afuera** del `Campo`, que renderiza un `<label>`.
+          Adentro, un click en «Nuevo» activa además el control asociado a esa
+          etiqueta —el campo del selector de proveedores—, así que abría el
+          buscador detrás del modal que se estaba abriendo.
+        */}
+        <div className="flex items-end gap-1.5 sm:col-span-2">
+          <div className="min-w-0 flex-1">
+            <Campo label="Proveedor">
               <SelectorProveedor
                 proveedores={lista}
                 valor={proveedorId}
                 onCambio={elegirProveedor}
               />
-            </div>
-            <button
-              type="button"
-              onClick={() => setAbrirAlta(true)}
-              className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              Nuevo
-            </button>
+            </Campo>
           </div>
-        </Campo>
+          <button
+            type="button"
+            onClick={() => setAbrirAlta(true)}
+            className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            Nuevo
+          </button>
+        </div>
         <Campo label="Marca"><Texto valor={marca} set={setMarca} /></Campo>
 
         <Campo label="Precio unitario">

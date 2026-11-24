@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { dominioPorCuit, candidatosDelCuit, valsDelPartner } from "./partnerDeProveedor";
+import {
+  dominioPorCuit, candidatosDelCuit, valsDelPartner, hayQueCrearlo,
+} from "./partnerDeProveedor";
 import type { PartnerCandidato } from "./proveedores";
 
 const candidato = (id: number, extra: Partial<PartnerCandidato> = {}): PartnerCandidato => ({
@@ -82,6 +84,81 @@ describe("valsDelPartner", () => {
     expect(
       "income_wh_registration" in
         valsDelPartner({ nombre: "X", cuit: "30711820279", tipoDocumentoId: 25, regimenGanancias: null })
+    ).toBe(false);
+  });
+});
+
+/**
+ * Evalúa un dominio de Odoo que es un OR de términos simples: saltea los `|`
+ * de la notación polaca y pregunta si alguno de los términos matchea.
+ */
+function matchea(dominio: unknown[], vat: string): boolean {
+  return dominio
+    .filter((t): t is [string, string, string] => Array.isArray(t))
+    .some(([, op, valor]) =>
+      op === "="
+        ? vat === String(valor)
+        : vat.toLowerCase().includes(String(valor).replaceAll("%", "").toLowerCase())
+    );
+}
+
+describe("dominioPorCuit", () => {
+  it("encuentra el CUIT guardado sin guiones", () => {
+    expect(matchea(dominioPorCuit("30689471524"), "30689471524")).toBe(true);
+  });
+
+  it("encuentra el CUIT guardado con un guion, que es lo que hay en Odoo hoy", () => {
+    expect(matchea(dominioPorCuit("30689471524"), "30-689471524")).toBe(true);
+  });
+
+  /*
+   * El canónico argentino `XX-XXXXXXXX-X` parte los últimos seis dígitos en
+   * dos, así que un `ilike` de seis contiguos no lo ve. Hoy no hay ninguno así
+   * en Odoo, pero es la forma en que una persona tipea un CUIT: el día que
+   * alguien cargue uno a mano, no encontrarlo significa crear el duplicado que
+   * toda esta búsqueda existe para evitar.
+   */
+  it("encuentra el CUIT escrito con los dos guiones", () => {
+    expect(matchea(dominioPorCuit("30689471524"), "30-68947152-4")).toBe(true);
+  });
+});
+
+describe("hayQueCrearlo", () => {
+  const candidato = (campos: Partial<PartnerCandidato>): PartnerCandidato => ({
+    id: 1, nombre: "X", empresa: null, activo: true, esContactoDeOtro: false, usos: 0, ...campos,
+  });
+
+  it("sin ningún partner con ese CUIT hay que crearlo", () => {
+    expect(hayQueCrearlo([], 1)).toBe(true);
+  });
+
+  it("con el partner de esta empresa no se crea nada", () => {
+    expect(hayQueCrearlo([candidato({ empresa: 1 })], 1)).toBe(false);
+  });
+
+  it("un partner compartido sirve para esta empresa", () => {
+    expect(hayQueCrearlo([candidato({ empresa: null })], 1)).toBe(false);
+  });
+
+  /*
+   * El caso que trababa al 40% de los RI: con AMBAS, la segunda vuelta del
+   * loop encuentra el partner que acaba de crear la primera y, si se mira el
+   * CUIT entero en vez de esta empresa, decide que ya está y no crea nada.
+   */
+  it("si el único está en la otra empresa, hay que crearlo acá", () => {
+    expect(hayQueCrearlo([candidato({ empresa: 2 })], 1)).toBe(true);
+  });
+
+  it("un archivado de esta empresa frena la creación", () => {
+    expect(hayQueCrearlo([candidato({ empresa: 1, activo: false })], 1)).toBe(false);
+  });
+
+  it("un empate en esta empresa no se resuelve creando un tercero", () => {
+    expect(
+      hayQueCrearlo(
+        [candidato({ id: 1, empresa: 1, usos: 5 }), candidato({ id: 2, empresa: 1, usos: 4 })],
+        1
+      )
     ).toBe(false);
   });
 });
