@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Turno } from "@/lib/mantenimiento/programacion";
 import { traerTodo } from "@/lib/core/paginado";
-import { fechaParaElCalendario, horarioDeLaOT, instanteDe, laOTEstaCerrada, TURNOS_DEL_TALLER } from "./evento";
+import {
+  elCierreQueAdelanta, horarioDeLaOT, instanteDe, laFechaQueMandaEnElEvento, laOTEstaCerrada, TURNOS_DEL_TALLER,
+} from "./evento";
 import { AVISO_DE_TOPE, claveDelHueco, horarioApilado } from "./apilado";
 import { leerEvento, type EventoParaGoogle } from "@/lib/core/calendar";
 import { aHoraDePared, aInstanteISO, eventoParaGoogle, idDeGoogleDe, invitadosLimpios } from "./pedido";
@@ -32,7 +34,13 @@ import { anotarEnLaFila } from "./cargar";
  *    existe `aviso`: algo que una persona tiene que mirar y que no es ni un
  *    fallo de escritura ni una divergencia.
  * 3. **Una OT cerrada no se toca**: su evento pasado queda como registro de lo
- *    que se planificó.
+ *    que se planificó. **Con una excepción: la que se cerró ANTES de su
+ *    inicio.** Ahí el evento no es un registro sino una promesa vencida: quedó
+ *    adelante, en un día que el trabajo ya no va a ocupar. Medido el 24/11/2026,
+ *    7 de los 78 eventos con `ot_id` caían después del cierre de su orden y uno
+ *    caía ese mismo día. Esa orden **sí** mueve su evento, y al día del cierre
+ *    (`elCierreQueAdelanta` de `evento.ts`). Un cierre a más de un año del
+ *    inicio no mueve nada: es casi seguro un año mal tipeado y se avisa.
  * 4. **Si la fecha de la OT cambia, el evento vuelve al horario de su turno,
  *    descartando una hora que alguien hubiera aceptado de Google.** La fecha de
  *    la OT es la autoridad de un evento de OT, y la hora aceptada pertenecía a
@@ -94,8 +102,8 @@ function arranqueDelTurno(turno: Turno): string {
 
 /**
  * Qué hacer con el evento de una OT cuya fecha puede haber cambiado.
- * `fechaNueva` es la que resuelve `fechaParaElCalendario` (la pendiente, si la
- * hay) o `null` si la orden quedó sin fecha.
+ * `fechaNueva` es la que resuelve `laFechaQueMandaEnElEvento` (el cierre si
+ * adelanta al inicio; si no, la pendiente, si la hay) o `null` si la orden quedó sin fecha.
  *
  * El orden de las preguntas importa: **vaciada** va antes que **divergió**
  * porque en los dos casos el evento no se toca, pero lo que hay que decir es
@@ -224,9 +232,25 @@ export function planDelEvento(fila: FilaDeEventoDeOT, ocupados: number = 0): Pla
   // `fecha_cierre` dejaba pasar 168 de 986 OT en `REALIZADO` (17 %, medido el
   // 03/11/2026), que seguían moviendo su evento futuro cada vez que la planilla
   // les tocaba la fecha.
-  if (laOTEstaCerrada(fila.orden)) return NADA;
+  //
+  // **Salvo la cerrada antes de empezar** (punto 3 del encabezado): su evento
+  // se mueve al día del cierre por el camino de siempre, y si el cierre no es
+  // creíble se avisa sin mover nada.
+  if (laOTEstaCerrada(fila.orden)) {
+    const cierre = elCierreQueAdelanta(fila.orden);
+    if (cierre === null) return NADA;
+    if (cierre.tipo === "no-creible") {
+      const motivo =
+        `La orden se cerró el ${cierre.cierre}, ${cierre.dias} días antes de su fecha de ejecución ` +
+        `(${cierre.inicio}): es más de un año y parece un error de carga, así que el evento no se movió. ` +
+        `Hay que corregir la fecha de cierre o la de ejecución.`;
+      if (fila.aviso === motivo) return NADA;
+      return { tipo: "avisar", mover: null, aviso: motivo, volverAAlertar: false };
+    }
+  }
 
-  const decision = queHacerConElEvento(fila, fechaParaElCalendario(fila.orden), ocupados);
+  const fechaDelDia = laFechaQueMandaEnElEvento(fila.orden);
+  const decision = queHacerConElEvento(fila, fechaDelDia, ocupados);
 
   if (decision.accion === "mover") {
     return {
@@ -244,7 +268,7 @@ export function planDelEvento(fila: FilaDeEventoDeOT, ocupados: number = 0): Pla
 
   // «No tocar» por divergencia: la orden y el evento están separados. Se
   // distingue de «ya está en esa fecha» mirando si de verdad difieren.
-  const separados = Boolean(fila.divergencia) && fechaDelEvento(fila.inicio) !== fechaParaElCalendario(fila.orden);
+  const separados = Boolean(fila.divergencia) && fechaDelEvento(fila.inicio) !== fechaDelDia;
   if (separados) {
     if (fila.aviso === decision.motivo) return NADA;
     return { tipo: "respetar", mover: null, aviso: decision.motivo, volverAAlertar: true };
@@ -587,7 +611,11 @@ export async function seguirALasOT(
       const turno = turnoDelTaller(f.turno);
       // El hueco del día al que la orden se mudó. Sin esto el evento llegaría
       // con la hora fija de su turno y caería encima de otro de su especialidad.
-      const fechaNueva = fechaParaElCalendario(orden);
+      // Es la fecha que manda en el evento —el cierre, si adelanta al inicio—
+      // y no la de inicio: si el destino se contara en el día del inicio, el
+      // evento se mudaría al del cierre y la orden caería encima de otra de su
+      // especialidad, sin error y sin aviso.
+      const fechaNueva = laFechaQueMandaEnElEvento(orden);
       const destino = fechaNueva && turno ? claveDelHueco(fechaNueva, orden.especialidad, turno) : null;
 
       const plan = planDelEvento(
