@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { traerTodo } from "@/lib/core/paginado";
 import { risDelRepuesto, type RiPosible } from "@/lib/mantenimiento/riDelRepuesto";
+import type { SalidaDelPanol } from "@/lib/inventario/salidasDelRepuesto";
 import {
   elReemplazoDelCuerpo, loQueCambiaDeLaLista, filasParaLaBase,
 } from "@/lib/mantenimiento/repuestosDeLaOT";
@@ -60,11 +61,52 @@ export async function GET(_request: Request, { params }: Params) {
         .range(desde, hasta)
   ).catch(() => []);
 
+  // ── De qué salida del pañol salió cada uno ──────────────────
+  //
+  // **No se embebe, y no es una comodidad.** `inventario_movimientos` está
+  // cerrada con `tiene_acceso_inventario()`: embebida con la sesión, a quien
+  // tiene Mantenimiento y no Inventario le devuelve `null` sin ningún error —la
+  // misma forma que el valor hora de RRHH, que le da 0 a quien no tiene el
+  // módulo—, y el renglón vinculado se leería como «sin movimiento». Los
+  // renglones se leen arriba con la sesión (ahí RLS es el permiso: quien llegó
+  // hasta acá puede ver esta orden) y los movimientos, por los ids que esos
+  // renglones ya trajeron, con el cliente admin.
+  //
+  // El `select` de arriba sigue siendo `*` a propósito: la columna
+  // `movimiento_id` la crea la migración `20261123214811`, que corre una persona
+  // a mano, y nombrarla antes de que exista rompería esta pantalla en toda OT.
+  // Con `*` aparece sola el día que exista; mientras tanto no hay ids y esta
+  // consulta no se ejecuta. Si falla, el renglón queda con `movimiento: null` y
+  // la pantalla dice «hay una salida declarada que no se pudo leer»: la
+  // respuesta honesta, que no es «sin movimiento».
+  const filas = data ?? [];
+  const idsDeMovimientos = [
+    ...new Set(
+      filas
+        .map((r) => (r as { movimiento_id?: string | null }).movimiento_id)
+        .filter((m): m is string => typeof m === "string")
+    ),
+  ];
+  const movimientos = new Map<string, SalidaDelPanol>();
+  if (idsDeMovimientos.length > 0) {
+    // Son los renglones de una sola orden (máximo hoy: 4): lejos de los 200 ids
+    // que PostgREST tolera en un `.in()`.
+    const { data: leidos } = await createAdminClient()
+      .from("inventario_movimientos")
+      .select("id, articulo_id, fecha, cantidad, solicitante, sector_raw, equipo_raw, tipo")
+      .in("id", idsDeMovimientos);
+    for (const m of leidos ?? []) movimientos.set(m.id, m as SalidaDelPanol);
+  }
+
   return NextResponse.json({
-    data: (data ?? []).map((r) => ({
-      ...r,
-      ris: risDelRepuesto({ nombre: r.nombre, codigo: r.codigo }, ris),
-    })),
+    data: filas.map((r) => {
+      const movimientoId = (r as { movimiento_id?: string | null }).movimiento_id;
+      return {
+        ...r,
+        ris: risDelRepuesto({ nombre: r.nombre, codigo: r.codigo }, ris),
+        movimiento: movimientoId ? (movimientos.get(movimientoId) ?? null) : null,
+      };
+    }),
   });
 }
 
