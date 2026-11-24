@@ -9,6 +9,8 @@ import { resumenDelDia, recorteDeLaHoja, TOPE_DE_LA_HOJA } from "@/lib/mantenimi
 import type { PedidoDeHoja } from "@/lib/mantenimiento/urlDeImpresion";
 import type { FranjaDeLaSemana } from "@/lib/mantenimiento/rotacionDeLaSemana";
 import { TURNOS_DE_LA_FRANJA } from "@/lib/mantenimiento/rotacionDeLaSemana";
+import type { Oficio } from "@/lib/mantenimiento/programacion";
+import { ETIQUETA_DE_TIPO, ETIQUETA_DE_QUIEN } from "@/lib/mantenimiento/filtrosOt";
 
 const MESES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -53,18 +55,27 @@ export default function ImprimirClient(props: {
   hoy?: string;
   conFranja?: boolean;
   error?: string;
+  /** Sólo para los tests: la rotación ya resuelta, sin pedirla. */
+  franjasDePrueba?: FranjaDeLaSemana[];
 }) {
-  const { pedido, dias, hoy, conFranja = false, error } = props;
+  const { pedido, dias, hoy, conFranja = false, error, franjasDePrueba } = props;
   const contenido = useRef<HTMLDivElement>(null);
   const [guardando, setGuardando] = useState(false);
-  const [franjas, setFranjas] = useState<FranjaDeLaSemana[] | null>(null);
+  const [franjas, setFranjas] = useState<FranjaDeLaSemana[] | null>(franjasDePrueba ?? null);
   const [falloDelTaller, setFalloDelTaller] = useState<string | null>(null);
 
   const desde = pedido?.desde;
   const hasta = pedido?.hasta;
+  /*
+   * La rotación se pide sólo donde se dibuja: el mes y la semana. En la hoja
+   * de un día no va —ahí la pregunta no es la rotación sino quién tiene cada
+   * orden, y eso está en la columna de operarios—, así que pedirla sería un
+   * viaje a una ruta de admin para un dato que no se imprime.
+   */
+  const laRotacionVa = conFranja && pedido?.periodo !== "dia";
 
   useEffect(() => {
-    if (!conFranja || !desde || !hasta) return;
+    if (!laRotacionVa || !desde || !hasta || franjasDePrueba) return;
     let cancelado = false;
     (async () => {
       try {
@@ -81,7 +92,7 @@ export default function ImprimirClient(props: {
       }
     })();
     return () => { cancelado = true; };
-  }, [conFranja, desde, hasta]);
+  }, [laRotacionVa, desde, hasta, franjasDePrueba]);
 
   async function guardarPdf() {
     const el = contenido.current;
@@ -149,25 +160,25 @@ export default function ImprimirClient(props: {
 
       <div ref={contenido} className="hoja mx-auto max-w-[277mm] p-4">
         <Encabezado pedido={pedido} />
+        {/* La leyenda va arriba y no al pie: una hoja de semana puede ocupar
+            tres carillas, y con la leyenda al final las dos primeras salen con
+            letras, flechas y rellenos negros que nada explica. */}
+        <Leyenda />
 
         {esMes ? (
           <HojaDelMes
             pedido={pedido}
             dias={dias}
             hoy={hoy}
-            franjas={conFranja ? franjas : null}
-            falloDelTaller={conFranja ? falloDelTaller : null}
+            rotacion={laRotacionVa ? { franjas, fallo: falloDelTaller } : null}
           />
         ) : (
           <HojaDeTabla
             pedido={pedido}
             dias={dias}
-            franjas={conFranja && pedido.periodo === "semana" ? franjas : null}
-            falloDelTaller={conFranja && pedido.periodo === "semana" ? falloDelTaller : null}
+            rotacion={laRotacionVa ? { franjas, fallo: falloDelTaller } : null}
           />
         )}
-
-        <Leyenda />
       </div>
     </>
   );
@@ -183,13 +194,25 @@ export default function ImprimirClient(props: {
  * órdenes del mes son mecánicas, así que la hoja entera y la hoja «Mecánico»
  * se parecen como dos gotas de agua.
  */
-function tituloDeLaHoja(p: PedidoDeHoja): string {
+export function tituloDeLaHoja(p: PedidoDeHoja): string {
   const partes: string[] = [];
   if (p.filtros.especialidad) {
-    partes.push(p.filtros.especialidad === SIN_ESPECIALIDAD ? "Sin especialidad" : p.filtros.especialidad);
+    partes.push(
+      p.filtros.especialidad === SIN_ESPECIALIDAD
+        ? "Sin especialidad"
+        : conMayusculaInicial(p.filtros.especialidad.toLowerCase())
+    );
   }
-  if (p.filtros.tipo) partes.push(p.filtros.tipo.toLowerCase());
-  if (p.filtros.quien) partes.push(p.filtros.quien.toLowerCase());
+  // Las etiquetas del catálogo y no un `toLowerCase()` pelado: están tipadas
+  // contra la lista de valores, así que agregar un tipo sin su etiqueta es un
+  // error de `tsc`. El `??` es para un valor viejo de la planilla que el
+  // catálogo no conozca: se imprime tal cual antes que romper la hoja.
+  if (p.filtros.tipo) {
+    partes.push(ETIQUETA_DE_TIPO[p.filtros.tipo as keyof typeof ETIQUETA_DE_TIPO] ?? p.filtros.tipo);
+  }
+  if (p.filtros.quien) {
+    partes.push(ETIQUETA_DE_QUIEN[p.filtros.quien as keyof typeof ETIQUETA_DE_QUIEN] ?? p.filtros.quien);
+  }
 
   if (p.periodo === "dia") {
     partes.push(`${DIAS_DE_LA_SEMANA[diaDeLaSemana(p.desde)]} ${comoSeLee(p.desde)}`);
@@ -284,58 +307,99 @@ function Marca({ letra, invertida = false }: { letra: string; invertida?: boolea
 
 // ─── La franja del taller, en papel ─────────────────────────────────────────
 
+/** Lo que la hoja sabe de la rotación: `franjas` en null es «todavía no llegó». */
+interface Rotacion {
+  franjas: FranjaDeLaSemana[] | null;
+  fallo: string | null;
+}
+
+/** Cómo se nombra cada oficio cuando se los cuenta. */
+const OFICIOS_IMPRESOS: { oficio: Oficio; uno: string; varios: string }[] = [
+  { oficio: "mecanico", uno: "mecánico", varios: "mecánicos" },
+  { oficio: "electricista", uno: "electricista", varios: "electricistas" },
+  { oficio: "lubricador", uno: "lubricador", varios: "lubricadores" },
+];
+
+/** «2 mecánicos, 1 electricista», o vacío si no hay nadie. */
+function porOficio(gente: { oficio: Oficio }[]): string {
+  return OFICIOS_IMPRESOS
+    .map(({ oficio, uno, varios }) => {
+      const n = gente.filter((p) => p.oficio === oficio).length;
+      return n === 0 ? null : `${n} ${n === 1 ? uno : varios}`;
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
 /**
- * La rotación de esa semana, sin nombres de más: en papel lo que sirve es
- * quién está en qué turno, y la hoja la mira gente que ya sabe quién es quién.
+ * La rotación de esa semana, **contada por oficio y sin nombres**.
+ *
+ * Por qué sin nombres, que es lo que no se deduce del código: quién está en el
+ * taller y en qué turno es dato de admin —`/api/mantenimiento/taller-del-mes`
+ * existe aparte de `/calendario` justamente por eso, y está guardada con
+ * `esAdminMantenimiento`—, y **una hoja colgada la lee cualquiera**. El permiso
+ * controla quién imprime, no quién mira la pared. Los nombres que sí salen son
+ * los de la columna «Operarios», que dicen quién tiene cada orden: eso es el
+ * trabajo asignado y no el padrón del taller.
  *
  * **En la hoja del día no va**: para un día la pregunta no es la rotación sino
- * quién tiene cada orden, y eso está en la columna de operarios.
+ * quién tiene cada orden, y eso está en esa columna.
  */
-function FranjaImpresa({ franja, fallo }: { franja: FranjaDeLaSemana | null; fallo: string | null }) {
+function FranjaImpresa({ franja, fallo, cargando }: {
+  franja: FranjaDeLaSemana | null;
+  fallo: string | null;
+  /** La rotación se pidió y todavía no contestó. */
+  cargando: boolean;
+}) {
+  const caja = { fontSize: "7pt", padding: "1mm 0", borderBottom: "0.2mm solid #000" } as const;
+
   if (fallo) {
-    return (
-      <div style={{ fontSize: "7pt", padding: "1mm 0", borderBottom: "0.2mm solid #000" }}>
-        No se pudo traer la rotación del taller de esta semana: {fallo}
-      </div>
-    );
+    return <div style={caja}>No se pudo traer la rotación del taller de esta semana: {fallo}</div>;
   }
+  // Decirlo importa: sin esta línea, una hoja impresa en los primeros
+  // milisegundos sale sin rotación y sin nada que lo explique, y en papel eso
+  // no se distingue de una hoja que no lleva rotación.
+  if (cargando) return <div style={caja}>Trayendo la rotación del taller…</div>;
   if (!franja) return null;
   if (!franja.porTurno) {
     return (
-      <div style={{ fontSize: "7pt", padding: "1mm 0", borderBottom: "0.2mm solid #000" }}>
+      <div style={caja}>
         Falta cargar la semana de referencia del taller: no se sabe quién va a qué turno.
       </div>
     );
   }
   const porTurno = franja.porTurno;
   return (
-    <div style={{
-      fontSize: "7pt", padding: "1mm 0", borderBottom: "0.2mm solid #000",
-      display: "flex", flexWrap: "wrap", gap: "4mm",
-    }}>
+    <div style={{ ...caja, display: "flex", flexWrap: "wrap", gap: "4mm" }}>
       {TURNOS_DE_LA_FRANJA.map((turno) => (
         <span key={turno}>
-          <strong>{turno}:</strong>{" "}
-          {(porTurno[turno] ?? []).map((p) => p.nombre).join(", ") || "—"}
+          <strong>{turno}:</strong> {porOficio(porTurno[turno] ?? []) || "—"}
         </span>
       ))}
       {franja.sinTurno.length > 0 && (
-        <span>
-          <strong>sin turno:</strong> {franja.sinTurno.map((p) => p.nombre).join(", ")}
-        </span>
+        <span><strong>sin turno:</strong> {porOficio(franja.sinTurno)}</span>
       )}
     </div>
   );
 }
 
+/** La rotación de la semana que empieza ese lunes, buscada por su lunes y nunca por su posición. */
+function laFranjaDe(rotacion: Rotacion | null, lunes: string) {
+  if (!rotacion) return null;
+  return {
+    franja: rotacion.franjas?.find((f) => f.lunes === lunes) ?? null,
+    fallo: rotacion.fallo,
+    cargando: rotacion.franjas === null && rotacion.fallo === null,
+  };
+}
+
 // ─── La hoja del mes ────────────────────────────────────────────────────────
 
-function HojaDelMes({ pedido, dias, hoy, franjas, falloDelTaller }: {
+function HojaDelMes({ pedido, dias, hoy, rotacion }: {
   pedido: PedidoDeHoja;
   dias: DiaDelCalendario[];
   hoy: string;
-  franjas: FranjaDeLaSemana[] | null;
-  falloDelTaller: string | null;
+  rotacion: Rotacion | null;
 }) {
   const porDia = useMemo(() => {
     const m = new Map<string, DiaDelCalendario>();
@@ -365,10 +429,12 @@ function HojaDelMes({ pedido, dias, hoy, franjas, falloDelTaller }: {
 
       {semanas.map((semana) => (
         <div key={semana[0]}>
-          {(franjas || falloDelTaller) && (
+          {rotacion && (
             <FranjaImpresa
-              franja={franjas?.find((f) => f.lunes === semana[0]) ?? null}
-              fallo={semana[0] === semanas[0][0] ? falloDelTaller : null}
+              {...laFranjaDe(rotacion, semana[0])!}
+              // El fallo es uno solo —la ruta trae el mes entero de una— y
+              // repetirlo seis veces convierte un aviso en un muro.
+              fallo={semana[0] === semanas[0][0] ? rotacion.fallo : null}
             />
           )}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
@@ -409,7 +475,18 @@ function CuadroDelDia({ diaIso, info, filtros, delMes, esHoy }: {
   return (
     <div style={{
       border: "0.2mm solid #000",
-      minHeight: "22mm",
+      /*
+       * 17 mm y no 22, medido: el área útil de una A4 apaisada con margen de
+       * 10 mm son 190 mm de alto, y seis filas de 22 mm más el encabezado, la
+       * leyenda y las seis bandas de rotación daban **199 mm impresos** — o
+       * sea una segunda carilla con una tira. Con 17 mm quedan ~169 mm y
+       * sobran dos centímetros para el mes que empiece en domingo.
+       *
+       * No aprieta el contenido: el día más cargado de noviembre de 2026 usa
+       * tres renglones (número, total, cuatro letras y la barra de atrasadas),
+       * que son unos 12 mm.
+       */
+      minHeight: "17mm",
       padding: "1mm",
       color: delMes ? "#000" : "#888",
     }}>
@@ -448,11 +525,10 @@ function CuadroDelDia({ diaIso, info, filtros, delMes, esHoy }: {
  * qué toca cada día, y una tabla corrida obliga a buscar dónde empieza el
  * martes.
  */
-function HojaDeTabla({ pedido, dias, franjas, falloDelTaller }: {
+function HojaDeTabla({ pedido, dias, rotacion }: {
   pedido: PedidoDeHoja;
   dias: DiaDelCalendario[];
-  franjas: FranjaDeLaSemana[] | null;
-  falloDelTaller: string | null;
+  rotacion: Rotacion | null;
 }) {
   const delRango = dias.filter((d) => d.dia >= pedido.desde && d.dia <= pedido.hasta);
   const total = delRango.reduce(
@@ -462,9 +538,11 @@ function HojaDeTabla({ pedido, dias, franjas, falloDelTaller }: {
 
   return (
     <div>
-      {(franjas || falloDelTaller) && (
-        <FranjaImpresa franja={franjas?.[0] ?? null} fallo={falloDelTaller} />
-      )}
+      {/* Por su lunes y no por la posición en el arreglo: con un `desde`
+          tipeado a mano, `franjas[0]` imprimiría la rotación de otra semana
+          sin decirlo, y un dato de otra semana en una hoja colgada no se nota
+          nunca. */}
+      {rotacion && <FranjaImpresa {...laFranjaDe(rotacion, semanaDe(pedido.desde)[0])!} />}
 
       {total === 0 && (
         <p style={{ fontSize: "9pt", padding: "4mm 0" }}>

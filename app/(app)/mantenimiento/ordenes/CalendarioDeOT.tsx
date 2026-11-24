@@ -334,11 +334,21 @@ export default function CalendarioDeOT({
    * nuevo por render entraría en las dependencias con identidad distinta cada
    * vez, que es el bucle infinito contra el que advierte la prop.
    */
+  /*
+   * `hoyEnArgentina()` adentro y no el `hoy` de arriba, para que la dependencia
+   * quede vacía y la identidad **no cambie nunca**.
+   *
+   * No es prolijidad: la app vive instalada en los teléfonos y puede quedar
+   * abierta días. Con `[hoy]`, al cruzar la medianoche esto se rearma, pero el
+   * padre conserva el objeto viejo —compara los otros campos, que no se
+   * movieron—, así que «Ir a hoy» queda apuntando al mes de ayer. Se nota sólo
+   * cruzando un fin de mes, que es cuando importa.
+   */
   const irAlMesDeHoy = useCallback(() => {
-    setMes(hoy.slice(0, 7));
+    setMes(hoyEnArgentina().slice(0, 7));
     setDiaAbierto(null);
     setDiaRechazado(null);
-  }, [hoy]);
+  }, []);
 
   useEffect(() => {
     onEstado?.({ mes, desde, hasta, filtros, dias: dias ?? SIN_DIAS, irAlMesDeHoy });

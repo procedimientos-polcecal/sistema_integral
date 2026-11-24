@@ -118,8 +118,10 @@ function BarraDeIndicadores({ delMes, deHoy, hayFiltro, onIrAHoy }: {
           </div>
         </div>
       ) : (
+        // Sin `text-sm`: `.btn-secondary` declara `font-size` fuera de toda
+        // capa, así que la utilidad de al lado no se aplica nunca.
         onIrAHoy && (
-          <button type="button" onClick={onIrAHoy} className="btn-secondary text-sm">
+          <button type="button" onClick={onIrAHoy} className="btn-secondary">
             Ir a hoy
           </button>
         )
