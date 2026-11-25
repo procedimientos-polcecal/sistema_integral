@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { cuerpoJson } from "@/lib/core/cuerpo";
-import { elMensajeDelChoque, loQueFaltaParaArmar } from "@/lib/mantenimiento/configurarElCiclo";
+import {
+  elMensajeDelChoque, elUpsertDeLaTarea, loQueFaltaParaArmar, YA_TIENE_CICLO,
+} from "@/lib/mantenimiento/configurarElCiclo";
 
 /**
  * POST — armar un ciclo encadenado nuevo.
@@ -11,19 +13,34 @@ import { elMensajeDelChoque, loQueFaltaParaArmar } from "@/lib/mantenimiento/con
  * Hasta hoy los cuatro ciclos que existen los cargó una migración a mano. Ésta
  * es la primera manera de crear uno desde la aplicación.
  *
- * ── PRIMERO LAS TAREAS, DESPUÉS EL CICLO ───────────────────────────────────
+ * ── PRIMERO SE PREGUNTA SI EL EQUIPO YA TIENE CICLO, Y RECIÉN AHÍ SE ESCRIBE ─
+ *
+ * Esto **no** es defensa en profundidad del `unique (equipment_id)`: es lo que
+ * impide que un alta fallida reconfigure un ciclo que está corriendo.
  *
  * Un ciclo apunta a dos filas de `mant_tareas_preventivas` y no copia sus
- * nombres: por eso hay que asegurarse de que existan antes. Son `upsert` sobre
- * la clave natural `(equipment_id, accion, componente)`, la misma que usa la
- * pantalla del catálogo, así que armar un ciclo sobre una tarea ya relevada la
- * reusa en vez de duplicarla — y si estaba `DESCARTADA`, la vuelve a
- * confirmar, que es lo que el modal avisa antes de guardar.
+ * nombres, así que hay que asegurarse de que existan antes del insert. Son
+ * `upsert` sobre la clave natural `(equipment_id, accion, componente)`, la
+ * misma que usa la pantalla del catálogo — que es justamente la clave que ya
+ * tienen las tareas del ciclo que ese equipo está corriendo. Con una pestaña
+ * vieja —cuya lista de equipos se armó antes de que ese equipo recibiera un
+ * ciclo— los dos `upsert` salían bien, le reescribían el `periodo_dias` a la
+ * hija de un ciclo vivo, y recién entonces el insert chocaba y contestaba 409:
+ * la pantalla decía «no se pudo armar» mientras acababa de reconfigurar el
+ * generador (revisión del 25/11/2026).
  *
- * El orden importa en el otro sentido también: si el insert del ciclo falla,
- * quedan dos tareas confirmadas de más. Eso es recuperable desde el catálogo y
- * no genera nada solo; al revés —un ciclo apuntando a una tarea que no se
- * pudo escribir— no es ni siquiera posible, porque las FK son `not null`.
+ * `elMensajeDelChoque` queda como lo que se diseñó para ser: la red para la
+ * carrera de verdad, los milisegundos entre esta lectura y el insert.
+ *
+ * Reusar una tarea ya relevada en vez de duplicarla es a propósito, y si
+ * estaba `DESCARTADA` la vuelve a confirmar — el modal lo avisa antes de
+ * guardar. Lo que el `upsert` **no** pisa es el período de la madre:
+ * `elUpsertDeLaTarea` conserva el que esa tarea ya tenía.
+ *
+ * Queda un final imperfecto aceptado: si el insert del ciclo falla por otra
+ * cosa, quedan dos tareas confirmadas de más. Eso es recuperable desde el
+ * catálogo y no genera nada solo; al revés —un ciclo apuntando a una tarea que
+ * no se pudo escribir— no es ni siquiera posible, porque las FK son `not null`.
  *
  * ── EL CICLO NACE SIN ARRANCAR ─────────────────────────────────────────────
  *
@@ -60,25 +77,42 @@ export async function POST(request: Request) {
   const componente = String(body.componente).trim();
   const admin = createAdminClient();
 
+  // Antes de tocar nada. Ver el bloque de arriba: lo que esto evita no es el
+  // 409 sino que un alta fallida le cambie el plazo a un ciclo que corre.
+  const { data: yaHay } = await admin
+    .from("mant_ciclos_de_ot")
+    .select("id")
+    .eq("equipment_id", equipment_id)
+    .maybeSingle();
+
+  if (yaHay) return NextResponse.json({ error: YA_TIENE_CICLO }, { status: 409 });
+
+  // Las del catálogo de ese equipo, para no pisarles lo que ya tienen.
+  const { data: delCatalogo } = await admin
+    .from("mant_tareas_preventivas")
+    .select("accion, componente, periodo_dias")
+    .eq("equipment_id", equipment_id);
+
   const ids: Record<"madre" | "hija", string> = { madre: "", hija: "" };
 
   for (const lado of ["madre", "hija"] as const) {
+    const accion = String(body[lado === "madre" ? "accionMadre" : "accionHija"]).trim();
+
     const { data, error } = await admin
       .from("mant_tareas_preventivas")
       .upsert(
         {
-          equipment_id,
-          componente,
-          accion: String(body[lado === "madre" ? "accionMadre" : "accionHija"]).trim(),
-          nombre: String(body[lado === "madre" ? "nombreMadre" : "nombreHija"]).trim(),
-          estado: "CONFIRMADA",
-          // El plazo es de la hija: es cada cuánto se repite. La madre lo deja
-          // en null, como la semilla — cuándo vuelve lo decide la cuenta de
-          // vueltas, no un período propio.
-          periodo_dias: lado === "hija" ? Number(body.periodo_dias) : null,
-          // Una confirmada no conserva el motivo de cuando se la descartó. Es
-          // la regla de la ruta del catálogo, donde está explicada.
-          motivo: null,
+          ...elUpsertDeLaTarea({
+            lado,
+            equipment_id,
+            componente,
+            accion,
+            nombre: String(body[lado === "madre" ? "nombreMadre" : "nombreHija"]).trim(),
+            periodo_dias: Number(body.periodo_dias),
+            existente: (delCatalogo ?? []).find(
+              (t) => t.accion === accion && t.componente === componente
+            ) ?? null,
+          }),
           decidido_por: user.id,
           decidido_en: new Date().toISOString(),
         },

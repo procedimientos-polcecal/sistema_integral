@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
 import { Modal } from "@/components/Modal";
 import { useConfirm } from "@/components/ConfirmProvider";
@@ -10,7 +11,7 @@ import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
 import { useBorrador } from "@/lib/core/useBorrador";
 import { caraDeLaVuelta, type Decision } from "@/lib/mantenimiento/cicloDeOT";
 import {
-  arrancaSolo, comoSeLeeLaDecision, loQueFaltaParaArmar,
+  arrancaSolo, comoSeLeeLaDecision, lasOpcionesDeTareas, loQueFaltaParaArmar,
 } from "@/lib/mantenimiento/configurarElCiclo";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { ACCIONES_PREVENTIVAS } from "@/lib/mantenimiento/tareasPreventivas";
@@ -133,11 +134,7 @@ export default function LoQueCreaOrdenesSolo({
       </div>
 
       {armando && (
-        <ArmarUnCiclo
-          paraArmar={paraArmar}
-          llamar={llamar}
-          alCerrar={() => setArmando(false)}
-        />
+        <ArmarUnCiclo paraArmar={paraArmar} alCerrar={() => setArmando(false)} />
       )}
 
       <LosProgramados programados={programados} />
@@ -182,13 +179,13 @@ function nombreSugerido(clave: string, componente: string): string {
  * muestra y deja editarle el nombre y el plazo.
  */
 function ArmarUnCiclo({
-  paraArmar, llamar, alCerrar,
+  paraArmar, alCerrar,
 }: {
   paraArmar: ParaArmarUnCiclo;
-  llamar: Llamar;
   alCerrar: () => void;
 }) {
   const confirmar = useConfirm();
+  const router = useRouter();
   const [guardando, setGuardando] = useState(false);
   const [problemas, setProblemas] = useState<string[]>([]);
 
@@ -210,12 +207,19 @@ function ArmarUnCiclo({
     valores.componente === "__otro__" ? valores.componenteLibre : valores.componente
   ).trim();
 
-  /** La fila del catálogo que ese par ya tiene, si la tiene. */
+  /**
+   * La fila del catálogo que ese par ya tiene, si la tiene.
+   *
+   * Compara el componente **exacto** porque eso es lo que compara la clave
+   * única de la tabla: con una comparación laxa, escribir «martillos» donde el
+   * catálogo dice «Martillos» mostraba «el ciclo la reusa» y después creaba una
+   * segunda fila para el mismo trabajo (revisión del 25/11/2026).
+   */
   const yaExiste = (accion: string) =>
     paraArmar.tareas.find(
       (t) => t.equipment_id === valores.equipment_id &&
         t.accion === accion &&
-        t.componente.trim().toLowerCase() === componente.toLowerCase()
+        t.componente === componente
     );
 
   /** Lo que se va a mandar: lo tipeado, y si está vacío lo sugerido. */
@@ -265,20 +269,31 @@ function ArmarUnCiclo({
       if (!sigue) return;
     }
 
+    // El `fetch` es propio y no el `llamar` compartido, que es el mismo patrón
+    // de `TipoModal`: `llamar` pinta el error **en la página**, y un modal se
+    // dibuja encima de ella con un velo negro. El 409 que esta rama escribió
+    // —«Ese equipo ya tiene un ciclo»— no lo leía nadie: el botón volvía de
+    // «Armando…» a «Armar el ciclo» y no pasaba nada más, así que lo natural
+    // era apretarlo de nuevo (revisión del 25/11/2026).
     setGuardando(true);
-    const ok = await llamar("/api/mantenimiento/ciclos", {
+    const res = await fetch("/api/mantenimiento/ciclos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(alta),
     });
+    const cuerpo = await res.json().catch(() => ({}));
     setGuardando(false);
+
+    if (!res.ok) {
+      setProblemas([cuerpo.error ?? "No se pudo armar el ciclo."]);
+      return;
+    }
 
     // Sale bien y cierra: `tirar()` y no `asentar()`, porque el formulario se
     // vuelve a montar la próxima vez que se abra.
-    if (ok) {
-      tirar();
-      alCerrar();
-    }
+    tirar();
+    alCerrar();
+    router.refresh();
   }
 
   return (
@@ -535,10 +550,6 @@ function TarjetaDeCiclo({
         )}
       </div>
 
-      {!ciclo.activo && puedeEditar && (
-        <p className="mt-1 text-xs text-slate-500">Apagado: no genera ninguna orden.</p>
-      )}
-
       <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
           <dt className="text-xs text-slate-500">Cada cuánto</dt>
@@ -552,10 +563,15 @@ function TarjetaDeCiclo({
                 value={plazoALaVista}
                 disabled={!puedeEditar}
                 onChange={(e) => setPlazo(e.target.value)}
-                onBlur={(e) => {
+                onBlur={async (e) => {
                   const texto = e.target.value.trim();
                   const n = texto === "" ? null : Number(texto);
-                  if (n !== (ciclo.periodoDias ?? null)) guardar({ periodo_dias: n });
+                  if (n === (ciclo.periodoDias ?? null)) return;
+                  // Si el servidor lo rechaza, el campo vuelve a lo guardado:
+                  // dejarlo con el valor negado hacía que la proyección de
+                  // abajo calculara contra una configuración que la base no
+                  // tiene (revisión del 25/11/2026).
+                  if (!(await guardar({ periodo_dias: n }))) setPlazo(null);
                 }}
               />
             </div>
@@ -578,9 +594,10 @@ function TarjetaDeCiclo({
               value={vueltas === null ? ciclo.repeticiones : vueltas}
               disabled={!puedeEditar}
               onChange={(e) => setVueltas(e.target.value)}
-              onBlur={(e) => {
+              onBlur={async (e) => {
                 const n = Number(e.target.value);
-                if (n !== ciclo.repeticiones && Number.isInteger(n)) guardar({ repeticiones: n });
+                if (n === ciclo.repeticiones || !Number.isInteger(n)) return;
+                if (!(await guardar({ repeticiones: n }))) setVueltas(null);
               }}
             />
           </dd>
@@ -592,10 +609,11 @@ function TarjetaDeCiclo({
                 value={horas === null ? (ciclo.horasEstimadas ?? "") : horas}
                 disabled={!puedeEditar}
                 onChange={(e) => setHoras(e.target.value)}
-                onBlur={(e) => {
+                onBlur={async (e) => {
                   const texto = e.target.value.trim();
                   const n = texto === "" ? null : Number(texto);
-                  if (n !== (ciclo.horasEstimadas ?? null)) guardar({ horas_estimadas: n });
+                  if (n === (ciclo.horasEstimadas ?? null)) return;
+                  if (!(await guardar({ horas_estimadas: n }))) setHoras(null);
                 }}
               />
             </div>
@@ -633,9 +651,16 @@ function TarjetaDeCiclo({
       <div className="mt-3 border-t border-slate-100 pt-2">
         <p className="text-sm text-slate-700">
           <span className="text-xs uppercase tracking-wide text-slate-400">Ahora mismo: </span>
-          {comoSeLeeLaDecision(ciclo.decision, { madre: ciclo.madre, hija: ciclo.hija })}
+          {comoSeLeeLaDecision(
+            ciclo.decision, { madre: ciclo.madre, hija: ciclo.hija }, ciclo.activo
+          )}
         </p>
-        <CuandoCaeLaSiguiente decision={ciclo.decision} plazo={Number(plazoALaVista) || null} />
+        {/* La proyección afirma que las órdenes salen cada N días. En un ciclo
+            apagado no sale ninguna, así que la línea se calla en vez de
+            prometer un ritmo que no existe. */}
+        {ciclo.activo && (
+          <CuandoCaeLaSiguiente decision={ciclo.decision} plazo={Number(plazoALaVista) || null} />
+        )}
       </div>
 
       {puedeEditar && <CambiarLasTareas ciclo={ciclo} guardar={guardar} />}
@@ -694,11 +719,24 @@ function CambiarLasTareas({
     await guardar(cambio);
   }
 
-  if (ciclo.tareasDelEquipo.length < 2) {
+  // Cada lado sin la tarea del otro: ofrecerla lleva a un error después de un
+  // cartel que avisa que se tira el estado del ciclo. Y si no queda ninguna
+  // libre no hay nada que elegir — que es el caso de los cuatro ciclos de
+  // producción, con dos confirmadas cada uno.
+  const opciones = lasOpcionesDeTareas(ciclo.tareasDelEquipo, {
+    tarea_madre_id: ciclo.tareaMadreId,
+    tarea_hija_id: ciclo.tareaHijaId,
+  });
+
+  if (!opciones.sePuede) {
     return (
       <p className="mt-2 text-xs text-slate-400">
-        Para cambiarle las tareas a este ciclo hace falta tener al menos dos confirmadas para
-        este equipo en el catálogo.
+        Para cambiarle las tareas a este ciclo hace falta una tercera tarea confirmada para este
+        equipo en{" "}
+        <Link href="/mantenimiento/tareas-preventivas" className="underline">
+          tareas preventivas
+        </Link>
+        : las dos que ya tiene son las que está usando.
       </p>
     );
   }
@@ -718,7 +756,7 @@ function CambiarLasTareas({
             className="input"
             onChange={(e) => cambiar({ tarea_hija_id: e.target.value })}
           >
-            {ciclo.tareasDelEquipo.map((t) => (
+            {opciones.hija.map((t) => (
               <option key={t.id} value={t.id}>{t.nombre}</option>
             ))}
           </Select>
@@ -732,7 +770,7 @@ function CambiarLasTareas({
             className="input"
             onChange={(e) => cambiar({ tarea_madre_id: e.target.value })}
           >
-            {ciclo.tareasDelEquipo.map((t) => (
+            {opciones.madre.map((t) => (
               <option key={t.id} value={t.id}>{t.nombre}</option>
             ))}
           </Select>

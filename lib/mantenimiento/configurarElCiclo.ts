@@ -17,11 +17,34 @@ import { ACCIONES_PREVENTIVAS } from "./tareasPreventivas";
  * Cubre las cuatro formas de `Decision`. `trabado` devuelve el motivo tal cual
  * y no lo envuelve: ese texto ya está escrito para que lo lea una persona, y
  * es el mismo que aparece en `/administracion/salud`.
+ *
+ * ── POR QUÉ `activo` ES OBLIGATORIO Y NO TIENE VALOR POR OMISIÓN ───────────
+ *
+ * Porque **el generador sólo mira los ciclos activos** (`generarEncadenadas`
+ * filtra `activo = true`) y esta función no lo sabe sola. Hasta el 25/11/2026
+ * la pantalla le pasaba la decisión de todos, así que la tarjeta de un ciclo
+ * recién apagado decía «Apagado: no genera ninguna orden» y cuatro líneas
+ * abajo «Crea «Rotación de Martillos» para el 27/11» — y esa frase se
+ * congelaba, porque sin el generador el corte no se mueve nunca y la fecha se
+ * va quedando en el pasado.
+ *
+ * Un valor por omisión de `true` dejaría que el próximo que llame a esto
+ * herede la mentira sin elegirla. Es la misma razón por la que
+ * `avisaALosInvitados()` es obligatorio en `lib/core/calendar.ts`.
  */
 export function comoSeLeeLaDecision(
   d: Decision,
-  tareas: { madre: string; hija: string }
+  tareas: { madre: string; hija: string },
+  activo: boolean
 ): string {
+  if (!activo) {
+    return `Apagado: no crea ninguna orden. Si se prendiera: ${laFrase(d, tareas)}`;
+  }
+
+  return laFrase(d, tareas);
+}
+
+function laFrase(d: Decision, tareas: { madre: string; hija: string }): string {
   switch (d.que) {
     case "crear":
       return d.vuelta === 0
@@ -126,9 +149,13 @@ export function loQueImpideGuardar(p: Parametros, ciclo: CicloComoEsta): string[
     }
   }
 
+  // `Number.isInteger` y no `isFinite`: la columna es `integer`, y un
+  // `<input type="number">` devuelve «1.5» igual. Sin esto la ruta contesta
+  // 500 con el `invalid input syntax for type integer` de Postgres, que es
+  // exactamente lo que esta función existe para no hacer.
   if (p.periodo_dias !== undefined && p.periodo_dias !== null) {
-    if (!Number.isFinite(p.periodo_dias) || p.periodo_dias < 1 || p.periodo_dias > 3650) {
-      problemas.push("El plazo va de 1 a 3650 días. Vaciarlo detiene el ciclo.");
+    if (!Number.isInteger(p.periodo_dias) || p.periodo_dias < 1 || p.periodo_dias > 3650) {
+      problemas.push("El plazo va de 1 a 3650 días, en días enteros. Vaciarlo detiene el ciclo.");
     }
   }
 
@@ -149,6 +176,38 @@ export function loQueImpideGuardar(p: Parametros, ciclo: CicloComoEsta): string[
   }
 
   return problemas;
+}
+
+/**
+ * Qué tareas se le pueden poner a cada lado del ciclo, y si cambiarlas es
+ * posible siquiera.
+ *
+ * ── POR QUÉ CADA LADO EXCLUYE LA DEL OTRO ──────────────────────────────────
+ *
+ * Porque `mant_ciclos_de_ot_tareas_distintas` las rechaza, y ofrecerla igual
+ * pone al final de un camino que arranca con un cartel que avisa que se tira
+ * el estado del ciclo: se confirma lo irreversible y después aparece el error.
+ *
+ * ── Y POR QUÉ HACE FALTA DECIR QUE NO SE PUEDE ─────────────────────────────
+ *
+ * Medido el 25/11/2026: los cuatro ciclos de producción tienen **exactamente
+ * dos** tareas confirmadas, las que plantó la semilla. Con dos, lo único que
+ * cada desplegable podía ofrecer además de la propia era la del otro lado, así
+ * que la salida de emergencia en la que se apoya todo el diseño no se podía
+ * usar en 4 de 4 casos — y la pantalla no decía por qué. Lo que falta es una
+ * tercera tarea confirmada en el catálogo del equipo.
+ */
+export function lasOpcionesDeTareas<T extends { id: string }>(
+  tareas: readonly T[],
+  par: { tarea_madre_id: string; tarea_hija_id: string }
+): { madre: T[]; hija: T[]; sePuede: boolean } {
+  return {
+    madre: tareas.filter((t) => t.id !== par.tarea_hija_id),
+    hija: tareas.filter((t) => t.id !== par.tarea_madre_id),
+    sePuede: tareas.some(
+      (t) => t.id !== par.tarea_madre_id && t.id !== par.tarea_hija_id
+    ),
+  };
 }
 
 /**
@@ -290,14 +349,58 @@ export function loQueFaltaParaArmar(datos: unknown): string[] {
 }
 
 /**
+ * La fila de `mant_tareas_preventivas` que escribe el alta de un ciclo.
+ *
+ * ── POR QUÉ LA MADRE NO LLEVA SIEMPRE `null` ───────────────────────────────
+ *
+ * Porque el alta hace `upsert` sobre la clave natural, o sea que **reusar una
+ * tarea del catálogo reescribe su fila entera**. Escribirle `periodo_dias:
+ * null` a la madre le borraba a esa tarea el período que había fijado la
+ * pantalla del catálogo — y justo después de que el modal dijera «ya existe
+ * X, cada N días: el ciclo la reusa» (revisión del 25/11/2026).
+ *
+ * El plazo del ciclo es el de la **hija**: es cada cuánto se repite. Cuándo
+ * vuelve la madre lo decide la cuenta de vueltas y no un período propio, así
+ * que una madre nueva nace en null, como la semilla.
+ *
+ * `motivo: null` es la regla de la ruta del catálogo, donde está explicada:
+ * una confirmada no conserva el motivo de cuando se la descartó.
+ */
+export function elUpsertDeLaTarea(datos: {
+  lado: "madre" | "hija";
+  equipment_id: string;
+  accion: string;
+  componente: string;
+  nombre: string;
+  periodo_dias: number;
+  existente: { periodo_dias: number | null } | null;
+}): {
+  equipment_id: string; accion: string; componente: string; nombre: string;
+  estado: "CONFIRMADA"; periodo_dias: number | null; motivo: null;
+} {
+  return {
+    equipment_id: datos.equipment_id,
+    accion: datos.accion,
+    componente: datos.componente,
+    nombre: datos.nombre,
+    estado: "CONFIRMADA",
+    periodo_dias: datos.lado === "hija"
+      ? datos.periodo_dias
+      : datos.existente?.periodo_dias ?? null,
+    motivo: null,
+  };
+}
+
+/** Lo que contesta el alta cuando ese equipo ya tiene un ciclo. */
+export const YA_TIENE_CICLO =
+  "Ese equipo ya tiene un ciclo. Si está apagado, se prende desde su tarjeta.";
+
+/**
  * Los choques contra un `unique` que esta pantalla puede provocar, con lo que
  * hay que decir en cada caso.
  */
 const CHOQUES: readonly { constraint: string; mensaje: string }[] = [
-  {
-    constraint: "mant_ciclos_de_ot_un_ciclo_por_equipo",
-    mensaje: "Ese equipo ya tiene un ciclo. Si está apagado, se prende desde su tarjeta.",
-  },
+  { constraint: "mant_ciclos_de_ot_un_ciclo_por_equipo", mensaje: YA_TIENE_CICLO },
 ];
 
 /**

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   arrancaSolo, comoSeLeeElPrograma, comoSeLeeLaDecision, elMensajeDelChoque,
-  elResetPorCambioDeTareas, loQueFaltaParaArmar, loQueImpideGuardar,
+  elResetPorCambioDeTareas, elUpsertDeLaTarea, lasOpcionesDeTareas,
+  loQueFaltaParaArmar, loQueImpideGuardar,
   type CicloComoEsta,
 } from "./configurarElCiclo";
 
@@ -18,29 +19,29 @@ const TAREAS = { madre: "Cambio de Martillos", hija: "Rotación de Martillos" };
 describe("comoSeLeeLaDecision", () => {
   test("una decisión de crear se lee con la tarea, la cara y la fecha", () => {
     expect(
-      comoSeLeeLaDecision({ que: "crear", vuelta: 2, fecha_ejecucion: "2026-11-27" }, TAREAS)
+      comoSeLeeLaDecision({ que: "crear", vuelta: 2, fecha_ejecucion: "2026-11-27" }, TAREAS, true)
     ).toBe("Crea «Rotación de Martillos» — a 3ª cara — para el 27/11/2026");
   });
 
   test("la vuelta 0 se lee con el nombre de la madre y sin cara", () => {
     expect(
-      comoSeLeeLaDecision({ que: "crear", vuelta: 0, fecha_ejecucion: "2026-12-01" }, TAREAS)
+      comoSeLeeLaDecision({ que: "crear", vuelta: 0, fecha_ejecucion: "2026-12-01" }, TAREAS, true)
     ).toBe("Crea «Cambio de Martillos» para el 01/12/2026");
   });
 
   test("esperar nombra la orden", () => {
-    expect(comoSeLeeLaDecision({ que: "esperar", ot: 3166 }, TAREAS)).toBe("Espera la OT 3166");
+    expect(comoSeLeeLaDecision({ que: "esperar", ot: 3166 }, TAREAS, true)).toBe("Espera la OT 3166");
   });
 
   test("sin arrancar lo dice con todas las letras", () => {
-    expect(comoSeLeeLaDecision({ que: "sin_arrancar" }, TAREAS)).toBe(
+    expect(comoSeLeeLaDecision({ que: "sin_arrancar" }, TAREAS, true)).toBe(
       "No arrancó, así que no genera ninguna orden"
     );
   });
 
   test("trabado devuelve el motivo tal cual, que es el que explica qué pasa", () => {
     expect(
-      comoSeLeeLaDecision({ que: "trabado", porque: "El equipo PO-C1-04 está inactivo." }, TAREAS)
+      comoSeLeeLaDecision({ que: "trabado", porque: "El equipo PO-C1-04 está inactivo." }, TAREAS, true)
     ).toBe("El equipo PO-C1-04 está inactivo.");
   });
 });
@@ -218,6 +219,18 @@ describe("loQueFaltaParaArmar", () => {
     expect(loQueFaltaParaArmar({ ...ALTA, componente: "Zaranda vibratoria" })).toEqual([]);
   });
 
+  /*
+   * De la revisión del 25/11/2026: `periodo_dias` es `integer`, y un
+   * `<input type="number">` devuelve «1.5» igual. Sin esto el alta contesta
+   * 500 con el `invalid input syntax for type integer` de Postgres, que es
+   * exactamente lo que esta validación existe para no hacer.
+   */
+  test("un plazo con decimales no entra", () => {
+    expect(loQueFaltaParaArmar({ ...ALTA, periodo_dias: 1.5 })).toEqual([
+      "El plazo va de 1 a 3650 días, en días enteros. Vaciarlo detiene el ciclo.",
+    ]);
+  });
+
   test("hereda los límites del plazo, las repeticiones y las horas", () => {
     expect(loQueFaltaParaArmar({ ...ALTA, periodo_dias: 0 })).toHaveLength(1);
     expect(loQueFaltaParaArmar({ ...ALTA, repeticiones: 21 })).toHaveLength(1);
@@ -248,6 +261,94 @@ describe("elMensajeDelChoque", () => {
     expect(
       elMensajeDelChoque({ code: "23505", message: 'duplicate key ... "otra_constraint"' })
     ).toBeNull();
+  });
+});
+
+
+/*
+ * De la revisión del 25/11/2026, y es el defecto más caro que encontró: la
+ * pantalla leía todos los ciclos y el generador sólo los activos, así que la
+ * tarjeta de uno recién apagado decía «Apagado: no genera ninguna orden» y
+ * cuatro líneas más abajo «Crea «Rotación de Martillos» para el 27/11».
+ *
+ * Y la frase se congela, porque el generador no lo toca y el corte no se
+ * mueve: esa fecha se va quedando en el pasado. En la pantalla que existe
+ * porque un ciclo generó 426 órdenes, lo peor que puede pasar es que quien
+ * acaba de apretar el interruptor lea que viene otra.
+ */
+describe("comoSeLeeLaDecision de un ciclo apagado", () => {
+  test("dice que no crea nada, y lo que haría queda en condicional", () => {
+    const frase = comoSeLeeLaDecision(
+      { que: "crear", vuelta: 2, fecha_ejecucion: "2026-11-27" }, TAREAS, false
+    );
+
+    expect(frase).toContain("Apagado: no crea ninguna orden.");
+    expect(frase).toContain("Si se prendiera:");
+    expect(frase).toContain("Rotación de Martillos");
+  });
+
+  test("también cuando espera, que de otro modo se lee como que está armado", () => {
+    expect(comoSeLeeLaDecision({ que: "esperar", ot: 3166 }, TAREAS, false))
+      .toBe("Apagado: no crea ninguna orden. Si se prendiera: Espera la OT 3166");
+  });
+});
+
+/*
+ * De la revisión del 25/11/2026. Los cuatro ciclos de producción tienen
+ * exactamente dos tareas confirmadas —las que plantó la semilla—, así que el
+ * único valor que cada desplegable ofrecía además del propio era el gemelo del
+ * otro lado: elegirlo da `tarea_madre_id = tarea_hija_id` y lo rechaza
+ * `loQueImpideGuardar`… **después** de que la persona confirmó un cartel que
+ * dice que se tira el estado del ciclo. La salida de emergencia en la que se
+ * apoya todo el diseño no se podía usar en 4 de 4 casos.
+ */
+describe("lasOpcionesDeTareas", () => {
+  const PAR = { tarea_madre_id: "cambio", tarea_hija_id: "rotacion" };
+  const DOS = [{ id: "cambio", nombre: "Cambio" }, { id: "rotacion", nombre: "Rotación" }];
+
+  test("con sólo las dos del par no hay nada que elegir", () => {
+    const o = lasOpcionesDeTareas(DOS, PAR);
+
+    expect(o.sePuede).toBe(false);
+    expect(o.madre.map((t) => t.id)).toEqual(["cambio"]);
+    expect(o.hija.map((t) => t.id)).toEqual(["rotacion"]);
+  });
+
+  test("con una tercera, cada lado ofrece la propia y la libre, nunca la del otro", () => {
+    const o = lasOpcionesDeTareas([...DOS, { id: "limpieza", nombre: "Limpieza" }], PAR);
+
+    expect(o.sePuede).toBe(true);
+    expect(o.madre.map((t) => t.id)).toEqual(["cambio", "limpieza"]);
+    expect(o.hija.map((t) => t.id)).toEqual(["rotacion", "limpieza"]);
+  });
+});
+
+/*
+ * De la revisión del 25/11/2026. El alta hace `upsert` sobre la clave natural,
+ * así que reusar una tarea del catálogo **reescribe su fila**: escribirle
+ * `periodo_dias: null` a la madre le borraba a esa tarea el período que había
+ * fijado la pantalla del catálogo, justo después de que el modal dijera «ya
+ * existe X, cada N días: el ciclo la reusa».
+ */
+describe("elUpsertDeLaTarea", () => {
+  const BASE = {
+    equipment_id: "eq-1", componente: "Martillos", nombre: "Cambio de Martillos",
+    accion: "CAMBIO", periodo_dias: 3,
+  };
+
+  test("la hija lleva el plazo que se tipeó", () => {
+    expect(elUpsertDeLaTarea({ ...BASE, lado: "hija", existente: { periodo_dias: 99 } }))
+      .toMatchObject({ periodo_dias: 3, estado: "CONFIRMADA", motivo: null });
+  });
+
+  test("la madre conserva el período que esa tarea ya tenía", () => {
+    expect(elUpsertDeLaTarea({ ...BASE, lado: "madre", existente: { periodo_dias: 90 } }))
+      .toMatchObject({ periodo_dias: 90 });
+  });
+
+  test("y una madre nueva nace sin período, como la semilla", () => {
+    expect(elUpsertDeLaTarea({ ...BASE, lado: "madre", existente: null }))
+      .toMatchObject({ periodo_dias: null });
   });
 });
 

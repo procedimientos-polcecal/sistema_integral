@@ -329,7 +329,19 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
       }
 
       if (this.accion === "upsert" && this.conflicto) {
-        const choca = filas.find((f) => f[this.conflicto!] === this.fila![this.conflicto!]);
+        // `onConflict` es una **lista** de columnas separadas por coma, que es
+        // como se nombra una clave natural: `equipment_id,accion,componente`.
+        // Tratarla como un solo nombre de columna hacía que el fake comparara
+        // `undefined === undefined` y diera que **todo choca con todo**: dos
+        // upserts distintos sobre la misma tabla terminaban en una sola fila, y
+        // un test que afirmara «no se escribió nada» pasaba en verde por el
+        // motivo equivocado (25/11/2026).
+        const claves = this.conflicto.split(",").map((c) => c.trim()).filter(Boolean);
+        // Una fila que no trae alguna de las columnas de la clave no puede
+        // chocar por ella: en Postgres dos NULL no son iguales para un `unique`.
+        const choca = claves.every((c) => this.fila![c] !== undefined)
+          ? filas.find((f) => claves.every((c) => f[c] === this.fila![c]))
+          : undefined;
         // La fila que ya estaba se actualiza y no se anota en `inserts`: lo que un
         // test quiere saber de un upsert repetido es justamente que no agregó nada.
         if (choca) {
