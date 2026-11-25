@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import LoQueCreaOrdenesSolo, {
+  type CicloDeLaSeccion, type ProgramadoDeLaSeccion,
+} from "./LoQueCreaOrdenesSolo";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import TipoModal, { type Tipo as TipoCompleto } from "./TipoModal";
@@ -32,7 +35,8 @@ interface Tarifa { id: string; valor: number | string; vigente_desde: string }
 const SLOTS = [1, 2, 3];
 
 export default function ConfiguracionClient({
-  operarios, contratistas, tipos, sectores, tarifas, razones, esAdmin, puedeEditar,
+  operarios, contratistas, tipos, sectores, tarifas, razones, ciclos, programados,
+  esAdmin, puedeEditar,
 }: {
   operarios: Operario[];
   contratistas: Contratista[];
@@ -40,6 +44,8 @@ export default function ConfiguracionClient({
   sectores: Sector[];
   tarifas: Tarifa[];
   razones: Razon[];
+  ciclos: CicloDeLaSeccion[];
+  programados: ProgramadoDeLaSeccion[];
   esAdmin: boolean;
   puedeEditar: boolean;
 }) {
@@ -71,6 +77,8 @@ export default function ConfiguracionClient({
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
+
+      <LoQueCreaOrdenesSolo ciclos={ciclos} programados={programados} />
 
       <Operarios operarios={operarios} esAdmin={esAdmin} llamar={llamar} />
 
