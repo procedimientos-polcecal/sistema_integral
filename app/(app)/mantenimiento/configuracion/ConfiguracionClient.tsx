@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import LoQueCreaOrdenesSolo, {
-  type CicloDeLaSeccion, type ProgramadoDeLaSeccion,
+  type CicloDeLaSeccion, type ParaArmarUnCiclo, type ProgramadoDeLaSeccion,
 } from "./LoQueCreaOrdenesSolo";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -35,7 +35,7 @@ interface Tarifa { id: string; valor: number | string; vigente_desde: string }
 const SLOTS = [1, 2, 3];
 
 export default function ConfiguracionClient({
-  operarios, contratistas, tipos, sectores, tarifas, razones, ciclos, programados,
+  operarios, contratistas, tipos, sectores, tarifas, razones, ciclos, programados, paraArmar,
   esAdmin, puedeEditar,
 }: {
   operarios: Operario[];
@@ -46,6 +46,7 @@ export default function ConfiguracionClient({
   razones: Razon[];
   ciclos: CicloDeLaSeccion[];
   programados: ProgramadoDeLaSeccion[];
+  paraArmar: ParaArmarUnCiclo;
   esAdmin: boolean;
   puedeEditar: boolean;
 }) {
@@ -79,7 +80,7 @@ export default function ConfiguracionClient({
       )}
 
       <LoQueCreaOrdenesSolo
-        ciclos={ciclos} programados={programados}
+        ciclos={ciclos} programados={programados} paraArmar={paraArmar}
         puedeEditar={puedeEditar} llamar={llamar}
       />
 

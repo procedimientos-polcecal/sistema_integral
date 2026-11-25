@@ -9,7 +9,7 @@ import { loQueHaraElCiclo } from "@/lib/mantenimiento/loQueHaraElCiclo";
 import type { OTDelCiclo } from "@/lib/mantenimiento/cicloDeOT";
 import type { CerradaParaMirar } from "@/lib/mantenimiento/sospechaDeCambio";
 import type {
-  CicloDeLaSeccion, ProgramadoDeLaSeccion,
+  CicloDeLaSeccion, ParaArmarUnCiclo, ProgramadoDeLaSeccion,
 } from "./LoQueCreaOrdenesSolo";
 
 /**
@@ -79,6 +79,7 @@ export default async function ConfiguracionMantenimientoPage() {
       razones={razones ?? []}
       ciclos={loQueCrea.ciclos}
       programados={loQueCrea.programados}
+      paraArmar={loQueCrea.paraArmar}
       sectores={(sectores ?? []).map((s) => ({
         id: s.id as string,
         codigo: s.codigo as string | null,
@@ -104,8 +105,15 @@ export default async function ConfiguracionMantenimientoPage() {
  */
 async function losQueCreanOrdenesSolo(
   supabase: Awaited<ReturnType<typeof createClient>>
-): Promise<{ ciclos: CicloDeLaSeccion[]; programados: ProgramadoDeLaSeccion[] }> {
-  const [{ data: ciclosLeidos }, { data: programadosLeidos }] = await Promise.all([
+): Promise<{
+  ciclos: CicloDeLaSeccion[];
+  programados: ProgramadoDeLaSeccion[];
+  paraArmar: ParaArmarUnCiclo;
+}> {
+  const [
+    { data: ciclosLeidos }, { data: programadosLeidos }, tareasLeidas, equiposLeidos,
+    componentesLeidos,
+  ] = await Promise.all([
     supabase
       .from("mant_ciclos_de_ot")
       .select(
@@ -116,6 +124,22 @@ async function losQueCreanOrdenesSolo(
       .from("mantenimientos_programados")
       .select("id, schedule_type, interval_days, next_date, status, equipos:equipment_id(code, name)")
       .order("next_date"),
+    // El catálogo entero y no sólo el de los equipos con ciclo: el alta tiene
+    // que poder decir «esa tarea ya existe» sobre cualquier equipo. Hoy son 8
+    // filas, pero es la tabla que crece con cada relevamiento.
+    traerTodo<TareaDelCatalogo>((de, a) =>
+      supabase
+        .from("mant_tareas_preventivas")
+        .select("id, equipment_id, accion, componente, nombre, periodo_dias, estado")
+        .order("nombre")
+        .range(de, a)
+    ),
+    traerTodo<{ id: string; code: string | null; name: string | null }>((de, a) =>
+      supabase.from("equipos").select("id, code, name").eq("is_active", true).order("code").range(de, a)
+    ),
+    traerTodo<{ equipment_id: string; nombre: string | null }>((de, a) =>
+      supabase.from("equipos_componentes").select("equipment_id, nombre").order("nombre").range(de, a)
+    ),
   ]);
 
   // El mismo `as unknown as` que usa `generarEncadenadas` para leer esta
@@ -124,8 +148,9 @@ async function losQueCreanOrdenesSolo(
   const programados = comoSeLeenLosProgramados(
     (programadosLeidos ?? []) as unknown as ProgramadoLeido[]
   );
+  const paraArmar = loQueNecesitaElAlta(ciclos, tareasLeidas, equiposLeidos, componentesLeidos);
 
-  if (ciclos.length === 0) return { ciclos: [], programados };
+  if (ciclos.length === 0) return { ciclos: [], programados, paraArmar };
 
   // Todas las OT de ciclo: hoy son diez, pero una tabla que crece no avisa
   // cuando cruza las mil filas de PostgREST.
@@ -137,18 +162,11 @@ async function losQueCreanOrdenesSolo(
       .range(de, a)
   );
 
-  // Las tareas confirmadas de esos equipos, que son las que se le pueden
-  // poner a un ciclo. Son pocas y por equipo; se traen enteras para que el
-  // desplegable del cambio de tareas no tenga que pedirlas después.
-  const { data: tareasLeidas } = await supabase
-    .from("mant_tareas_preventivas")
-    .select("id, equipment_id, nombre, accion, componente")
-    .eq("estado", "CONFIRMADA")
-    .in("equipment_id", ciclos.map((c) => c.equipment_id))
-    .order("nombre");
-
+  // Las confirmadas por equipo, que son las que se le pueden poner a un ciclo
+  // cuando se le cambia el par de tareas.
   const tareasPorEquipo = new Map<string, { id: string; nombre: string }[]>();
-  for (const t of (tareasLeidas ?? []) as { id: string; equipment_id: string; nombre: string }[]) {
+  for (const t of tareasLeidas) {
+    if (t.estado !== "CONFIRMADA") continue;
     const lista = tareasPorEquipo.get(t.equipment_id) ?? [];
     lista.push({ id: t.id, nombre: t.nombre });
     tareasPorEquipo.set(t.equipment_id, lista);
@@ -209,8 +227,62 @@ async function losQueCreanOrdenesSolo(
       };
     }),
     programados,
+    paraArmar,
   };
 }
+
+/**
+ * Lo que necesita el alta y no sale de los ciclos que ya existen.
+ *
+ * **Los equipos que ya tienen ciclo no se ofrecen**: `unique (equipment_id)`
+ * admite uno solo, así que elegirlo terminaría en un choque contra la base. Y
+ * los inactivos tampoco, porque un ciclo sobre un equipo inactivo nace
+ * `trabado` y no genera nada.
+ */
+function loQueNecesitaElAlta(
+  ciclos: CicloLeido[],
+  tareas: TareaDelCatalogo[],
+  equipos: { id: string; code: string | null; name: string | null }[],
+  componentes: { equipment_id: string; nombre: string | null }[]
+): ParaArmarUnCiclo {
+  const conCiclo = new Set(ciclos.map((c) => c.equipment_id));
+
+  const porEquipo: Record<string, string[]> = {};
+  for (const c of componentes) {
+    const nombre = (c.nombre ?? "").trim();
+    if (!nombre) continue;
+    const lista = porEquipo[c.equipment_id] ?? (porEquipo[c.equipment_id] = []);
+    if (!lista.includes(nombre)) lista.push(nombre);
+  }
+
+  return {
+    equipos: equipos
+      .filter((e) => !conCiclo.has(e.id))
+      .map((e) => ({
+        id: e.id,
+        etiqueta: [e.code, e.name].filter(Boolean).join(" – ") || e.id,
+      })),
+    componentes: porEquipo,
+    tareas: tareas.map((t) => ({
+      equipment_id: t.equipment_id,
+      accion: t.accion,
+      componente: t.componente,
+      nombre: t.nombre,
+      periodo_dias: t.periodo_dias,
+      estado: t.estado,
+    })),
+  };
+}
+
+type TareaDelCatalogo = {
+  id: string;
+  equipment_id: string;
+  accion: string;
+  componente: string;
+  nombre: string;
+  periodo_dias: number | null;
+  estado: string;
+};
 
 type TareaLeida = {
   nombre: string;

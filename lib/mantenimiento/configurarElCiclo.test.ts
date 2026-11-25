@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
-  arrancaSolo, comoSeLeeElPrograma, comoSeLeeLaDecision, elResetPorCambioDeTareas,
-  loQueImpideGuardar, type CicloComoEsta,
+  arrancaSolo, comoSeLeeElPrograma, comoSeLeeLaDecision, elMensajeDelChoque,
+  elResetPorCambioDeTareas, loQueFaltaParaArmar, loQueImpideGuardar,
+  type CicloComoEsta,
 } from "./configurarElCiclo";
 
 /** Hidratación al 24/11/2026: tres rotaciones, parada en la segunda. */
@@ -174,6 +175,79 @@ describe("elResetPorCambioDeTareas", () => {
   test("no mandar tareas no resetea nada", () => {
     expect(elResetPorCambioDeTareas({}, CICLO)).toBeNull();
     expect(elResetPorCambioDeTareas({ repeticiones: 5 }, CICLO)).toBeNull();
+  });
+});
+
+describe("loQueFaltaParaArmar", () => {
+  const ALTA = {
+    equipment_id: "eq-1",
+    componente: "Martillos",
+    accionMadre: "CAMBIO",
+    nombreMadre: "Cambio de Martillos",
+    accionHija: "ROTACION",
+    nombreHija: "Rotación de Martillos",
+    periodo_dias: 3,
+    repeticiones: 3,
+  };
+
+  test("un alta completa no tiene nada que objetar", () => {
+    expect(loQueFaltaParaArmar(ALTA)).toEqual([]);
+  });
+
+  test("pide el equipo, el componente, las dos acciones, los dos nombres, el plazo y las repeticiones", () => {
+    expect(loQueFaltaParaArmar({})).toHaveLength(8);
+  });
+
+  test("la acción tiene que estar en el vocabulario", () => {
+    expect(loQueFaltaParaArmar({ ...ALTA, accionHija: "INVENTADA" })).toHaveLength(1);
+  });
+
+  /**
+   * Es la forma en que `tarea_madre_id = tarea_hija_id` llegaría a la base
+   * desde el alta: la clave única de una tarea es (equipo, acción,
+   * componente), así que el mismo par resuelve a la misma fila y el check
+   * `mant_ciclos_de_ot_tareas_distintas` lo rechaza con un 500.
+   */
+  test("la madre y la hija no pueden ser la misma acción sobre el mismo componente", () => {
+    expect(loQueFaltaParaArmar({ ...ALTA, accionMadre: "CAMBIO", accionHija: "CAMBIO" })).toEqual([
+      "La tarea que se repite y la que cierra el ciclo tienen que ser distintas.",
+    ]);
+  });
+
+  test("un componente escrito a mano es válido: 62 de los 269 equipos no tienen ninguno relevado", () => {
+    expect(loQueFaltaParaArmar({ ...ALTA, componente: "Zaranda vibratoria" })).toEqual([]);
+  });
+
+  test("hereda los límites del plazo, las repeticiones y las horas", () => {
+    expect(loQueFaltaParaArmar({ ...ALTA, periodo_dias: 0 })).toHaveLength(1);
+    expect(loQueFaltaParaArmar({ ...ALTA, repeticiones: 21 })).toHaveLength(1);
+    expect(loQueFaltaParaArmar({ ...ALTA, horas_estimadas: -3 })).toHaveLength(1);
+  });
+});
+
+/**
+ * El único camino que la validación **no** puede cubrir: dos pestañas abiertas,
+ * o una página vieja que todavía ofrece un equipo que entre medio recibió un
+ * ciclo. Ahí decide la base, y lo que llega tiene que ser una frase.
+ */
+describe("elMensajeDelChoque", () => {
+  test("un equipo que ya tiene ciclo se contesta con una frase, no con el error de Postgres", () => {
+    expect(
+      elMensajeDelChoque({
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "mant_ciclos_de_ot_un_ciclo_por_equipo"',
+      })
+    ).toBe("Ese equipo ya tiene un ciclo. Si está apagado, se prende desde su tarjeta.");
+  });
+
+  test("un error que no es un choque no se traduce", () => {
+    expect(elMensajeDelChoque({ code: "23503", message: "foreign key" })).toBeNull();
+  });
+
+  test("un choque contra otra constraint tampoco se traduce: diría algo que no es", () => {
+    expect(
+      elMensajeDelChoque({ code: "23505", message: 'duplicate key ... "otra_constraint"' })
+    ).toBeNull();
   });
 });
 

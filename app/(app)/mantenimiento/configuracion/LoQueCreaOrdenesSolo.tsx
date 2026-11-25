@@ -3,11 +3,17 @@
 import { useState } from "react";
 import Link from "next/link";
 import Select from "@/components/Select";
+import { Modal } from "@/components/Modal";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { comoSeLee } from "@/lib/core/fechas";
+import { claveDelBorrador } from "@/lib/core/borradorDeFormulario";
+import { useBorrador } from "@/lib/core/useBorrador";
 import { caraDeLaVuelta, type Decision } from "@/lib/mantenimiento/cicloDeOT";
-import { arrancaSolo, comoSeLeeLaDecision } from "@/lib/mantenimiento/configurarElCiclo";
+import {
+  arrancaSolo, comoSeLeeLaDecision, loQueFaltaParaArmar,
+} from "@/lib/mantenimiento/configurarElCiclo";
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
+import { ACCIONES_PREVENTIVAS } from "@/lib/mantenimiento/tareasPreventivas";
 
 export interface CicloDeLaSeccion {
   id: string;
@@ -41,6 +47,23 @@ export interface ProgramadoDeLaSeccion {
   estado: string;
 }
 
+/** Lo que el alta necesita saber y no sale de los ciclos que ya existen. */
+export interface ParaArmarUnCiclo {
+  /** Los activos **sin** ciclo: `unique (equipment_id)` admite uno solo. */
+  equipos: { id: string; etiqueta: string }[];
+  /** Los relevados, por equipo. 62 de los 269 equipos no tienen ninguno. */
+  componentes: Record<string, string[]>;
+  /** El catálogo entero, para reusar una tarea en vez de duplicarla. */
+  tareas: {
+    equipment_id: string;
+    accion: string;
+    componente: string;
+    nombre: string;
+    periodo_dias: number | null;
+    estado: string;
+  }[];
+}
+
 type Llamar = (url: string, o: RequestInit) => Promise<boolean>;
 
 /**
@@ -68,13 +91,16 @@ type Llamar = (url: string, o: RequestInit) => Promise<boolean>;
  * callado, que es como un ciclo dormido se queda dormido para siempre.
  */
 export default function LoQueCreaOrdenesSolo({
-  ciclos, programados, puedeEditar, llamar,
+  ciclos, programados, paraArmar, puedeEditar, llamar,
 }: {
   ciclos: CicloDeLaSeccion[];
   programados: ProgramadoDeLaSeccion[];
+  paraArmar: ParaArmarUnCiclo;
   puedeEditar: boolean;
   llamar: Llamar;
 }) {
+  const [armando, setArmando] = useState(false);
+
   return (
     <div className="card space-y-4 p-4">
       <div>
@@ -86,9 +112,16 @@ export default function LoQueCreaOrdenesSolo({
       </div>
 
       <div className="space-y-3">
-        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">
-          Ciclos encadenados
-        </h3>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">
+            Ciclos encadenados
+          </h3>
+          {puedeEditar && (
+            <button type="button" className="btn-secondary text-xs" onClick={() => setArmando(true)}>
+              Armar un ciclo
+            </button>
+          )}
+        </div>
 
         {ciclos.length === 0 ? (
           <p className="text-sm text-slate-500">No hay ningún ciclo configurado.</p>
@@ -99,8 +132,345 @@ export default function LoQueCreaOrdenesSolo({
         )}
       </div>
 
+      {armando && (
+        <ArmarUnCiclo
+          paraArmar={paraArmar}
+          llamar={llamar}
+          alCerrar={() => setArmando(false)}
+        />
+      )}
+
       <LosProgramados programados={programados} />
     </div>
+  );
+}
+
+/** Las dos mitades de un ciclo, con el rótulo que lleva cada una en pantalla. */
+const LADOS = [
+  { lado: "Hija", titulo: "La tarea que se repite", ejemplo: "Rotación de Martillos" },
+  { lado: "Madre", titulo: "La tarea que cierra el ciclo", ejemplo: "Cambio de Martillos" },
+] as const;
+
+/** El texto que una persona escribiría para esa acción sobre ese componente. */
+function nombreSugerido(clave: string, componente: string): string {
+  const accion = ACCIONES_PREVENTIVAS.find((a) => a.clave === clave);
+  if (!accion || !componente) return "";
+
+  return `${accion.corta.charAt(0).toUpperCase()}${accion.corta.slice(1)} ${componente}`;
+}
+
+/**
+ * Armar un ciclo nuevo.
+ *
+ * ── POR QUÉ UN SOLO COMPONENTE PARA LAS DOS TAREAS ─────────────────────────
+ *
+ * Porque un ciclo encadenado es siempre el mismo componente visto dos veces:
+ * se rota la pieza hasta que se le acaban las caras y entonces se la cambia.
+ * Dos componentes distintos no serían un ciclo sino dos planes, que es lo que
+ * hacen los mantenimientos programados.
+ *
+ * Esa es también la razón de que las dos acciones no puedan ser la misma: la
+ * clave de una tarea del catálogo es `(equipo, acción, componente)`, así que
+ * con el componente compartido dos acciones iguales resuelven a la misma fila
+ * y el ciclo nacería apuntándose a sí mismo.
+ *
+ * ── POR QUÉ REUSA UNA TAREA EN VEZ DE CREARLA SIEMPRE ──────────────────────
+ *
+ * Porque el catálogo ya es de alguien: `/mantenimiento/tareas-preventivas` es
+ * donde se confirma qué tareas tiene un equipo, y duplicarlas desde acá
+ * dejaría dos filas para el mismo trabajo. Si la tarea ya está, el alta la
+ * muestra y deja editarle el nombre y el plazo.
+ */
+function ArmarUnCiclo({
+  paraArmar, llamar, alCerrar,
+}: {
+  paraArmar: ParaArmarUnCiclo;
+  llamar: Llamar;
+  alCerrar: () => void;
+}) {
+  const confirmar = useConfirm();
+  const [guardando, setGuardando] = useState(false);
+  const [problemas, setProblemas] = useState<string[]>([]);
+
+  const { valores, cambiar, tocado, tirar } = useBorrador(
+    claveDelBorrador("armar-ciclo"),
+    {
+      equipment_id: "", componente: "", componenteLibre: "",
+      accionHija: "ROTACION", nombreHija: "",
+      accionMadre: "CAMBIO", nombreMadre: "",
+      periodo_dias: "", repeticiones: "3",
+      especialidad: "", horas_estimadas: "",
+    },
+  );
+
+  const relevados = paraArmar.componentes[valores.equipment_id] ?? [];
+  // «otro…» no es un componente: es la puerta al campo de texto, que es lo que
+  // usan los 62 equipos sin ninguno relevado.
+  const componente = (
+    valores.componente === "__otro__" ? valores.componenteLibre : valores.componente
+  ).trim();
+
+  /** La fila del catálogo que ese par ya tiene, si la tiene. */
+  const yaExiste = (accion: string) =>
+    paraArmar.tareas.find(
+      (t) => t.equipment_id === valores.equipment_id &&
+        t.accion === accion &&
+        t.componente.trim().toLowerCase() === componente.toLowerCase()
+    );
+
+  /** Lo que se va a mandar: lo tipeado, y si está vacío lo sugerido. */
+  const nombreDe = (lado: "Madre" | "Hija") => {
+    const tipeado = (lado === "Madre" ? valores.nombreMadre : valores.nombreHija).trim();
+    if (tipeado) return tipeado;
+
+    const accion = lado === "Madre" ? valores.accionMadre : valores.accionHija;
+    return yaExiste(accion)?.nombre ?? nombreSugerido(accion, componente);
+  };
+
+  const plazoDeLaHija = valores.periodo_dias.trim() ||
+    String(yaExiste(valores.accionHija)?.periodo_dias ?? "");
+
+  const alta = {
+    equipment_id: valores.equipment_id,
+    componente,
+    accionMadre: valores.accionMadre,
+    nombreMadre: nombreDe("Madre"),
+    accionHija: valores.accionHija,
+    nombreHija: nombreDe("Hija"),
+    periodo_dias: plazoDeLaHija === "" ? undefined : Number(plazoDeLaHija),
+    repeticiones: valores.repeticiones.trim() === "" ? undefined : Number(valores.repeticiones),
+    especialidad: valores.especialidad || null,
+    horas_estimadas: valores.horas_estimadas.trim() === ""
+      ? null
+      : Number(valores.horas_estimadas),
+  };
+
+  async function guardar() {
+    const falta = loQueFaltaParaArmar(alta);
+    setProblemas(falta);
+    if (falta.length > 0) return;
+
+    // El arranque automático reconoce trabajos escritos como un reemplazo de
+    // la pieza. Si la madre no lo es, el ciclo nace dormido — y un ciclo
+    // dormido no genera nada y nada lo avisa, así que se dice antes.
+    if (!arrancaSolo(valores.accionMadre, componente)) {
+      const sigue = await confirmar({
+        title: "Este ciclo no va a arrancar solo",
+        message:
+          `«${alta.nombreMadre}» no se lee como un reemplazo de la pieza, así que el ` +
+          `arranque automático no lo va a reconocer. El ciclo se puede armar igual, pero ` +
+          `hay que arrancarlo a mano desde la ficha del equipo cuando se haga el primero.`,
+        confirmText: "Armarlo igual",
+      });
+      if (!sigue) return;
+    }
+
+    setGuardando(true);
+    const ok = await llamar("/api/mantenimiento/ciclos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(alta),
+    });
+    setGuardando(false);
+
+    // Sale bien y cierra: `tirar()` y no `asentar()`, porque el formulario se
+    // vuelve a montar la próxima vez que se abra.
+    if (ok) {
+      tirar();
+      alCerrar();
+    }
+  }
+
+  return (
+    <Modal titulo="Armar un ciclo" alSalir={alCerrar} tocado={tocado} ancho="ancho">
+      <div className="space-y-4">
+        <p className="text-xs text-slate-500">
+          Una tarea que se repite unas cuantas veces y, cuando se le acaban las vueltas, otra
+          que cierra el ciclo y lo vuelve a empezar. La más cargada: rotar los martillos tres
+          veces y después cambiarlos.
+        </p>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">Equipo</label>
+            <Select
+              className="input"
+              value={valores.equipment_id}
+              onChange={(e) => cambiar({ equipment_id: e.target.value, componente: "" })}
+            >
+              <option value="">Elegir…</option>
+              {paraArmar.equipos.map((e) => (
+                <option key={e.id} value={e.id}>{e.etiqueta}</option>
+              ))}
+            </Select>
+            <p className="mt-1 text-xs text-slate-400">
+              Sólo los que todavía no tienen ciclo: cada equipo puede tener uno.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">Componente</label>
+            {relevados.length > 0 ? (
+              <Select
+                className="input"
+                value={valores.componente}
+                onChange={(e) => cambiar({ componente: e.target.value })}
+              >
+                <option value="">Elegir…</option>
+                {relevados.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+                <option value="__otro__">otro…</option>
+              </Select>
+            ) : (
+              <input
+                className="input"
+                placeholder="Martillos"
+                value={valores.componenteLibre}
+                onChange={(e) =>
+                  cambiar({ componente: "__otro__", componenteLibre: e.target.value })
+                }
+              />
+            )}
+            {relevados.length > 0 && valores.componente === "__otro__" && (
+              <input
+                className="input mt-1"
+                placeholder="Martillos"
+                value={valores.componenteLibre}
+                onChange={(e) => cambiar({ componenteLibre: e.target.value })}
+              />
+            )}
+            <p className="mt-1 text-xs text-slate-400">
+              La misma pieza para las dos tareas: se rota hasta gastarla y después se cambia.
+            </p>
+          </div>
+        </div>
+
+        {LADOS.map(({ lado, titulo, ejemplo }) => {
+          const accion = lado === "Madre" ? valores.accionMadre : valores.accionHija;
+          const existente = yaExiste(accion);
+
+          return (
+            <div key={lado} className="rounded-lg border border-slate-200 p-3">
+              <h4 className="text-xs font-semibold text-slate-700">{titulo}</h4>
+
+              <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Qué se hace</label>
+                  <Select
+                    className="input"
+                    value={accion}
+                    onChange={(e) => cambiar(
+                      lado === "Madre"
+                        ? { accionMadre: e.target.value }
+                        : { accionHija: e.target.value }
+                    )}
+                  >
+                    {ACCIONES_PREVENTIVAS.map((a) => (
+                      <option key={a.clave} value={a.clave}>{a.etiqueta}</option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div className={lado === "Hija" ? "" : "sm:col-span-2"}>
+                  <label className="mb-1 block text-xs text-slate-500">Cómo se llama</label>
+                  <input
+                    className="input"
+                    placeholder={ejemplo}
+                    value={nombreDe(lado)}
+                    onChange={(e) => cambiar(
+                      lado === "Madre"
+                        ? { nombreMadre: e.target.value }
+                        : { nombreHija: e.target.value }
+                    )}
+                  />
+                </div>
+
+                {lado === "Hija" && (
+                  <div>
+                    <label className="mb-1 block text-xs text-slate-500">Cada cuántos días</label>
+                    <input
+                      type="number" min={1} max={3650} className="input"
+                      value={plazoDeLaHija}
+                      onChange={(e) => cambiar({ periodo_dias: e.target.value })}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {existente && (
+                <p className="mt-2 text-xs text-slate-500">
+                  Ese equipo ya tiene «{existente.nombre}» en el catálogo
+                  {existente.periodo_dias ? `, cada ${existente.periodo_dias} días` : ""}: el
+                  ciclo la reusa.{" "}
+                  {existente.estado === "DESCARTADA" && (
+                    <span className="text-amber-700">
+                      Estaba descartada, y armar el ciclo la vuelve a confirmar.
+                    </span>
+                  )}
+                </p>
+              )}
+            </div>
+          );
+        })}
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">
+              Veces antes de cerrar
+            </label>
+            <input
+              type="number" min={1} max={20} className="input"
+              value={valores.repeticiones}
+              onChange={(e) => cambiar({ repeticiones: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">Especialidad</label>
+            <Select
+              className="input"
+              value={valores.especialidad}
+              onChange={(e) => cambiar({ especialidad: e.target.value })}
+            >
+              <option value="">Sin especialidad</option>
+              {ESPECIALIDADES.map((e) => (
+                <option key={e} value={e}>{e}</option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">
+              Horas estimadas
+            </label>
+            <input
+              type="number" min={0} step="0.5" className="input"
+              value={valores.horas_estimadas}
+              onChange={(e) => cambiar({ horas_estimadas: e.target.value })}
+            />
+          </div>
+        </div>
+
+        {problemas.length > 0 && (
+          <ul className="list-disc space-y-0.5 pl-5 text-xs text-red-700">
+            {problemas.map((p) => <li key={p}>{p}</li>)}
+          </ul>
+        )}
+
+        <p className="text-xs text-slate-500">
+          El ciclo nace <strong>sin arrancar</strong>: no genera ninguna orden hasta que se
+          haga el primer {nombreDe("Madre").toLowerCase() || "trabajo que lo dispare"}.
+        </p>
+
+        <div className="flex flex-wrap justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={() => { tirar(); alCerrar(); }}>
+            Descartar
+          </button>
+          <button type="button" className="btn-primary" disabled={guardando} onClick={guardar}>
+            {guardando ? "Armando…" : "Armar el ciclo"}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

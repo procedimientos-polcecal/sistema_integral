@@ -187,6 +187,142 @@ export function elResetPorCambioDeTareas(
   return cambioLaMadre || cambioLaHija ? { desde: null, vuelta_desde: null } : null;
 }
 
+/** Lo que se tipea para armar un ciclo nuevo. */
+export interface AltaDeCiclo {
+  equipment_id: string;
+  componente: string;
+  accionMadre: string;
+  nombreMadre: string;
+  accionHija: string;
+  nombreHija: string;
+  periodo_dias: number;
+  repeticiones: number;
+  especialidad: string | null;
+  horas_estimadas: number | null;
+}
+
+/**
+ * Qué falta o qué está mal en un alta. Vacío quiere decir que se puede.
+ *
+ * Los límites del plazo, las repeticiones y las horas no se repiten acá: los
+ * pone `loQueImpideGuardar`, que es el mismo juego de números que valida una
+ * edición. Lo que esta función agrega es lo que sólo existe en el alta —los
+ * obligatorios, el vocabulario de acciones y el par de tareas—.
+ *
+ * ── EL CICLO SINTÉTICO QUE SE LE PASA A `loQueImpideGuardar` ───────────────
+ *
+ * En un alta no hay ciclo contra el cual comparar, así que va uno con los
+ * campos en cero. **`p` no lleva `tarea_madre_id` ni `tarea_hija_id`**: la
+ * comprobación de «madre y hija distintas» de aquella función corre sólo
+ * cuando se le manda al menos uno de los dos, y mandar `""` en ambos la
+ * dispararía en falso sobre un alta perfecta. Acá el mismo choque se
+ * comprueba por el par `(acción, componente)`, que es la forma en que llegaría
+ * a la base desde esta pantalla.
+ *
+ * ── POR QUÉ EL PAR Y NO LOS IDS ────────────────────────────────────────────
+ *
+ * La clave única de una tarea preventiva es `(equipment_id, accion,
+ * componente)` y el alta usa **un solo componente** para las dos tareas, así
+ * que dos acciones iguales resuelven al mismo upsert, o sea a la misma fila:
+ * el ciclo nacería con `tarea_madre_id = tarea_hija_id` y lo rechazaría
+ * `mant_ciclos_de_ot_tareas_distintas` con un 500.
+ *
+ * Informa **todos** los problemas juntos, como el resto del módulo.
+ */
+export function loQueFaltaParaArmar(datos: unknown): string[] {
+  const d = (datos ?? {}) as Record<string, unknown>;
+  const texto = (v: unknown) => String(v ?? "").trim();
+  const numeroONada = (v: unknown): number | undefined => {
+    if (v === null || v === undefined || texto(v) === "") return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+
+  const problemas: string[] = [];
+
+  if (!texto(d.equipment_id)) problemas.push("Falta el equipo.");
+
+  // El componente es texto libre y está bien que lo sea: 62 de los 269 equipos
+  // no tienen ninguno relevado, así que una lista cerrada dejaría a esos
+  // equipos sin poder armar un ciclo.
+  if (!texto(d.componente)) problemas.push("Falta el componente.");
+
+  const cual = {
+    Madre: "la tarea que cierra el ciclo",
+    Hija: "la tarea que se repite",
+  } as const;
+
+  for (const lado of ["Madre", "Hija"] as const) {
+    const accion = texto(d[`accion${lado}`]);
+    if (!accion) problemas.push(`Falta la acción de ${cual[lado]}.`);
+    else if (!ACCIONES_PREVENTIVAS.some((a) => a.clave === accion)) {
+      problemas.push(`«${accion}» no es una acción del vocabulario.`);
+    }
+
+    if (!texto(d[`nombre${lado}`])) problemas.push(`Falta el nombre de ${cual[lado]}.`);
+  }
+
+  const plazo = numeroONada(d.periodo_dias);
+  const repeticiones = numeroONada(d.repeticiones);
+
+  if (plazo === undefined) problemas.push("Falta el plazo: cada cuántos días se repite la tarea.");
+  if (repeticiones === undefined) {
+    problemas.push("Faltan las repeticiones: cuántas veces se repite antes de volver a la madre.");
+  }
+
+  problemas.push(
+    ...loQueImpideGuardar(
+      {
+        periodo_dias: plazo,
+        repeticiones,
+        horas_estimadas: numeroONada(d.horas_estimadas),
+      },
+      { repeticiones: 0, vuelta_desde: null, tarea_madre_id: "", tarea_hija_id: "" }
+    )
+  );
+
+  const accionMadre = texto(d.accionMadre);
+  if (accionMadre && accionMadre === texto(d.accionHija)) {
+    problemas.push("La tarea que se repite y la que cierra el ciclo tienen que ser distintas.");
+  }
+
+  return problemas;
+}
+
+/**
+ * Los choques contra un `unique` que esta pantalla puede provocar, con lo que
+ * hay que decir en cada caso.
+ */
+const CHOQUES: readonly { constraint: string; mensaje: string }[] = [
+  {
+    constraint: "mant_ciclos_de_ot_un_ciclo_por_equipo",
+    mensaje: "Ese equipo ya tiene un ciclo. Si está apagado, se prende desde su tarjeta.",
+  },
+];
+
+/**
+ * El mensaje de un choque contra un `unique` de la base, o `null` si el error
+ * no es eso.
+ *
+ * ── POR QUÉ HACE FALTA, SI YA HAY VALIDACIÓN ───────────────────────────────
+ *
+ * Porque el alta sólo ofrece equipos sin ciclo, y esa lista la arma la página
+ * al cargarse. Dos pestañas abiertas, o una página vieja, alcanzan para
+ * mandar un equipo que entre medio recibió uno. Ése es el único camino que la
+ * validación no puede cubrir, y lo que llega tiene que ser una frase y no el
+ * texto de Postgres.
+ *
+ * **Mira el nombre de la constraint y no sólo el `23505`**: traducir cualquier
+ * choque con este mensaje diría que el equipo ya tiene ciclo cuando lo
+ * repetido fue otra cosa, y mandaría a mirar donde no hay nada.
+ */
+export function elMensajeDelChoque(error: { code?: string; message?: string }): string | null {
+  if (error?.code !== "23505") return null;
+
+  const mensaje = error.message ?? "";
+  return CHOQUES.find((c) => mensaje.includes(c.constraint))?.mensaje ?? null;
+}
+
 /**
  * Cada cuánto corre un mantenimiento programado, el **otro** motor de OT
  * automáticas.
