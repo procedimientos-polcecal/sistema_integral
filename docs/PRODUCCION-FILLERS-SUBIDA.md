@@ -91,20 +91,43 @@ Lo que hay que saber de cada una de las tres que no se leen, medido el
 - **`Pesadas Balanza` es la única que no son zips, y la única que se sube
   entera.** Son doce `DAT000000NN.CSV` sueltos. Cada uno es **un camión**: la
   segunda columna numérica es su tara y no cambia dentro del archivo (11300,
-  7580, 8640, 6660…), y cada uno arranca en agosto o septiembre y llega a hoy.
-  O sea que **son acumulativos igual que un zip, pero uno por vehículo**, y por
-  eso el subidor los sube los doce: quedarse con el más nuevo subiría un camión
-  y perdería once. Eso es lo que hace `"carpetaEntera": true` en la
-  configuración. El destino conserva el nombre del archivo y **no** lleva fecha
-  —`Pesadas Balanza DAT00000010.CSV`—, así que el de mañana reemplaza al de
-  hoy y la carpeta de Drive tiene un archivo por camión y no uno por camión por
-  día; con fecha, en un año habría 4.380 archivos diciendo casi lo mismo.
+  7580, 8640, 6660…). Por eso el subidor los sube los doce: quedarse con el
+  más nuevo subiría un camión y perdería once. Eso es lo que hace
+  `"carpetaEntera": true`. El destino conserva el nombre del archivo y **no**
+  lleva fecha —`Pesadas Balanza DAT00000010.CSV`—, así que la carpeta de Drive
+  tiene un archivo por camión y no uno por camión por día; con fecha, en un
+  año habría 4.380 archivos diciendo casi lo mismo.
+
+  **Y no son acumulativos, aunque durante tres meses lo parecieron.** Son una
+  **ventana corrida**: el software de la balanza los purga cada tanto y
+  arranca de cero. El 19/11/2026 pasó, y el freno de encogimiento —bien— dejó
+  de subirlos seis días en vez de pisar la historia con lo que quedaba.
+  Medido el 25/11/2026 con las dos puntas en la mano:
+
+  | | Drive tenía | el servidor tenía | en común |
+  |---|---|---|---|
+  | `DAT00000010.CSV` | 31/8 → 18/11, 353 filas | 20/11 → 24/11, 11 filas | **0** |
+  | `DAT00000014.CSV` | 31/8 → 18/11, 110 filas | 19/11 → 24/11, 12 filas | **0** |
+
+  Las dos mitades no se pisan: se continúan. Por eso las dos salidas obvias
+  eran malas —reemplazar pierde agosto a noviembre, no reemplazar pierde de
+  ahí en adelante— y la entrada lleva además **`"fusionar": true`**, que hace
+  que el archivo de Drive sea la historia completa aunque el origen la tire:
+  se baja lo que está, se le agregan las filas que no tiene y se sube la
+  unión. Con eso el archivo de **Drive** vuelve a sólo crecer, que es la
+  propiedad de la que depende todo el resto del subidor, y el origen puede
+  hacer lo que quiera. Lo que decide y lo que deja afuera está en
+  [scripts/pcrobot/fusionar.mjs](../scripts/pcrobot/fusionar.mjs); el riesgo
+  asumido es que dos pesadas idénticas al kilo en el mismo minuto se cuentan
+  como una (0 de 463 filas lo eran, y el log dice cuántas repetidas vio).
 
   Lo que hay que saber antes de usar `carpetaEntera` para otra cosa: **vale
-  sólo si cada archivo acumula lo suyo.** Una carpeta donde cada archivo sea el
-  dato de un día y nunca se reescriba no entra acá — ahí un día que falle se
-  pierde para siempre, y la defensa sería una cola, que es justamente lo que
-  este script no tiene y no conviene que tenga.
+  sólo si cada archivo acumula lo suyo, o si se le pone `fusionar`.** Una
+  carpeta donde cada archivo sea el dato de un día y nunca se reescriba sigue
+  sin entrar — ahí un día que falle se pierde para siempre, y la defensa sería
+  una cola, que es justamente lo que este script no tiene y no conviene que
+  tenga. Y la moraleja de arriba, que es la que vale para el próximo origen:
+  **que un archivo haya crecido tres meses seguidos no prueba que acumule.**
 
   Y el dato en sí **no es nuevo para el SdG**: las pesadas ya entran a
   `cantera_pesadas` desde la pestaña «Datos» de la planilla de balanza

@@ -43,12 +43,21 @@
  *    propiedad que lo hace confiable.
  *
  *    Lo que importa es la ACUMULATIVIDAD, no que sea un zip ni que sea uno
- *    solo. La balanza (05/11/2026) tiene doce CSV, uno por camión, y cada uno
- *    también arranca en agosto y llega a hoy: entra por la misma puerta con
- *    `carpetaEntera: true` y conserva la misma propiedad. Lo que NO se puede
- *    agregar acá es una carpeta donde cada archivo sea el dato de un día y
- *    nunca se reescriba — ahí un día perdido se pierde para siempre, y eso
- *    pide una cola, que es justamente lo que este script no tiene.
+ *    solo. La balanza (05/11/2026) tiene doce CSV, uno por camión, y entra por
+ *    la misma puerta con `carpetaEntera: true`. Lo que NO se puede agregar acá
+ *    es una carpeta donde cada archivo sea el dato de un día y nunca se
+ *    reescriba — ahí un día perdido se pierde para siempre, y eso pide una
+ *    cola, que es justamente lo que este script no tiene.
+ *
+ *    Y la balanza terminó mostrando que la acumulatividad hay que medirla, no
+ *    suponerla: sus CSV son una VENTANA CORRIDA que el software purga cada
+ *    tanto. El 19/11/2026 arrancaron de cero y el freno del punto 3 —bien—
+ *    dejó de subirlos seis días. Para eso está `fusionar: true`, que hace que
+ *    el archivo de Drive sea la historia completa aunque el origen la tire:
+ *    ver scripts/pcrobot/fusionar.mjs, que tiene las dos mitades medidas.
+ *    Con eso el archivo de DRIVE vuelve a sólo crecer, que es la propiedad
+ *    que el resto de este script necesita. El origen puede hacer lo que
+ *    quiera.
  *
  * 3. UN ARCHIVO MÁS CHICO NO PISA AL QUE YA ESTÁ. De lo anterior se sigue que
  *    estos archivos sólo crecen, así que uno que encogió no es un dato nuevo:
@@ -79,6 +88,8 @@
 import { createSign } from "node:crypto";
 import { readFileSync, readdirSync, statSync, appendFileSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
+
+import { fusionarLineas } from "./fusionar.mjs";
 
 const SCOPE = "https://www.googleapis.com/auth/drive";
 
@@ -392,6 +403,24 @@ async function principal() {
   };
 
   /**
+   * Baja el contenido de un archivo de Drive, como texto.
+   *
+   * Lo usa sólo la fusión. Se lee en latin1 y no en utf8 **a propósito**: la
+   * balanza escribe bytes de 8 bits sin declarar codificación, y leer en utf8
+   * convierte cualquier byte suelto >127 en U+FFFD, que al volver a escribir
+   * ya no es el byte original. latin1 es una ida y vuelta exacta byte a byte
+   * para lo único que esta función hace: partir en líneas y volver a pegar.
+   */
+  const bajarTexto = async (id) => {
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) salir(explicar(res.status, await res.text()));
+    return Buffer.from(await res.arrayBuffer()).toString("latin1");
+  };
+
+  /**
    * Multipart: metadatos y contenido en un solo request. Los zips pesan
    * decenas de kilobytes, así que no hace falta subida resumible.
    *
@@ -401,7 +430,7 @@ async function principal() {
    * mismo día dejarían dos archivos con el mismo nombre y nadie podría sacar
    * el viejo.
    */
-  const subir = async (nombre, ruta, id) => {
+  const subir = async (nombre, contenido, id) => {
     const LIMITE = "limite-" + Math.random().toString(36).slice(2);
     const metadatos = JSON.stringify(id ? { name: nombre } : { name: nombre, parents: [carpetaDrive] });
     const cuerpo = Buffer.concat([
@@ -409,7 +438,7 @@ async function principal() {
         `--${LIMITE}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadatos}\r\n` +
           `--${LIMITE}\r\nContent-Type: ${tipoDe(nombre)}\r\n\r\n`
       ),
-      readFileSync(ruta),
+      contenido,
       Buffer.from(`\r\n--${LIMITE}--\r\n`),
     ]);
 
@@ -467,6 +496,37 @@ async function principal() {
         : nombreDestino(etiqueta, archivo.mtime);
 
       const yaEsta = await buscar(destino);
+
+      // ── El origen no acumula: Drive guarda la historia ────────────────────
+      // Antes del atajo por tamaño y antes del freno, porque para un origen
+      // así los dos razonan sobre una premisa que no vale. El tamaño igual no
+      // quiere decir "lo mismo" —una ventana corrida puede pesar igual y
+      // traer otras filas—, y el archivo más chico no es el origen roto sino
+      // una purga. El porqué medido está en fusionar.mjs.
+      if (origen.fusionar) {
+        const antes = yaEsta ? await bajarTexto(yaEsta.id) : "";
+        const { texto, agregadas, repetidas, sinCambios } = fusionarLineas(
+          antes,
+          readFileSync(archivo.ruta, "latin1")
+        );
+        const repes = repetidas ? `, ${repetidas} ya estaban` : "";
+
+        if (sinCambios) {
+          decir(`= ${etiqueta}: ${destino} no trae filas nuevas${repes}, no se sube${aviso}`);
+          continue;
+        }
+        if (seco) {
+          decir(`~ ${etiqueta}: agregaría ${agregadas} fila(s)${repes} a ${destino}${aviso}`);
+          continue;
+        }
+        const subido = await subir(destino, Buffer.from(texto, "latin1"), yaEsta?.id);
+        decir(
+          `+ ${etiqueta}: ${destino} con ${agregadas} fila(s) nueva(s)${repes}, ` +
+            `${subido.size} bytes, id ${subido.id}${aviso}`
+        );
+        continue;
+      }
+
       if (yaEsta && Number(yaEsta.size) === archivo.tamano) {
         decir(`= ${etiqueta}: ${destino} ya está en Drive con el mismo tamaño, no se sube${aviso}`);
         continue;
@@ -498,7 +558,7 @@ async function principal() {
         continue;
       }
 
-      const subido = await subir(destino, archivo.ruta, yaEsta?.id);
+      const subido = await subir(destino, readFileSync(archivo.ruta), yaEsta?.id);
       const que = yaEsta ? "reemplazado" : "subido";
       decir(`+ ${etiqueta}: ${destino} ${que}, ${subido.size} bytes, id ${subido.id}${aviso}`);
     }

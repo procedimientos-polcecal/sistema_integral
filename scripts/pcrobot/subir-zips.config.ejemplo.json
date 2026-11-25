@@ -16,7 +16,7 @@
     { "nombre": "Planta 02", "carpeta": "\\\\server\\EXTERIOR\\Planta 02", "ignorar": " - (INICIO|AL INICIAR) " },
     { "nombre": "Hornos", "carpeta": "\\\\server\\EXTERIOR\\Hornos" },
     { "nombre": "Porteria", "carpeta": "\\\\server\\EXTERIOR\\Porteria" },
-    { "nombre": "Pesadas Balanza", "carpeta": "\\\\server\\EXTERIOR\\Pesadas Balanza", "carpetaEntera": true }
+    { "nombre": "Pesadas Balanza", "carpeta": "\\\\server\\EXTERIOR\\Pesadas Balanza", "carpetaEntera": true, "fusionar": true }
   ],
 
   "_log": "Opcional pero muy recomendado: una tarea programada no tiene a nadie mirando la consola.",
