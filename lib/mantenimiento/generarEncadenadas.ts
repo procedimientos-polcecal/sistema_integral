@@ -54,11 +54,8 @@ import { celdasParaRegistrar } from "@/lib/mantenimiento/ordenes";
 import { escribirEnLaFilaDeLaOT } from "@/lib/mantenimiento/planillaDeOT";
 import { elPendienteDelIntento } from "@/lib/mantenimiento/pendienteDeLaOT";
 import { traerTodo } from "@/lib/core/paginado";
-import {
-  queSigueEnElCiclo, elCorteQueSigue, descripcionDeLaOT,
-  type CicloParaDecidir, type OTDelCiclo,
-} from "./cicloDeOT";
-import { elArranqueDeUnCambio } from "./sospechaDeCambio";
+import { descripcionDeLaOT, type OTDelCiclo } from "./cicloDeOT";
+import { loQueHaraElCiclo } from "./loQueHaraElCiclo";
 
 export interface ResultadoDeEncadenadas {
   generadas: { ot_number: number; ciclo_id: string; vuelta: number }[];
@@ -154,87 +151,61 @@ export async function generarLasEncadenadas(
 
   for (const ciclo of ciclos) {
     const eq = ciclo.equipos;
-
-    // Un equipo dado de baja no recibe órdenes nuevas. Se dice, en vez de
-    // seguir creando trabajo para una máquina que ya no está.
-    if (eq?.is_active === false) {
-      r.trabados.push({
-        ciclo_id: ciclo.id,
-        porque: `El equipo ${eq.code ?? ""} está inactivo, así que el ciclo no genera órdenes.`,
-      });
-      continue;
-    }
-
-    if (!ciclo.madre || !ciclo.hija) {
-      r.trabados.push({
-        ciclo_id: ciclo.id,
-        porque: "Al ciclo le falta la tarea madre o la hija en el catálogo de tareas preventivas.",
-      });
-      continue;
-    }
-
-    const paraDecidir: CicloParaDecidir = {
-      id: ciclo.id,
-      repeticiones: ciclo.repeticiones,
-      periodo_dias: ciclo.hija.periodo_dias ?? null,
-      desde: ciclo.desde,
-      vuelta_desde: ciclo.vuelta_desde,
-    };
     const mias = todasLasOT.filter((o) => o.ciclo_id === ciclo.id);
 
-    // ── Primero el corte, y después la decisión ───────────────────────────
+    // ── LA DECISIÓN ENTERA VIVE EN UNA FUNCIÓN SOLA ───────────────────────
     //
-    // En este orden a propósito: la madre que acaba de cerrarse mueve el corte
-    // en esta misma corrida, y así la hija 1 nace sin esperar a la siguiente.
-    // ── EL ARRANQUE, QUE VIENE DE UN CAMBIO DE PIEZA ──────────────────────
+    // Los dos trabados, el arranque, el corte y qué sigue salen de
+    // `loQueHaraElCiclo`, que es **la misma** que mira la pantalla de
+    // configuración para decir qué va a generar este ciclo. Acá lo único que
+    // se agrega es persistir lo que devuelve.
     //
-    // Un ciclo sin arrancar no genera nada, y eso lo vuelve invisible: no hay
-    // orden que se atrase, así que `mant-atrasadas-por-fecha` no puede avisarlo. Pedir
-    // la fecha tipeada equipo por equipo es lo que ya falló con el preventivo
-    // —pantalla, botón y cero OT en toda la historia—, así que arranca solo
-    // con el primer cambio de la pieza **posterior a su configuración**.
-    //
-    // Hacia adelante y nunca hacia atrás: medido el 13/11/2026, arrancar del
-    // último cambio histórico dejaba a los cuatro ciclos con su primera
-    // rotación atrasada 7, 21, 21 y 3 días, sobre máquinas ya rotadas.
-    if (!paraDecidir.desde) {
-      const arranque = elArranqueDeUnCambio(
-        {
-          id: ciclo.id, equipment_id: ciclo.equipment_id,
-          componente: ciclo.hija.componente,
-          desdeCuandoMirar: String(ciclo.creado_en).slice(0, 10),
-        },
-        cerradasDeLosEquipos.filter((c) => c.equipment_id === ciclo.equipment_id)
-      );
+    // Importa que sea una sola: la previsión de la pantalla tiene que ser
+    // exactamente lo que pasa, y con los tres pasos sueltos cualquiera de los
+    // dos lugares podía quedarse con uno.
+    const hara = loQueHaraElCiclo(
+      {
+        id: ciclo.id,
+        equipment_id: ciclo.equipment_id,
+        repeticiones: ciclo.repeticiones,
+        desde: ciclo.desde,
+        vuelta_desde: ciclo.vuelta_desde,
+        creado_en: String(ciclo.creado_en),
+        equipoActivo: eq?.is_active !== false,
+        equipoCode: eq?.code ?? null,
+        madre: ciclo.madre ?? null,
+        hija: ciclo.hija ?? null,
+      },
+      mias,
+      cerradasDeLosEquipos.filter((c) => c.equipment_id === ciclo.equipment_id)
+    );
 
-      if (arranque) {
-        const { error } = await admin
-          .from("mant_ciclos_de_ot")
-          .update({ desde: arranque.desde, vuelta_desde: 0 })
-          .eq("id", ciclo.id);
-        if (error) { r.fallaron.push({ ciclo_id: ciclo.id, error: error.message }); continue; }
-
-        paraDecidir.desde = arranque.desde;
-        paraDecidir.vuelta_desde = 0;
-        r.arrancados.push({ ciclo_id: ciclo.id, desde: arranque.desde, ot_number: arranque.ot_number });
-      }
-    }
-
-    const corte = elCorteQueSigue(paraDecidir, mias);
-    if (corte) {
+    if (hara.arranque) {
       const { error } = await admin
         .from("mant_ciclos_de_ot")
-        .update({ desde: corte.desde, vuelta_desde: corte.vuelta_desde })
+        .update({ desde: hara.arranque.desde, vuelta_desde: 0 })
+        .eq("id", ciclo.id);
+      if (error) { r.fallaron.push({ ciclo_id: ciclo.id, error: error.message }); continue; }
+
+      r.arrancados.push({
+        ciclo_id: ciclo.id,
+        desde: hara.arranque.desde,
+        ot_number: hara.arranque.ot_number,
+      });
+    }
+
+    if (hara.corte) {
+      const { error } = await admin
+        .from("mant_ciclos_de_ot")
+        .update({ desde: hara.corte.desde, vuelta_desde: hara.corte.vuelta_desde })
         .eq("id", ciclo.id);
       if (error) {
         r.fallaron.push({ ciclo_id: ciclo.id, error: error.message });
         continue;
       }
-      paraDecidir.desde = corte.desde;
-      paraDecidir.vuelta_desde = corte.vuelta_desde;
     }
 
-    const decision = queSigueEnElCiclo(paraDecidir, mias);
+    const decision = hara.decision;
 
     if (decision.que === "sin_arrancar") { r.sinArrancar.push(ciclo.id); continue; }
     if (decision.que === "trabado") { r.trabados.push({ ciclo_id: ciclo.id, porque: decision.porque }); continue; }
@@ -242,6 +213,14 @@ export async function generarLasEncadenadas(
 
     const esLaMadre = decision.vuelta === 0;
     const tarea = esLaMadre ? ciclo.madre : ciclo.hija;
+
+    // Esto sólo angosta el tipo. La regla —un ciclo sin una de sus dos tareas
+    // no genera nada— vive en `loQueHaraElCiclo`, que ya devolvió `trabado`
+    // con su motivo si faltaba alguna; el compilador no puede ver que una
+    // decisión de «crear» implica que están. No se repite el mensaje acá a
+    // propósito: dos textos para el mismo motivo es como se separan.
+    if (!tarea) continue;
+
     const descripcion = descripcionDeLaOT({
       tarea: tarea.nombre,
       componente: tarea.componente,
@@ -250,7 +229,7 @@ export async function generarLasEncadenadas(
       // Lo que el sistema cree, escrito en la orden para que se pueda
       // desmentir. Cuando la próxima es la madre, el corte es la fecha de la
       // última rotación y no la del cambio, así que no se nombra.
-      ultimoCambio: esLaMadre ? null : (paraDecidir.vuelta_desde === 0 ? paraDecidir.desde : null),
+      ultimoCambio: esLaMadre ? null : (hara.alDecidir.vuelta_desde === 0 ? hara.alDecidir.desde : null),
     });
 
     const equipoRaw = eq ? `${eq.code ?? ""} — ${eq.name ?? ""}`.trim() : null;
