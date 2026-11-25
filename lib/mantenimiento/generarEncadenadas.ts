@@ -214,12 +214,25 @@ export async function generarLasEncadenadas(
     const esLaMadre = decision.vuelta === 0;
     const tarea = esLaMadre ? ciclo.madre : ciclo.hija;
 
-    // Esto sólo angosta el tipo. La regla —un ciclo sin una de sus dos tareas
+    // Esto sólo angosta el tipo: la regla —un ciclo sin una de sus dos tareas
     // no genera nada— vive en `loQueHaraElCiclo`, que ya devolvió `trabado`
-    // con su motivo si faltaba alguna; el compilador no puede ver que una
-    // decisión de «crear» implica que están. No se repite el mensaje acá a
-    // propósito: dos textos para el mismo motivo es como se separan.
-    if (!tarea) continue;
+    // con su motivo si faltaba alguna, y el compilador no puede ver que una
+    // decisión de «crear» implica que están.
+    //
+    // **Pero grita en vez de seguir de largo**, y eso no es prolijidad. Antes
+    // del refactor este estado reventaba con un `TypeError` sobre
+    // `tarea.nombre`: rompía el contrato de «no tira», pero se oía. Un
+    // `continue` pelado lo volvía silencioso —el ciclo desaparecía del
+    // informe y `porQueFallaron` contaba la corrida como sana—, que es la
+    // forma exacta en que un generador roto se disfraza de uno que no tiene
+    // nada que hacer. Hoy es inalcanzable: las dos FK son `not null`.
+    if (!tarea) {
+      r.fallaron.push({
+        ciclo_id: ciclo.id,
+        error: "El ciclo decidió crear una orden sin tener la tarea de esa vuelta.",
+      });
+      continue;
+    }
 
     const descripcion = descripcionDeLaOT({
       tarea: tarea.nombre,
