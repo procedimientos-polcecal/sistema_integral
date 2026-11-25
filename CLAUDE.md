@@ -136,6 +136,16 @@ Antes de escribir una, leer las once trampas del
   probarlo con un `curl`.
 - **Un `.in()` con muchos ids** arma una URL que PostgREST rechaza con un 400 sin
   decir por qué. Filtrar por una condición, o de a lotes de 200.
+- **Y cambiar N consultas por un `.in()` convierte un fallo aislado en uno
+  total.** Es la otra mitad de la regla de arriba y muerde al revés: con una
+  consulta por id, un id inválido —o borrado— falla solo y el resto sigue
+  vivo; con todos en un `.in()`, un id mal formado hace que Postgres rechace
+  **la consulta entera** con un `22P02` y no vuelva ninguna fila. Pasó en la
+  curva granulométrica el 25/11/2026 al sacarle el tope de muestras: un enlace
+  compartido por chat al que le truncaron el último uuid abría la pantalla
+  vacía, sin error y sin un solo mensaje. Al agrupar lecturas, **validar la
+  forma de los ids antes** — y revisar los comentarios que decían «esa fila se
+  saltea», porque dejan de ser ciertos.
 - **Un `select()` armado en una variable** pierde la inferencia de tipos de
   Supabase. La cadena va literal.
 - **Los catálogos del núcleo los comparten los seis módulos**: `usuarios`,
