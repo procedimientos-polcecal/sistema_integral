@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { cuerpoJson } from "@/lib/core/cuerpo";
-import { loQueImpideGuardar, type Parametros } from "@/lib/mantenimiento/configurarElCiclo";
+import {
+  elResetPorCambioDeTareas, loQueImpideGuardar, type Parametros,
+} from "@/lib/mantenimiento/configurarElCiclo";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -60,6 +62,9 @@ export async function PATCH(request: Request, { params }: Params) {
   // El plazo primero: si falla, el ciclo queda como estaba y el error es uno
   // solo. Al revés habría que deshacer lo del ciclo.
   if (cambios.periodo_dias !== undefined) {
+    // Si la hija también está cambiando, el plazo es el de la **nueva**: lo
+    // que se tipeó en la pantalla describe el ciclo que queda, no el que fue.
+    //
     // `decidido_por`/`decidido_en` se mueven igual que desde el catálogo: cada
     // cuánto va una tarea **es** parte de lo que esa pantalla pide decidir, y
     // dejarlos viejos diría que el período lo fijó quien ya no lo fijó.
@@ -70,7 +75,7 @@ export async function PATCH(request: Request, { params }: Params) {
         decidido_por: user.id,
         decidido_en: new Date().toISOString(),
       })
-      .eq("id", ciclo.tarea_hija_id);
+      .eq("id", cambios.tarea_hija_id ?? ciclo.tarea_hija_id);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -80,13 +85,20 @@ export async function PATCH(request: Request, { params }: Params) {
   if (cambios.especialidad !== undefined) delCiclo.especialidad = cambios.especialidad;
   if (cambios.horas_estimadas !== undefined) delCiclo.horas_estimadas = cambios.horas_estimadas;
   if (cambios.activo !== undefined) delCiclo.activo = cambios.activo;
+  if (cambios.tarea_madre_id !== undefined) delCiclo.tarea_madre_id = cambios.tarea_madre_id;
+  if (cambios.tarea_hija_id !== undefined) delCiclo.tarea_hija_id = cambios.tarea_hija_id;
+
+  // Cambiar el par de tareas deja el ciclo sin arrancar: `desde` y
+  // `vuelta_desde` describían el par viejo y no se pueden traducir.
+  const reset = elResetPorCambioDeTareas(cambios, ciclo);
+  if (reset) Object.assign(delCiclo, reset);
 
   if (Object.keys(delCiclo).length > 0) {
     const { error } = await admin.from("mant_ciclos_de_ot").update(delCiclo).eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ data: cambios });
+  return NextResponse.json({ data: { ...cambios, reseteado: reset !== null } });
 }
 
 /**
@@ -114,6 +126,8 @@ function loQueLlegó(body: Record<string, unknown>): Parametros {
       : Number(body.horas_estimadas);
   }
   if ("activo" in body) p.activo = Boolean(body.activo);
+  if ("tarea_madre_id" in body) p.tarea_madre_id = String(body.tarea_madre_id);
+  if ("tarea_hija_id" in body) p.tarea_hija_id = String(body.tarea_hija_id);
 
   return p;
 }

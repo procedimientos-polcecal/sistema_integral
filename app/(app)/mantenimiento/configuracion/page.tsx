@@ -137,6 +137,23 @@ async function losQueCreanOrdenesSolo(
       .range(de, a)
   );
 
+  // Las tareas confirmadas de esos equipos, que son las que se le pueden
+  // poner a un ciclo. Son pocas y por equipo; se traen enteras para que el
+  // desplegable del cambio de tareas no tenga que pedirlas después.
+  const { data: tareasLeidas } = await supabase
+    .from("mant_tareas_preventivas")
+    .select("id, equipment_id, nombre, accion, componente")
+    .eq("estado", "CONFIRMADA")
+    .in("equipment_id", ciclos.map((c) => c.equipment_id))
+    .order("nombre");
+
+  const tareasPorEquipo = new Map<string, { id: string; nombre: string }[]>();
+  for (const t of (tareasLeidas ?? []) as { id: string; equipment_id: string; nombre: string }[]) {
+    const lista = tareasPorEquipo.get(t.equipment_id) ?? [];
+    lista.push({ id: t.id, nombre: t.nombre });
+    tareasPorEquipo.set(t.equipment_id, lista);
+  }
+
   // Y las cerradas de los equipos de los ciclos que todavía no arrancaron, que
   // es de donde sale su arranque. Si no hay ninguno, no se lee nada.
   const sinArrancar = ciclos.filter((c) => !c.desde);
@@ -187,6 +204,7 @@ async function losQueCreanOrdenesSolo(
         activo: c.activo,
         desde: c.desde,
         vueltaDesde: c.vuelta_desde,
+        tareasDelEquipo: tareasPorEquipo.get(c.equipment_id) ?? [],
         decision: hara.decision,
       };
     }),

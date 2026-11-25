@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Select from "@/components/Select";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { comoSeLee } from "@/lib/core/fechas";
 import { caraDeLaVuelta, type Decision } from "@/lib/mantenimiento/cicloDeOT";
 import { arrancaSolo, comoSeLeeLaDecision } from "@/lib/mantenimiento/configurarElCiclo";
@@ -26,6 +27,8 @@ export interface CicloDeLaSeccion {
   activo: boolean;
   desde: string | null;
   vueltaDesde: number | null;
+  /** Las confirmadas del catálogo para ese equipo: lo que se le puede poner. */
+  tareasDelEquipo: { id: string; nombre: string }[];
   /** Ya calculada en el servidor con `loQueHaraElCiclo`. */
   decision: Decision;
 }
@@ -265,6 +268,8 @@ function TarjetaDeCiclo({
         <CuandoCaeLaSiguiente decision={ciclo.decision} plazo={Number(plazoALaVista) || null} />
       </div>
 
+      {puedeEditar && <CambiarLasTareas ciclo={ciclo} guardar={guardar} />}
+
       {!arrancado && !arrancaSolo(ciclo.accionMadre, ciclo.componente) && (
         <p className="mt-2 text-xs text-amber-700">
           Este ciclo <strong>no arranca solo</strong>: hay que arrancarlo{" "}
@@ -276,6 +281,94 @@ function TarjetaDeCiclo({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Cambiar el par de tareas de un ciclo, que lo devuelve a «sin arrancar».
+ *
+ * ── POR QUÉ ESTO EXISTE ────────────────────────────────────────────────────
+ *
+ * Porque si no, no hay salida: `unique (equipment_id)` admite un ciclo por
+ * equipo, no hay botón de borrar, y el alta no ofrece equipos que ya tengan
+ * uno. Sin esto, un equipo cuyo ciclo se apagó no podría tener otro nunca.
+ *
+ * Va plegado detrás de un resumen porque es lo más destructivo de la tarjeta y
+ * lo que menos se usa, y la confirmación dice **qué se pierde**, con el dato
+ * concreto: `desde` y `vuelta_desde` describen el par viejo y no se pueden
+ * traducir a otro.
+ */
+function CambiarLasTareas({
+  ciclo, guardar,
+}: {
+  ciclo: CicloDeLaSeccion;
+  guardar: (cambio: Record<string, unknown>) => Promise<boolean>;
+}) {
+  const confirmar = useConfirm();
+  const arrancado = ciclo.desde !== null && ciclo.vueltaDesde !== null;
+
+  async function cambiar(cambio: { tarea_madre_id?: string; tarea_hija_id?: string }) {
+    const queSePierde = arrancado
+      ? `El ciclo va a quedar sin arrancar: se pierde que el último trabajo fue ` +
+        `${ciclo.vueltaDesde === 0 ? ciclo.madre : `${ciclo.hija} a ${caraDeLaVuelta(ciclo.vueltaDesde!)} cara`}` +
+        ` el ${comoSeLee(ciclo.desde!)}, porque eso describe las tareas viejas y no se puede traducir.`
+      : "El ciclo todavía no arrancó, así que no se pierde ningún estado.";
+
+    if (!(await confirmar({
+      title: "Cambiar las tareas del ciclo",
+      message: `${queSePierde}\n\nVa a arrancar de nuevo con el próximo trabajo que lo dispare, o a mano desde la ficha del equipo.`,
+      confirmText: "Cambiarlas",
+      danger: arrancado,
+    }))) return;
+
+    await guardar(cambio);
+  }
+
+  if (ciclo.tareasDelEquipo.length < 2) {
+    return (
+      <p className="mt-2 text-xs text-slate-400">
+        Para cambiarle las tareas a este ciclo hace falta tener al menos dos confirmadas para
+        este equipo en el catálogo.
+      </p>
+    );
+  }
+
+  return (
+    <details className="mt-2">
+      <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-900">
+        Cambiarle las tareas
+      </summary>
+      <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">
+            La que se repite
+          </label>
+          <Select
+            value={ciclo.tareaHijaId}
+            className="input"
+            onChange={(e) => cambiar({ tarea_hija_id: e.target.value })}
+          >
+            {ciclo.tareasDelEquipo.map((t) => (
+              <option key={t.id} value={t.id}>{t.nombre}</option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">
+            La que cierra el ciclo
+          </label>
+          <Select
+            value={ciclo.tareaMadreId}
+            className="input"
+            onChange={(e) => cambiar({ tarea_madre_id: e.target.value })}
+          >
+            {ciclo.tareasDelEquipo.map((t) => (
+              <option key={t.id} value={t.id}>{t.nombre}</option>
+            ))}
+          </Select>
+        </div>
+      </div>
+    </details>
   );
 }
 

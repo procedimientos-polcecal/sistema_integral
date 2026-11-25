@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
-  arrancaSolo, comoSeLeeElPrograma, comoSeLeeLaDecision, loQueImpideGuardar,
-  type CicloComoEsta,
+  arrancaSolo, comoSeLeeElPrograma, comoSeLeeLaDecision, elResetPorCambioDeTareas,
+  loQueImpideGuardar, type CicloComoEsta,
 } from "./configurarElCiclo";
 
 /** Hidratación al 24/11/2026: tres rotaciones, parada en la segunda. */
@@ -116,6 +116,64 @@ describe("loQueImpideGuardar", () => {
 
   test("no mandar nada no impide nada", () => {
     expect(loQueImpideGuardar({}, CICLO)).toEqual([]);
+  });
+
+  /**
+   * Éste pasa desde que `Parametros` lleva los dos ids: acota el código en vez
+   * de manejarlo. Se comprobó mutando la comparación a `madre !== hija` —falla
+   * sólo éste—, que es la única manera de saber que no está de adorno.
+   */
+  test("la madre y la hija no pueden terminar siendo la misma", () => {
+    expect(loQueImpideGuardar({ tarea_madre_id: "a", tarea_hija_id: "a" }, CICLO)).toEqual([
+      "La tarea que se repite y la que cierra el ciclo tienen que ser distintas.",
+    ]);
+  });
+
+  test("cambiar sólo una tarea se compara contra la que el ciclo ya tiene", () => {
+    expect(loQueImpideGuardar({ tarea_hija_id: "tarea-madre" }, CICLO)).toHaveLength(1);
+    expect(loQueImpideGuardar({ tarea_hija_id: "otra" }, CICLO)).toEqual([]);
+  });
+});
+
+/**
+ * ── POR QUÉ CAMBIAR LAS TAREAS DEVUELVE EL CICLO A «SIN ARRANCAR» ──────────
+ *
+ * Porque `desde` y `vuelta_desde` describen el par viejo: «la 2ª rotación el
+ * 14/11» no quiere decir nada si la hija pasó a ser otra tarea, y dejarlo ahí
+ * haría que el ciclo siguiera contando vueltas de un trabajo que ya no es el
+ * suyo. El estado anterior no se puede traducir, así que se tira y se dice.
+ *
+ * Esto es además lo que evita el callejón sin salida: con `unique
+ * (equipment_id)`, sin botón de borrar y sin poder cambiar las tareas, un
+ * equipo cuyo ciclo se apagó nunca más podría tener otro.
+ */
+describe("elResetPorCambioDeTareas", () => {
+  test("cambiar la hija resetea el ciclo a sin arrancar", () => {
+    expect(elResetPorCambioDeTareas({ tarea_hija_id: "otra" }, CICLO)).toEqual({
+      desde: null,
+      vuelta_desde: null,
+    });
+  });
+
+  test("cambiar la madre también lo resetea", () => {
+    expect(elResetPorCambioDeTareas({ tarea_madre_id: "otra" }, CICLO)).toEqual({
+      desde: null,
+      vuelta_desde: null,
+    });
+  });
+
+  test("mandar las mismas tareas no resetea nada", () => {
+    expect(
+      elResetPorCambioDeTareas(
+        { tarea_madre_id: "tarea-madre", tarea_hija_id: "tarea-hija" },
+        CICLO
+      )
+    ).toBeNull();
+  });
+
+  test("no mandar tareas no resetea nada", () => {
+    expect(elResetPorCambioDeTareas({}, CICLO)).toBeNull();
+    expect(elResetPorCambioDeTareas({ repeticiones: 5 }, CICLO)).toBeNull();
   });
 });
 

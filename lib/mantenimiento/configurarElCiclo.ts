@@ -152,6 +152,42 @@ export function loQueImpideGuardar(p: Parametros, ciclo: CicloComoEsta): string[
 }
 
 /**
+ * Lo que hay que escribirle al ciclo cuando se le cambia el par de tareas, o
+ * `null` si el par no cambió.
+ *
+ * ── POR QUÉ CAMBIAR LAS TAREAS LO DEVUELVE A «SIN ARRANCAR» ────────────────
+ *
+ * Porque `desde` y `vuelta_desde` describen el par viejo. «La 2ª rotación el
+ * 14/11» no quiere decir nada si la hija pasó a ser otra tarea, y dejarlo ahí
+ * haría que el ciclo siguiera contando vueltas de un trabajo que ya no es el
+ * suyo. El estado anterior no se puede traducir: se tira, y la pantalla lo
+ * dice antes de guardar.
+ *
+ * ── Y POR QUÉ LAS TAREAS SE PUEDEN CAMBIAR ─────────────────────────────────
+ *
+ * Porque si no, no hay salida. `unique (equipment_id)` admite un solo ciclo
+ * por equipo, no hay botón de borrar —borrarlo dejaría en null el `ciclo_id`
+ * de todas sus órdenes— y el alta no ofrece equipos que ya tengan uno. Sin
+ * esto, un equipo cuyo ciclo se apagó no podría tener otro nunca más.
+ *
+ * Las OT viejas conservan su `ciclo_id` y no molestan: el corte las deja
+ * afuera, porque un ciclo sin arrancar no cuenta ninguna y, cuando arranque,
+ * contará sólo desde esa fecha hacia adelante.
+ *
+ * Compara contra lo que el ciclo tiene hoy y no contra la presencia del campo:
+ * mandar el mismo id no es un cambio.
+ */
+export function elResetPorCambioDeTareas(
+  p: Parametros,
+  ciclo: CicloComoEsta
+): { desde: null; vuelta_desde: null } | null {
+  const cambioLaMadre = p.tarea_madre_id !== undefined && p.tarea_madre_id !== ciclo.tarea_madre_id;
+  const cambioLaHija = p.tarea_hija_id !== undefined && p.tarea_hija_id !== ciclo.tarea_hija_id;
+
+  return cambioLaMadre || cambioLaHija ? { desde: null, vuelta_desde: null } : null;
+}
+
+/**
  * Cada cuánto corre un mantenimiento programado, el **otro** motor de OT
  * automáticas.
  *
