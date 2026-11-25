@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   COLORES_DE_LA_COMPARACION,
-  TOPE_DE_MUESTRAS,
+  COMBINACIONES_DE_LA_COMPARACION,
   TRAZOS_DE_LA_COMPARACION,
   compararMuestras,
   etiquetasDeMuestras,
+  parDeLaSerie,
 } from "./comparacion";
 
 /** Calcio 0-2 del 27/10/2026, el mismo de `curva.test.ts`. Peso 100: los gramos son los %. */
@@ -262,9 +263,51 @@ describe("la paleta sobrevive al blanco y negro", () => {
   });
 });
 
-describe("TOPE_DE_MUESTRAS", () => {
-  it("son seis, y hay un color y un trazo para cada una", () => {
-    expect(TOPE_DE_MUESTRAS).toBe(6);
-    expect(COLORES_DE_LA_COMPARACION).toHaveLength(TOPE_DE_MUESTRAS);
+describe("parDeLaSerie", () => {
+  it("las primeras seis quedan como estaban: el color y el trazo de su índice", () => {
+    // Es lo que hace que sacar el tope no cambie el aspecto del caso de
+    // siempre. La primera sigue siendo el verde con línea llena.
+    for (let i = 0; i < 6; i++) {
+      expect(parDeLaSerie(i)).toEqual(
+        TRAZOS_DE_LA_COMPARACION[i] === undefined
+          ? { color: COLORES_DE_LA_COMPARACION[i] }
+          : { color: COLORES_DE_LA_COMPARACION[i], trazo: TRAZOS_DE_LA_COMPARACION[i] }
+      );
+    }
+  });
+
+  it("no repite el par hasta las 36, que son seis colores por seis trazos", () => {
+    const vistos = new Set<string>();
+    for (let i = 0; i < COMBINACIONES_DE_LA_COMPARACION; i++) {
+      const { color, trazo } = parDeLaSerie(i);
+      vistos.add(`${color} ${trazo ?? "llena"}`);
+    }
+    expect(vistos.size).toBe(COMBINACIONES_DE_LA_COMPARACION);
+    expect(COMBINACIONES_DE_LA_COMPARACION).toBe(36);
+  });
+
+  it("la 36 vuelve a la 0, que es el único techo que queda", () => {
+    expect(parDeLaSerie(COMBINACIONES_DE_LA_COMPARACION)).toEqual(parDeLaSerie(0));
+  });
+
+  it("la cuenta de combinaciones depende de que las dos listas midan lo mismo", () => {
+    // `(i + floor(i / C)) % T` da 36 pares distintos porque C y T son iguales.
+    // Con listas de largo distinto el período deja de ser el producto y este
+    // archivo mentiría sin que nada fallara.
+    expect(TRAZOS_DE_LA_COMPARACION).toHaveLength(COLORES_DE_LA_COMPARACION.length);
+  });
+});
+
+describe("compararMuestras: cuándo se repiten los pares", () => {
+  const muchas = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ ...CALCIO, id: `m${i}` }));
+
+  it("con pocas muestras no se repite ninguno", () => {
+    expect(compararMuestras(muchas(10), []).seRepitenLosPares).toBe(false);
+  });
+
+  it("pasadas las 36 sí, y por eso se dice en la pantalla", () => {
+    expect(compararMuestras(muchas(36), []).seRepitenLosPares).toBe(false);
+    expect(compararMuestras(muchas(37), []).seRepitenLosPares).toBe(true);
   });
 });

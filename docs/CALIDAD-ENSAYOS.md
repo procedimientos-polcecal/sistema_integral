@@ -384,8 +384,9 @@ bajando un archivo y abriéndolo.
 
 ### Comparar varias muestras (19/11/2026)
 
-La pantalla acepta **hasta seis muestras a la vez** y las superpone en los tres
-gráficos y en el Excel. Spec:
+La pantalla superpone **varias muestras** en los tres gráficos y en el Excel.
+Nació con un tope de seis, que se sacó el 25/11/2026 —ver «Comparar ya no
+tiene tope» más abajo—. Spec:
 [2026-11-19-calidad-curva-comparar-muestras-design.md](superpowers/specs/2026-11-19-calidad-curva-comparar-muestras-design.md)
 · plan:
 [2026-11-19-calidad-curva-comparar-muestras.md](superpowers/plans/2026-11-19-calidad-curva-comparar-muestras.md).
@@ -506,11 +507,99 @@ Dos cosas que no se deducen del código:
   cuadrito gris en la esquina de cada gráfico que nadie puede apretar.
 
 En la vista ampliada la leyenda muestra la etiqueta entera; en la grilla se
-corta en 26 caracteres, porque seis observaciones de 40 envuelven varias filas
-dentro de un panel de alto fijo y se comen el dibujo.
+corta en 26 caracteres, porque una observación de 40 por muestra envuelve
+varias filas debajo de un panel de ~287 px.
 
 Lo que **no** hace: no se salta de un gráfico a otro sin cerrar. Son dos clics
 y no se midió que hagan falta menos.
+
+### Bajar un gráfico como imagen (25/11/2026)
+
+Cada panel —y la vista ampliada— tiene un botón que baja **ese** gráfico como
+PNG. Antes el único camino era bajar el Excel y recortar la imagen de adentro.
+
+Tres cosas que no se deducen del código:
+
+- **Es el mismo camino del Excel cortado un paso antes.** La foto la saca
+  `fotoDe()`, que comparten los dos botones: si cada uno rasterizara por su
+  cuenta, la imagen que alguien pega en un correo podría dejar de ser la misma
+  que la del informe. De ahí salen gratis el `scale: 4` y el fondo blanco
+  explícito —un PNG transparente pegado en un correo oscuro se ve ilegible—.
+- **La guarda del `svg.recharts-surface` vale igual acá.** Un clic mientras
+  cargan los chunks `dynamic` de recharts fotografía el esqueleto gris, que es
+  un PNG perfectamente válido. El `ref` existe desde el principio, así que
+  preguntar por él no dice nada.
+- **Conviene bajarla desde la vista ampliada.** El `scale: 4` sube la
+  densidad, pero no desenvuelve un rótulo cortado: en la grilla la leyenda se
+  corta en 26 caracteres y en el modal sale entera.
+- **Y bajar desde el modal necesita un `onclone`.** `html2canvas` clona el
+  documento entero en un iframe y respeta el `overflow` de los ancestros al
+  pintar; el cuerpo del `Modal` es `overflow-y-auto` con `max-h-full`, así que
+  un gráfico ampliado más alto que la pantalla —lo que pasa en cuanto la
+  leyenda ocupa dos renglones— saldría **cortado por abajo, justo donde está
+  la leyenda, y sin que nada avise**. El `onclone` suelta el recorte de los
+  ancestros **en el clon**, nunca en la pantalla, y corre antes de que se midan
+  los límites del nodo (verificado contra el paquete instalado:
+  `onclone(documentClone, referenceElement)`). Para los paneles de la grilla
+  no hace nada, porque no tienen ancestro que recorte.
+
+El nombre lo arma `lib/calidad/ensayos/nombreDelArchivo.ts`, que **se mudó
+desde la ruta del Excel** porque ahora lo necesitan los dos lados —el PNG no
+pasa por el servidor—. De paso el día dejó de salir de un `toISOString()`, que
+después de las 21:00 de Argentina fechaba el archivo mañana.
+
+### Comparar ya no tiene tope (25/11/2026)
+
+Hasta el 25/11/2026 se comparaban **seis** muestras. El tope se sacó, y lo que
+importa es por qué se podía sacar.
+
+La medición que lo justificaba sigue siendo cierta: una línea tiene que verse
+contra el blanco, lo que la deja por debajo de 0,37 de luminancia, y seis
+valores en esa banda no pasan de ~1,2 de contraste entre sí. **El color no
+separa en papel; separa el trazo.** Lo que estaba mal era la conclusión: el
+color y el trazo se indexaban **los dos con `i % 6`**, así que la séptima curva
+repetía el par entero de la primera. Son dos ejes, y recorriendo el segundo una
+vuelta más tarde que el primero —`TRAZOS[(i + floor(i / 6)) % 6]`— salen **36
+pares distintos**. Las primeras seis quedan exactamente como estaban, porque
+para `i` de 0 a 5 el término de la vuelta es 0.
+
+Cuatro cosas que no se deducen del código:
+
+- **El techo que queda es técnico y no de producto**: `MUESTRAS_QUE_SE_ACEPTAN`
+  son 200, que es lo que entra en un `.in()` de PostgREST. Y tiene que ser
+  técnico porque esto crece rápido: del 19 al 25/11/2026 las muestras con
+  granulometría pasaron de 106 a 135, los productos que tienen alguna de 8 a 11
+  y el más cargado de 23 a 28. Un tope de 40 se alcanzaría en dos semanas.
+- **Un id mal formado pasó a ser peligroso, y por eso ahora se filtra.** Con
+  las muestras traídas de a una, un id cualquiera no encontraba nada y la
+  pantalla salteaba *esa* muestra. Con un solo `.in()`, Postgres rechaza la
+  consulta entera con `22P02` y no vuelve **ninguna**: un enlace de tres
+  muestras al que el chat le truncó el último id abriría la pantalla vacía sin
+  un solo mensaje. `leerMuestrasPedidas` tira lo que no tiene forma de UUID,
+  con la misma expresión que ya validaba la ruta del Excel.
+- **Leer 200 muestras de a una serían 400 consultas.** La pantalla y la ruta
+  usaban `traerMuestra` por id, con el argumento escrito de que «son seis como
+  mucho». Hoy usan `traerMuestrasConRetenidos`, que son dos consultas. Y los
+  retenidos van por `traerTodo()`: medido el 25/11/2026 son 4,9 mallas por
+  muestra y 8 como máximo, así que 200 muestras dan entre 980 y 1.600
+  renglones y PostgREST corta en 1.000 sin avisar — el síntoma sería que a las
+  últimas curvas les faltan tamices, que se ve igual que una muestra que midió
+  menos. Su `order` lleva `muestra_id` antes que `malla` para que paginar no
+  repita ni saltee; comprobado contra producción con tandas de 50.
+- **La leyenda dejó de ser la de recharts.** Aquélla se dibuja adentro del área
+  del `LineChart`, que mide `h-64` fijo: con ocho entradas o más le come el
+  alto al dibujo hasta dejarlo en nada. Ahora es markup propio
+  (`LeyendaDeLaCurva.tsx`), **debajo del gráfico y dentro del panel** para que
+  siga entrando en la foto, y **vive en otro archivo que no importa recharts**
+  —importarla desde `GraficosDeLaCurva.tsx` traería los ~350 KB que el
+  `dynamic` existe para evitar—. Su muestra lleva el trazo, y el chip de arriba
+  también: sin tope, dos muestras pueden compartir color y distinguirse sólo
+  por el trazo, y un punto de color las haría ver iguales justo donde se elige
+  cuál sacar.
+- **El único aviso sobre la cantidad es que se repita un par.** Pasadas las 36
+  dos curvas quedan dibujadas idénticas, y eso es un hecho. Que doce
+  superpuestas se lean con esfuerzo lo ve quien mira: un cartel diciéndolo
+  sería opinión del sistema sobre el trabajo de quien compara.
 
 ## La lista de productos no es el catálogo del núcleo
 
