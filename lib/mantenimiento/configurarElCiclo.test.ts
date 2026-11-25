@@ -1,5 +1,16 @@
 import { describe, expect, test } from "vitest";
-import { arrancaSolo, comoSeLeeElPrograma, comoSeLeeLaDecision } from "./configurarElCiclo";
+import {
+  arrancaSolo, comoSeLeeElPrograma, comoSeLeeLaDecision, loQueImpideGuardar,
+  type CicloComoEsta,
+} from "./configurarElCiclo";
+
+/** Hidratación al 24/11/2026: tres rotaciones, parada en la segunda. */
+const CICLO: CicloComoEsta = {
+  repeticiones: 3,
+  vuelta_desde: 2,
+  tarea_madre_id: "tarea-madre",
+  tarea_hija_id: "tarea-hija",
+};
 
 const TAREAS = { madre: "Cambio de Martillos", hija: "Rotación de Martillos" };
 
@@ -59,6 +70,52 @@ describe("arrancaSolo", () => {
     // respuesta puede depender del componente y no sólo de la acción.
     expect(arrancaSolo("CAMBIO", "Grillas")).toBe(true);
     expect(arrancaSolo("ROTACION", "Grillas")).toBe(false);
+  });
+});
+
+/**
+ * Los límites son **los checks de la base**, copiados acá para que la pantalla
+ * los niegue antes: un `repeticiones` por debajo de la vuelta en curso rompe
+ * `mant_ciclos_de_ot_vuelta` y sale como un 500, que no le dice nada a nadie.
+ */
+describe("loQueImpideGuardar", () => {
+  test("no se bajan las repeticiones por debajo de la vuelta en la que está", () => {
+    expect(loQueImpideGuardar({ repeticiones: 2 }, { ...CICLO, vuelta_desde: 3 })).toEqual([
+      "El ciclo está en la vuelta 3, así que no puede repetirse menos de 3 veces.",
+    ]);
+  });
+
+  test("un ciclo sin arrancar admite cualquier repetición válida", () => {
+    expect(loQueImpideGuardar({ repeticiones: 1 }, { ...CICLO, vuelta_desde: null })).toEqual([]);
+  });
+
+  test("las repeticiones van de 1 a 20", () => {
+    expect(loQueImpideGuardar({ repeticiones: 0 }, CICLO)).toHaveLength(1);
+    expect(loQueImpideGuardar({ repeticiones: 21 }, CICLO)).toHaveLength(1);
+    expect(loQueImpideGuardar({ repeticiones: 20 }, CICLO)).toEqual([]);
+  });
+
+  test("el plazo va de 1 a 3650 días y no acepta texto", () => {
+    expect(loQueImpideGuardar({ periodo_dias: 0 }, CICLO)).toHaveLength(1);
+    expect(loQueImpideGuardar({ periodo_dias: 3651 }, CICLO)).toHaveLength(1);
+    expect(loQueImpideGuardar({ periodo_dias: Number.NaN }, CICLO)).toHaveLength(1);
+  });
+
+  test("el plazo puede vaciarse, y eso deja el ciclo detenido", () => {
+    expect(loQueImpideGuardar({ periodo_dias: null }, CICLO)).toEqual([]);
+  });
+
+  test("las horas estimadas no pueden ser negativas", () => {
+    expect(loQueImpideGuardar({ horas_estimadas: -1 }, CICLO)).toHaveLength(1);
+    expect(loQueImpideGuardar({ horas_estimadas: null }, CICLO)).toEqual([]);
+  });
+
+  test("informa todos los problemas juntos y no de a uno", () => {
+    expect(loQueImpideGuardar({ repeticiones: 0, periodo_dias: 0 }, CICLO)).toHaveLength(2);
+  });
+
+  test("no mandar nada no impide nada", () => {
+    expect(loQueImpideGuardar({}, CICLO)).toEqual([]);
   });
 });
 

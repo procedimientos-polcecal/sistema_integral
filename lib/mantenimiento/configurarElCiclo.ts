@@ -74,6 +74,83 @@ export function arrancaSolo(accionMadre: string, componente: string): boolean {
   return pareceUnCambio(`${accion.corta} ${componente}`, componente);
 }
 
+/** Lo que se le puede cambiar a un ciclo ya armado. */
+export interface Parametros {
+  periodo_dias?: number | null;
+  repeticiones?: number;
+  especialidad?: string | null;
+  horas_estimadas?: number | null;
+  activo?: boolean;
+  tarea_madre_id?: string;
+  tarea_hija_id?: string;
+}
+
+/** El ciclo como está hoy, que es contra lo que se validan los cambios. */
+export interface CicloComoEsta {
+  repeticiones: number;
+  vuelta_desde: number | null;
+  tarea_madre_id: string;
+  tarea_hija_id: string;
+}
+
+/**
+ * Qué impide guardar estos parámetros. Vacío quiere decir que se puede.
+ *
+ * ── POR QUÉ LOS LÍMITES ESTÁN ACÁ Y NO SÓLO EN LA BASE ─────────────────────
+ *
+ * Porque los checks de `mant_ciclos_de_ot` y de `mant_tareas_preventivas` ya
+ * los niegan, pero lo hacen con un 500 y un mensaje de Postgres. Esta pantalla
+ * es la primera donde alguien puede cambiar el plazo y las repeticiones de un
+ * ciclo —hasta hoy no se podían tocar—, así que es también la primera manera
+ * de fabricar órdenes de más con un número mal tipeado. Los límites de abajo
+ * son los mismos que los de la base, copiados a propósito.
+ *
+ * El que no es un check de la base es el de `vuelta_desde`: bajar las
+ * repeticiones por debajo de la vuelta en curso **sí** rompe
+ * `mant_ciclos_de_ot_vuelta`, pero lo que hay que decir no es eso sino en qué
+ * vuelta está el ciclo.
+ *
+ * Informa **todos** los problemas juntos, como el resto del módulo.
+ */
+export function loQueImpideGuardar(p: Parametros, ciclo: CicloComoEsta): string[] {
+  const problemas: string[] = [];
+
+  if (p.repeticiones !== undefined) {
+    if (!Number.isInteger(p.repeticiones) || p.repeticiones < 1 || p.repeticiones > 20) {
+      problemas.push("Las repeticiones van de 1 a 20.");
+    } else if (ciclo.vuelta_desde !== null && p.repeticiones < ciclo.vuelta_desde) {
+      problemas.push(
+        `El ciclo está en la vuelta ${ciclo.vuelta_desde}, así que no puede repetirse ` +
+        `menos de ${ciclo.vuelta_desde} veces.`
+      );
+    }
+  }
+
+  if (p.periodo_dias !== undefined && p.periodo_dias !== null) {
+    if (!Number.isFinite(p.periodo_dias) || p.periodo_dias < 1 || p.periodo_dias > 3650) {
+      problemas.push("El plazo va de 1 a 3650 días. Vaciarlo detiene el ciclo.");
+    }
+  }
+
+  if (p.horas_estimadas !== undefined && p.horas_estimadas !== null) {
+    if (!Number.isFinite(p.horas_estimadas) || p.horas_estimadas < 0) {
+      problemas.push("Las horas estimadas no pueden ser negativas.");
+    }
+  }
+
+  // Sólo cuando se mandan tareas: no mandarlas no es un cambio de tareas, y el
+  // alta —que no tiene un ciclo contra el cual comparar— pasa ids vacíos.
+  if (p.tarea_madre_id !== undefined || p.tarea_hija_id !== undefined) {
+    const madre = p.tarea_madre_id ?? ciclo.tarea_madre_id;
+    const hija = p.tarea_hija_id ?? ciclo.tarea_hija_id;
+    if (madre === hija) {
+      problemas.push("La tarea que se repite y la que cierra el ciclo tienen que ser distintas.");
+    }
+  }
+
+  return problemas;
+}
+
 /**
  * Cada cuánto corre un mantenimiento programado, el **otro** motor de OT
  * automáticas.

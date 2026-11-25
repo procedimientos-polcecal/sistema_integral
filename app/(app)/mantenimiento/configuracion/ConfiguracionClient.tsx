@@ -78,7 +78,10 @@ export default function ConfiguracionClient({
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
-      <LoQueCreaOrdenesSolo ciclos={ciclos} programados={programados} />
+      <LoQueCreaOrdenesSolo
+        ciclos={ciclos} programados={programados}
+        puedeEditar={puedeEditar} llamar={llamar}
+      />
 
       <Operarios operarios={operarios} esAdmin={esAdmin} llamar={llamar} />
 
