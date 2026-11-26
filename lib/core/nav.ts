@@ -240,6 +240,13 @@ export const NAV: NavItem[] = [
        * notificación no sale —fuera de 7:00 a 21:00 no sale—.
        */
       { label: "Consultas de repuestos", href: "/compras/consultas", modulo: "compras" },
+      /*
+       * Acá empieza lo que se consulta, después de las bandejas de trabajo.
+       * Comparativas es la primera de las tres porque es la que se abre para
+       * decidir algo —qué salió este repuesto la vez pasada— y no para
+       * mantener un dato.
+       */
+      { label: "Comparativas", href: "/compras/comparativas", modulo: "compras" },
       { label: "Proveedores", href: "/compras/proveedores", modulo: "compras" },
       { label: "Ubicaciones", href: "/compras/ubicaciones", modulo: "compras" },
       { label: "Configuración", href: "/compras/configuracion", modulo: "compras", soloAdmin: true },

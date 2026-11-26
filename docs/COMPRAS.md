@@ -211,6 +211,56 @@ trabajo es comparar. En el teléfono esa vista se convierte en tarjetas apiladas
 **Al aprobarse la compra, la comparativa se congela.** Desde ahí es el respaldo
 de por qué se eligió ese precio: no se agrega, no se edita y no se borra.
 
+## Buscar entre las comparativas bajadas (26/11/2026)
+
+`/compras/comparativas` es una pantalla de consulta: busca entre **todo lo que
+se cotizó alguna vez** por producto, marca o número de RI, y por proveedor. Hasta
+ahora eso sólo se podía mirar desde adentro de un pedido —entrando al RI 1340 se
+ve lo que se cotizó para el RI 1340— y la pregunta al revés, «¿cuándo pedimos
+esto antes y a cuánto nos lo cotizaron?», no tenía dónde hacerse.
+
+Cuatro cosas que no se deducen del código:
+
+**Se agrupa por artículo porque agrupar por pedido no mostraría nada.** Medido
+el 26/11/2026 sobre las 1.078 cotizaciones importadas: están repartidas en 1.031
+requerimientos y **1.002 de ésos tienen una sola cotización**. Sólo 29 pedidos
+tienen dos o más, así que «la comparativa del pedido X» es casi siempre una fila
+sola. Las mismas 1.078 caen en **840 artículos**, de los que **139 tienen dos o
+más**: son los consumibles que se vuelven a pedir —correas, filtros, guantes—,
+que es justo donde saber el precio anterior sirve para algo. El agrupador es
+`clave_articulo` y no la descripción, que es lo que hace que «CORREA C-153» y
+«Correa C 153» sean el mismo artículo.
+
+**Cotizaciones y pedidos no son lo mismo, y la cabecera muestra los dos.** El
+artículo más cotizado tiene **9 cotizaciones que son todas del RI 1865** —dos
+proveedores compitiendo por una compra: eso es una comparativa— mientras que
+«Filtro aceite motor» tiene 8 repartidas en pedidos de siete meses distintos, que
+es historial. Son dos cosas y el total solo no las distingue: hay **139 artículos
+con 2+ cotizaciones contra 119 con 2+ pedidos**, y los 20 de diferencia son
+artículos pedidos una sola vez con varios presupuestos. Por eso el filtro «sólo
+los pedidos más de una vez» mira **`pedidos` y no `veces`**: escrito al revés
+—que fue como salió la primera versión— el filtro contradice su propia etiqueta.
+
+**No reemplaza al histórico de la ficha del RI, y no es el mismo dato.**
+`lib/compras/historicoDelArticulo.ts` mira `monto_conocido`, o sea **lo que la
+compra terminó costando**, y se muestra adentro de un pedido para el artículo de
+ese pedido. Esta pantalla mira lo que **se cotizó**, que incluye a los
+proveedores a los que después no se les compró — que son justamente los que dejan
+comparar. Los dos conviven a propósito.
+
+**Un artículo cotizado en dos monedas no tiene rango de precio, y lo dice.** No
+es un caso teórico: de los 840 artículos hay uno así —el de las 9 cotizaciones—,
+porque entre las 1.078 hay una sola en dólares. Un mínimo que compara 1.000 pesos
+con 1.000 dólares no está incompleto, está mal; es la misma regla que el embudo
+del CRM, donde el monto no se convierte nunca. Y va el rango y no un promedio por
+lo que ya dejó escrito `resumenDelHistorico`: un solo número se lee como una
+promesa, y el precio de un consumible salta.
+
+Se ejercita contra los datos reales con
+`npx tsx scripts/probar-buscador-de-comparativas.mts`, que corre la misma
+consulta y las mismas funciones que la pantalla. La pantalla en sí **no se abrió
+en un navegador**: está detrás del login, como casi todo el sistema.
+
 ## El semáforo de pedidos y el reclamo (12/11/2026)
 
 `/mis-pedidos` pinta de verde, amarillo o rojo los pedidos que **esperan a
