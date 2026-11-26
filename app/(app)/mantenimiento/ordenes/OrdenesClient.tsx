@@ -25,6 +25,7 @@ import HiloDeMensajes from "@/components/HiloDeMensajes";
 import JustificacionOT from "./JustificacionOT";
 import PostergarOTModal from "./PostergarOTModal";
 import MandarAlCalendarioModal from "./MandarAlCalendarioModal";
+import FueUnCambioModal from "./FueUnCambioModal";
 import { fechaParaElCalendario, laOTEstaCerrada } from "@/lib/agenda/evento";
 import { pideJustificacion } from "@/lib/mantenimiento/notas";
 import { prioridadEfectiva } from "@/lib/mantenimiento/prioridad";
@@ -1080,6 +1081,7 @@ function OTDetail({
 }) {
   const [postergando, setPostergando] = useState(false);
   const [mandandoAlCalendario, setMandandoAlCalendario] = useState(false);
+  const [fueUnCambio, setFueUnCambio] = useState(false);
   // Cancelar sólo se ofrece como destino desde donde la ruta lo deja: una
   // realizada tiene cierre.
   const ESTADO_OPTIONS = [
@@ -1193,6 +1195,22 @@ function OTDetail({
           Repuestos que hacen falta
         </button>
 
+        {/* ── FUE UN CAMBIO, NO UNA ROTACIÓN ────────────────────────────
+            Sólo en una hija de un ciclo que sigue abierta. En la madre no —ya
+            es el cambio— y en una cerrada tampoco. A diferencia de «Postergar»,
+            acá no se explica por qué no está: en una orden que no viene de un
+            ciclo nadie espera este botón, así que un cartel sería ruido.
+            `laOTEstaCerrada` cubre REALIZADO y CANCELADA, que es lo mismo que
+            mira el servidor. */}
+        {canEdit && o.ciclo_id && (o.ciclo_vuelta ?? 0) > 0 && !laOTEstaCerrada(o) && (
+          <button
+            onClick={() => setFueUnCambio(true)}
+            className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Fue un cambio
+          </button>
+        )}
+
         {/* ── POSTERGAR, Y POR QUÉ SÓLO EN ALGUNAS ──────────────────────────
             La fecha de inicio de una OT del formulario vive en la pestaña
             que maneja Google Forms, y escribir ahí corre las filas de las
@@ -1262,6 +1280,14 @@ function OTDetail({
           orden={o}
           onCerrar={() => setPostergando(false)}
           onPostergada={() => { setPostergando(false); onPostergada?.(); }}
+        />
+      )}
+
+      {fueUnCambio && (
+        <FueUnCambioModal
+          orden={o}
+          onCerrar={() => setFueUnCambio(false)}
+          onRegistrado={() => { setFueUnCambio(false); onPostergada?.(); }}
         />
       )}
 
