@@ -161,7 +161,10 @@ const esComentario = (linea) => /^\s*(\/\/|\/\*|\*|\{\/\*)/.test(linea);
  */
 const SIN_PREFIJO = String.raw`(?<![\w:\-\[])`;
 const GRILLA = new RegExp(`${SIN_PREFIJO}grid-cols-(\\d+)(?![\\w\\-\\[])`, "g");
-const ANCHO_FIJO = new RegExp(`${SIN_PREFIJO}w-\\[(\\d+(?:\\.\\d+)?)px\\](?![\\w\\-])`, "g");
+const ANCHO_FIJO = new RegExp(
+  `${SIN_PREFIJO}w-\\[(\\d+(?:\\.\\d+)?)(px|rem)\\](?![\\w\\-])`,
+  "g"
+);
 /**
  * `min-w-[Npx]`: el cuarto patrón, y necesita su propia regex.
  *
@@ -173,19 +176,59 @@ const ANCHO_FIJO = new RegExp(`${SIN_PREFIJO}w-\\[(\\d+(?:\\.\\d+)?)px\\](?![\\w
  * resultado**. El día que alguien escriba `min-w-[480px]` sí cambia, y hasta
  * entonces el script decía verde sobre un patrón que no estaba mirando.
  *
+ * **Los `rem` entran desde el 26/11/2026, y antes no.** Acá decía que quedaban
+ * afuera a propósito, porque «la conversión depende del tamaño de fuente de la
+ * raíz y el script no mide, mira texto», con el dato de que los dos `rem` del
+ * árbol eran `16rem` = 256 px y entraban. El argumento no era malo; la premisa
+ * venció: hoy son **nueve**, y dos pasan el ancho útil —`min-w-[34rem]` (544 px)
+ * en `IndicadoresPorSector` y `min-w-[40rem]` (640 px) en `ProgramacionClient`—.
+ * Los dos están bien tapados por su `overflow-x-auto`, así que esto no destapa
+ * un bug: lo que destapa es que el patrón de más tráfico del archivo era el que
+ * el script no miraba.
+ *
+ * Esa nota se defendía con que «si aparece uno que no, lo va a encontrar la
+ * pasada visual». La pasada visual corrió el 26/11/2026 y en efecto los
+ * encontró — pero sólo porque alguien se puso a mirar, que es exactamente lo
+ * que este script existe para no necesitar.
+ *
+ * La conversión es ×16 y se puede afirmar: `app/globals.css` no toca el
+ * `font-size` de `html` —lo único que le pone es `-webkit-text-size-adjust`—,
+ * así que la raíz es el default del navegador. **Si alguna vez se le declara
+ * uno, este número deja de valer** y hay que cambiarlo acá.
+ *
  * Un `min-width` mayor que el ancho útil es peor que un `width`: no hay forma de
  * que la caja se achique, así que estira la página entera sí o sí.
- *
- * Los valores en `rem` —`min-w-[16rem]`, que hay dos— no entran a propósito: la
- * conversión depende del tamaño de fuente de la raíz y el script no mide, mira
- * texto. 16rem son 256 px y entran; si aparece uno que no, lo va a encontrar la
- * pasada visual, no esta regex.
  */
+const PX_POR_REM = 16;
 const MIN_ANCHO_FIJO = new RegExp(
-  `${SIN_PREFIJO}min-w-\\[(\\d+(?:\\.\\d+)?)px\\](?![\\w\\-])`,
+  `${SIN_PREFIJO}min-w-\\[(\\d+(?:\\.\\d+)?)(px|rem)\\](?![\\w\\-])`,
   "g"
 );
 const CONTENEDOR_CON_SCROLL = /overflow-(?:x-)?(?:auto|scroll)/;
+
+/**
+ * ¿La línea `indice` está adentro de algo que scrollea?
+ *
+ * Mira hacia arriba `LINEAS_HASTA_EL_CONTENEDOR` líneas, que es lo mismo que
+ * hacía el chequeo de `<table>` escrito a mano. Está acá afuera para que las
+ * dos preguntas —«esta tabla está envuelta» y «este ancho está envuelto»—
+ * tengan **una sola** definición de «envuelto»: dos copias que se van
+ * separando es como un chequeo empieza a contestar distinto según quién
+ * pregunte, y nada lo avisaría.
+ *
+ * Es una heurística de texto y no un parser: no sabe si el contenedor de más
+ * arriba realmente envuelve a esta línea. Se equivoca hacia el lado barato
+ * —callarse de más— que para un chequeo que no está en el CI es el correcto:
+ * un falso negativo lo encuentra la pasada visual, un falso positivo hace que
+ * nadie vuelva a mirar la salida.
+ *
+ * @param {string[]} lineas
+ * @param {number} indice
+ */
+function hayContenedorConScrollArriba(lineas, indice) {
+  const desde = Math.max(0, indice - LINEAS_HASTA_EL_CONTENEDOR);
+  return CONTENEDOR_CON_SCROLL.test(lineas.slice(desde, indice + 1).join("\n"));
+}
 
 /**
  * Busca en los archivos lo que no entra en 375 px.
@@ -239,21 +282,40 @@ export function revisarResponsive(archivos) {
         ["min-w", MIN_ANCHO_FIJO],
       ]) {
         for (const m of contenido.matchAll(regex)) {
-          const ancho = Number(m[1]);
+          const unidad = m[2];
+          const ancho = Number(m[1]) * (unidad === "rem" ? PX_POR_REM : 1);
           if (ancho <= ANCHO_UTIL) continue;
+
+          // Un ancho que excede los 343 px **dentro de un contenedor con
+          // scroll no es un hallazgo**: es el patrón correcto, el mismo que
+          // el chequeo de `<table>` viene exigiendo desde el principio.
+          //
+          // Este hueco estaba desde siempre y no se veía porque los `px` del
+          // árbol no llegaban a 343 y los `rem` ni se miraban. Al dejar
+          // entrar los `rem` (26/11/2026) salieron de golpe dos ROMPE sobre
+          // código correcto —`min-w-[34rem]` y `min-w-[40rem]`, las dos
+          // tablas anchas, las dos bien envueltas—, y un rojo que no es un
+          // defecto es lo que enseña a no mirar el script: es el mismo
+          // motivo por el que el lint y esto todavía no están en el CI.
+          if (hayContenedorConScrollArriba(lineas, indice)) continue;
+          // El hallazgo dice las dos cosas —lo escrito y lo que mide— porque
+          // con `rem` el número de la clase ya no es el de la comparación, y
+          // sin el px nadie puede contrastar el aviso contra los 343.
+          const comoSeEscribio = `${clase}-[${m[1]}${unidad}]`;
           hallazgos.push({
             ruta: rutaNormal,
             linea,
             severidad: "ROMPE",
-            que: `${clase}-[${m[1]}px] sin breakpoint: más que los ${ANCHO_UTIL} px útiles`,
+            que:
+              unidad === "rem"
+                ? `${comoSeEscribio} sin breakpoint: ${ancho} px, más que los ${ANCHO_UTIL} px útiles`
+                : `${comoSeEscribio} sin breakpoint: más que los ${ANCHO_UTIL} px útiles`,
           });
         }
       }
 
       if (/<table[\s>]/.test(contenido)) {
-        const desde = Math.max(0, indice - LINEAS_HASTA_EL_CONTENEDOR);
-        const arriba = lineas.slice(desde, indice + 1).join("\n");
-        if (!CONTENEDOR_CON_SCROLL.test(arriba)) {
+        if (!hayContenedorConScrollArriba(lineas, indice)) {
           if (tablasPorPerdonar > 0) {
             tablasPorPerdonar--;
           } else {

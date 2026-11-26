@@ -368,15 +368,27 @@ export default function PartesClient({
           <h1 className="page-header">Partes de trituración</h1>
           <p className="page-subheader">Uno o más turnos por planta y día. Queda exportado a la planilla real al guardar.</p>
         </div>
-        <select
-          className="input w-auto"
-          value={plantaId}
-          onChange={(e) => irA(e.target.value, mes)}
-        >
-          {plantas.map((p) => (
-            <option key={p.id} value={p.id}>{p.nombre}</option>
-          ))}
-        </select>
+        {/* El ancho va en este `div` y no en el `select`. Acá decía
+            `className="input w-auto"`, y `w-auto` no se aplicaba: `.input`
+            declara `width: 100%` fuera de toda capa, así que le gana a
+            cualquier `w-*` de al lado —medido el 26/11/2026: 327 px en un
+            teléfono de 375, o sea la fila entera, cuando lo que se pedía era
+            que el desplegable midiera lo que dice su opción más larga—. Es la
+            trampa de `components/RepuestosDeLaOT.tsx` y el arreglo es el
+            mismo: envolver y dejar que el campo llene el envoltorio.
+            En el teléfono va ancho completo a propósito: ahí sí es lo que
+            conviene, y el `sm:w-auto` lo encoge recién cuando hay lugar. */}
+        <div className="w-full sm:w-auto">
+          <select
+            className="input"
+            value={plantaId}
+            onChange={(e) => irA(e.target.value, mes)}
+          >
+            {plantas.map((p) => (
+              <option key={p.id} value={p.id}>{p.nombre}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-5">
@@ -612,7 +624,7 @@ export default function PartesClient({
               <span className="text-xs text-slate-400">{form.fecha}{form.orden !== null && ` · turno ${form.orden}`}</span>
               <div className="flex gap-2">
                 {form.id && (
-                  <button className="btn-ghost text-red-600" disabled={borrando} onClick={borrarTurno}>
+                  <button className="btn-ghost-danger" disabled={borrando} onClick={borrarTurno}>
                     {borrando ? "Borrando..." : "Borrar este turno"}
                   </button>
                 )}

@@ -313,13 +313,13 @@ export default function ColaClient({
       </div>
 
       {ots === null && (
-        <div role="note" className="card border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+        <div role="note" className="card bg-amber-50 p-3 text-sm text-amber-900" style={{ borderColor: "var(--borde-aviso)" }}>
           <strong>{SIN_ACCESO_A_MANTENIMIENTO}.</strong> Podés cargar el motivo de una parada, pero no enlazarla a una
           orden de trabajo: esas órdenes no se ven con tu usuario. Si una parada ya tiene su orden, se ve el número.
         </div>
       )}
       {!puedeEditar && (
-        <div role="note" className="card border-slate-300 bg-slate-50 p-3 text-sm text-slate-700">
+        <div role="note" className="card bg-slate-50 p-3 text-sm text-slate-700" style={{ borderColor: "var(--border-dark)" }}>
           Tu usuario ve esta lista pero no puede cargar motivos: hace falta nivel de edición en Producción.
         </div>
       )}

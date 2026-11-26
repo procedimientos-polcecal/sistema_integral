@@ -292,7 +292,7 @@ export default function ProgramacionClient({ empleados }: { empleados: EmpleadoE
       </div>
 
       {errorDeCarga && (
-        <div className="card border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <div className="card bg-red-50 p-4 text-sm text-red-800" style={{ borderColor: "var(--borde-alerta)" }}>
           No se pudo traer la semana: {errorDeCarga}
         </div>
       )}
@@ -415,7 +415,7 @@ export default function ProgramacionClient({ empleados }: { empleados: EmpleadoE
             es cambiar `HojaDePersona` para que ofrezca la falta sin `asignacion`.
           */}
           {semana.sinTurno.some((s) => s.dia === diaActivo) && (
-            <section className="card border-amber-200 bg-amber-50 p-3">
+            <section className="card bg-amber-50 p-3" style={{ borderColor: "var(--borde-aviso)" }}>
               <h2 className="mb-1 text-sm font-semibold text-amber-900">Sin turno este día</h2>
               <p className="mb-2 text-xs text-amber-900">
                 Son del taller pero el ciclo no les da turno. Tocá a uno para asignárselo.

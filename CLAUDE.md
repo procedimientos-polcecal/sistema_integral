@@ -42,7 +42,7 @@ código.
 
 | | |
 |---|---|
-| Compras | [docs/COMPRAS-ESTADO.md](docs/COMPRAS-ESTADO.md) · [COMPRAS.md](docs/COMPRAS.md) · [COMPRAS-SINCRONIZACION.md](docs/COMPRAS-SINCRONIZACION.md) — semáforo y reclamo (12/11): la sección `## El semáforo de pedidos y el reclamo` de COMPRAS.md · [spec](docs/superpowers/specs/2026-11-12-compras-semaforo-y-reclamo-design.md) · [plan](docs/superpowers/plans/2026-11-12-compras-semaforo-y-reclamo.md). Tres cosas que no se deducen del código: **`EN_ESPERA` queda afuera del conjunto reclamable** —9 de los 10 pedidos más viejos estaban ahí, frenados a propósito, y sin excluirlos el primer reclamo se contesta con «ése está en espera»—; **el destinatario sale del grant explícito de `usuario_modulos` y nunca de `nivelEnModulo()`**, que le da `admin` a todo `admin_sistema` y metería a quien tiene `lectura` explícita; y **el orden por defecto no cambia, pero al filtrar por color sí** —los 11 rojos de Mantenimiento caían en las páginas 5 a 15 y la página 1 no tenía un solo punto de color— · la trazabilidad del repuesto (23/11): [spec](docs/superpowers/specs/2026-11-23-compras-trazabilidad-del-repuesto-design.md) · [plan](docs/superpowers/plans/2026-11-23-compras-trazabilidad-del-repuesto.md) y la sección `## De qué salida del pañol salió un repuesto` de MANTENIMIENTO-INTEGRACION.md. Lo que no se deduce del código: **esto sirve para el repuesto y no para el consumible** —la mediana son 2 salidas posteriores a una entrada y el máximo 454—, y **el día que se despliegue, las salidas que lista cada ficha van a decir todas «sin justificar»**, porque la ficha parte del artículo de la entrada y no del renglón de la OT, y 0 de 37 renglones de repuesto tienen artículo ni salida declarada: es la precondición y no un error —y no es una sección vacía, que se leería como rota— — alta de proveedor desde el presupuesto (24/11): la sección `## Dar de alta un proveedor desde el presupuesto` de COMPRAS.md · [spec](docs/superpowers/specs/2026-11-23-compras-alta-de-proveedor-desde-el-presupuesto-design.md) · [plan](docs/superpowers/plans/2026-11-24-compras-alta-de-proveedor-desde-el-presupuesto.md). Tres cosas que no se deducen del código: **el CUIT es obligatorio ahí y opcional en `/compras/proveedores`**, a propósito —ese camino existe para llegar a una orden de compra y el otro no; de los 45 proveedores cotizados que hoy no llegan a una, 40 no tienen CUIT—; **el alta lee Odoo y no le escribe** —enlaza si el partner ya está, y el `res.partner` nuevo lo crea la generación de la orden, cuando hay una compra de verdad detrás y la empresa ya la decidió el RI, porque el 40% de los RI son AMBAS y serían dos partners por alta—; y **`supplier_rank: 1` al crear no es cosmético**: el cruce masivo busca `[["supplier_rank", ">", 0]]` y sin eso el partner recién creado queda invisible y vuelve a figurar como «no está en Odoo». Esto **no** destraba a los 40 que ya están en la lista sin CUIT: el modal es para el proveedor que no está |
+| Compras | [docs/COMPRAS-ESTADO.md](docs/COMPRAS-ESTADO.md) · [COMPRAS.md](docs/COMPRAS.md) · [COMPRAS-SINCRONIZACION.md](docs/COMPRAS-SINCRONIZACION.md) — semáforo y reclamo (12/11): la sección `## El semáforo de pedidos y el reclamo` de COMPRAS.md · [spec](docs/superpowers/specs/2026-11-12-compras-semaforo-y-reclamo-design.md) · [plan](docs/superpowers/plans/2026-11-12-compras-semaforo-y-reclamo.md). Tres cosas que no se deducen del código: **`EN_ESPERA` queda afuera del conjunto reclamable** —9 de los 10 pedidos más viejos estaban ahí, frenados a propósito, y sin excluirlos el primer reclamo se contesta con «ése está en espera»—; **el destinatario sale del grant explícito de `usuario_modulos` y nunca de `nivelEnModulo()`**, que le da `admin` a todo `admin_sistema` y metería a quien tiene `lectura` explícita; y **el orden por defecto no cambia, pero al filtrar por color sí** —los 11 rojos de Mantenimiento caían en las páginas 5 a 15 y la página 1 no tenía un solo punto de color— · la trazabilidad del repuesto (23/11): [spec](docs/superpowers/specs/2026-11-23-compras-trazabilidad-del-repuesto-design.md) · [plan](docs/superpowers/plans/2026-11-23-compras-trazabilidad-del-repuesto.md) y la sección `## De qué salida del pañol salió un repuesto` de MANTENIMIENTO-INTEGRACION.md. Lo que no se deduce del código: **esto sirve para el repuesto y no para el consumible** —la mediana son 2 salidas posteriores a una entrada y el máximo 454—, y **el día que se despliegue, las salidas que lista cada ficha van a decir todas «sin justificar»**, porque la ficha parte del artículo de la entrada y no del renglón de la OT, y 0 de 37 renglones de repuesto tienen artículo ni salida declarada: es la precondición y no un error —y no es una sección vacía, que se leería como rota— — alta de proveedor desde el presupuesto (24/11): la sección `## Dar de alta un proveedor desde el presupuesto` de COMPRAS.md · [spec](docs/superpowers/specs/2026-11-23-compras-alta-de-proveedor-desde-el-presupuesto-design.md) · [plan](docs/superpowers/plans/2026-11-24-compras-alta-de-proveedor-desde-el-presupuesto.md). Tres cosas que no se deducen del código: **el CUIT es obligatorio ahí y opcional en `/compras/proveedores`**, a propósito —ese camino existe para llegar a una orden de compra y el otro no; de los 45 proveedores cotizados que hoy no llegan a una, 40 no tienen CUIT—; **el alta lee Odoo y no le escribe** —enlaza si el partner ya está, y el `res.partner` nuevo lo crea la generación de la orden, cuando hay una compra de verdad detrás y la empresa ya la decidió el RI, porque el 40% de los RI son AMBAS y serían dos partners por alta—; y **`supplier_rank: 1` al crear no es cosmético**: el cruce masivo busca `[["supplier_rank", ">", 0]]` y sin eso el partner recién creado queda invisible y vuelve a figurar como «no está en Odoo». Esto **no** destraba a los 40 que ya están en la lista sin CUIT: el modal es para el proveedor que no está — buscar entre las comparativas bajadas (26/11): la sección `## Buscar entre las comparativas bajadas` de COMPRAS.md. Tres cosas que no se deducen del código: **se agrupa por artículo porque agrupar por pedido no mostraría nada** —de los 1.031 requerimientos cotizados, **1.002 tienen una sola cotización**, así que «la comparativa del pedido X» es casi siempre una fila sola; las mismas 1.078 cotizaciones caen en 840 artículos y 139 tienen dos o más—; **cotizaciones y pedidos no son lo mismo y la cabecera muestra los dos**, porque el artículo más cotizado tiene sus 9 cotizaciones en un solo RI (dos proveedores compitiendo: eso es una comparativa) mientras «Filtro aceite motor» tiene 8 en pedidos de siete meses (eso es historial) — son 139 artículos con 2+ cotizaciones contra 119 con 2+ pedidos, y por eso el filtro de repetidos mira `pedidos` y no `veces`; y **no reemplaza al histórico de la ficha del RI**, que mira `monto_conocido` —lo que la compra costó— mientras ésta mira lo que se cotizó, incluidos los proveedores a los que no se les compró, que son los que dejan comparar. Un artículo cotizado en dos monedas no lleva rango y lo dice: hay uno, y es justo el de las 9. Se ejercita con `npx tsx scripts/probar-buscador-de-comparativas.mts` |
 | Mantenimiento | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md) — GUT (21/10): la sección `## La matriz GUT` de ese documento y el [spec](docs/superpowers/specs/2026-10-21-mantenimiento-gut-design.md). Tres cosas que no se deducen del código: `gut_orden` es una columna generada y **no es el puntaje** (lleva el 27 de "sin puntaje" y el +1000 de las abiertas: imprimirla muestra 1027); el 27 está escrito en dos lugares, el `coalesce` de la migración y `lib/mantenimiento/gut.ts`, con un test que los ata; y el GUT **no se exporta a ninguna planilla** — MTBF: [spec](docs/superpowers/specs/2026-10-16-mantenimiento-mtbf-design.md) · [plan](docs/superpowers/plans/2026-10-16-mantenimiento-mtbf.md) — partes de contratista: [spec](docs/superpowers/specs/2026-10-20-mantenimiento-partes-de-contratista-design.md). Del 04/11/2026, lo mismo que el cuaderno de PIPARO y por el mismo pedido: **la descripción dice sólo la actividad** —contratista, quincena, horas y partes salían del texto porque tienen columna (N, K, O) o viven en el sistema— y la generación **drena su propia cola** para que esas columnas no lleguen vacías. Dos cosas medidas que evitan rehacer el análisis: **no hace falta denominador común** porque el grupo se arma por la actividad normalizada (0 de 19 OT tienen dos formas de escribirla), y **no hay costo que mandar a REPUESTO UTILIZADO** —no hay columna de costo, `materiales` está vacío en los 21 partes y `horas_50`/`horas_100` en cero—. Lo que se pierde, a propósito: los lugares con su número de parte salen de la planilla (siguen en `mant_partes_contratista_renglones`), y 13 de 19 órdenes quedan diciendo sólo «Limpieza», separadas por el sector —que es como ya se cargaban a mano— · el cierre anterior al inicio (12/11): la sección `## El cierre anterior al inicio` de ese documento · [spec](docs/superpowers/specs/2026-11-12-mantenimiento-cierre-anterior-al-inicio-design.md) · [plan](docs/superpowers/plans/2026-11-12-mantenimiento-cierre-anterior-al-inicio.md). **Lo primero, para quien despliegue: la columna `ordenes_trabajo.cierre_justificacion` no existe en producción hasta que alguien corra a mano la migración `20261112095357_…`; sin ella muere toda alta de OT y, peor, el `select` de `exportarLoPendiente` falla sin que su llamador mire el `error`, así que la sincronización pisa con la planilla lo que el sistema acaba de registrar.** Desde el 12/11/2026 una OT **se puede** cerrar con fecha anterior a su inicio **con justificación obligatoria** —la valida `justificacionQueExplica()`, la de Compras—, lo que **dio vuelta la regla del 05/11/2026 y sólo la mitad**: sin fecha de inicio sigue sin poder cerrarse, con texto o sin él. Medido el 12/11/2026: **66 de las 2.176 OT con las dos fechas** ya están así —44 PROGRAMADO contra 22 CORRECTIVO, adelanto típico de 2 días— y **sólo 3 de las 66 entraron por la app**, así que lo que viene de la planilla va a seguir cerrándose antes sin explicar nada. Y la trampa: **el `select` de `exportarLoPendiente` es una lista de columnas escrita a mano**, y olvidarse `cierre_justificacion` ahí hace que la del alta no llegue nunca a la planilla sin fallar ni avisar. **El spec arranca de una premisa falsa** —dice que nada lo frena, siete días después de que la regla del 05/11 empezara a frenarlo todo—: leerlo sin eso en mente es rehacer el error |
 | Mantenimiento — OT encadenadas | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## Las OT encadenadas` · [spec](docs/superpowers/specs/2026-11-12-mantenimiento-ot-encadenadas-design.md) · [plan](docs/superpowers/plans/2026-11-12-mantenimiento-ot-encadenadas.md). Una OT que al cerrarse genera la siguiente: cambio de martillos → rotación × 3 → cambio, en cuatro molinos y rompedoras. Tres cosas que no se deducen del código: **el estado son dos campos y un corte** —`desde` y `vuelta_desde`, y sólo cuentan las OT creadas en `desde` o después—, y sin ese corte reiniciar un ciclo vuelve a crear la orden recién cancelada sobre piezas nuevas, que es el anti-objetivo producido por el mecanismo que existía para evitarlo; **lo mueven tres puntas y nada más** (la madre al cerrarse, el botón de reinicio, la carga inicial), así que sin eso el ciclo se detiene para siempre después del primer cambio; y **la cara es la vuelta más uno**, que no es una convención elegida sino lo que dicen 63 de las 248 OT medidas —aparecen la 2ª, la 3ª y la 4ª, nunca la 1ª y nunca una 5ª—. El ciclo **apunta a `mant_tareas_preventivas`** en vez de copiar los nombres: el día que ese catálogo genere planes, una tarea que un ciclo maneja no se genera dos veces. Y los cuatro nacen **sin punto de arranque**: desde el 13/11/2026 **arrancan solos con el primer «Cambio de martillos» que se cierre a partir del día en que se configuraron**, que es la única parte del mecanismo donde el texto de una descripción decide algo —la versión anterior pedía cuatro fechas tipeadas, y un ciclo sin arrancar no genera órdenes, así que nada se atrasa y `mant-atrasadas` no puede avisarlo: se habría desplegado dormido—. **Mira hacia adelante y nunca hacia atrás**: arrancando del último cambio histórico, los cuatro nacían con su primera rotación atrasada 7, 21, 21 y 3 días, y Filler 2 —que está en 4ª cara— pediría rotar a la 2ª. Se ve sin esperar con `npx tsx scripts/que-haria-el-ciclo.mts`. **Funciona: medido el 17/11/2026**, Filler 1 y Filler 2 arrancaron solos con los cambios del 14 y del 15/11 y generaron las OT 3096 y 3097, las dos en la planilla y sin pendiente de exportación; el cambio de Filler 2 venía escondido en «Se desatora rompedora (Por corte de energía) **y se realiza cambio de martillos**». Y ahí se vio el límite de mirar sólo hacia adelante: **un equipo configurado a mitad de ciclo espera hasta el final de su ciclo**, así que Planta 0-2 —cambiada el 31/10, o sea antes de configurarse, y sin rotar desde entonces— se cargó a mano (`desde` 31/10, `vuelta_desde` 0) y nació su OT 3111 en ATRASADO con fecha 10/11, que es la verdad. Hidratación sigue sin arrancar **y está bien**: llegó a la 4ª cara el 14/11, así que lo que le toca es un cambio y es justo lo que el ciclo espera. **La trampa de medir esto a mano**: el 13/11 el análisis dio 2ª cara para Hidratación porque la rotación a 3ª del 12/11 todavía no había llegado por el `IMPORTRANGE`, y cargarla con ese dato habría pedido rotar algo ya rotado — el ancla válida es **la última rotación**, nunca el último cambio, y el dato tarda entre 3 y 53 h en asentarse. **Y el 24/11/2026 se rompió: Hidratación generó 426 OT de «Cambio de Martillos» en cuatro días, de la 3166 a la 3594, una cada diez minutos.** `laUltimaEnRango` ordenaba por `ciclo_vuelta` ascendente, y **la vuelta 0 no es el principio de la lista sino el final del ciclo**: la madre recién creada ordenaba primera, «la última» seguía siendo la hija 3 cerrada, y cada corrida volvía a decidir «crear la madre» sin ver la que ya existía. La otra mitad, que lo volvía permanente: `elCorteQueSigue` exige que la última **sea** la madre para mover el corte, así que el corte tampoco se movía nunca. Hoy el lugar de la madre se calcula contra **la hija más alta que haya** y no contra `repeticiones`, que se edita en el catálogo. **Ningún test lo podía ver porque todos pasan UNA sola OT** —con una sola la madre es la última por falta de competencia—, y el monitor de salud estuvo en verde todo el tiempo: vigila que el generador corra, no que lo que genera tenga sentido. Le tocó a Hidratación por ser el único que había completado sus tres rotaciones; los otros tres lo tenían esperando, PY-A1-05 a un cierre de distancia. Y el defecto vecino que éste tapaba, confirmado con un test antes de tocarlo: **una madre cerrada el mismo día que nació empata con el corte**, vuelve a ser la última y congela el ciclo para siempre — hoy queda fuera del rango la madre que fijó el corte. De la limpieza, dos cosas que valen para la próxima: **no se borra por rango de filas** —las 427 del bloque 272–698 de «Altas del sistema» incluían dos órdenes legítimas de otros equipos, las OT 3172 y 3176—, y **primero la planilla y después la base**, porque al revés la sincronización siguiente reimporta lo borrado y lo trae sin `ciclo_id`. Se conservó la 3166, que era la orden real |
 | Mantenimiento — cancelar una OT | [docs/MANTENIMIENTO-INTEGRACION.md](docs/MANTENIMIENTO-INTEGRACION.md), sección `## Cancelar una OT` · [spec](docs/superpowers/specs/2026-11-13-mantenimiento-cancelar-una-ot-design.md) · [plan](docs/superpowers/plans/2026-11-13-mantenimiento-cancelar-una-ot.md). El estado de la orden que **no se va a hacer nunca**, con justificación obligatoria. **La migración `20261116082742_…` ya está aplicada**, comprobado contra producción el 18/11/2026 leyendo el catálogo: la expresión de `gut_orden` dice `('REALIZADO', 'CANCELADA')`, la columna es `stored` y el índice `ordenes_trabajo_gut_orden_idx` —que el `drop column` se había llevado— volvió con `(gut_orden desc, ot_number desc)`. Los tres pedazos, que es lo que había que mirar: es `drop` + `add` + `create index`, así que el modo de fallo era quedarse a medias. Lo que arregla, por si alguien la ve en otra base: sin ella una cancelada conserva su +1000 en `gut_orden` y sube en el listado de OT en vez de correrse al final —y eso es el listado entero de `/mantenimiento/ordenes` y el Asistente, no un tablero GUT aparte, porque esa columna es el orden por defecto—. Cinco cosas que no se deducen del código: **`CANCELADA` reemplazó a `SUSPENDIDA`** en vez de sumarse, porque ese estado tenía **0 filas de 2.453** y dos palabras para «cerrada sin hacerse» es como se pudre un vocabulario; **la justificación no es una columna sino una nota** de `ordenes_trabajo_notas`, que ya exporta a la columna X —por eso no hizo falta migración para el motivo, y por eso una cancelada puede volver a justificarse—; **el motivo entra antes que el estado** por las dos puntas que cancelan (el PATCH de órdenes y el botón de reiniciar un ciclo), que es la regla de la auditoría de lo irreversible; **una cancelada no puede tener `fecha_cierre`** y el camino vivo que lo rompía era «Registrar el trabajo» con resultado **Parcial**, que deja la orden `EN_PROCESO` **con** fecha —la fecha que decide es `elCierreQueQueda()` de `cierreDeOT.ts`, la misma que miran las tres reglas del cierre, y no la del cuerpo—; y **la puerta de la planilla no se cierra, se detecta**: la columna M la edita gente a mano, así que una «Cancelada» sin motivo la informa `laCancelacionNoTieneMotivo` como divergencia del contraste, y si la consulta de notas falla el detector calla y lo dice en `canceladas_sin_revisar`. Del merge con `main` (17/11/2026), la trampa que ningún test podía ver: **el botón «reiniciar el ciclo» escribía `SUSPENDIDA`**, o sea la palabra que esta rama borró del vocabulario — iba cruda a la columna M, `estadoDeTexto` ya no la reconocía y la sincronización siguiente la devolvía como `POR_HACER`, **reviviendo la orden que el reinicio acababa de aparcar**. Hoy escribe `CANCELADA`. Lo gemelo en `cicloDeOT.ts`: la rama que miraba `SUSPENDIDA` quedó muerta y una cancelada caía en «esperar», congelando el ciclo para siempre |
@@ -690,11 +690,35 @@ etiqueta con su campo. Va `grid-cols-1 sm:grid-cols-3`. Dos columnas entran
 el escaneo no hace.
 
 Lo detecta `node scripts/revisar-responsive.mjs`, que busca cuatro cosas: grillas
-de tres o más columnas sin breakpoint, `w-[Npx]` y `min-w-[Npx]` mayores a 343, y
-`<table>` sin un contenedor con scroll. El escaneo a mano del 16/10/2026 encontró
+de tres o más columnas sin breakpoint, `w-[N]` y `min-w-[N]` mayores a 343 —en
+`px` **y desde el 26/11/2026 también en `rem`**, a 16 px cada uno—, y `<table>`
+sin un contenedor con scroll. El escaneo a mano del 16/10/2026 encontró
 30 lugares que no entraban en 313 pantallas; el script es ese escaneo convertido
 en código. **No ve la sintaxis arbitraria** (`grid-cols-[repeat(12,1fr)]`): esa
-hay que medirla a mano.
+hay que medirla a mano — las seis del árbol se miraron el 26/11/2026 y las seis
+son de una columna en el teléfono.
+
+**Los `rem` estaban excluidos a propósito y con argumento escrito, y la premisa
+venció.** Decía que la conversión depende del tamaño de fuente de la raíz, con
+el dato de que los dos `rem` del árbol eran `16rem` = 256 px y entraban. Hoy son
+nueve y dos pasan el ancho útil. El argumento se cerró midiendo: `globals.css`
+no le declara `font-size` a `html`, así que la raíz es el default y el ×16 se
+puede afirmar — **si algún día se lo declara, ese número deja de valer** y hay
+que cambiarlo en el script. Esa nota se defendía con que «si aparece uno que no,
+lo va a encontrar la pasada visual»; la pasada visual corrió y en efecto los
+encontró, pero sólo porque alguien se puso a mirar, que es lo que el script
+existe para no necesitar.
+
+**Y dejarlos entrar destapó un hueco que estaba desde el principio: el chequeo
+de anchos no miraba si había un contenedor con scroll**, cosa que el de
+`<table>` sí hacía. Los dos `rem` grandes del árbol son tablas anchas bien
+envueltas, así que salieron como **ROMPE sobre código correcto** — y un rojo que
+no es un defecto es lo que enseña a no mirar la salida, el mismo motivo por el
+que el lint no está en el CI. Las dos preguntas comparten ahora una sola
+definición de «envuelto» (`hayContenedorConScrollArriba`), que mira doce líneas
+hacia arriba y **se equivoca hacia callarse**: para un chequeo que no está en el
+CI, un falso negativo lo encuentra la pasada visual y un falso positivo lo
+apaga.
 
 ## Y `className="input w-20"` no mide 20
 
@@ -736,13 +760,14 @@ clase sin capa, y las otras dos muerden igual de callado:
 | Clase | Declara | Lo que no se aplica al lado |
 |---|---|---|
 | `.card` | `border` (el atajo, o sea también el color) | `border-red-300`, `border-amber-300`, `border-l-*` |
-| `.card` | `box-shadow` | `ring-*`, `shadow-*` |
-| `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost` | `color` y `font-size` | `text-red-700`, `text-xs`, `text-sm` |
-| `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost` | `cursor` | `disabled:cursor-not-allowed`, `cursor-*` |
+| `.card` | `box-shadow` | `ring-*`, `shadow-*` — y también `hover:shadow-*`, que el `:hover` no esquiva nada. Desde el 26/11/2026 el levantarse lo da `a.card:hover, button.card:hover` en `globals.css`, así que una tarjeta clicable no necesita declararlo |
+| `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost`, `.btn-ghost-danger` | `color` y `font-size` | `text-red-700`, `text-xs`, `text-sm` |
+| `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost`, `.btn-ghost-danger` | `cursor` | `disabled:cursor-not-allowed`, `cursor-*` |
 | `.badge` | `display: inline-flex`, `border-radius`, `padding`, `font-size: 11px`, `font-weight: 600`, `letter-spacing` **y `text-transform: uppercase`** | `block`, `rounded-md`, `px-*`/`py-*`, `font-normal`, `tracking-*`, `text-xs`, `text-sm` — y la segunda no es una utilidad que pierde sino una que nadie pensó en poner: una oración dentro de un `.badge` sale **gritada en mayúsculas** |
 
-**Los cuatro `.btn-*` están en la lista a propósito, y `.badge` entró último
-—el 19/11/2026, después de `.btn-ghost`—.** Una tabla incompleta es lo que hace
+**Los cinco `.btn-*` están en la lista a propósito, y los dos últimos en entrar
+fueron `.badge` —el 19/11/2026, después de `.btn-ghost`— y `.btn-ghost-danger`,
+el 26/11/2026.** Una tabla incompleta es lo que hace
 que el próximo lector la dé por segura: si falta una clase, el que la use va a
 creer que la suya sí deja pasar las utilidades. Antes de agregar un `.btn-*`
 nuevo a `globals.css`, va también acá con lo que declare.
@@ -763,10 +788,47 @@ cinco `text-xs` medían 14 px. **Ninguna de las tres cosas rompe nada y ésa es
 la trampa**: la pantalla se ve bien, sólo que no dice lo que el código dice que
 dice.
 
-Qué hacer según el caso: un color de estado va por `style` —es lo que ya hacen
-los badges de Mantenimiento—; para un botón rojo existe `.btn-danger`; y una
-utilidad que no puede ganar **se saca**, porque una clase que no hace nada y
-promete que sí es peor que no tenerla.
+**Y medido de nuevo el 26/11/2026, esta vez en todo el árbol y con el navegador
+en vez de la cascada: eran 28 utilidades muertas en 19 archivos** —6 bordes de
+alerta de `.card` que se veían grises, 12 `hover:` de `.card` que no hacían
+nada, 7 `text-xs` sobre un `.btn-*` que medían 14 px y 4 «Eliminar»/«Borrar»
+que pedían rojo y salían grises—, más un `input w-auto` que medía 327 px. Lo
+que vale guardar de esa pasada son tres cosas:
+
+- **El comentario de `.card` en `globals.css` afirmaba que los `hover:shadow-lg`
+  de las tarjetas de KPI «siguen sumando el efecto de levantarse», y era
+  falso.** Un comentario que promete que una utilidad muerta funciona es peor
+  que la utilidad: es lo que hace que el siguiente escriba otra.
+- **Y medir un `:hover` desde acá tiene dos trampas encima.** Una ya estaba
+  anotada: leer `getComputedStyle` pegado al hover devuelve el valor de reposo,
+  porque corre contra la transición. La otra apareció el 26/11/2026 y es peor,
+  porque no se parece a un error: **con el panel del navegador oculto la página
+  corre en segundo plano y no recalcula estilos**, así que `getComputedStyle`
+  devuelve lo de antes —ni siquiera un `element.style.boxShadow = "none"` se ve
+  reflejado— y **todo parece muerto, lo esté o no**. Se arregla forzando un
+  repintado entre el hover y la lectura (una captura alcanza) y, sobre todo,
+  teniendo un **control positivo**: un caso que sí tiene que cambiar. Sin él no
+  se distingue «la utilidad no se aplica» de «la medición no se actualizó», y
+  las dos veces que acá se dio por muerta una regla fue con esa ambigüedad
+  arriba de la mesa.
+- **Contarlas con `grep` sobre `className="…"` da de menos.** Así salían 11
+  `hover:` y eran 12: `components/KpiCard.tsx` arma la clase en una variable
+  (`const clases = "card … hover:shadow-lg"`), que ningún patrón de atributo ve.
+- **Las cinco tarjetas de los tableros de Compras, Despacho, Inventario,
+  Producción y Remises no usan `.card`**: son `rounded-xl border bg-white` a
+  mano, y por eso su `hover:shadow-md` sí anda. O sea que la pantalla que se
+  salvó es la que no usó la clase de la casa.
+
+Qué hacer según el caso, con lo que se eligió el 26/11 al lado:
+
+| Caso | Qué va | Por qué no lo otro |
+|---|---|---|
+| Color de estado en una `.card` | `style={{ borderColor: "var(--borde-aviso)" }}` | Es lo que ya hacen los badges de Mantenimiento. Los tokens `--borde-aviso` y `--borde-alerta` existen para que el mismo hex no quede copiado en tres archivos |
+| Tarjeta clicable que se levanta | nada: lo hace `a.card:hover, button.card:hover` en `globals.css` | Acotado a `a` y `button` porque **lo que se levanta es lo que se puede apretar**; una tarjeta de sólo lectura que reacciona al mouse promete un clic que no existe |
+| Botón rojo con borde | `.btn-danger` | — |
+| Acción destructiva adentro de un `<td>`, al lado de otro ghost | `.btn-ghost-danger` | `.btn-danger` es 14 px con borde y 9×16 contra los 13 px sin borde y 6×10 del ghost: mete un botón de otro peso al lado de su hermano y ensancha una columna que en el teléfono ya va con scroll |
+| Hay que forzar un tamaño o un color puntual | el `!` de Tailwind (`!text-xs`), que sí gana | Ya estaba en el repo (`remises/hoy/RouteCard.tsx`) y conserva la intención del autor, que sacar la clase pierde |
+| La utilidad no se puede hacer ganar y no hace falta | **se saca** | Una clase que no hace nada y promete que sí es peor que no tenerla |
 
 **Hay una variante que la tabla no puede expresar, porque no es una utilidad
 que pierde sino una regla que falta.** Hasta el 04/11/2026 `globals.css`
@@ -1401,17 +1463,22 @@ primero que hay que mirar cuando un dato se pierde. Eran cinco; desde que los
 avisos tienen su cola (29/10/2026) **son tres**: las notas de una OT, la
 respuesta de Compras a una consulta por un repuesto —que escribe la misma
 columna X y por el mismo motivo— y el libro de comparativa de un RI, las tres
-con su porqué medido. Sale 1 si hay algún ROMPE, y **hoy da ROMPE 1 · MIRAR 0**:
-es `lib/mantenimiento/altaDeOS.ts`, que escribe en la planilla del formulario de
-OS y no está declarado en el registro del script. **No se declaró a propósito, y
-eso es lo que hay que saber antes de cerrarlo**: ese módulo nació el 19/11/2026
-en dos commits (`669dec76` y `4c7c1ca6`) y **todavía no lo llama nadie** —sólo
-su propio test—, así que es un alta a medio cablear. Hoy la escritura **es** el
-alta y todos sus caminos de fallo devuelven `ok: false` sin dejar nada, o sea
-`aborta`; pero el día que se la cablee a una ruta que inserte en la base antes
-de escribir, esa declaración pasa a ser falsa **sin que nada avise**, que es
-exactamente lo que el script existe para impedir. Lo contesta quien termine esa
-alta, no quien pase por al lado. Y **todavía no está en el CI** por lo mismo que
+con su porqué medido. Sale 1 si hay algún ROMPE, y **hoy da ROMPE 0 · MIRAR 0**.
+
+**El último en entrar al registro fue `lib/mantenimiento/altaDeOS.ts`
+(24/11/2026), y su entrada tiene una salvedad que hay que leer antes de tocar
+ese módulo.** Nació el 19/11/2026 en dos commits (`669dec76` y `4c7c1ca6`) y
+**todavía no lo llama nadie** —sólo su propio test—, así que es un alta a medio
+cablear: lo declarado es el contrato que el archivo garantiza hoy y no el de un
+camino que ya exista. Quedó como `aborta`, y no por analogía con su gemela de
+las OT sino por lo que hace: escribe «Altas del sistema» **antes** de que la OS
+exista en la base, relee la fila destino para no pisar un alta que entró
+mientras tanto, relee lo escrito para confirmar el número, y todos sus caminos
+de fallo devuelven `ok: false` sin dejar nada. **El día que se la cablee a una
+ruta que inserte en la base antes de escribir, esa declaración pasa a ser falsa
+sin que nada avise**, que es exactamente lo que el script existe para impedir:
+quien termine esa alta tiene que releer la entrada contra la ruta. Y **todavía
+no está en el CI** por lo mismo que
 `revisar-responsive`: primero conviene que el registro aguante unas semanas de
 cambios.
 

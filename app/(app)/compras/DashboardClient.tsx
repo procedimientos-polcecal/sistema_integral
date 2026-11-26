@@ -236,6 +236,7 @@ export default function DashboardClient({
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Más</h2>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Acceso href="/compras/seguimiento" label="Seguimiento" />
+          <Acceso href="/compras/comparativas" label="Comparativas" />
           <Acceso href="/compras/proveedores" label="Proveedores" />
           <Acceso href="/compras/ubicaciones" label="Ubicaciones" />
         </div>
