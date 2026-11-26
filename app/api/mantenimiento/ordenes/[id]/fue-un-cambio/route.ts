@@ -64,11 +64,18 @@ type Params = { params: Promise<{ id: string }> };
  *
  * ── EL CICLO Y SUS TAREAS SE LEEN EN CONSULTAS SEPARADAS, NO CON UN EMBED ──
  *
- * `mant_ciclos_de_ot` → `mant_tareas_preventivas` es uno de los pares ambiguos
- * conocidos del repo —hay dos caminos, la madre y la hija—, y un embed mal
- * escrito ahí no falla en `tsc` ni en los tests: contesta `300 PGRST201` del
- * otro lado del cable. Dos consultas sobre dos filas cuestan nada y no tienen
- * ese modo de falla.
+ * **No es por la ambigüedad**: el repo embebe ese par por la columna
+ * —`madre:tarea_madre_id(nombre, componente)`, como hacen la ficha del equipo
+ * y la Configuración— y nombrar la columna ya elige el camino, así que no hay
+ * `300 PGRST201` posible. Es por el test: `supabaseDeMentira` **no resuelve
+ * embeds** —sólo el de `creado_por`—, y esta ruta tiene test de ruta
+ * justamente porque lo que hay que probar acá es el orden de las escrituras.
+ * Con un embed, esa lectura devolvería `null` en el test y el test estaría
+ * probando otra cosa que la que corre en producción.
+ *
+ * Dos consultas sobre dos filas cuestan nada. El `GET` de `ciclos/[id]`, que
+ * alimenta al modal, hace lo mismo y por la misma razón: dos lecturas gemelas
+ * escritas igual se leen mejor que una de cada forma.
  *
  * ── Y POR QUÉ ESTA RUTA MUEVE EL CORTE ─────────────────────────────────────
  *

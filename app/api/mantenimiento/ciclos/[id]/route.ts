@@ -15,11 +15,13 @@ type Params = { params: Promise<{ id: string }> };
  * de la tarea madre —«Fue un cambio de martillos»— y para decir cuál es el
  * piso de la fecha hace falta el ciclo.
  *
- * **Las dos tareas se leen en una consulta aparte y no con un embed.** El par
- * `mant_ciclos_de_ot` → `mant_tareas_preventivas` tiene dos caminos (la madre y
- * la hija), y un embed sin el FK explícito contesta `300 PGRST201` del otro
- * lado del cable: no lo ven `tsc`, ni los tests, ni el build. Dos consultas
- * sobre dos filas no tienen ese modo de falla.
+ * **Las dos tareas se leen en una consulta aparte y no con un embed**, igual
+ * que en `ordenes/[id]/fue-un-cambio`, que es la ruta a la que este GET sirve.
+ * No es por la ambigüedad del par —embeberlo por la columna,
+ * `madre:tarea_madre_id(...)`, ya elige el camino y es lo que hacen la ficha
+ * del equipo y la Configuración—: es para que las dos lecturas gemelas estén
+ * escritas igual. La de allá no puede ser un embed porque
+ * `supabaseDeMentira` no los resuelve y esa ruta tiene test de ruta.
  *
  * Pide `puedeEditarMantenimiento` y no sólo sesión, porque lo único que lo
  * llama es una pantalla de edición: dar menos acceso del necesario se nota al
