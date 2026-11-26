@@ -2,6 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { moneda } from "@/lib/compras/constants";
 import type { Proveedor } from "@/lib/compras/types";
 import Select from "@/components/Select";
@@ -13,13 +14,15 @@ type Estadistica = { pedidos: number; monto: number };
 const AMBAS = "ambas";
 
 export default function ProveedoresClient({
-  proveedores, estadisticas, empresas, canEdit,
+  proveedores, estadisticas, empresas, canEdit, puedeFusionar,
 }: {
   proveedores: Proveedor[];
   estadisticas: Record<string, Estadistica>;
   /** Las dos empresas del grupo, que en Odoo son dos perfiles separados. */
   empresas: { id: string; nombre: string }[];
   canEdit: boolean;
+  /** Admin del núcleo: es el único que entra a fusionar duplicados. */
+  puedeFusionar: boolean;
 }) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
@@ -75,14 +78,24 @@ export default function ProveedoresClient({
             {proveedores.length} proveedores. El padrón lo comparten Compras y Mantenimiento.
           </p>
         </div>
-        {canEdit && (
-          <button
-            onClick={() => setCreando(true)}
-            className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)]"
-          >
-            + Nuevo proveedor
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {puedeFusionar && (
+            <Link
+              href="/compras/proveedores/duplicados"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Cargados dos veces
+            </Link>
+          )}
+          {canEdit && (
+            <button
+              onClick={() => setCreando(true)}
+              className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)]"
+            >
+              + Nuevo proveedor
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">

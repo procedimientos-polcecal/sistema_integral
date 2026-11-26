@@ -462,6 +462,15 @@ un caso raro: es uno de cada dos. Por qué son tantos y por qué cargarlos no es
 sólo cuestión de escribirlos está en la sección «El padrón tiene a la misma
 empresa dos veces» de [ODOO-INTEGRACION.md](ODOO-INTEGRACION.md).
 
+De ahí sale también la otra punta: **`/compras/proveedores/duplicados`**, la
+pantalla de admin que fusiona las fichas de la misma empresa cargada dos veces
+—105 grupos al 26/11/2026—, que es el camino para 111 de los CUITs que no se
+pueden escribir. Se entra desde «Cargados dos veces», en la lista de
+proveedores. Borra una fila del padrón, así que **se audita con `borrar`**, y lo
+que hay que saber antes de tocarla —cuál queda la decide la planilla y no la
+actividad, el orden de las cuatro escrituras, y las dos clases de choque— está
+en la sección «La pantalla para fusionarlos» de ese mismo documento.
+
 ## Integración con el resto del SdG
 
 - **Proveedores viven en el núcleo**, no dentro de Compras. Mantenimiento ya

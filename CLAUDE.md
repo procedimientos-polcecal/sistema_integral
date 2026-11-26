@@ -163,11 +163,11 @@ Antes de escribir una, leer las once trampas del
   `remises_empleados_datos.direccion`.
 - **Lo que no se deshace se audita.** Desde el 05/10/2026 hay una tabla
   `auditoria` en el núcleo y una función `auditar()` en
-  [lib/core/auditoria.ts](lib/core/auditoria.ts). Medido el 13/11/2026 con
-  `grep` **contra este árbol**: la llaman **catorce rutas y un ayudante
+  [lib/core/auditoria.ts](lib/core/auditoria.ts). Medido el 26/11/2026 con
+  `grep` **contra este árbol**: la llaman **quince rutas y un ayudante
   compartido** (eran nueve el 26/10/2026 y ocho antes; este renglón había
   quedado en «nueve» mientras el árbol llegaba a catorce, que es justo lo que
-  vuelve insegura una cuenta escrita a mano). Las catorce: postear un asiento en
+  vuelve insegura una cuenta escrita a mano). Las quince: postear un asiento en
   Odoo, mover los permisos de un usuario, cerrar una liquidación, ajustar stock,
   aprobar o denegar una compra, —desde la programación del taller— corregir o
   borrar una ausencia **por las dos puntas** (`rrhh/ausencias/[id]` y
@@ -178,7 +178,7 @@ Antes de escribir una, leer las once trampas del
   faltaba, estaba al mismo nivel que postear un asiento y era la única
   escritura irreversible a Odoo sin rastro de quién la hizo, y usa el verbo
   `cerrar`, el mismo de la liquidación, para no necesitar una migración. Y las
-  cinco que se sumaron después: sacar un renglón del cuaderno de un contratista
+  seis que se sumaron después: sacar un renglón del cuaderno de un contratista
   (`mantenimiento/cuaderno/renglones/[id]`), postergar una OT —que es `corregir`
   su fecha de ejecución, con la justificación como motivo
   (`mantenimiento/ordenes/[id]/postergar`)—, borrar una fila del padrón del
@@ -188,7 +188,13 @@ Antes de escribir una, leer las once trampas del
   contactos, sus oportunidades y todo su historial de conversaciones — y a
   diferencia del renglón del cuaderno, acá **no hay archivo de origen en ningún
   bucket**, así que la fila de `auditoria` es lo único que queda: por eso lleva
-  la razón social, el CUIT y cuántas filas colgaban. El ayudante es
+  la razón social, el CUIT y cuántas filas colgaban. Y del 26/11/2026,
+  **fusionar dos fichas del mismo proveedor** (`compras/proveedores/fusionar`),
+  que borra la que se va después de re-apuntarle las 19 tablas: el registro va
+  **antes** de todo —si no entra, no se fusiona— y lleva en el `contexto` el
+  nombre, el CUIT, la razón social y cuántas filas se movieron por tabla, que
+  es lo único con lo que se puede rehacer la fila si la fusión estuvo mal. El
+  ayudante es
   [lib/core/borradoDeEspejo.ts](lib/core/borradoDeEspejo.ts): ahí se
   registra el `borrar` de las sincronizaciones que espejan una planilla. Ese
   verbo lo escribía **sólo un proceso** hasta el 03/11/2026, cuando apareció el

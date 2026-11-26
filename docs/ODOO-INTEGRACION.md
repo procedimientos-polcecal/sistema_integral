@@ -378,6 +378,85 @@ tiene; «PIPARO» tiene 438 y «Omar Piparo» 3. Fusionar es re-apuntar las **19
 tablas** que cuelgan de `proveedores` (`node scripts/que-cuelga-de.mjs
 proveedores`), y seis de ellas hacen fallar el borrado si quedan filas.
 
+### La pantalla para fusionarlos: `/compras/proveedores/duplicados`
+
+Del 26/11/2026, sólo **admin del núcleo** —no edición de Compras—, porque
+`proveedores` es catálogo del núcleo y una fusión mal hecha no rompe Compras:
+re-apunta los requerimientos, las facturas, los partes de contratista y el
+kardex de Inventario de una empresa a otra.
+
+La trae `GET /api/compras/proveedores/duplicados` y la ejecuta
+`POST /api/compras/proveedores/fusionar`. Van separadas por lo mismo que el
+cruce con Odoo tiene `preview` y `enlazar`: **lo que no se deshace se mira
+antes**.
+
+**Las tres columnas que muestra de cada fila son tres preguntas distintas**, y
+la tercera es la que decide. Cuánto cuelga de la ficha es lo que uno miraría
+solo, y lleva a elegir mal justo en los casos que importan; si está enlazada a
+Odoo dice cuál puede generar una orden hoy; y **si la planilla la nombra** dice
+si borrarla sirve de algo. Por eso la fila que viene marcada es la que la
+planilla nombra más veces, y sólo cuando la planilla no nombra a ninguna, la
+que más filas tiene.
+
+**Medido contra la planilla real de Compras el 26/11/2026**, sobre los 105
+grupos: en **70** la planilla escribe **un solo nombre** de los dos —las dos
+filas del padrón caen en la misma celda, así que fusionar alcanza—; en **15**
+no nombra a ninguna, y nada las puede recrear; y en **20** escribe **dos o
+más**. Esos 20 son los que la pantalla frena con un cartel: la fila que se
+borre vuelve en la corrida siguiente, así que **primero se unifica la columna
+PROVEEDOR de la planilla y después se fusiona acá**. Suman 569 filas colgando,
+o sea que no son el caso chico. El filtro «sólo los que se pueden fusionar sin
+tocar la planilla» existe por eso.
+
+Ojo con la cuenta: lo que se cuentan son **claves normalizadas de la planilla**
+y no filas del padrón. `ALBERDI` y `Alberdi` son 272 apariciones del **mismo**
+nombre, no dos; contar filas da 74 grupos «con dos nombres» en vez de 20.
+
+**El orden de las cuatro escrituras no es casual, porque no hay transacción.**
+PostgREST no tiene una, así que lo único que se puede elegir es **en qué estado
+queda si se corta a la mitad**:
+
+1. el registro de auditoría —antes de tocar nada; si no entra, no se fusiona,
+   igual que el borrado de espejo—;
+2. mover las 19 tablas;
+3. borrar la fila que se va;
+4. **recién ahí** escribirle a la que queda el CUIT y lo que le falte.
+
+El 4 va último a propósito. Al revés —escribir el CUIT y después borrar— un
+fallo en el borrado deja **dos filas con el mismo CUIT**, y eso es peor que no
+haber hecho nada: `cruzarProveedores()` no enlaza ningún CUIT repetido, así que
+habría desconectado las dos. Con este orden, un fallo a mitad de camino deja a
+la que se va vacía y viva —exactamente el estado de antes— y la operación se
+puede repetir. Si falla el 4, el CUIT no se pierde: está en el `contexto` de la
+fila de auditoría, que ya se escribió, y la respuesta lo dice.
+
+**Los choques son de dos clases y se tratan distinto.** En dos tablas
+`proveedor_id` es sólo la mitad de una clave única, así que la fila de la que se
+va puede no entrar: el mismo requerimiento con los dos proveedores invitados (3
+casos) y el mismo enlace a Odoo en la misma empresa (5 casos). Ahí la fila
+repetida no dice nada que la otra no diga, así que se borra. Pero en
+`cantera_contratistas` y `despacho_recepcion_proveedores` el `proveedor_id`
+**es** la clave primaria entera: la fila lleva datos propios y borrarla los
+pierde, así que se frena antes de escribir nada y lo decide una persona. Esa
+comprobación corre sobre **todas** las filas del grupo antes de la primera
+escritura: frenar a mitad de una tanda dejaría la primera fusionada y la
+segunda no, que es el peor de los estados.
+
+**Dos CUITs válidos distintos no se fusionan nunca**: son dos empresas, no un
+duplicado, y el 409 lo dice.
+
+**El `nombre` no se copia jamás** —es con lo que la sincronización reconoce al
+proveedor—, pero los otros 18 campos sí, **sólo si la que queda los tiene
+vacíos**; `activo`, `es_contratista` y `trabaja_con_ambas` se juntan con un O
+lógico.
+
+Dos cosas más de la ruta de lectura: **la planilla se lee «si se puede»** y, si
+falla, contesta `planilla: null` con el motivo tal cual lo dio Google en vez de
+dibujar una columna vacía que parezca un dato; y **las 19 tablas se leen
+enteras** en vez de con un `.in()`, porque la pregunta es «cuántas filas por
+proveedor» para ~250 ids y un `.in()` de ese tamaño arma una URL que PostgREST
+rechaza con un 400 sin decir por qué.
+
 ### Lo que el archivo no cambia nunca
 
 **El `nombre`.** Volvió con 18 nombres cambiados y 77 pasados a mayúscula por
