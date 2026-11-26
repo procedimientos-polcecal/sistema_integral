@@ -75,6 +75,38 @@ const { esPestanaDeArea, indexarColumnas } = await import("../lib/compras/sheets
 
 const aplicar = process.argv.includes("--aplicar");
 
+/**
+ * El modo que invierte la regla, y que **sólo se corre cuando una persona lo
+ * pidió para esos grupos**.
+ *
+ * Toma exactamente el caso que la regla normal manda a la mano: la ficha que
+ * nombra la planilla es la que NO tiene CUIT. Ahí deja viva a la de la
+ * planilla —que hereda el CUIT, la razón social y el enlace a Odoo de la
+ * otra— y borra la que sí tenía CUIT. Es la única forma de que el grupo
+ * termine en una sola ficha sin que la sincronización la recree.
+ *
+ * El enlace a Odoo no se pierde: `proveedores_odoo` sólo borra la fila
+ * repetida cuando la que queda ya tiene una para esa empresa, y en este caso
+ * no tiene ninguna, así que las filas se re-apuntan.
+ *
+ * Lo que sí se pierde es el nombre: queda «ORITI» y no «Oriti Gustavo». Si se
+ * quiere el otro, el camino no es fusionar al revés —eso recrea la ficha— sino
+ * cambiar la celda de la planilla y después fusionar.
+ */
+const laDeLaPlanilla = process.argv.includes("--la-de-la-planilla");
+
+/**
+ * `--solo "NOMBRE|OTRO"` limita la corrida a los grupos cuya ficha
+ * sobreviviente se llame así.
+ *
+ * Existe porque **la lista se mueve mientras uno la mira**: entre que se le
+ * muestran los grupos a una persona y que contesta, otra fusión hecha a mano
+ * puede destrabar grupos nuevos, y correr «todo lo que da hoy» haría más de lo
+ * que se aprobó. Pasó el 26/11/2026: se aprobaron 10 y el ensayo daba 12.
+ */
+const soloArg = process.argv.indexOf("--solo");
+const solo = soloArg >= 0 ? new Set(process.argv[soloArg + 1].split("|").map((x) => x.trim())) : null;
+
 const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -230,6 +262,29 @@ for (const grupo of grupos) {
     continue;
   }
 
+  const nombradas = filas.filter((f) => dice.porFila[f.id]?.laNombra);
+
+  if (laDeLaPlanilla) {
+    /*
+     * Este modo atiende UN solo caso y saltea todo lo demás, para que correrlo
+     * no pueda tocar nada que no sea lo que una persona aprobó mirándolo.
+     */
+    if (nombradas.length !== 1 || nombradas[0].id === conCuit[0].id) continue;
+    const queda = nombradas[0];
+    const seVan = filas.filter((f) => f.id !== queda.id);
+    const cambios: Record<string, unknown> = {};
+    for (const f of seVan) Object.assign(cambios, camposQueSeMudan({ ...queda, ...cambios }, f));
+    listos.push({
+      clave: grupo.clave,
+      queda,
+      seVan,
+      porQue: "la nombra la planilla y hereda el CUIT de la otra",
+      mueve: seVan.reduce((a, f) => a + cuelgaDe(f.id).total, 0),
+      hereda: Object.keys(cambios),
+    });
+    continue;
+  }
+
   const queda = conCuit[0];
   const seVan = filas.filter((f) => f.id !== queda.id);
 
@@ -287,6 +342,15 @@ console.log(`  se fusionan ahora: ${listos.length}  (${listos.reduce((a, p) => a
 console.log(`  de ésos, la que queda HEREDA el CUIT de la que se va: ${heredanCuit.length}`);
 console.log(`  frenados: ${frenados.length}\n`);
 
+if (solo) {
+  const fuera = listos.filter((p) => !solo.has(p.queda.nombre));
+  const faltan = [...solo].filter((n) => !listos.some((p) => p.queda.nombre === n));
+  listos.splice(0, listos.length, ...listos.filter((p) => solo.has(p.queda.nombre)));
+  console.log(`--solo: quedan ${listos.length} de ${listos.length + fuera.length}.`);
+  if (fuera.length) console.log(`  se dejan afuera: ${fuera.map((p) => `«${p.queda.nombre}»`).join(", ")}`);
+  if (faltan.length) console.log(`  PEDIDOS QUE NO ESTÁN EN LA LISTA DE HOY: ${faltan.join(", ")}`);
+}
+
 console.log("SE FUSIONAN");
 for (const p of listos) {
   console.log(
@@ -334,7 +398,9 @@ for (const p of listos) {
       actor: "persona",
       valor_anterior: `${seVa.nombre}${seVa.cuit ? ` (${seVa.cuit})` : ""}`,
       valor_nuevo: `${p.queda.nombre}${p.queda.cuit ? ` (${p.queda.cuit})` : ""}`,
-      motivo: "Fusión de duplicados del padrón (tanda de nombres parecidos)",
+      motivo: laDeLaPlanilla
+        ? "Fusión de duplicados del padrón: queda la ficha que nombra la planilla, que hereda el CUIT"
+        : "Fusión de duplicados del padrón (tanda de nombres parecidos)",
       contexto: {
         fusionada_en: p.queda.id,
         nombre: seVa.nombre,

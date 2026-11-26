@@ -532,6 +532,38 @@ es que a uno solo— no se contesta desde acá: `compras_requerimientos` tiene u
 a cotizar sí tienen tabla propia (`compras_requerimiento_proveedores`), pero el
 adjudicado es uno.
 
+### Los 10 que se fusionaron al revés, y la trampa de la lista que se mueve
+
+El 26/11/2026, a pedido del usuario y mirándolos uno por uno, se resolvieron
+los 10 grupos donde **la ficha que nombra la planilla es la que no tiene
+CUIT**: ABADIE, BERNER, BOGGIO, ORITI, INDUMEC, YICAR, PAPEL MISIONERO, EL
+MANU MATERIALES, MESSINEO y MARTINESE. Sobrevive la de la planilla y **hereda**
+el CUIT, la razón social y el enlace a Odoo de la otra, que se borra. Son 10
+fichas menos y 101 filas re-apuntadas; el padrón quedó en **369**.
+
+**El enlace a Odoo no se pierde al borrar la ficha que lo tenía.**
+`proveedores_odoo` está en `TABLAS_QUE_APUNTAN` con `choque: borrar` sobre
+`empresa_id`, y eso sólo borra la fila repetida cuando la que queda ya tiene
+una para esa empresa. Acá ninguna tenía, así que las filas se re-apuntaron:
+comprobado contra el `contexto` de las propias filas de auditoría, **16
+enlaces traían las diez borradas y 16 quedaron**. Lo único que no se copia
+nunca es el `nombre`.
+
+Lo corre `scripts/fusionar-duplicados-de-nombre.mts --la-de-la-planilla`, un
+modo aparte y no el de siempre: la regla normal **no borra una ficha con CUIT**
+y ésta sí, así que sólo se usa sobre grupos que una persona aprobó.
+
+**Y la trampa que apareció al hacerlo, que vale para cualquier tanda sobre esta
+pantalla: la lista se mueve mientras uno la mira.** Se le mostraron al usuario
+10 grupos, contestó que sí, y el ensayo de ese momento daba **12** — porque
+entre una cosa y la otra él había fusionado otros a mano desde la pantalla, y
+cada fusión destraba grupos que antes estaban tapados. Dos de esos 12 nunca los
+había visto, y uno era justamente «RAVIOLI», el de los rodamientos que se había
+marcado como dudoso. Por eso el script acepta **`--solo "NOMBRE|OTRO"`**, que
+limita la corrida a los grupos cuya ficha sobreviviente se llame así e imprime
+cuáles deja afuera: aprobar «estos diez» y correr «lo que dé hoy» no son lo
+mismo.
+
 ### Lo que el archivo no cambia nunca
 
 **El `nombre`.** Volvió con 18 nombres cambiados y 77 pasados a mayúscula por
