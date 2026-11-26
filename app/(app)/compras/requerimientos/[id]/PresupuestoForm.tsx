@@ -6,6 +6,7 @@ import {
   totalCotizacion, PLAZOS_PAGO, DISPONIBILIDADES, plazosAlCambiarDeProveedor, mismosPlazos,
   datosDePagoDe, alCambiarDeProveedor, type ProveedorElegible,
 } from "@/lib/compras/comparativa";
+import { avisoDeCuit } from "@/lib/compras/avisoDeCuit";
 import SelectorProveedor from "../../SelectorProveedor";
 import NuevoProveedorModal from "./NuevoProveedorModal";
 import MultiSelect from "@/components/MultiSelect";
@@ -88,6 +89,10 @@ export default function PresupuestoForm({
 
   /** Si el campo sigue mostrando lo que trajo la ficha del proveedor. */
   const delProveedor = (valor: string, puesto: string) => puesto !== "" && valor === puesto;
+
+  // Sin CUIT la orden de compra no sale, y hoy 267 de 484 proveedores no lo
+  // tienen. Se dice al elegirlo, no al final del circuito.
+  const avisoDelCuit = avisoDeCuit(lista.find((p) => p.id === proveedorId));
 
   const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(",", ".")));
 
@@ -173,6 +178,16 @@ export default function PresupuestoForm({
             Nuevo
           </button>
         </div>
+
+        {/*
+          El aviso va acá y no al guardar: no frena nada —se puede cotizar con
+          un proveedor sin CUIT y a veces la compra termina en otro—, pero deja
+          de ser una sorpresa al final del circuito. El freno sigue estando en
+          la generación de la orden, que es donde el dato es imprescindible.
+        */}
+        {avisoDelCuit && (
+          <p className="text-sm text-amber-700 sm:col-span-3">{avisoDelCuit}</p>
+        )}
         <Campo label="Marca"><Texto valor={marca} set={setMarca} /></Campo>
 
         <Campo label="Precio unitario">

@@ -332,6 +332,58 @@ Cuatro cosas que salen de ahí:
 - **Odoo tiene 298 CUITs que el SdG no tiene.** El padrón de Odoo es bastante más
   grande, así que traer proveedores desde Odoo es una oportunidad concreta.
 
+## El padrón tiene a la misma empresa dos veces, y eso es lo que frena el cruce
+
+Del 26/11/2026, y es lo primero que hay que saber antes de intentar «cargarle
+el CUIT a los que faltan»: **cargarlo puede desconectar a los que hoy andan.**
+
+Se exportó un CSV con los 311 proveedores sin CUIT y administración completó
+**166**. Medido contra la base antes de escribir nada:
+
+| | |
+|---|---|
+| CUITs completados | 166 |
+| De ésos, **que ya tenía otra fila del padrón** | **111** |
+| De esas otras filas, **enlazadas a Odoo hoy** | 98 |
+| Que se podían escribir sin pisar a nadie | 50 |
+| Con el dígito verificador mal | 0 |
+
+Escribir los 166 no habría sumado 166 proveedores conectados: `cruzarProveedores()`
+manda a `cuitRepetidoEnSdG` **todo CUIT que aparezca en dos filas y no enlaza a
+ninguna de las dos**, así que habría **desconectado 98 que funcionaban**. Por eso
+`lib/odoo/padronDesdeElArchivo.ts` escribe el CUIT libre e informa el par, y por
+eso el camino para los 111 no es escribir sino **fusionar**.
+
+Se escribieron los 50. El padrón pasó de 168 a 218 con CUIT y el cruce de 130 a
+**197 proveedores enlazables**; los 50 estaban todos en Odoo. El inventario de
+los pares lo saca `npx tsx scripts/proveedores-duplicados.mts [salida.csv]`, que
+no escribe nada: al 26/11/2026 son **4 grupos con el mismo CUIT y 101 grupos de
+nombre parecido donde sólo una tiene CUIT**.
+
+### Cuál de las dos queda no lo puede decidir un script
+
+La regla no es «la que tiene más actividad». Es **la que nombra la planilla de
+Compras**, porque `asegurarProveedores()` crea la fila que no encuentra por
+nombre: borrar esa la trae de vuelta vacía en la corrida siguiente, que es el
+incidente del 14/09/2026 otra vez. Y hay un tercer caso donde ninguna de las dos
+lo es: «SINGLA, FASE 3» y «PLATINO, ZMG, TRACK MAR, EQUIPARTES» son celdas de la
+planilla que nombraron a varios proveedores y nacieron como una fila sola.
+
+Lo que sí decide el script, y está en el CSV, es si el par está **inerte**: dos
+filas con la misma `claveProveedor` ya las unifica la sincronización —
+`indicePorClave()` le da los datos a la que tiene CUIT— y la otra no recibe
+nada. Con claves distintas, en cambio, son dos proveedores vivos: «CANDIA» tiene
+258 filas colgando y no tiene CUIT, «Candia Rubén Horacio» tiene 1 y sí lo
+tiene; «PIPARO» tiene 438 y «Omar Piparo» 3. Fusionar es re-apuntar las **19
+tablas** que cuelgan de `proveedores` (`node scripts/que-cuelga-de.mjs
+proveedores`), y seis de ellas hacen fallar el borrado si quedan filas.
+
+### Lo que el archivo no cambia nunca
+
+**El `nombre`.** Volvió con 18 nombres cambiados y 77 pasados a mayúscula por
+Excel, y `nombre` es con lo que la sincronización de Compras reconoce al
+proveedor. Se informan y no se escriben.
+
 ## Qué hay hoy (spike)
 
 **`lib/odoo/client.ts`** — cliente JSON-RPC con `fetch` a mano, sin dependencias

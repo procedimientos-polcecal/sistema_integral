@@ -57,14 +57,16 @@ export default async function RequerimientoPage({
       .order("created_at", { ascending: false }),
     supabase
       .from("compras_cotizaciones")
-      .select("*, proveedores(nombre)")
+      .select("*, proveedores(nombre, cuit)")
       .eq("requerimiento_id", id)
       .order("precio_total", { ascending: true }),
     // Con los datos de pago: el formulario de presupuesto los completa solo
     // al elegir el proveedor.
     supabase
       .from("proveedores")
-      .select("id, nombre, plazo_pago_dias, forma_pago, condicion_pago")
+      // El `cuit` no completa ningún campo: es para avisar que falta al elegir
+      // al proveedor, en vez de que lo diga recién la generación de la orden.
+      .select("id, nombre, cuit, plazo_pago_dias, forma_pago, condicion_pago")
       .eq("activo", true)
       .order("nombre"),
   ]);
