@@ -141,6 +141,111 @@ export async function leerValores(
   return valores;
 }
 
+/**
+ * La URL de una lectura de varios rangos. Separada para poder probarla.
+ *
+ * `ranges` se repite una vez por rango y Google conserva ese orden en la
+ * respuesta: es lo único que ata cada resultado con lo que se pidió, porque el
+ * `range` que Google devuelve viene normalizado —`Altas!A:B` vuelve como
+ * `'Altas del sistema'!A1:B1000`— y no se puede comparar con el que se mandó.
+ */
+export function urlDeVariosRangos(
+  planillaId: string,
+  rangos: readonly string[],
+  sinFormato: boolean
+): string {
+  const parametros = rangos.map((r) => `ranges=${encodeURIComponent(r)}`);
+  if (sinFormato) parametros.push("valueRenderOption=UNFORMATTED_VALUE");
+  return (
+    `https://sheets.googleapis.com/v4/spreadsheets/${planillaId}` +
+    `/values:batchGet?${parametros.join("&")}`
+  );
+}
+
+/**
+ * Reparte la respuesta de `batchGet` en un resultado por rango pedido.
+ *
+ * Un rango sin datos vuelve como un objeto sin `values`, igual que una lectura
+ * suelta devuelve `[]`: no es un error. Lo que sí es un error es que Google
+ * conteste otra cantidad de rangos de la que se pidió, porque ahí el orden deja
+ * de alinear y cada resultado iría a parar al rango equivocado — una pestaña
+ * leída como si fuera otra, en silencio. Se corta antes de repartir.
+ */
+export function repartirRangos(
+  rangos: readonly string[],
+  valueRanges: readonly { values?: string[][] }[]
+): string[][][] {
+  if (valueRanges.length !== rangos.length) {
+    throw new Error(
+      `Google contestó ${valueRanges.length} rangos y se pidieron ${rangos.length} ` +
+        `(${rangos.join(", ")}): no se puede saber cuál es cuál, así que no se lee nada`
+    );
+  }
+  return rangos.map((rango, i) => {
+    const valores = valueRanges[i]?.values ?? [];
+    if (estaCalculando(valores)) throw errorDeCalculo(rango);
+    return valores;
+  });
+}
+
+/**
+ * Varios rangos de la misma planilla, en **una sola** llamada a Google.
+ *
+ * POR QUÉ EXISTE
+ *
+ * La cuota de Sheets que muerde no es la diaria sino `ReadRequestsPerMinutePerUser`,
+ * que vale **60** y la comparten todos los módulos, porque la "user" es la única
+ * cuenta de servicio. Y lo que la gasta no son las filas sino las **llamadas**:
+ * leer once pestañas de a una cuesta once, leerlas juntas cuesta una.
+ *
+ * El 26/11/2026 a las 13:41 eso dejó al RI 2379 sin prioridad ni empresa y tiró
+ * la importación de las 13:42 a los 76 ms, con el 429 de Google en
+ * `sheets_pendiente`. En esa ventana había una importación de Compras (doce
+ * llamadas), un alta desde la app (nueve) y los reintentos de quien miraba la
+ * pantalla.
+ *
+ * LA TRAMPA, que no se deduce de la firma
+ *
+ * `valueRenderOption` es **de la llamada y no del rango**: todo lo que entre
+ * acá se lee del mismo modo. Así que sólo se juntan rangos que ya se leían
+ * igual. Mezclar uno que se leía formateado con otros crudos no da error — da
+ * otro valor, que es peor: una fecha que era "1/12/2025" pasa a ser 45992 y
+ * nadie se entera hasta que alguien la mira dos semanas después. Si hacen falta
+ * las dos formas, van dos llamadas, y siguen siendo menos que una por rango.
+ *
+ * LA OTRA, que apareció probándolo: **un rango inválido tira la llamada
+ * entera.** Pedir `ZZ9000` en una pestaña de 23 columnas contesta 400 y con él
+ * se caen los rangos buenos que viajaban al lado; leyéndolos de a uno, sólo
+ * fallaba ése. Así que acá entran rangos que se sabe que existen —nombres de
+ * pestaña que vinieron de `listarPestanas`, columnas fijas como `A:B`— y no
+ * uno armado con una fila o una columna calculada.
+ *
+ * Un rango válido pero sin datos no es un problema: Google lo devuelve sin
+ * `values` y vuelve como `[]`, igual que una lectura suelta. Comprobado contra
+ * una planilla real el 26/11/2026, junto con que el orden de la respuesta es el
+ * de lo pedido y que el contenido es idéntico al de leerlos de a uno.
+ *
+ * Devuelve un resultado por rango pedido, en el mismo orden.
+ */
+export async function leerVariosRangos(
+  planillaId: string,
+  rangos: readonly string[],
+  opciones: { sinFormato?: boolean } = {}
+): Promise<string[][][]> {
+  if (rangos.length === 0) return [];
+  const token = await obtenerToken([SCOPE_SHEETS_LECTURA]);
+
+  const res = await pedir(urlDeVariosRangos(planillaId, rangos, opciones.sinFormato === true), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio(), "leer"));
+  }
+
+  const json = (await res.json()) as { valueRanges?: { values?: string[][] }[] };
+  return repartirRangos(rangos, json.valueRanges ?? []);
+}
+
 /** Los nombres de las pestañas de una planilla. */
 export async function listarPestanas(planillaId: string): Promise<string[]> {
   const token = await obtenerToken([SCOPE_SHEETS_LECTURA]);
