@@ -305,6 +305,20 @@ export function cuantasSon(n: NovedadesDelDia): number {
 }
 
 /**
+ * Cuántos renglones tiene el correo entero, presencia incluida.
+ *
+ * **Son dos cuentas distintas a propósito y conviene no unificarlas.**
+ * `cuantasSon` cuenta movimientos y es la que decide si el correo sale
+ * (decisión 5): si contara la presencia, saldría todos los días. Ésta cuenta
+ * renglones y sirve para una sola cosa, que es saber cuántos quedaron sin
+ * listar cuando una sección pasa el tope. Usar la primera para recortar deja
+ * las dos secciones de presencia cortándose en silencio.
+ */
+export function cuantosRenglones(n: NovedadesDelDia): number {
+  return cuantasSon(n) + n.empiezanOTerminan.length + n.siguenAusentes.length;
+}
+
+/**
  * Si hay algo que mandar.
  *
  * **Sin movimientos no se manda nada**, que es lo primero que pidió el usuario
@@ -457,7 +471,16 @@ export function asuntoDelCorreo(n: NovedadesDelDia, dia: string): string {
   if (n.vacaciones.length) partes.push(plural(n.vacaciones.length, "vacación", "vacaciones"));
   if (n.francosTomados.length) partes.push(plural(n.francosTomados.length, "franco tomado", "francos tomados"));
   if (n.francosGenerados.length) partes.push(plural(n.francosGenerados.length, "franco generado", "francos generados"));
-  return `RR.HH. — novedades del ${fechaCorta(dia)}: ${partes.join(", ")}`;
+  if (partes.length) return `RR.HH. — novedades del ${fechaCorta(dia)}: ${partes.join(", ")}`;
+
+  // Sin movimientos el asunto quedaba terminando en dos puntos y nada. Por el
+  // cron no se ve nunca —sin movimientos no manda—, pero desde el botón de
+  // «mandarlo ahora» sí: ahí lo manda una persona que ya vio lo que dice.
+  const afuera = n.empiezanOTerminan.length + n.siguenAusentes.length;
+  if (afuera) {
+    return `RR.HH. — novedades del ${fechaCorta(dia)}: sin movimientos, ${plural(afuera, "persona ausente", "personas ausentes")}`;
+  }
+  return `RR.HH. — novedades del ${fechaCorta(dia)}: sin novedades`;
 }
 
 function seccion(titulo: string, aclaracion: string | null, renglones: string[]): string[] {

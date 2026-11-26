@@ -246,6 +246,7 @@ export default function DashboardClient({
             <>
               <Acceso href="/rrhh/turnos" label="Turnos" />
               <Acceso href="/rrhh/feriados" label="Feriados" />
+              <Acceso href="/rrhh/correo-novedades" label="Mandar novedades" />
               <Acceso href="/rrhh/configuracion" label="Configuración" />
             </>
           )}

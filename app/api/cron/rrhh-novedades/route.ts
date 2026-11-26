@@ -1,20 +1,14 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revisarElSecreto } from "@/lib/core/cron";
-import { traerPaginado } from "@/lib/rrhh/paginado";
 import { enviarCorreo, estaConfigurado } from "@/lib/core/correo";
-import { hoyEnArgentina, instanteDeArgentina, sumarDias } from "@/lib/core/fechas";
+import { hoyEnArgentina } from "@/lib/core/fechas";
+import { leerNovedadesDelDia, recortarParaElCorreo, TOPE_POR_SECCION } from "@/lib/rrhh/leerNovedadesDelDia";
 import {
   asuntoDelCorreo,
-  cuantasSon,
   cuerpoDelCorreo,
   destinatariosDelCorreo,
   hayAlgoQueMandar,
-  juntarAusentesDelDia,
-  repartirAusentesDelDia,
-  repartirVacacionesYAusencias,
-  soloLoQueCorrespondeAlDia,
-  type NovedadesDelDia,
 } from "@/lib/rrhh/novedadesDelDia";
 
 /**
@@ -24,6 +18,12 @@ import {
  * el usuario el 16/11/2026.
  *
  * ## Lo que hay que saber antes de tocarlo
+ *
+ * - **Éste es el camino automático, y hay otro.** Desde el 26/11/2026 el mismo
+ *   correo se puede mandar a mano desde `/rrhh/correo-novedades`, eligiendo a
+ *   quién. Las dos puntas leen con `leerNovedadesDelDia()` y arman el texto con
+ *   las mismas funciones: lo único que cambia es **quién decide que salga**.
+ *   Si tocás lo que el correo dice, se toca una sola vez y vale para los dos.
  *
  * - **Sale de la casilla de RR.HH. y de ninguna otra.** `enviarCorreo(..., "rrhh")`
  *   usa `SDG_CORREO_RRHH_URL/SECRET`, que es un Apps Script publicado desde
@@ -35,13 +35,15 @@ import {
  *
  * - **Un correo por destinatario.** El Apps Script acepta una sola dirección y
  *   valida su dominio partiendo por `@`, así que una lista separada por comas
- *   la rechaza. Con los 12 encargados de hoy son 12 llamadas de ~2 s cada una,
+ *   la rechaza. Con los 13 encargados de hoy son 13 llamadas de ~2 s cada una,
  *   bien adentro del presupuesto de la función. Van una tras otra y no en
- *   paralelo: no hay apuro a las 15:50 y doce pedidos juntos al mismo Apps
+ *   paralelo: no hay apuro a las 15:50 y trece pedidos juntos al mismo Apps
  *   Script es la forma de que Google corte alguno.
  *
  * - **Si no hay novedades no se manda nada.** Medido sobre los 46 días desde
- *   el 01/10/2026: 23 de esos días no habrían tenido ninguna.
+ *   el 01/10/2026: 23 de esos días no habrían tenido ninguna. Es lo único que
+ *   esta ruta decide y el botón de la pantalla no: ahí manda lo que haya,
+ *   porque lo apretó una persona que ya vio lo que dice.
  *
  * - **El día se recorta sobre `created_at` y en hora de Argentina.** Vercel
  *   corre en UTC: a las 18:50 UTC del 16 ya son las 15:50 del 16 acá, pero el
@@ -51,10 +53,8 @@ import {
  * - **El correo cuenta dos cosas distintas y sólo una lo dispara.** Los
  *   *movimientos* son lo que se cargó ese día, y son los que deciden si sale.
  *   Las dos secciones de *presencia* —quién empieza o termina hoy, quién sigue
- *   ausente— se arman recién cuando ya se sabe que sale, porque calcularlas
- *   antes sería trabajo para tirar los 23 de 46 días sin movimientos. Y
- *   sobre todo: **si disparasen, el correo saldría todos los días**, porque
- *   hubo alguien ausente los 46 días de 46.
+ *   ausente— viajan con él. **Si disparasen, el correo saldría todos los
+ *   días**, porque hubo alguien ausente los 46 días de 46.
  *
  * - **Quién no viene se lee de dos tablas.** `ausencias` no alcanza: 20 de los
  *   41 períodos de vacaciones no crearon ausencia, y son justamente las
@@ -73,9 +73,6 @@ import {
  *   15:50, así que el JSON de la corrida es lo único que después permite ver
  *   que a once les llegó y a uno no.
  */
-
-/** Cuántos renglones de cada cosa entran. Por encima de esto, el correo dice cuántos quedaron afuera. */
-const TOPE_POR_SECCION = 60;
 
 export async function GET(request: Request) {
   const rechazo = revisarElSecreto(request);
@@ -106,185 +103,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ mandado: false, motivo: "apagado desde RRHH → Configuración" });
   }
 
-  // ── Qué se cargó hoy ──
-  //
-  // El día de Argentina en instantes reales, que es con lo que se compara un
-  // `timestamptz`. El límite de arriba es `lt` y no `lte`: la medianoche del
-  // día siguiente ya es del día siguiente.
-  const desde = instanteDeArgentina(`${dia}T00:00`);
-  const hasta = instanteDeArgentina(`${sumarDias(dia, 1)}T00:00`);
-
-  const EMPLEADO = "empleados(apellido, nombre, legajo)";
-
-  let ausencias, vacaciones, francos, ausentesDelDia, vacacionesEnCurso;
+  let lo;
   try {
-    [ausencias, vacaciones, francos, ausentesDelDia, vacacionesEnCurso] = await Promise.all([
-      traerPaginado(
-        () =>
-          admin
-            .from("ausencias")
-            .select(`id, fecha_desde, fecha_hasta, tipo, justificada, observaciones, ${EMPLEADO}, usuarios:cargado_por_id(nombre, apellido)`)
-            .gte("created_at", desde)
-            .lt("created_at", hasta)
-            .order("created_at", { ascending: true })
-            .order("id", { ascending: true }),
-        "ausencias del día"
-      ),
-      traerPaginado(
-        () =>
-          admin
-            .from("vacaciones")
-            .select(`id, fecha_desde, fecha_hasta, dias_tomados, anio_correspondiente, ausencia_id, ${EMPLEADO}`)
-            .gte("created_at", desde)
-            .lt("created_at", hasta)
-            .order("created_at", { ascending: true })
-            .order("id", { ascending: true }),
-        "vacaciones del día"
-      ),
-      // Los francos entran por dos puertas distintas y por eso se traen en una
-      // sola consulta: `created_at` dice cuáles generó hoy el recálculo, y
-      // `fecha_tomado` cuáles marcó hoy una persona. Un mismo franco puede
-      // cumplir las dos —se generó y se tomó el mismo día— y entonces vale la
-      // segunda, que es la que hizo alguien.
-      traerPaginado(
-        () =>
-          admin
-            .from("francos")
-            .select(`id, fecha_generado, fecha_tomado, horas, created_at, ${EMPLEADO}`)
-            .or(`and(created_at.gte.${desde},created_at.lt.${hasta}),fecha_tomado.eq.${dia}`)
-            .order("created_at", { ascending: true })
-            .order("id", { ascending: true }),
-        "francos del día"
-      ),
-      // Los que no vienen HOY, se haya cargado su ausencia cuando se haya
-      // cargado. Las dos últimas consultas son las únicas que no miran
-      // `created_at`: acá la pregunta no es qué se movió sino quién falta, y
-      // una licencia de 29 días se cargó una vez y hace falta los 29.
-      traerPaginado(
-        () =>
-          admin
-            .from("ausencias")
-            .select(`id, fecha_desde, fecha_hasta, tipo, ${EMPLEADO}`)
-            .lte("fecha_desde", dia)
-            .gte("fecha_hasta", dia)
-            .order("fecha_desde", { ascending: true })
-            .order("id", { ascending: true }),
-        "ausentes del día"
-      ),
-      // Y la segunda puerta: un período de vacaciones abierto. Hace falta
-      // porque 20 de los 41 no tienen ausencia y por lo tanto no están en la
-      // consulta de arriba de ninguna forma (decisión 7). El `ausencia_id` no
-      // es dato del correo: es lo que después evita contar dos veces al mismo.
-      traerPaginado(
-        () =>
-          admin
-            .from("vacaciones")
-            .select(`id, fecha_desde, fecha_hasta, ausencia_id, ${EMPLEADO}`)
-            .lte("fecha_desde", dia)
-            .gte("fecha_hasta", dia)
-            .order("fecha_desde", { ascending: true })
-            .order("id", { ascending: true }),
-        "vacaciones en curso"
-      ),
-    ]);
+    lo = await leerNovedadesDelDia(admin, dia);
   } catch (e) {
     const detalle = String((e as Error)?.message ?? e);
     console.error("rrhh-novedades: no se pudieron leer las novedades:", detalle);
     return NextResponse.json({ mandado: false, motivo: "fallo al leer", detalle }, { status: 500 });
   }
 
-  // PostgREST devuelve un embed como objeto o como arreglo de uno según cómo
-  // resuelva la cardinalidad; se aceptan las dos formas, como en el resto del
-  // módulo.
-  const uno = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
-
-  type Fila = Record<string, unknown>;
-  const tomados = (francos as Fila[]).filter((f) => f.fecha_tomado === dia);
-  const generados = (francos as Fila[]).filter((f) => f.fecha_tomado !== dia);
-
-  // Una licencia cargada como vacaciones deja DOS filas —la ausencia y el
-  // período— y el reparto decide cuál se escribe, para que no salga dos veces.
-  const repartidas = repartirVacacionesYAusencias(
-    (ausencias as Fila[]).map((a) => {
-      const quien = uno(a.usuarios as { nombre?: string; apellido?: string } | null);
-      return {
-        id: a.id as string,
-        empleado: uno(a.empleados as never),
-        fecha_desde: a.fecha_desde as string,
-        fecha_hasta: a.fecha_hasta as string,
-        tipo: a.tipo as string,
-        justificada: a.justificada as boolean,
-        observaciones: a.observaciones as string | null,
-        cargadaPor: quien ? [quien.nombre, quien.apellido].filter(Boolean).join(" ") : null,
-      };
-    }),
-    (vacaciones as Fila[]).map((v) => ({
-      empleado: uno(v.empleados as never),
-      fecha_desde: v.fecha_desde as string,
-      fecha_hasta: v.fecha_hasta as string,
-      dias_tomados: v.dias_tomados as number,
-      anio_correspondiente: v.anio_correspondiente as number,
-      ausencia_id: (v.ausencia_id as string | null) ?? null,
-    }))
-  );
-
-  const novedades: NovedadesDelDia = {
-    ausencias: repartidas.ausencias,
-    vacaciones: repartidas.vacaciones,
-    francosTomados: tomados.map((f) => ({
-      empleado: uno(f.empleados as never),
-      fecha_generado: f.fecha_generado as string,
-      fecha_tomado: f.fecha_tomado as string,
-      horas: f.horas as number,
-    })),
-    francosGenerados: generados.map((f) => ({
-      empleado: uno(f.empleados as never),
-      fecha_generado: f.fecha_generado as string,
-      horas: f.horas as number,
-    })),
-    // Se llenan abajo: no son movimientos y no deciden si el correo sale.
-    empiezanOTerminan: [],
-    siguenAusentes: [],
-  };
-
-  // Lo que se cargó hoy pero ya había terminado no se informa (decisión 4).
-  // Va **antes** de `hayAlgoQueMandar`: un día en que sólo se puso al día el
-  // pasado no tiene por qué mandar un correo.
-  const movimientos = soloLoQueCorrespondeAlDia(novedades, dia);
-
-  const cuenta = {
-    ausencias: movimientos.ausencias.length,
-    vacaciones: movimientos.vacaciones.length,
-    francosTomados: movimientos.francosTomados.length,
-    francosGenerados: movimientos.francosGenerados.length,
-    sinInformarPorSerPasado: cuantasSon(novedades) - cuantasSon(movimientos),
-  };
-
-  if (!hayAlgoQueMandar(movimientos)) {
-    return NextResponse.json({ mandado: false, motivo: "sin novedades", dia, cuenta });
+  if (!hayAlgoQueMandar(lo.movimientos)) {
+    return NextResponse.json({ mandado: false, motivo: "sin novedades", dia, cuenta: lo.cuenta });
   }
-
-  // Recién acá, cuando ya se sabe que el correo sale, se arma la foto del día:
-  // calcularla antes sería trabajo para tirar los 23 de 46 días sin
-  // movimientos.
-  const { empiezanOTerminan, siguenAusentes } = repartirAusentesDelDia(
-    juntarAusentesDelDia(
-      (ausentesDelDia as Fila[]).map((a) => ({
-        id: a.id as string,
-        empleado: uno(a.empleados as never),
-        fecha_desde: a.fecha_desde as string,
-        fecha_hasta: a.fecha_hasta as string,
-        tipo: a.tipo as string,
-      })),
-      (vacacionesEnCurso as Fila[]).map((v) => ({
-        empleado: uno(v.empleados as never),
-        fecha_desde: v.fecha_desde as string,
-        fecha_hasta: v.fecha_hasta as string,
-        ausencia_id: (v.ausencia_id as string | null) ?? null,
-      }))
-    ),
-    dia
-  );
 
   // ── A quién ──
   const { data: usuarios, error: errorDeUsuarios } = await admin
@@ -307,7 +137,10 @@ export async function GET(request: Request) {
   // afuera se leen igual que «no hubo novedades».
   if (!para.length) {
     console.error("rrhh-novedades: hay novedades pero no hay a quién mandarlas");
-    return NextResponse.json({ mandado: false, motivo: "sin destinatarios", dia, cuenta }, { status: 500 });
+    return NextResponse.json(
+      { mandado: false, motivo: "sin destinatarios", dia, cuenta: lo.cuenta },
+      { status: 500 }
+    );
   }
 
   // La casilla se revisa **antes** de armar el cuerpo, y la respuesta es un
@@ -321,23 +154,18 @@ export async function GET(request: Request) {
         motivo: "la casilla de RR.HH. no está configurada",
         detalle: "Falta publicar el Apps Script desde gestiondepersonas@polcecal.com y cargar SDG_CORREO_RRHH_URL y SDG_CORREO_RRHH_SECRET en Vercel.",
         dia,
-        cuenta,
+        cuenta: lo.cuenta,
       },
       { status: 503 }
     );
   }
 
-  const recortadas: NovedadesDelDia = {
-    ausencias: movimientos.ausencias.slice(0, TOPE_POR_SECCION),
-    vacaciones: movimientos.vacaciones.slice(0, TOPE_POR_SECCION),
-    francosTomados: movimientos.francosTomados.slice(0, TOPE_POR_SECCION),
-    francosGenerados: movimientos.francosGenerados.slice(0, TOPE_POR_SECCION),
-    empiezanOTerminan: empiezanOTerminan.slice(0, TOPE_POR_SECCION),
-    siguenAusentes: siguenAusentes.slice(0, TOPE_POR_SECCION),
-  };
-  const quedaronAfuera = cuantasSon(movimientos) - cuantasSon(recortadas);
+  const { conPresencia, recortadas, quedaronAfuera } = recortarParaElCorreo(lo);
 
-  const asunto = asuntoDelCorreo(movimientos, dia);
+  // El asunto sale del objeto entero y no de los movimientos: ahí la presencia
+  // va vacía. Con movimientos da exactamente lo mismo, que es el caso de esta
+  // ruta; la diferencia se ve del otro lado, cuando lo manda una persona.
+  const asunto = asuntoDelCorreo(conPresencia, dia);
   let cuerpo = cuerpoDelCorreo(recortadas, dia, {
     encabezado: config.encabezado as string,
     cierre: config.cierre as string,
@@ -361,14 +189,11 @@ export async function GET(request: Request) {
   return NextResponse.json({
     mandado: enviados > 0,
     dia,
-    cuenta,
+    cuenta: lo.cuenta,
     ausentes: {
-      empiezanOTerminan: empiezanOTerminan.length,
-      siguenAusentes: siguenAusentes.length,
-      // De qué tabla salieron, que es lo que después permite ver si la segunda
-      // puerta sirvió de algo sin volver a consultar nada.
-      deAusencias: (ausentesDelDia as Fila[]).length,
-      deVacaciones: (vacacionesEnCurso as Fila[]).length,
+      empiezanOTerminan: lo.empiezanOTerminan.length,
+      siguenAusentes: lo.siguenAusentes.length,
+      ...lo.ausentes,
     },
     quedaronAfuera,
     asunto,

@@ -3,6 +3,7 @@ import {
   asuntoDelCorreo,
   comoSeLlama,
   cuantasSon,
+  cuantosRenglones,
   cuerpoDelCorreo,
   destinatariosDelCorreo,
   diaLargo,
@@ -433,6 +434,44 @@ describe("asuntoDelCorreo", () => {
     expect(asuntoDelCorreo(n, "2026-11-16")).toBe(
       "RR.HH. — novedades del 16/11/2026: 1 franco tomado, 1 franco generado"
     );
+  });
+
+  it("sin movimientos no termina en dos puntos y nada", () => {
+    /*
+     * Por el cron esto no se ve nunca —sin movimientos no manda—, pero el
+     * botón de «mandarlo ahora» sí puede llegar acá, y el asunto decía
+     * «novedades del 26/11/2026: » y se cortaba.
+     */
+    const unAusente = { empleado: CEJAS, fecha_desde: "2026-11-02", fecha_hasta: "2026-11-29", tipo: "VACACIONES" };
+    expect(asuntoDelCorreo(con({ siguenAusentes: [unAusente, unAusente] }), "2026-11-26")).toBe(
+      "RR.HH. — novedades del 26/11/2026: sin movimientos, 2 personas ausentes"
+    );
+    expect(asuntoDelCorreo(con({ empiezanOTerminan: [unAusente] }), "2026-11-26")).toBe(
+      "RR.HH. — novedades del 26/11/2026: sin movimientos, 1 persona ausente"
+    );
+    expect(asuntoDelCorreo(VACIO, "2026-11-26")).toBe("RR.HH. — novedades del 26/11/2026: sin novedades");
+  });
+});
+
+describe("cuantosRenglones", () => {
+  const unAusente = { empleado: CEJAS, fecha_desde: "2026-11-02", fecha_hasta: "2026-11-29", tipo: "VACACIONES" };
+
+  it("cuenta la presencia, que es justo lo que `cuantasSon` no cuenta", () => {
+    /*
+     * Las dos cuentas existen por motivos distintos y mezclarlas rompe una de
+     * las dos: `cuantasSon` decide si el correo sale y tiene que ignorar la
+     * presencia; ésta decide cuántos renglones quedaron sin listar al recortar
+     * y tiene que mirarla, o las dos secciones de presencia se cortan en
+     * silencio.
+     */
+    const n = con({ ausencias: [UNA_AUSENCIA], siguenAusentes: [unAusente, unAusente] });
+    expect(cuantasSon(n)).toBe(1);
+    expect(cuantosRenglones(n)).toBe(3);
+  });
+
+  it("sobre un correo sin presencia las dos dan lo mismo", () => {
+    const n = con({ ausencias: [UNA_AUSENCIA, UNA_AUSENCIA] });
+    expect(cuantosRenglones(n)).toBe(cuantasSon(n));
   });
 });
 
