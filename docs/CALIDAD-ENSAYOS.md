@@ -601,6 +601,44 @@ Cuatro cosas que no se deducen del código:
   superpuestas se lean con esfuerzo lo ve quien mira: un cartel diciéndolo
   sería opinión del sistema sobre el trabajo de quien compara.
 
+### Elegir varias de una, con casillas (25/11/2026)
+
+El selector de muestras era de **un valor**: agregar cinco eran cinco
+desplegables abiertos y cinco viajes al servidor. Lo pidió el usuario el mismo
+día que se sacó el tope, que es cuando empezó a doler: sin tope, comparar
+veintiocho muestras eran veintiocho vueltas.
+
+Hoy es un `MultiSelect` —el componente de la casa para *varios* valores, el
+mismo de los filtros de los listados— con un botón **«Comparar»** al lado.
+Cuatro cosas que no se deducen del código:
+
+- **Lo tildado es estado local y por eso hay un botón.** `MultiSelect` avisa en
+  cada tilde, que en un listado es correcto porque el filtro corre en el
+  cliente y es gratis. Acá cada aviso sería un `router.push`, o sea una vuelta
+  entera al servidor con sus dos consultas **por tilde**; y peor que lento,
+  `elegidas` baja del servidor, así que mientras una navegación está en vuelo
+  los tildes siguientes parten del conjunto viejo y se pisan entre ellos. Se
+  junta todo en el componente y se aplica una vez. De ahí también la `key` que
+  lo remonta con cada navegación: sin ella seguiría mostrando lo del producto
+  anterior.
+- **Muestra el producto entero, con las ya elegidas tildadas**, y no «lo que
+  falta» como el desplegable viejo. Eso resuelve solo algo que antes había que
+  cuidar a mano: que el «(n de m)» de la etiqueta se numere contra la lista
+  entera del producto y no contra las que quedan —con tres muestras del mismo
+  día, elegir una dejaba a las otras dos diciendo «(1 de 2)» y «(2 de 2)»
+  mientras su chip decía «(1 de 3)»—.
+- **Aplicar no puede tocar lo que el selector no ve**, que es lo que prueba
+  `laEleccionQueQueda` (`lib/calidad/ensayos/eleccionDeMuestras.ts`). Lo
+  elegido puede cruzar productos, y el selector muestra uno solo: destildar
+  todo saca las de **este** producto y deja las otras donde estaban. Para
+  sacar una de otro producto está la × de su chip, que es el único lugar que
+  las ve.
+- **Lo que ya estaba elegido no se mueve, y lo que entra lo hace en el orden
+  del producto.** El orden decide el color y el trazo de cada curva
+  (`parDeLaSerie`), así que reordenar al aplicar le cambiaría el color a una
+  curva que nadie tocó, y ordenar por el orden de los tildes haría que dos
+  personas que eligen lo mismo vean gráficos distintos.
+
 ## La lista de productos no es el catálogo del núcleo
 
 `productos` tiene las cosas físicas que se despachan. Acá *Filler 1* y *Filler 2*
@@ -673,6 +711,7 @@ retomarlo.
 | Retenidos y acumulados | `lib/calidad/ensayos/granulometria.ts` |
 | La curva de una muestra, con los tamices apagados | `lib/calidad/ensayos/curva.ts` |
 | Las filas del Excel de la curva | `lib/calidad/ensayos/hojaDeLaCurva.ts`, y la ruta `app/api/calidad/ensayos/curva/export/route.ts` |
+| Qué muestras quedan al aplicar el selector | `lib/calidad/ensayos/eleccionDeMuestras.ts` — `laEleccionQueQueda` |
 | Límites y la muestra evaluada | `lib/calidad/ensayos/limites.ts` — `evaluarMuestra` |
 | Validación de lo que llega | `lib/calidad/ensayos/cuerpoDeLaMuestra.ts` |
 | El juego de tamices | `lib/calidad/ensayos/mallas.ts` |

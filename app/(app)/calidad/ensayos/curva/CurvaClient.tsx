@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
+import MultiSelect from "@/components/MultiSelect";
 import { Modal } from "@/components/Modal";
+import { laEleccionQueQueda } from "@/lib/calidad/ensayos/eleccionDeMuestras";
 import {
   COMBINACIONES_DE_LA_COMPARACION,
   compararMuestras,
@@ -587,6 +589,99 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
   );
 }
 
+/**
+ * El selector de muestras del producto: se tildan las que se quieran y se
+ * aplican de una.
+ *
+ * **Lo tildado vive acá y no en la URL, y por eso hay un botón.** `MultiSelect`
+ * avisa en cada tilde, que es lo correcto en los listados —el filtro corre en
+ * el cliente y es gratis—; acá cada aviso sería un `router.push`, o sea una
+ * vuelta entera al servidor con sus dos consultas por tilde. Peor que lento:
+ * `elegidas` baja del servidor, así que mientras una navegación está en vuelo
+ * los tildes siguientes parten del conjunto viejo y se pisan entre ellos. Se
+ * junta todo acá y se aplica una vez.
+ *
+ * **Muestra el producto entero, incluidas las que ya están elegidas**, que
+ * llegan tildadas: ése es el estado y no una lista de «lo que falta». De paso
+ * resuelve solo lo que antes había que cuidar a mano —que el «(n de m)» de la
+ * etiqueta se numere contra la lista entera del producto—, porque ya no se
+ * saca nada de la lista.
+ */
+function ElegirMuestras({
+  productoId,
+  productoNombre,
+  delSelector,
+  elegidas,
+  ir,
+}: {
+  productoId: string;
+  productoNombre: string;
+  delSelector: MuestraParaLaLista[];
+  /** Todo lo elegido, que puede incluir muestras de otros productos. */
+  elegidas: string[];
+  ir: (producto: string, ids: string[]) => void;
+}) {
+  const delProducto = useMemo(() => delSelector.map((m) => m.id), [delSelector]);
+  const yaEstaban = useMemo(
+    () => delProducto.filter((id) => elegidas.includes(id)),
+    [delProducto, elegidas]
+  );
+
+  const [tildadas, setTildadas] = useState<string[]>(yaEstaban);
+  const [yendo, empezarAIr] = useTransition();
+
+  const opciones = useMemo(() => {
+    const etiquetas = etiquetasDeMuestras(
+      delSelector.map((m) => ({
+        producto: productoNombre,
+        fecha: m.fecha,
+        observaciones: m.observaciones,
+      })),
+      false
+    );
+    return delSelector.map((m, i): [string, string] => [m.id, etiquetas[i]]);
+  }, [delSelector, productoNombre]);
+
+  const quedaria = laEleccionQueQueda(elegidas, delProducto, tildadas);
+  const hayCambio =
+    quedaria.length !== elegidas.length || quedaria.some((id, i) => id !== elegidas[i]);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {/*
+        Su botón es `w-full` —nació para una fila de filtros en grilla—, así
+        que acá va dentro de algo que le dé el ancho.
+      */}
+      <div className="w-60 max-w-full">
+        <MultiSelect
+          valores={tildadas}
+          onCambio={setTildadas}
+          // «Elegí las muestras» y no «Elegí una muestra»: el resumen cerrado
+          // dice cuántas de **este** producto están tildadas, y vacío puede
+          // ser tanto «todavía no elegí nada» como «destildé las que había»,
+          // que no es «agregar otra».
+          vacio="Elegí las muestras"
+          plural="muestras"
+          opciones={opciones}
+          limpiar="Destildar todas"
+        />
+      </div>
+      <button
+        type="button"
+        // Sin `disabled:opacity-50` al lado: `globals.css` ya le pone el
+        // apagado y el `:hover:not(:disabled)` a los cuatro `.btn-*`, y una
+        // utilidad que repite lo que la clase sin capa ya declara no gana
+        // nunca — sólo promete que sí.
+        className="btn-secondary"
+        disabled={!hayCambio || yendo}
+        onClick={() => empezarAIr(() => ir(productoId, quedaria))}
+      >
+        {yendo ? "Buscando…" : "Comparar"}
+      </button>
+    </div>
+  );
+}
+
 export default function CurvaClient({
   productos,
   productoId,
@@ -622,31 +717,6 @@ export default function CurvaClient({
   // el chip y la leyenda del gráfico no puedan decir cosas distintas.
   const series = useMemo(() => compararMuestras(muestras, []).series, [muestras]);
 
-  /**
-   * Lo que ofrece el desplegable: las muestras del producto que todavía no
-   * están elegidas. La etiqueta no repite el producto, porque son todas suyas.
-   *
-   * **Las etiquetas se numeran contra la lista entera del producto y recién
-   * después se sacan las elegidas.** Numerar sobre las que quedan hace que el
-   * «(n de m)» cuente otra cosa: con tres muestras del mismo día, elegir una
-   * dejaría a las otras dos diciendo «(1 de 2)» y «(2 de 2)», y la que ya está
-   * elegida tiene su chip diciendo «(1 de 3)». Acá se elige una muestra por su
-   * etiqueta, así que un número que no cierra hace comparar la que no era.
-   */
-  const porAgregar = useMemo(() => {
-    const etiquetas = etiquetasDeMuestras(
-      delSelector.map((m) => ({
-        producto: productoNombre,
-        fecha: m.fecha,
-        observaciones: m.observaciones,
-      })),
-      false
-    );
-    return delSelector
-      .map((m, i) => ({ id: m.id, etiqueta: etiquetas[i] }))
-      .filter((m) => !elegidas.includes(m.id));
-  }, [delSelector, elegidas, productoNombre]);
-
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 md:p-6">
       <div>
@@ -672,21 +742,18 @@ export default function CurvaClient({
             ))}
           </Select>
 
-          {productoId !== "" && porAgregar.length > 0 && (
-            <Select
-              value=""
-              onChange={(e) => e.target.value && ir(productoId, [...elegidas, e.target.value])}
-              className="max-w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
-            >
-              <option value="">
-                {elegidas.length === 0 ? "Elegí una muestra" : "Agregar otra muestra"}
-              </option>
-              {porAgregar.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.etiqueta}
-                </option>
-              ))}
-            </Select>
+          {productoId !== "" && delSelector.length > 0 && (
+            // La `key` lo vuelve a montar con lo elegido de cada navegación:
+            // lo tildado es estado local, y sin esto quedaría diciendo lo de
+            // antes del salto —o lo del producto anterior—.
+            <ElegirMuestras
+              key={`${productoId}:${elegidas.join(",")}`}
+              productoId={productoId}
+              productoNombre={productoNombre}
+              delSelector={delSelector}
+              elegidas={elegidas}
+              ir={ir}
+            />
           )}
 
         </div>

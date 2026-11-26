@@ -1,13 +1,15 @@
-# La curva se baja como imagen, y las muestras dejan de tener tope
+# La curva se baja como imagen, las muestras dejan de tener tope, y se eligen con casillas
 
 **Fecha**: 25/11/2026
 **Módulo**: Calidad — Ensayos, la curva granulométrica (`/calidad/ensayos/curva`)
 
-Dos pedidos del usuario, el mismo día:
+Tres pedidos del usuario, el mismo día:
 
 1. que los gráficos se puedan **bajar como imagen directamente**, sin pasar por
    el Excel;
-2. que **no haya tope** para cuántas muestras se comparan.
+2. que **no haya tope** para cuántas muestras se comparan;
+3. y, viendo lo anterior, que el selector tenga **casillas de verificación**
+   para elegir varias de una.
 
 Son dos features chicas y una de ellas da vuelta una decisión medida el
 19/11/2026, así que lo que sigue es sobre todo el porqué de esa vuelta.
@@ -147,11 +149,60 @@ trazo**, que es lo que de verdad la distingue en papel.
   sobre el trabajo de quien compara. Lo que **sí** se dice es el único hecho:
   pasadas las 36, el par de color y trazo se repite y dos curvas quedan
   idénticas. Ese cartel aparece recién ahí.
-- **No se agrega un «elegir todas».** Llegar a 28 muestras pide 28 clics, y eso
-  es un freno natural que no cuesta nada mantener.
+- **No se agrega un «elegir todas».** Llegar a 28 muestras pide 28 tildes, y
+  eso es un freno natural que no cuesta nada mantener. El botón de abajo del
+  panel destilda, nunca tilda: deshacer tiene que ser barato y elegir todo no.
+  (Escrito antes de la sección 3, cuando cada clic costaba además una vuelta al
+  servidor. Con las casillas los 28 tildes son gratis y el freno es sólo la
+  mano; el argumento se mantiene igual, pero conviene saber que es más flojo
+  que cuando se escribió.)
 - **El tooltip sigue listando todas las series de esa malla.** Con veinte
   muestras es una caja alta. Se deja así: recortarlo escondería justo la
   comparación que alguien pidió.
+
+## 3. Elegir varias de una, con casillas
+
+Llegó después de los otros dos y es consecuencia del segundo: el selector era
+de **un valor**, así que sin tope comparar las 28 muestras de Filler 2 eran 28
+desplegables abiertos y 28 vueltas al servidor.
+
+Pasa a ser `MultiSelect` —el componente de la casa para *varios* valores, el
+mismo de los filtros de los listados, que ya dibuja casillas de verdad y trae
+buscador desde las diez opciones— con un botón **«Comparar»** al lado.
+
+Decisiones:
+
+- **Lo tildado es estado local y por eso hay un botón.** `MultiSelect` avisa en
+  cada tilde: correcto en un listado, donde el filtro corre en el cliente y es
+  gratis. Acá cada aviso sería un `router.push` con sus dos consultas **por
+  tilde**, y además `elegidas` baja del servidor, así que los tildes que salen
+  mientras una navegación está en vuelo parten del conjunto viejo y se pisan
+  entre ellos. Se junta todo en el componente y se aplica una vez. De ahí la
+  `key`, que lo remonta con lo elegido de cada navegación.
+- **Muestra el producto entero, con las ya elegidas tildadas.** El desplegable
+  viejo ofrecía «lo que falta», y eso obligaba a cuidar a mano que el
+  «(n de m)» de la etiqueta se numerara contra la lista entera: numerando sobre
+  las que quedan, elegir una de tres del mismo día dejaba a las otras diciendo
+  «(1 de 2)» y «(2 de 2)» mientras su chip decía «(1 de 3)». Con casillas no
+  se saca nada de la lista y el problema desaparece.
+- **Aplicar no toca lo que el selector no ve.** Lo elegido puede cruzar
+  productos y el selector muestra uno solo, así que destildar todo saca las de
+  **este** producto y deja las otras donde estaban. Sacar una de otro producto
+  sigue siendo la × de su chip, que es el único lugar que las ve.
+- **Lo que ya estaba no se mueve, y lo que entra va en el orden del producto.**
+  El orden decide el color y el trazo de cada curva (`parDeLaSerie`):
+  reordenar al aplicar le cambiaría el color a una curva que nadie tocó, y
+  ordenar por el orden de los tildes haría que dos personas que eligen lo mismo
+  vean gráficos distintos.
+
+Eso último es lo único que no es dibujo, así que vive en
+`lib/calidad/ensayos/eleccionDeMuestras.ts` (`laEleccionQueQueda`) con sus
+tests, y el componente sólo lo llama.
+
+`MultiSelect` ganó una prop opcional, `limpiar`, para el texto del botón de
+destildar todo: nació para filtros y dice «Quitar este filtro», que acá no
+nombra nada de la pantalla. Por omisión sigue diciendo lo de siempre, así que
+los ocho usos que ya existían no cambian.
 
 ## Lo que no se pudo comprobar
 
