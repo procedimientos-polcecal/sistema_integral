@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { laEleccionQueQueda } from "./eleccionDeMuestras";
+import { laEleccionQueQueda, losTildesQueSiguen } from "./eleccionDeMuestras";
 
 /**
  * El selector de muestras de la curva tilda varias de un producto y las aplica
@@ -36,5 +36,33 @@ describe("laEleccionQueQueda", () => {
 
   it("no repite si algo llega dos veces", () => {
     expect(laEleccionQueQueda(["a"], ["a", "b"], ["a", "a", "b"])).toEqual(["a", "b"]);
+  });
+});
+
+/**
+ * Y lo que pasa cuando el selector cambia de alcance: el 26/11/2026 se le sumó
+ * una casilla que agrega las muestras de los otros productos con el mismo juego
+ * de tamices, así que lo visible crece y se achica sin que nadie tilde nada.
+ */
+describe("losTildesQueSiguen", () => {
+  it("al ensanchar, lo que ya estaba elegido de lo nuevo entra tildado", () => {
+    expect(losTildesQueSiguen(["a"], ["a", "b"], ["a", "b", "x", "y"], ["a", "x"])).toEqual([
+      "a",
+      "x",
+    ]);
+  });
+
+  it("al ensanchar, lo que ya se veía conserva su tilde — y su destilde", () => {
+    // "b" estaba elegida y la persona la destildó sin aplicar todavía: abrir el
+    // grupo no puede devolvérsela.
+    expect(losTildesQueSiguen(["a"], ["a", "b"], ["a", "b", "x"], ["a", "b"])).toEqual(["a"]);
+  });
+
+  it("al angostar, lo que deja de verse sale", () => {
+    expect(losTildesQueSiguen(["a", "x"], ["a", "x"], ["a"], ["a", "x"])).toEqual(["a"]);
+  });
+
+  it("el orden es el de lo visible ahora", () => {
+    expect(losTildesQueSiguen(["b", "a"], ["a", "b"], ["a", "b"], [])).toEqual(["a", "b"]);
   });
 });

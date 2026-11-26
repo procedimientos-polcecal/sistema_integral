@@ -87,10 +87,15 @@ export default function ArticulosClient({
   /**
    * Pedir un artículo, tenga faltante o no.
    *
-   * A diferencia del stock, acá el botón está en todas las filas: desde el
-   * catálogo se pide lo que se sabe que va a hacer falta, no sólo lo que ya se
-   * acabó. La precarga es la misma —el stock de seguridad como cantidad— y es
-   * editable, que es donde se ajusta cuando el artículo está bien de stock.
+   * El botón está en todas las filas: se pide lo que se sabe que va a hacer
+   * falta, no sólo lo que ya se acabó. La precarga es la misma —el stock de
+   * seguridad como cantidad— y es editable, que es donde se ajusta cuando el
+   * artículo está bien de stock.
+   *
+   * Decía "a diferencia del stock", y desde el 26/11/2026 ya no: esa pantalla
+   * mostraba el botón sólo en lo que faltaba y ahora lo muestra siempre. Las
+   * dos contestan igual a la misma pregunta, que es lo que hace que se pueda
+   * explicar por qué una deja pedir algo y la otra no.
    */
   async function pedir(a: Articulo) {
     if (a.riAbierto && !(await confirmar(avisoDePedidoAbierto(a.riAbierto)))) return;
@@ -212,9 +217,9 @@ export default function ArticulosClient({
                           RI {a.riAbierto.nro_ri}
                         </Link>
                       )}
-                      {/* En todas las filas, haya faltante o no: desde el
-                          catálogo se pide lo que se sabe que va a hacer falta.
-                          Y sin mirar `esAdmin`, que gobierna Editar. */}
+                      {/* En todas las filas, haya faltante o no: se pide lo
+                          que se sabe que va a hacer falta. Y sin mirar
+                          `esAdmin`, que gobierna Editar. */}
                       <button
                         type="button"
                         onClick={() => pedir(a)}

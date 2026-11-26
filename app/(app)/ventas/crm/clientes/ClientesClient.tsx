@@ -217,7 +217,7 @@ export default function ClientesClient({
                 <button
                   type="button"
                   onClick={() => setAbierto(f.cliente.id)}
-                  className="card w-full p-3 text-left transition hover:-translate-y-0.5 hover:shadow-lg"
+                  className="card w-full p-3 text-left transition hover:-translate-y-0.5"
                 >
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <span className="font-semibold text-slate-900">{f.cliente.razon_social}</span>

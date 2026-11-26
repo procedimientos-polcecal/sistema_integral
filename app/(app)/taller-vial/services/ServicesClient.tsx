@@ -385,7 +385,7 @@ export default function ServicesClient({
                             {abierta ? "Ocultar" : "Ver / agregar"}
                           </button>
                           {puedeEditar && (
-                            <button className="btn-ghost text-red-600" onClick={() => borrar(s.id)}>Borrar</button>
+                            <button className="btn-ghost-danger" onClick={() => borrar(s.id)}>Borrar</button>
                           )}
                         </td>
                       </tr>

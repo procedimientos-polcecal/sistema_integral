@@ -61,8 +61,16 @@ export async function traerMuestras(
 }
 
 /**
- * Todas las muestras de **un producto**, de la más nueva a la más vieja, para
- * elegir una en la pantalla de la curva granulométrica.
+ * Todas las muestras de **unos productos**, de la más nueva a la más vieja,
+ * para elegirlas en la pantalla de la curva granulométrica.
+ *
+ * **Son varios productos y no uno desde el 26/11/2026**: el selector ofrece,
+ * con una casilla, las muestras de los otros productos que declaran el mismo
+ * juego de tamices (`losQueComparten`). Van en una consulta y no en una por
+ * producto —son hasta seis por juego, medido— y la casilla **no decide qué se
+ * lee**: se trae el grupo entero siempre y el cliente filtra, porque el grupo
+ * más grande son 108 muestras de tres columnas y una segunda vuelta al
+ * servidor por prender una casilla se nota más que esas filas.
  *
  * **Sin ventana de fechas, a diferencia de `traerMuestras()`.** La pantalla
  * acepta la muestra en la URL para poder mandarla por chat: con una ventana, un
@@ -71,21 +79,25 @@ export async function traerMuestras(
  * pocas por producto, pero el Excel que esto reemplaza traía 623 de tres años,
  * así que va con `traerTodo()` igual que las demás.
  *
- * Trae sólo lo que la lista necesita (id, fecha y observaciones): los
- * retenidos de la muestra elegida se piden aparte, con `traerMuestra()`.
+ * Trae sólo lo que la lista necesita (id, fecha, observaciones y de qué
+ * producto es): los retenidos de las elegidas se piden aparte, con
+ * `traerMuestrasConRetenidos()`.
  */
-export async function traerMuestrasDeProducto(
+export async function traerMuestrasDeProductos(
   supabase: SupabaseClient,
-  productoId: string
-): Promise<Pick<Muestra, "id" | "fecha" | "observaciones">[]> {
-  return traerTodo<Pick<Muestra, "id" | "fecha" | "observaciones">>((desde, hasta) =>
-    supabase
-      .from("calidad_ensayos_muestras")
-      .select("id, fecha, observaciones")
-      .eq("producto_id", productoId)
-      .order("fecha", { ascending: false })
-      .order("cargado_en", { ascending: false })
-      .range(desde, hasta)
+  productoIds: string[]
+): Promise<Pick<Muestra, "id" | "fecha" | "observaciones" | "producto_id">[]> {
+  if (productoIds.length === 0) return [];
+
+  return traerTodo<Pick<Muestra, "id" | "fecha" | "observaciones" | "producto_id">>(
+    (desde, hasta) =>
+      supabase
+        .from("calidad_ensayos_muestras")
+        .select("id, fecha, observaciones, producto_id")
+        .in("producto_id", productoIds)
+        .order("fecha", { ascending: false })
+        .order("cargado_en", { ascending: false })
+        .range(desde, hasta)
   );
 }
 

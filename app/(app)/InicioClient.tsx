@@ -363,7 +363,7 @@ function ModuloCard({
   return (
     <Link
       href={href}
-      className="card group flex flex-col overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lg"
+      className="card group flex flex-col overflow-hidden transition hover:-translate-y-0.5"
       style={{ borderTop: `3px solid ${color}` }}
     >
       <div className="flex items-center gap-3 p-5 pb-4">

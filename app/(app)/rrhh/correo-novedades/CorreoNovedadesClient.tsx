@@ -221,18 +221,18 @@ export default function CorreoNovedadesClient() {
               <button
                 type="button"
                 onClick={() => setElegidos(encargados.map((c) => c.id))}
-                className="btn-secondary text-xs"
+                className="btn-secondary !text-xs"
               >
                 Todos los encargados ({encargados.length})
               </button>
-              <button type="button" onClick={() => setElegidos([])} className="btn-secondary text-xs">
+              <button type="button" onClick={() => setElegidos([])} className="btn-secondary !text-xs">
                 Ninguno
               </button>
               {vista.sugeridos.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setElegidos(vista.sugeridos)}
-                  className="btn-secondary text-xs"
+                  className="btn-secondary !text-xs"
                 >
                   Los de siempre ({vista.sugeridos.length})
                 </button>

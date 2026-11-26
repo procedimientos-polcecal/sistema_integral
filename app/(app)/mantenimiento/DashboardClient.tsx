@@ -824,7 +824,7 @@ export default function DashboardClient({
                   <Link
                     key={s.estado}
                     href={`/mantenimiento/ordenes?estado=${s.estado}`}
-                    className="card p-4 relative overflow-hidden block transition hover:-translate-y-0.5 hover:shadow-lg"
+                    className="card p-4 relative overflow-hidden block transition hover:-translate-y-0.5"
                   >
                     <div className="absolute top-0 left-0 right-0 h-1" style={{ background: meta.color }} />
                     <div className="flex items-center gap-2 mb-2">
@@ -1126,7 +1126,7 @@ function Acceso({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="card flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:shadow-lg"
+      className="card flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5"
     >
       {label}
       <span className="text-slate-400">→</span>

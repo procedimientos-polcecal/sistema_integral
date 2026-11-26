@@ -211,6 +211,56 @@ trabajo es comparar. En el teléfono esa vista se convierte en tarjetas apiladas
 **Al aprobarse la compra, la comparativa se congela.** Desde ahí es el respaldo
 de por qué se eligió ese precio: no se agrega, no se edita y no se borra.
 
+## Buscar entre las comparativas bajadas (26/11/2026)
+
+`/compras/comparativas` es una pantalla de consulta: busca entre **todo lo que
+se cotizó alguna vez** por producto, marca o número de RI, y por proveedor. Hasta
+ahora eso sólo se podía mirar desde adentro de un pedido —entrando al RI 1340 se
+ve lo que se cotizó para el RI 1340— y la pregunta al revés, «¿cuándo pedimos
+esto antes y a cuánto nos lo cotizaron?», no tenía dónde hacerse.
+
+Cuatro cosas que no se deducen del código:
+
+**Se agrupa por artículo porque agrupar por pedido no mostraría nada.** Medido
+el 26/11/2026 sobre las 1.078 cotizaciones importadas: están repartidas en 1.031
+requerimientos y **1.002 de ésos tienen una sola cotización**. Sólo 29 pedidos
+tienen dos o más, así que «la comparativa del pedido X» es casi siempre una fila
+sola. Las mismas 1.078 caen en **840 artículos**, de los que **139 tienen dos o
+más**: son los consumibles que se vuelven a pedir —correas, filtros, guantes—,
+que es justo donde saber el precio anterior sirve para algo. El agrupador es
+`clave_articulo` y no la descripción, que es lo que hace que «CORREA C-153» y
+«Correa C 153» sean el mismo artículo.
+
+**Cotizaciones y pedidos no son lo mismo, y la cabecera muestra los dos.** El
+artículo más cotizado tiene **9 cotizaciones que son todas del RI 1865** —dos
+proveedores compitiendo por una compra: eso es una comparativa— mientras que
+«Filtro aceite motor» tiene 8 repartidas en pedidos de siete meses distintos, que
+es historial. Son dos cosas y el total solo no las distingue: hay **139 artículos
+con 2+ cotizaciones contra 119 con 2+ pedidos**, y los 20 de diferencia son
+artículos pedidos una sola vez con varios presupuestos. Por eso el filtro «sólo
+los pedidos más de una vez» mira **`pedidos` y no `veces`**: escrito al revés
+—que fue como salió la primera versión— el filtro contradice su propia etiqueta.
+
+**No reemplaza al histórico de la ficha del RI, y no es el mismo dato.**
+`lib/compras/historicoDelArticulo.ts` mira `monto_conocido`, o sea **lo que la
+compra terminó costando**, y se muestra adentro de un pedido para el artículo de
+ese pedido. Esta pantalla mira lo que **se cotizó**, que incluye a los
+proveedores a los que después no se les compró — que son justamente los que dejan
+comparar. Los dos conviven a propósito.
+
+**Un artículo cotizado en dos monedas no tiene rango de precio, y lo dice.** No
+es un caso teórico: de los 840 artículos hay uno así —el de las 9 cotizaciones—,
+porque entre las 1.078 hay una sola en dólares. Un mínimo que compara 1.000 pesos
+con 1.000 dólares no está incompleto, está mal; es la misma regla que el embudo
+del CRM, donde el monto no se convierte nunca. Y va el rango y no un promedio por
+lo que ya dejó escrito `resumenDelHistorico`: un solo número se lee como una
+promesa, y el precio de un consumible salta.
+
+Se ejercita contra los datos reales con
+`npx tsx scripts/probar-buscador-de-comparativas.mts`, que corre la misma
+consulta y las mismas funciones que la pantalla. La pantalla en sí **no se abrió
+en un navegador**: está detrás del login, como casi todo el sistema.
+
 ## El semáforo de pedidos y el reclamo (12/11/2026)
 
 `/mis-pedidos` pinta de verde, amarillo o rojo los pedidos que **esperan a
@@ -377,6 +427,49 @@ con la lista de lo que **sólo se puede comprobar en la primera corrida real** �
 el Odoo de local es staging y está congelado desde el 11/09/2026—. La primera
 prueba va con un RI de **una sola empresa**, no con uno de AMBAS: si algo sale
 mal, hay un partner que archivar y no dos.
+
+## El CUIT que falta se avisa al elegir al proveedor (26/11/2026)
+
+El circuito ya frenaba por esto: `armarOrdenes()` devuelve `sin cuit` y el
+mensaje dice qué hacer. El problema era **cuándo** lo dice — al generar la orden,
+o sea después de pedir los presupuestos, cargarlos, armar la comparativa y
+aprobarla—. Medido el 23/11/2026: de los 45 proveedores cotizados en 180 días que
+no llegan a una orden, **40 no tienen CUIT**.
+
+Desde el 26/11/2026 el aviso aparece antes, en dos momentos y sin frenar nada:
+
+- al **elegir al proveedor** en el formulario de presupuesto, como un renglón
+  debajo del selector;
+- al lado de su nombre en **los tres lugares donde se mira la comparativa** — la
+  tabla, la matriz de decisión y las tarjetas del teléfono— con un `· sin CUIT`
+  y el texto entero en el `title` (`MarcaSinCuit`).
+
+Tres cosas que no se deducen del código:
+
+- **No bloquea, a propósito.** A veces se cotiza para comparar y la compra
+  termina en otro proveedor. El freno sigue donde el dato es imprescindible.
+- **Un CUIT inválido avisa distinto que uno que falta.** La consecuencia es la
+  misma —Odoo no lo reconoce— pero un dato ausente y uno mal tipeado no se
+  buscan en el mismo lugar, y por eso `avisoDeCuit()` devuelve dos textos y la
+  marca dice `· CUIT inválido`. El dígito verificador lo comprueba
+  `cuitEsValido()`, que ya existía.
+- **El `cuit` viaja en `ProveedorElegible` sin completar ningún campo.** Es el
+  único dato de la ficha del proveedor que va al formulario y no se autocompleta
+  en ningún lado: está sólo para poder avisar.
+
+Al 26/11/2026 son **267 de 484** los proveedores sin CUIT, así que el aviso no es
+un caso raro: es uno de cada dos. Por qué son tantos y por qué cargarlos no es
+sólo cuestión de escribirlos está en la sección «El padrón tiene a la misma
+empresa dos veces» de [ODOO-INTEGRACION.md](ODOO-INTEGRACION.md).
+
+De ahí sale también la otra punta: **`/compras/proveedores/duplicados`**, la
+pantalla de admin que fusiona las fichas de la misma empresa cargada dos veces
+—105 grupos al 26/11/2026—, que es el camino para 111 de los CUITs que no se
+pueden escribir. Se entra desde «Cargados dos veces», en la lista de
+proveedores. Borra una fila del padrón, así que **se audita con `borrar`**, y lo
+que hay que saber antes de tocarla —cuál queda la decide la planilla y no la
+actividad, el orden de las cuatro escrituras, y las dos clases de choque— está
+en la sección «La pantalla para fusionarlos» de ese mismo documento.
 
 ## Integración con el resto del SdG
 

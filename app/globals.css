@@ -41,6 +41,21 @@
   --text-secondary: #475569;
   --text-muted:     #94A3B8;
 
+  /* Bordes de una tarjeta que avisa algo.
+     Existen porque `.card` declara el atajo `border` —color incluido— y está
+     fuera de capa, así que un `border-amber-200` al lado **no se aplica**:
+     seis tarjetas de alerta de cuatro pantallas se veían grises. El color de
+     estado va por `style`, como los badges de Mantenimiento, y va por token
+     para que no quede el mismo hex copiado en tres archivos.
+
+     Es un solo ámbar a propósito, aunque las seis declaraban dos tonos
+     (amber-200 y amber-300): ninguno de los dos estaba en pantalla, así que
+     esto no cambia un color sino que elige el que va a haber, y a 1 px la
+     diferencia entre los dos no se ve. El gris fuerte no necesita token: es
+     `--border-dark`, que ya es slate-300 exacto. */
+  --borde-aviso:  #FDE68A;
+  --borde-alerta: #FECACA;
+
   /* Status (equipos de Mantenimiento) */
   --status-op:   #16A34A;
   --status-mant: #2563EB;
@@ -218,7 +233,7 @@ button:focus-visible, a:focus-visible {
 .btn-secondary:hover:not(:disabled) { background: var(--bg); border-color: var(--border-dark); box-shadow: var(--shadow); }
 .btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
 
-.btn-ghost {
+.btn-ghost, .btn-ghost-danger {
   display: inline-flex;
   align-items: center;
   background: transparent;
@@ -232,6 +247,30 @@ button:focus-visible, a:focus-visible {
 }
 .btn-ghost:hover:not(:disabled) { background: var(--bg); color: var(--text-primary); }
 .btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ─── El ghost rojo ───
+   Existe porque faltaba y cuatro pantallas lo escribían como
+   `btn-ghost text-red-600` —usuarios, reparaciones, services y partes de
+   trituración—, donde el rojo **nunca se aplicaba**: `.btn-ghost` declara
+   `color` y está fuera de capa, así que «Eliminar» y «Borrar» se veían del
+   mismo gris que el «Editar» de al lado. Es el mismo defecto que arregló
+   `FotosDeLaCondicion` el 31/10/2026 pasando a `.btn-danger`.
+
+   Acá no servía esa salida y por eso hay clase nueva en vez de reuso: los
+   cuatro son el rojo de un **par** de ghosts dentro de un `<td>` con
+   `whitespace-nowrap`, y `.btn-danger` es 14 px con borde y 9×16 de relleno
+   contra los 13 px sin borde y 6×10 del ghost — mete un botón de otro peso al
+   lado de su hermano y ensancha una columna que en el teléfono ya va con
+   scroll. Así que esto es `.btn-ghost` y lo único que cambia es el color.
+
+   Lleva su `:disabled` y la guarda `:not(:disabled)` del `:hover` porque sin
+   las dos un botón deshabilitado conserva el aspecto entero y encima cambia de
+   fondo al pasarle el mouse, que es señalar «funciono» sin hacer nada. No hace
+   falta acordarse: `lib/core/botonesDeshabilitados.test.ts` saca las clases del
+   propio CSS, así que un `.btn-*` nuevo entra solo al control. */
+.btn-ghost-danger { color: var(--status-rep); }
+.btn-ghost-danger:hover:not(:disabled) { background: #FEF2F2; color: #B91C1C; }
+.btn-ghost-danger:disabled { opacity: .5; cursor: not-allowed; }
 
 .btn-danger {
   display: inline-flex;
@@ -255,14 +294,43 @@ button:focus-visible, a:focus-visible {
    Sombra siempre visible, no sólo al pasar el mouse — el usuario lo pidió
    explícitamente después de ver tarjetas de KPI que sólo se despegaban en
    hover (`--shadow`, un escalón más marcado que `--shadow-sm`, que quedaba
-   casi imperceptible en reposo). Los `hover:shadow-lg` que ya tienen las
-   tarjetas de KPI de Cantera/Taller Vial siguen sumando el efecto de
-   "levantarse" al pasar el mouse, arriba de esta base. */
+   casi imperceptible en reposo).
+
+   ACÁ DECÍA QUE LOS `hover:shadow-lg` DE LAS TARJETAS DE KPI SEGUÍAN
+   SUMANDO EL EFECTO DE "LEVANTARSE", Y ERA FALSO. Medido el 26/11/2026 con
+   el elemento realmente en `:hover` y pasada la transición: `box-shadow` y
+   `border-color` idénticos al reposo. Es la trampa de la capa —`.card` está
+   fuera de toda capa y le gana a `@layer utilities` pase lo que pase con la
+   especificidad—, y el `:hover` no la esquiva. **Doce** tarjetas lo
+   declaraban y ninguna lo hacía; lo único que sí funcionaba de ese hover era
+   el `hover:-translate-y-0.5`, porque `transform` no lo declara nadie acá.
+   Doce y no once: la de `components/KpiCard.tsx` arma la clase en una
+   variable (`const clases = "card … hover:shadow-lg"`), así que buscar por
+   `className="…"` la deja afuera — vale para contar cualquier otra cosa.
+
+   Cómo se mide esto sin equivocarse, que costó una vuelta: el panel del
+   navegador oculto corre la página en segundo plano y **no recalcula
+   estilos**, así que `getComputedStyle` devuelve lo de antes y todo parece
+   muerto, lo esté o no. Hay que forzar un repintado entre el hover y la
+   lectura, y tener un **control positivo** —un caso que sí tiene que
+   cambiar— o no se distingue «la utilidad no se aplica» de «la medición no
+   se actualizó».
+
+   Por eso el levantarse vive ahora en la regla de abajo, que está en el
+   mismo lugar sin capa y entonces sí gana. Va acotada a `a` y `button`
+   porque **lo que se levanta es lo que se puede apretar**: las once eran un
+   `<Link>` o un `<button>`, y una tarjeta de sólo lectura que reacciona al
+   mouse promete un clic que no existe. Una tarjeta clicable nueva lo hereda
+   sin acordarse de nada, que es la mitad del punto. */
 .card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: var(--shadow);
+}
+a.card:hover, button.card:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--border-dark);
 }
 
 /* ─── Page header ─── */

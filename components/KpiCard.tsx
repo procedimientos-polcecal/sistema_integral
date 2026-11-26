@@ -53,7 +53,7 @@ export default function KpiCard({
       {sub && <div className="mt-0.5 text-xs text-[var(--text-muted)]">{sub}</div>}
     </>
   );
-  const clases = "card relative block overflow-hidden p-4 transition hover:-translate-y-0.5 hover:shadow-lg";
+  const clases = "card relative block overflow-hidden p-4 transition hover:-translate-y-0.5";
 
   if (href) return <Link href={href} className={clases}>{contenido}</Link>;
   if (onClick) return <button onClick={onClick} className={`${clases} w-full text-left`}>{contenido}</button>;

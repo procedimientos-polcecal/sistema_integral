@@ -391,7 +391,7 @@ function PorSector({
       </div>
 
       {enCero > 0 && (
-        <button type="button" className="btn-ghost text-xs" onClick={() => setVerTodos(!verTodos)}>
+        <button type="button" className="btn-ghost !text-xs" onClick={() => setVerTodos(!verTodos)}>
           {verTodos
             ? `Ocultar los ${enCero} sectores sin ausencias`
             : `Ver también los ${enCero} ${enCero === 1 ? "sector" : "sectores"} sin ausencias`}

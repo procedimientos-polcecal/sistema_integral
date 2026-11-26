@@ -824,5 +824,12 @@ export function plazosAlCambiarDeProveedor(
   return actual.length === 0 || mismosPlazos(actual, puestosAntes) ? nuevos : actual;
 }
 
-/** Un proveedor en el selector del formulario, con lo que se autocompleta de él. */
-export type ProveedorElegible = { id: string; nombre: string } & PagoDelProveedor;
+/**
+ * Un proveedor en el selector del formulario, con lo que se autocompleta de él.
+ *
+ * El `cuit` no se autocompleta en ningún campo: viaja para poder **avisar que
+ * falta** en el momento de elegir al proveedor, que es cuando todavía se puede
+ * hacer algo. Sin él, el único que lo dice es `armarOrdenes()`, y eso llega
+ * después de toda la comparativa — ver `lib/compras/avisoDeCuit.ts`.
+ */
+export type ProveedorElegible = { id: string; nombre: string; cuit: string | null } & PagoDelProveedor;

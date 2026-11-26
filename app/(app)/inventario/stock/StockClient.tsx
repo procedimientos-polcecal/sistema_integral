@@ -94,8 +94,13 @@ export default function StockClient({
   }, []);
 
   /**
-   * Pedir un faltante. El cartel de "esto ya está pedido" lo arma el lib,
-   * porque lo usa también el catálogo: dos copias se separan.
+   * Pedir un artículo, tenga faltante o no.
+   *
+   * El cartel de "esto ya está pedido" lo arma el lib, porque lo usa también el
+   * catálogo: dos copias se separan.
+   *
+   * La precarga es la misma de siempre —el stock de seguridad como cantidad— y
+   * es editable, que es donde se ajusta cuando el artículo está bien de stock.
    */
   async function pedir(a: Articulo) {
     if (a.riAbierto && !(await confirmar(avisoDePedidoAbierto(a.riAbierto)))) return;
@@ -218,19 +223,27 @@ export default function StockClient({
                       manda a la izquierda y la que no lo tiene los deja a la
                       derecha: bajando por la lista, los botones bailan. */}
                   <div className="ml-auto flex shrink-0 items-center gap-2">
-                    {/* Pedir no mira `puedeOperar`: cargar un movimiento es
-                        operar el inventario, pedir un material lo puede hacer
-                        cualquier usuario activo. Quien nota que algo se acabó
-                        es el que está parado en el pañol. */}
-                    {falta && (
-                      <button
-                        type="button"
-                        onClick={() => pedir(a)}
-                        className="min-h-9 rounded-lg border border-[var(--primary)] px-3 text-sm font-semibold text-[var(--primary)] hover:bg-[var(--primary-light)]"
-                      >
-                        Pedir
-                      </button>
-                    )}
+                    {/* En todas las filas, haya faltante o no. Estaba sólo en
+                        las que faltaban, y eso convertía al mínimo en un
+                        permiso: un artículo justo en el mínimo —5 de 5— no se
+                        podía pedir, que es exactamente cuando conviene hacerlo
+                        porque la próxima salida lo deja abajo. El mínimo marca
+                        cuándo el sistema **avisa**, no cuándo alguien tiene
+                        derecho a pedir. Es además lo que el catálogo ya hacía,
+                        así que las dos pantallas dejan de contestar distinto a
+                        la misma pregunta.
+
+                        Y no mira `puedeOperar`: cargar un movimiento es operar
+                        el inventario, pedir un material lo puede hacer
+                        cualquier usuario activo. Quien nota que algo se va a
+                        acabar es el que está parado en el pañol. */}
+                    <button
+                      type="button"
+                      onClick={() => pedir(a)}
+                      className="min-h-9 rounded-lg border border-[var(--primary)] px-3 text-sm font-semibold text-[var(--primary)] hover:bg-[var(--primary-light)]"
+                    >
+                      Pedir
+                    </button>
                     {puedeOperar && (
                       <Link
                         href={`/inventario/movimientos/nuevo?articulo=${a.id}`}
