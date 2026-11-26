@@ -21,7 +21,8 @@ import { norm } from "@/lib/compras/texto";
 import { serialDelDia, serialDelInstante } from "@/lib/core/fechaDeSheets";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  leerValores, escribirCeldas, filaSiguienteSegunLaColumna, comoTexto, textoParaLaCelda,
+  leerValores, leerVariosRangos, escribirCeldas, filaSiguienteSegunLaColumna, comoTexto,
+  textoParaLaCelda,
 } from "@/lib/core/sheets";
 import { empresaParaPlanilla, indexarColumnas } from "@/lib/compras/sheets";
 import { maximoDeLaColumna } from "@/lib/compras/serieDeRi";
@@ -652,10 +653,15 @@ export async function maximoDeLaSerieEnLaPlanilla(): Promise<number> {
   if (!idFormulario() || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON) return 0;
 
   try {
-    const [respuestas, altas] = await Promise.all([
-      leerValores(idFormulario(), `${HOJA_RESPUESTAS}!A:A`, { sinFormato: true }),
-      leerValores(idFormulario(), `${HOJA_ALTAS}!A:A`, { sinFormato: true }),
-    ]);
+    // `Promise.all` las mandaba a la vez pero seguían siendo dos llamadas, y lo
+    // que la cuota cuenta son llamadas, no filas ni tiempo. Las dos se leían ya
+    // sin formato, que es la condición para poder juntarlas (ver
+    // `leerVariosRangos`).
+    const [respuestas, altas] = await leerVariosRangos(
+      idFormulario(),
+      [`${HOJA_RESPUESTAS}!A:A`, `${HOJA_ALTAS}!A:A`],
+      { sinFormato: true }
+    );
     return Math.max(
       maximoDeLaColumna(respuestas, PRIMERA_FILA_DE_RESPUESTAS),
       maximoDeLaColumna(altas, PRIMERA_FILA_DE_ALTAS)
@@ -816,10 +822,9 @@ export async function exportarAltaAlFormulario(
     // ahí la cuenta de la fila libre se corre y un alta pisa a otra. El valor
     // crudo no tiene ese problema y no cuesta nada pedirlo así. Y para comparar
     // el N° de RI hace falta igual.
-    const columnas = await paso(`al buscar la fila libre en ${PLANILLA.altas}`, () =>
-      leerValores(idFormulario(), `${HOJA_ALTAS}!A:B`, { sinFormato: true })
-    );
-
+    //
+    // La segunda pestaña viaja en la misma llamada, y es ésta:
+    //
     // La serie es una sola y la reparten dos: el sistema con `max(nro_ri) + 1`
     // sobre la base, y el Apps Script con `max(A) + 1` sobre la planilla. Entre
     // que la base da un número y la sincronización trae las respuestas nuevas
@@ -831,10 +836,21 @@ export async function exportarAltaAlFormulario(
     // esto, el sistema escribiría feliz un RI que el formulario ya usó y el
     // `upsert` por `nro_ri` de la sincronización colapsaría los dos pedidos en
     // uno — que es exactamente cómo desapareció un pedido el 09/09/2026.
-    const enRespuestas = await paso(
-      `al comprobar que el N° de RI no esté tomado en ${PLANILLA.respuestas}`,
-      () => leerValores(idFormulario(), `${HOJA_RESPUESTAS}!A:B`, { sinFormato: true })
+    //
+    // Las dos se leen juntas y no una después de la otra porque ninguna depende
+    // del resultado de la otra —las dos comprobaciones vienen más abajo— y las
+    // dos se piden sin formato, que es lo que permite juntarlas. El motivo de
+    // fondo es la cuota: ver `leerVariosRangos`.
+    const [columnas, enRespuestas] = await paso(
+      `al leer ${PLANILLA.altas} y ${PLANILLA.respuestas} para ubicar el RI ${r.nro_ri}`,
+      () =>
+        leerVariosRangos(
+          idFormulario(),
+          [`${HOJA_ALTAS}!A:B`, `${HOJA_RESPUESTAS}!A:B`],
+          { sinFormato: true }
+        )
     );
+
     const tomado = filaConEsteRi(
       enRespuestas,
       r.nro_ri as number,
