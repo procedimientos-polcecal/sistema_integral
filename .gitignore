@@ -37,3 +37,4 @@ public/pdfjs/
 
 # Espacio de trabajo de los planes de superpowers: ledger y paquetes de revision.
 .superpowers/
+recibidos-del-kardex-*.json

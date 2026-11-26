@@ -6,6 +6,18 @@
 // Existe porque `que-haria-el-ciclo.mts` sólo mira los ciclos activos, y éste
 // se puso inactivo para cortar la generación en loop del 20 al 24/11/2026.
 
+// El `.env.local` se lee acá y nunca pasa por el shell: exportarlo con
+// `set -a; . <(grep …)` rompe el JSON de la cuenta de servicio y el error lo
+// imprime entero, clave privada incluida. Pasó el 24/11/2026.
+import { readFileSync, existsSync } from "node:fs";
+const env = process.env.ENV_PATH ?? new URL("../.env.local", import.meta.url).pathname;
+if (existsSync(env)) {
+  for (const line of readFileSync(env, "utf-8").split("\n")) {
+    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
+  }
+}
+
 const { queSigueEnElCiclo, elCorteQueSigue } = await import("../lib/mantenimiento/cicloDeOT.ts");
 
 const URL_BASE = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";

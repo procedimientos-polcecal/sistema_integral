@@ -163,7 +163,7 @@ export function queSigueEnElCiclo(
   const ultima = laUltimaEnRango(ciclo, ots);
 
   if (!ultima) {
-    return crearLaSiguiente(ciclo, ciclo.vuelta_desde, ciclo.desde);
+    return crearLaSiguiente(ciclo, ciclo.vuelta_desde, ciclo.desde, ots);
   }
 
   // Decía `SUSPENDIDA`, que salió del vocabulario el 16/11/2026 cuando
@@ -209,7 +209,7 @@ export function queSigueEnElCiclo(
     };
   }
 
-  return crearLaSiguiente(ciclo, ultima.ciclo_vuelta, cerradaEl);
+  return crearLaSiguiente(ciclo, ultima.ciclo_vuelta, cerradaEl, ots);
 }
 
 /**
@@ -242,13 +242,48 @@ export function elCorteQueSigue(
   return { desde: cerradaEl, vuelta_desde: 0 };
 }
 
-/** Después de la vuelta `hecha`, qué toca y cuándo. */
+/** Todavía hay trabajo pendiente en esa orden. */
+const estaAbierta = (o: OTDelCiclo): boolean =>
+  o.estado !== CERRADA && o.estado !== ESTADO_CANCELADA;
+
+/**
+ * Después de la vuelta `hecha`, qué toca y cuándo — salvo que esa vuelta ya
+ * tenga una orden abierta.
+ *
+ * ── EL GUARDRAIL, Y POR QUÉ NO MIRA NI EL ORDEN NI EL CORTE ────────────────
+ *
+ * El 24/11/2026 este ciclo creó 426 órdenes de cambio de martillos en cuatro
+ * días porque el orden de `laUltimaEnRango` no reconocía a la madre. Ese
+ * defecto está arreglado; esto es la segunda línea, para el próximo.
+ *
+ * Y la única forma de que una segunda línea sirva es que **no se apoye en nada
+ * de lo que puede fallar**: no mira el orden, no mira `desde` y no mira
+ * `created_at_app`. Pregunta una sola cosa sobre el dato —¿este ciclo ya tiene
+ * una OT abierta para esta vuelta?— y si la hay, espera esa en vez de crear
+ * otra. Un guardrail escrito en los mismos términos que la función que vigila
+ * se equivoca junto con ella.
+ *
+ * **Mira todas las OT del ciclo y no sólo las del rango**, que es lo que lo
+ * hace valer: una orden abierta de una vuelta anterior significa que ese
+ * trabajo no se hizo, y una vuelta nueva no empieza sobre trabajo pendiente.
+ * Pasa de verdad cuando el corte se mueve hacia adelante —al cerrarse la madre,
+ * o porque alguien lo cargó a mano como se hizo con Planta 0-2— dejando atrás
+ * una orden que nadie cerró.
+ *
+ * Lo cerrado **no** frena: la hija 1 de la vuelta pasada, ya hecha, es
+ * exactamente lo normal cuando arranca la siguiente.
+ */
 function crearLaSiguiente(
   ciclo: CicloParaDecidir,
   hecha: number,
-  desdeCuando: string
+  desdeCuando: string,
+  ots: readonly OTDelCiclo[]
 ): Decision {
   const vuelta = hecha >= ciclo.repeticiones ? 0 : hecha + 1;
+
+  const yaAbierta = ots.find((o) => o.ciclo_vuelta === vuelta && estaAbierta(o));
+  if (yaAbierta) return { que: "esperar", ot: yaAbierta.ot_number };
+
   return {
     que: "crear",
     vuelta,

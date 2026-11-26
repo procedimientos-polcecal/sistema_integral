@@ -9,8 +9,10 @@ import { useRouter } from "next/navigation";
 import {
   DIAS_DE_CONSUMO, altaDeReposicion, ordenarParaReponer, filtrarParaReponer,
   ORDENES_DE_REPOSICION, ORDEN_POR_DEFECTO,
-  type Candidato, type ConPedido, type OrdenDeReposicion,
+  type Candidato, type ConPedido, type Desestimado, type OrdenDeReposicion,
 } from "@/lib/inventario/reponer";
+import { textoDeLaDesestimacion } from "@/lib/inventario/desestimar";
+import { fecha } from "@/lib/compras/constants";
 import { COMPRA_LABELS } from "@/lib/compras/constants";
 import Select from "@/components/Select";
 import NuevoRequerimientoModal, {
@@ -20,24 +22,30 @@ import NuevoRequerimientoModal, {
 type Opcion = { id: string; nombre: string };
 
 /**
- * Qué reponer, en dos grupos.
+ * Qué reponer, en tres grupos.
  *
- * La separación es el punto. Arriba lo que hay que pedir; abajo lo que ya tiene
- * un pedido, diciendo cuál y de cuándo. Ocultar lo segundo dejaría a quien busca
- * algo que sabe que falta sin saber si el sistema no lo vio o si ya está pedido,
- * y son dos problemas con dos arreglos distintos.
+ * La separación es el punto. Arriba lo que hay que pedir; después lo que ya
+ * tiene un pedido, diciendo cuál y de cuándo; y al final lo que alguien
+ * desestimó. Ocultar los dos últimos dejaría a quien busca algo que sabe que
+ * falta sin saber si el sistema no lo vio, si ya está pedido o si alguien dijo
+ * que no, que son tres problemas con tres arreglos distintos.
  */
 export default function ReponerClient({
-  paraPedir, yaPedidos, areas, empresas, ubicaciones,
+  paraPedir, yaPedidos, desestimados, puedeDesestimar, areas, empresas, ubicaciones,
 }: {
   paraPedir: Candidato[];
   yaPedidos: ConPedido[];
+  desestimados: Desestimado[];
+  /** Mismo nivel que registrar un movimiento. La ruta lo vuelve a comprobar. */
+  puedeDesestimar: boolean;
   areas: Opcion[];
   empresas: Opcion[];
   ubicaciones: Opcion[];
 }) {
   const router = useRouter();
   const [pidiendo, setPidiendo] = useState<ValoresIniciales | null>(null);
+  const [desestimando, setDesestimando] = useState<Candidato | null>(null);
+  const [error, setError] = useState("");
   const [pedido, setPedido] = useState("");
   const [orden, setOrden] = useState<OrdenDeReposicion>(ORDEN_POR_DEFECTO);
   const [busqueda, setBusqueda] = useState("");
@@ -59,6 +67,31 @@ export default function ReponerClient({
     () => ordenarParaReponer(filtrarParaReponer(yaPedidos, busqueda), orden),
     [yaPedidos, busqueda, orden]
   );
+  const desestimadosVisibles = useMemo(
+    () => ordenarParaReponer(filtrarParaReponer(desestimados, busqueda), orden),
+    [desestimados, busqueda, orden]
+  );
+
+  /**
+   * Volver a considerar un faltante desestimado.
+   *
+   * Y desestimar está en el modal de abajo, que es el que pide el motivo. Las
+   * dos recargan desde el servidor en vez de tocar el estado local: quién lo
+   * desestimó, cuándo y contra qué movimiento se mide los decide la ruta, y
+   * adivinarlos acá sería tener dos versiones de lo mismo en pantalla.
+   */
+  async function volverAConsiderar(articuloId: string) {
+    setError("");
+    const r = await fetch(
+      `/api/inventario/faltantes-desestimados?articulo_id=${encodeURIComponent(articuloId)}`,
+      { method: "DELETE" }
+    );
+    if (!r.ok) {
+      setError((await r.json().catch(() => null))?.error ?? "No se pudo volver a considerarlo.");
+      return;
+    }
+    router.refresh();
+  }
 
   // Qué decir cuando arriba no hay nada, que no es siempre lo mismo. «No hay
   // nada para reponer» con filas debajo es mentira, y «nada coincide» mientras
@@ -91,7 +124,7 @@ export default function ReponerClient({
 
       {/* Sólo si hay algo que filtrar: un buscador sobre una lista vacía es un
           control que promete que la pantalla podría decir otra cosa. */}
-      {paraPedir.length + yaPedidos.length > 0 && (
+      {paraPedir.length + yaPedidos.length + desestimados.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           {/* `w-full` abajo de `sm` y `flex-1` arriba: a 343px el buscador y el
               selector no entran en la misma línea, y partir el ancho deja dos
@@ -129,6 +162,12 @@ export default function ReponerClient({
         </p>
       )}
 
+      {error && (
+        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+          {error}
+        </p>
+      )}
+
       <section className="space-y-2">
         <h2 className="section-title">
           Para pedir <Cuenta visibles={pedirVisibles.length} total={paraPedir.length} />
@@ -148,7 +187,22 @@ export default function ReponerClient({
               // pena bajar de línea. `Detalle` tiene base 0 y se queda con lo que
               // sobra al lado del botón (~230px a 375px de ancho).
               <li key={c.articulo.id} className="flex items-center gap-3 px-4 py-3">
-                <Detalle c={c} />
+                {/* «Desestimar» va **debajo** del detalle y no al lado de
+                    «Pedir». A 343px los dos botones juntos se comen 160px y
+                    dejan la descripción en una palabra; y además no son dos
+                    acciones del mismo peso: una abre el pedido y la otra saca
+                    la fila de la lista. Chico y gris es lo que corresponde. */}
+                <div className="min-w-0 flex-1">
+                  <Detalle c={c} />
+                  {puedeDesestimar && (
+                    <button
+                      onClick={() => { setError(""); setDesestimando(c); }}
+                      className="mt-1 text-xs text-slate-500 underline hover:text-slate-900"
+                    >
+                      Desestimar
+                    </button>
+                  )}
+                </div>
                 {/* `min-h-10` (40px) y no el `py-1.5` de un botón de tabla: se
                     aprieta con el pulgar, de pie, a veces con guantes. */}
                 <button
@@ -213,6 +267,55 @@ export default function ReponerClient({
         </section>
       )}
 
+      {/* Igual que «Ya pedidos»: con una búsqueda puesta, si nada coincide la
+          sección entera desaparece en vez de mostrar un título sin filas. */}
+      {desestimadosVisibles.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="section-title">
+            Desestimados <Cuenta visibles={desestimadosVisibles.length} total={desestimados.length} />
+          </h2>
+          <p className="text-xs text-slate-500">
+            Alguien decidió no reponerlos. Vuelven solos a «Para pedir» en cuanto
+            el artículo tenga un movimiento de un día posterior al último que
+            había cuando se desestimó.
+          </p>
+
+          <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            {desestimadosVisibles.map((c) => (
+              // Apilado, por lo mismo que «Ya pedidos»: el texto de quién lo
+              // desestimó y por qué es largo y al lado dejaría la descripción
+              // cortada en una letra.
+              <li key={c.articulo.id} className="flex flex-col gap-1 px-4 py-3">
+                <Detalle c={c} />
+                <span className="text-xs text-slate-500">
+                  {textoDeLaDesestimacion(c.desestimacion, fecha)}
+                </span>
+                {puedeDesestimar && (
+                  <button
+                    onClick={() => volverAConsiderar(c.articulo.id)}
+                    className="self-start text-xs font-medium text-[var(--primary)] underline hover:opacity-80"
+                  >
+                    Volver a considerarlo
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {desestimando && (
+        <DesestimarModal
+          candidato={desestimando}
+          onClose={() => setDesestimando(null)}
+          onError={(m) => { setDesestimando(null); setError(m); }}
+          onHecho={() => {
+            setDesestimando(null);
+            router.refresh();
+          }}
+        />
+      )}
+
       {/* El formulario de Compras, tal cual: uno solo para los dos lados, así un
           campo que se agregue allá aparece acá sin que nadie se acuerde. Se
           abre, no se envía — el paso de aprobación que hoy da una persona
@@ -259,7 +362,79 @@ function Cuenta({ visibles, total }: { visibles: number; total: number }) {
   );
 }
 
-/** Lo que se ve de un artículo, igual en los dos grupos. */
+/**
+ * Desestimar un faltante, con el motivo.
+ *
+ * **El motivo es opcional**, y el modal existe igual. Obligarlo es la forma más
+ * rápida de llenar la tabla de «x»; sacar el modal y desestimar de un click es
+ * la forma más rápida de que alguien saque una fila sin querer. Un paso que se
+ * puede contestar con Enter y que de paso dice qué va a pasar después es el
+ * punto medio.
+ */
+function DesestimarModal({
+  candidato, onClose, onHecho, onError,
+}: {
+  candidato: Candidato;
+  onClose: () => void;
+  onHecho: () => void;
+  onError: (mensaje: string) => void;
+}) {
+  const [motivo, setMotivo] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar() {
+    setGuardando(true);
+    const r = await fetch("/api/inventario/faltantes-desestimados", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ articulo_id: candidato.articulo.id, motivo: motivo.trim() || null }),
+    }).catch(() => null);
+
+    if (!r?.ok) {
+      onError((await r?.json().catch(() => null))?.error ?? "No se pudo desestimar.");
+      return;
+    }
+    onHecho();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+      <div className="card w-full max-w-md space-y-3">
+        <h2 className="text-base font-semibold text-slate-900">No reponer este artículo</h2>
+        <p className="text-sm text-slate-600">
+          <span className="font-medium">{candidato.articulo.descripcion}</span>{" "}
+          <span className="font-mono text-xs text-slate-500">{candidato.articulo.codigo}</span>
+        </p>
+        <p className="text-xs text-slate-500">
+          Sale de «Para pedir» y pasa a «Desestimados». Vuelve solo en cuanto el
+          artículo tenga un movimiento nuevo.
+        </p>
+
+        <label className="block text-sm">
+          <span className="text-slate-700">Motivo (opcional)</span>
+          <textarea
+            rows={2}
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            placeholder="Se discontinuó, el mínimo está mal cargado, se reemplazó por otro…"
+            className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+        </label>
+
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="btn-secondary" disabled={guardando}>
+            Cancelar
+          </button>
+          <button type="button" onClick={guardar} className="btn-primary" disabled={guardando}>
+            {guardando ? "Guardando…" : "Desestimar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Lo que se ve de un artículo, igual en los tres grupos. */
 function Detalle({ c }: { c: Candidato }) {
   return (
     <div className="min-w-0 flex-1">

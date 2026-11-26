@@ -815,3 +815,111 @@ del enum queda cubierto solo. Sale 1 si algo que no puede verse salió.
   todos, que es un supuesto y no el dato de cada sector.
 - **La importación de NOVEDADES** (`scripts/importar-novedades.mts`), que es de
   una sola vez y todavía no se corrió.
+
+## El correo de novedades del cierre del día (16/11/2026 · 26/11/2026)
+
+Todos los días a las **18:50 UTC = 15:50 de Argentina** sale un correo con las
+novedades de personal cargadas ese día. Lo manda
+`app/api/cron/rrhh-novedades/route.ts`, sale desde
+**`gestiondepersonas@polcecal.com`** —una segunda implementación del mismo Apps
+Script, con sus propias `SDG_CORREO_RRHH_URL` y `SDG_CORREO_RRHH_SECRET`— y se
+configura en **RRHH → Configuración**: a quién, el saludo, el cierre, y un
+interruptor para apagarlo.
+
+Desde el **26/11/2026** hay además una segunda punta: **RRHH → Mandar
+novedades** (`/rrhh/correo-novedades`), donde una persona ve el correo tal cual
+va a salir, tilda a quién mandárselo y lo manda en el momento. Las dos leen con
+`leerNovedadesDelDia()` y arman el texto con las mismas funciones de
+`lib/rrhh/novedadesDelDia.ts`: **lo único que cambia es quién decide que
+salga**.
+
+### Lo que no se deduce del código
+
+**«Novedad» acá es lo que se cargó ese día, y no lo que pasa ese día.** Son dos
+preguntas distintas y el correo contesta las dos en secciones separadas: los
+**movimientos** (ausencias, vacaciones y francos por `created_at`, en hora de
+Argentina) y la **presencia** («Empiezan o terminan hoy», «Siguen ausentes»).
+Sólo los movimientos disparan el correo. Si la presencia disparara, saldría
+**todos los días**: medido sobre 46 días, hubo alguien afuera los 46.
+
+**Quién no viene se le pregunta a dos tablas.** `ausencias` no alcanza, porque
+**20 de los 41 períodos de vacaciones no tienen ninguna ausencia** —los que se
+cargaron por la puerta que no la creaba— y son justo las licencias largas.
+Medido sobre los 46 días hasta el 26/11/2026: **37 tenían al menos una vacación
+en curso que el correo no nombraba**, y en **6 de esos días el único que
+faltaba estaba de vacaciones**. El 26/11: 0 ausencias y 3 personas de
+vacaciones. Una licencia se descarta por dos caminos para que nadie salga dos
+veces —por `ausencia_id`, y por legajo más fechas contra una ausencia de tipo
+`VACACIONES`—, y una `TARDANZA` no entra porque la persona viene.
+
+**El día que esos 20 períodos huérfanos se conviertan en ausencias, el correo
+de ese día NO va a listar veinte.** Esas ausencias nacerían con el `created_at`
+de ese día y entrarían como movimientos, pero el filtro de «lo que ya terminó
+no se informa» deja **2**: son las únicas dos con `fecha_hasta` de hoy en
+adelante (medido el 26/11/2026). Y las dos ya salen hoy por la segunda puerta,
+así que el correo de ese día no va a decir nada nuevo sobre ellas. Está escrito
+acá porque quien planee ese relleno va a querer saber a quién le llega el ruido.
+
+**Lo que se cargó hoy pero ya terminó no se informa.** El corte es
+`fecha_hasta >= el día`. Se lleva 23 de 38 ausencias cargadas en esos 46 días y
+**130 de 143 francos generados**, que el recálculo crea el lunes por el domingo
+anterior: ése era el montón de 17 renglones automáticos que más empujaba a no
+abrir el correo.
+
+**El asunto se arma con el objeto completo y no con los movimientos.** Con
+movimientos da exactamente lo mismo, así que por el cron no se nota nunca; por
+el botón sí, y decía «sin novedades» mientras el cuerpo listaba dos personas de
+licencia. Por lo mismo hay **dos contadores** en `novedadesDelDia.ts` y no uno:
+`cuantasSon()` cuenta movimientos y decide si el correo sale —si contara la
+presencia, saldría todos los días—, y `cuantosRenglones()` cuenta renglones y
+sirve para saber cuántos quedaron sin listar al recortar.
+
+**Un correo por destinatario, uno tras otro.** El Apps Script valida el dominio
+partiendo la dirección por `@`, así que una lista separada por comas la
+rechaza. Van en serie y no en paralelo: no hay apuro a las 15:50 y trece
+pedidos juntos al mismo Apps Script es la forma de que Google corte alguno.
+
+**La casilla de RR.HH. no cae a la del sistema.** Si falta
+`SDG_CORREO_RRHH_URL/SECRET`, no se manda y se dice: el remitente es parte del
+mensaje —dice a dónde contestar— y mandarlo desde la cuenta equivocada es peor
+que no mandarlo.
+
+### Lo que hay que saber de «Mandar novedades»
+
+- **Pide admin de RR.HH.**, no por mandar un correo sino por lo que el correo
+  lleva adentro: las observaciones de una ausencia y quién la cargó.
+- **El POST vuelve a leer la base.** Del pedido sólo se usan el día y los ids
+  de los destinatarios: ni el texto ni las direcciones. Si el cliente pudiera
+  mandar el cuerpo, esto sería una forma de escribirle cualquier cosa a
+  cualquiera desde la casilla de RR.HH. Lo que cuesta: entre mirar la vista
+  previa y apretar el botón puede entrar una novedad más, y sale con una línea
+  que no se vio. Por eso la pantalla vuelve a pedir la vista previa después de
+  mandar.
+- **Los destinatarios son ids de usuario, nunca direcciones.** Un id que no
+  existe, o de alguien inactivo o sin correo, se cae solo — y si no queda
+  ninguno, contesta 400 sin mandar nada.
+- **Lee con el cliente admin, igual que el cron.** Si leyera con la sesión de
+  quien mira, RLS podría devolverle menos filas que las que el cron ve, y la
+  vista previa mostraría un correo distinto del que sale. Una vista previa que
+  no es exacta es peor que no tenerla.
+- **Desde acá se puede mandar sin movimientos y el cron no.** Es la única
+  diferencia de criterio entre los dos caminos, y es a propósito: acá hay
+  alguien mirando.
+- **No queda registro de quién lo mandó ni a quién.** La respuesta del POST lo
+  dice y el servidor lo loguea, pero no se guarda en ninguna tabla: eso pedía
+  una migración y una migración la corre una persona. Si alguna vez importa
+  —por ejemplo para saber si una licencia se comunicó—, es una columna más en
+  `rrhh_correo_novedades` o una tabla aparte, y recién ahí vale la pena.
+
+### Lo que queda del lado de una persona
+
+- **Hay una fecha imposible cargada.** PETTACHI, LEONARDO (PC_231) tiene un
+  permiso personal del **02/12/20226** al 02/12/2026 —un `2` de más en el año—,
+  cargado el 12/11/2026. Como el desde queda después del hasta, esa ausencia no
+  cubre ningún día: no sale en el correo, ni en Disponibilidad, ni en la
+  programación del taller. Se corrige desde la ficha.
+- **Con la regla de «sólo si hubo movimiento», hay días sin ningún correo
+  aunque falte gente.** De los últimos 46 días, **20 tuvieron gente afuera y
+  ningún movimiento cargado**. Es lo que se pidió y está bien así; si alguna
+  vez molesta, lo que corresponde es un envío fijo los lunes con la foto, y no
+  hacer que la presencia dispare el correo diario.

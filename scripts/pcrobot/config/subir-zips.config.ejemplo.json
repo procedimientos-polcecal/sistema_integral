@@ -16,7 +16,7 @@
     { "nombre": "Planta 02", "carpeta": "/datos/planta02", "ignorar": " - (INICIO|AL INICIAR) " },
     { "nombre": "Hornos", "carpeta": "/datos/hornos" },
     { "nombre": "Porteria", "carpeta": "/datos/porteria" },
-    { "nombre": "Pesadas Balanza", "carpeta": "/datos/balanza", "carpetaEntera": true }
+    { "nombre": "Pesadas Balanza", "carpeta": "/datos/balanza", "carpetaEntera": true, "fusionar": true }
   ],
 
   "_log": "Sin definir a propósito: adentro de un contenedor el log es `docker compose logs`, que ya rota. Un archivo acá se perdería al recrear el contenedor."

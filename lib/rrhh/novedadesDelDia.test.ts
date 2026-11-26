@@ -3,11 +3,13 @@ import {
   asuntoDelCorreo,
   comoSeLlama,
   cuantasSon,
+  cuantosRenglones,
   cuerpoDelCorreo,
   destinatariosDelCorreo,
   diaLargo,
   fechaCorta,
   hayAlgoQueMandar,
+  juntarAusentesDelDia,
   rangoDeFechas,
   repartirAusentesDelDia,
   repartirVacacionesYAusencias,
@@ -266,6 +268,127 @@ describe("repartirAusentesDelDia y comoEstaEnElDia", () => {
   });
 });
 
+describe("juntarAusentesDelDia", () => {
+  const HOY = "2026-11-26";
+  const RAMALLO = { apellido: "RAMALLO", nombre: "NESTOR FABIAN", legajo: "PS_008" };
+
+  const enfermo = {
+    id: "a1",
+    empleado: CEJAS,
+    fecha_desde: "2026-11-20",
+    fecha_hasta: "2026-11-30",
+    tipo: "ENFERMEDAD_ACCIDENTE_INCULPABLE",
+  };
+  const periodoSuelto = {
+    empleado: RAMALLO,
+    fecha_desde: "2026-11-02",
+    fecha_hasta: "2026-11-29",
+    ausencia_id: null,
+  };
+
+  it("trae al que está de vacaciones aunque no tenga ausencia", () => {
+    /*
+     * El caso real del 26/11/2026: 0 ausencias y 3 períodos de vacaciones, los
+     * tres con `ausencia_id` en null porque se cargaron antes del 16/11. Sin
+     * esto la sección sale vacía con gente de licencia.
+     */
+    const r = juntarAusentesDelDia([], [periodoSuelto]);
+    expect(r).toHaveLength(1);
+    expect(r[0].tipo).toBe("VACACIONES");
+    expect(comoSeLlama(r[0].empleado)).toBe("RAMALLO, NESTOR FABIAN (PS_008)");
+  });
+
+  it("no cuenta dos veces a la vacación que ya tiene su ausencia", () => {
+    /*
+     * Las fechas acá NO coinciden, a propósito: de los 21 períodos atados,
+     * uno tiene la ausencia terminando un día después (13→19 contra 13→20).
+     * O sea que el enlace por id tiene que alcanzar solo, sin ayuda de la
+     * comparación de fechas.
+     */
+    const suAusencia = {
+      id: "a9",
+      empleado: RAMALLO,
+      fecha_desde: "2026-11-02",
+      fecha_hasta: "2026-11-30",
+      tipo: "VACACIONES",
+    };
+    const atada = { ...periodoSuelto, ausencia_id: "a9" };
+    const r = juntarAusentesDelDia([suAusencia], [atada]);
+    expect(r).toHaveLength(1);
+    expect(r[0].fecha_hasta).toBe("2026-11-30");
+  });
+
+  it("una ausencia de otro tipo con las mismas fechas no se come la vacación", () => {
+    /*
+     * Sólo una ausencia de tipo VACACIONES puede ser «la misma licencia
+     * escrita dos veces». Si alguien tiene cargada una enfermedad justo en
+     * esas fechas, es un dato que se contradice y el correo lo muestra: no
+     * se elige en silencio cuál de los dos es el bueno.
+     */
+    const enfermedadIgual = {
+      id: "a9",
+      empleado: RAMALLO,
+      fecha_desde: "2026-11-02",
+      fecha_hasta: "2026-11-29",
+      tipo: "ENFERMEDAD_ACCIDENTE_INCULPABLE",
+    };
+    expect(juntarAusentesDelDia([enfermedadIgual], [periodoSuelto])).toHaveLength(2);
+  });
+
+  it("tampoco cuando las cargaron por separado, sin enlazarlas", () => {
+    // El `ausencia_id` está en null pero hay una ausencia VACACIONES del mismo
+    // legajo con las mismas fechas: es la misma licencia escrita dos veces.
+    const gemela = {
+      id: "a9",
+      empleado: RAMALLO,
+      fecha_desde: "2026-11-02",
+      fecha_hasta: "2026-11-29",
+      tipo: "VACACIONES",
+    };
+    const r = juntarAusentesDelDia([gemela], [periodoSuelto]);
+    expect(r).toHaveLength(1);
+  });
+
+  it("una vacación de otras fechas sí es otra licencia", () => {
+    const otraAusencia = {
+      id: "a9",
+      empleado: RAMALLO,
+      fecha_desde: "2026-11-02",
+      fecha_hasta: "2026-11-10",
+      tipo: "VACACIONES",
+    };
+    expect(juntarAusentesDelDia([otraAusencia], [periodoSuelto])).toHaveLength(2);
+  });
+
+  it("deja afuera la tardanza, que cubre el día pero viene", () => {
+    const tardanza = {
+      id: "a2",
+      empleado: PEREZ,
+      fecha_desde: HOY,
+      fecha_hasta: HOY,
+      tipo: "TARDANZA",
+    };
+    const r = juntarAusentesDelDia([enfermo, tardanza], []);
+    expect(r.map((a) => a.tipo)).toEqual(["ENFERMEDAD_ACCIDENTE_INCULPABLE"]);
+  });
+
+  it("ordena por fecha de inicio y no deja las vacaciones al final", () => {
+    // Vienen de dos consultas distintas: pegarlas una atrás de la otra daría
+    // dos listas ordenadas en vez de una.
+    const r = juntarAusentesDelDia([enfermo], [periodoSuelto]);
+    expect(r.map((a) => a.fecha_desde)).toEqual(["2026-11-02", "2026-11-20"]);
+  });
+
+  it("las dos puertas juntas llegan enteras a las dos secciones", () => {
+    const r = repartirAusentesDelDia(juntarAusentesDelDia([enfermo], [periodoSuelto]), HOY);
+    expect(r.empiezanOTerminan).toEqual([]);
+    expect(r.siguenAusentes).toHaveLength(2);
+    const cuerpo = cuerpoDelCorreo(con({ ausencias: [UNA_AUSENCIA], siguenAusentes: r.siguenAusentes }), HOY);
+    expect(cuerpo).toContain("SIGUEN AUSENTES (2)");
+    expect(cuerpo).toContain("Vacaciones · hasta el 29/11/2026");
+  });
+});
+
 describe("las secciones de presencia no disparan el correo", () => {
   const unAusente = { empleado: CEJAS, fecha_desde: "2026-11-01", fecha_hasta: "2026-11-30", tipo: "VACACIONES" };
 
@@ -311,6 +434,44 @@ describe("asuntoDelCorreo", () => {
     expect(asuntoDelCorreo(n, "2026-11-16")).toBe(
       "RR.HH. — novedades del 16/11/2026: 1 franco tomado, 1 franco generado"
     );
+  });
+
+  it("sin movimientos no termina en dos puntos y nada", () => {
+    /*
+     * Por el cron esto no se ve nunca —sin movimientos no manda—, pero el
+     * botón de «mandarlo ahora» sí puede llegar acá, y el asunto decía
+     * «novedades del 26/11/2026: » y se cortaba.
+     */
+    const unAusente = { empleado: CEJAS, fecha_desde: "2026-11-02", fecha_hasta: "2026-11-29", tipo: "VACACIONES" };
+    expect(asuntoDelCorreo(con({ siguenAusentes: [unAusente, unAusente] }), "2026-11-26")).toBe(
+      "RR.HH. — novedades del 26/11/2026: sin movimientos, 2 personas ausentes"
+    );
+    expect(asuntoDelCorreo(con({ empiezanOTerminan: [unAusente] }), "2026-11-26")).toBe(
+      "RR.HH. — novedades del 26/11/2026: sin movimientos, 1 persona ausente"
+    );
+    expect(asuntoDelCorreo(VACIO, "2026-11-26")).toBe("RR.HH. — novedades del 26/11/2026: sin novedades");
+  });
+});
+
+describe("cuantosRenglones", () => {
+  const unAusente = { empleado: CEJAS, fecha_desde: "2026-11-02", fecha_hasta: "2026-11-29", tipo: "VACACIONES" };
+
+  it("cuenta la presencia, que es justo lo que `cuantasSon` no cuenta", () => {
+    /*
+     * Las dos cuentas existen por motivos distintos y mezclarlas rompe una de
+     * las dos: `cuantasSon` decide si el correo sale y tiene que ignorar la
+     * presencia; ésta decide cuántos renglones quedaron sin listar al recortar
+     * y tiene que mirarla, o las dos secciones de presencia se cortan en
+     * silencio.
+     */
+    const n = con({ ausencias: [UNA_AUSENCIA], siguenAusentes: [unAusente, unAusente] });
+    expect(cuantasSon(n)).toBe(1);
+    expect(cuantosRenglones(n)).toBe(3);
+  });
+
+  it("sobre un correo sin presencia las dos dan lo mismo", () => {
+    const n = con({ ausencias: [UNA_AUSENCIA, UNA_AUSENCIA] });
+    expect(cuantosRenglones(n)).toBe(cuantasSon(n));
   });
 });
 

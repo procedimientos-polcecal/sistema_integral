@@ -15,6 +15,10 @@ import {
   DIAS_VERDE, DIAS_AMARILLO, rangoDeColor, colorDelPedido, diasEsperando,
   esReclamable, textoDeEspera, ESPERAN_A_COMPRAS, type ColorDelPedido,
 } from "@/lib/compras/semaforo";
+import {
+  llegadasPorRequerimiento, textoDeLaLlegada, elEstadoNoLoDice,
+  type LlegadaAlPanol,
+} from "@/lib/compras/entradaAlPanol";
 import type { RequerimientoConRelaciones } from "@/lib/compras/types";
 
 type Opcion = { id: string; nombre: string };
@@ -153,6 +157,8 @@ export default function MisPedidosClient({
   const [conteos, setConteos] = useState<Record<ColorDelPedido, number> | null>(null);
   /** Cuándo fue el último mensaje de cada pedido en pantalla, por id. */
   const [ultimoMensaje, setUltimoMensaje] = useState<Record<string, string>>({});
+  /** Qué pedidos de la página ya entraron al pañol, por id. */
+  const [llegadas, setLlegadas] = useState<Map<string, LlegadaAlPanol>>(new Map());
 
   const [pedidos, setPedidos] = useState<RequerimientoConRelaciones[]>([]);
   const [total, setTotal] = useState(0);
@@ -384,12 +390,59 @@ export default function MisPedidosClient({
     setUltimoMensaje(ultimo);
   }, [pedidos]);
 
+  /**
+   * Qué pedidos de la página ya entraron al pañol.
+   *
+   * El `estado_compra` lo pasa a `RECIBIDO` una persona, y casi nadie lo
+   * escribe: medido el 24/11/2026, **161 requerimientos ya recibieron
+   * mercadería y su estado no lo dice**. La consecuencia que se ve en esta
+   * pantalla es que **12 de los 115 pedidos reclamables ya están guardados**,
+   * y 6 de ellos ofrecen el botón «Reclamar» — el RI 1843 desde el 21/08.
+   *
+   * El kardex sí lo sabe, porque la entrada nombra el requerimiento que la
+   * trajo. No se cruza por código: de las 766 entradas que nombran un RI, 16
+   * llevan un código distinto al de ese RI.
+   *
+   * Mismo molde que el cargador de los mensajes y por los mismos motivos: un
+   * `.in()` de 50 ids como mucho, que es el tamaño de la página, y si falla la
+   * lista se muestra sin la nota. Esto es un agregado y no puede tumbar la
+   * pantalla.
+   */
+  useCargar(async (vigente) => {
+    if (pedidos.length === 0) { setLlegadas(new Map()); return; }
+    const supabase = createClient();
+    /*
+     * `traerTodo` y no una consulta suelta, igual que arriba: un pedido puede
+     * tener varias entregas, y lo que PostgREST corta en 1000 sin avisar son
+     * las de los últimos pedidos — filas que se quedan sin nota en silencio.
+     */
+    const data = await traerTodo<{ requerimiento_id: string; tipo: string; fecha: string | null }>(
+      (desde, hasta) =>
+        supabase
+          .from("inventario_movimientos")
+          .select("requerimiento_id, tipo, fecha")
+          .in("requerimiento_id", pedidos.map((p) => p.id))
+          .range(desde, hasta)
+    ).catch(() => null);
+
+    if (!vigente() || !data) return;
+    setLlegadas(llegadasPorRequerimiento(data));
+  }, [pedidos]);
+
   const paginas = Math.ceil(total / POR_PAGINA);
   /** De mi área. Es lo que se marca al mirar todos. */
   const esMio = (p: RequerimientoConRelaciones) =>
     p.area_id !== null && misAreas.includes(p.area_id);
   /** Y este lo cargué yo, que es otra cosa y también se dice. */
   const loCargueYo = (p: RequerimientoConRelaciones) => p.solicitante_id === usuarioId;
+  /**
+   * Lo que entró al pañol por este pedido, cuando el estado todavía no lo dice.
+   *
+   * Sobre un `RECIBIDO` devuelve undefined a propósito: la nota repetiría la
+   * etiqueta de al lado.
+   */
+  const llegadaDe = (p: RequerimientoConRelaciones) =>
+    elEstadoNoLoDice(p.estado_compra) ? llegadas.get(p.id) : undefined;
 
   const nombreDeMisAreas = areas
     .filter((a) => misAreas.includes(a.id))
@@ -567,8 +620,9 @@ export default function MisPedidosClient({
                 <BotonDeMensajes pedido={p} onAbrir={setConversacion} />
                 <BotonDeReclamo
                   pedido={p} esMio={esMio(p)} gestores={gestoresDeCompras}
-                  onAbrir={setConversacion}
+                  onAbrir={setConversacion} yaLlego={llegadaDe(p) !== undefined}
                 />
+                <YaEntroAlPanol llegada={llegadaDe(p)} />
                 <UltimoMensaje cuando={ultimoMensaje[p.id]} />
               </div>
             </article>
@@ -624,8 +678,9 @@ export default function MisPedidosClient({
                         <BotonDeMensajes pedido={p} onAbrir={setConversacion} />
                         <BotonDeReclamo
                           pedido={p} esMio={esMio(p)} gestores={gestoresDeCompras}
-                          onAbrir={setConversacion}
+                          onAbrir={setConversacion} yaLlego={llegadaDe(p) !== undefined}
                         />
+                        <YaEntroAlPanol llegada={llegadaDe(p)} />
                         <UltimoMensaje cuando={ultimoMensaje[p.id]} />
                       </div>
                     </td>
@@ -818,6 +873,23 @@ function BotonDeMensajes({
 }
 
 /**
+ * Que lo que el pedido traía ya está guardado, cuando el estado no lo dice.
+ *
+ * Es lo que la fila dice **en vez de** ofrecer un reclamo. Verde y no gris
+ * porque es una buena noticia y porque tiene que ganarle de lejos al «hace 96
+ * días» que está dos renglones más arriba: los dos son ciertos —el pedido
+ * sigue esperando que Compras lo cierre— y el que habilita una acción es éste.
+ */
+function YaEntroAlPanol({ llegada }: { llegada?: LlegadaAlPanol }) {
+  if (!llegada) return null;
+  return (
+    <span className="text-xs font-medium text-green-700">
+      {textoDeLaLlegada(llegada, fecha)}
+    </span>
+  );
+}
+
+/**
  * Pedirle a Compras que explique por qué ese pedido está demorado.
  *
  * Abre **el mismo hilo** que «Mensajes», con la pregunta redactada y los de
@@ -828,15 +900,27 @@ function BotonDeMensajes({
  * **Sólo en amarillo y rojo, y sólo sobre pedidos del área propia.** Un pedido
  * de treinta días no es noticia, y reclamar por el pedido de otra área es
  * ruido para Compras que no ayuda a nadie.
+ *
+ * **Y nunca sobre algo que ya está en el pañol.** Es el filtro que no sale del
+ * `estado_compra` sino del kardex, y tapaba a 6 de los 115 reclamables: el
+ * más viejo entró el 21/08, al día siguiente de pedirse, y sigue en
+ * `SIN_INICIAR`. Preguntar por mercadería guardada hace tres meses es la
+ * forma más rápida de que nadie le vuelva a creer al semáforo — el mismo
+ * argumento que dejó a `EN_ESPERA` afuera del conjunto reclamable. El punto
+ * de color **no** cambia: ese pedido sí espera algo de Compras, que lo
+ * cierre.
  */
 function BotonDeReclamo({
-  pedido, esMio, gestores, onAbrir,
+  pedido, esMio, gestores, onAbrir, yaLlego,
 }: {
   pedido: RequerimientoConRelaciones;
   esMio: boolean;
   gestores: string[];
   onAbrir: (p: Conversacion) => void;
+  /** Si el kardex ya registró una entrada por este pedido. */
+  yaLlego: boolean;
 }) {
+  if (yaLlego) return null;
   if (!esMio || !esReclamable(pedido)) return null;
   const dias = diasEsperando(pedido.fecha, new Date());
   if (colorDelPedido(pedido.fecha, new Date()) === "verde") return null;

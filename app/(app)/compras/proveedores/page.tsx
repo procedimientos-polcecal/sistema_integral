@@ -35,12 +35,16 @@ export default async function ProveedoresPage() {
     };
   }
 
+  const { data: empresas } = await supabase
+    .from("empresas").select("id, nombre").eq("activo", true).order("nombre");
+
   const { nivel } = await permisosComprasActuales();
 
   return (
     <ProveedoresClient
       proveedores={(proveedores ?? []) as Proveedor[]}
       estadisticas={estadisticas}
+      empresas={empresas ?? []}
       canEdit={nivel === "edicion" || nivel === "admin"}
     />
   );
