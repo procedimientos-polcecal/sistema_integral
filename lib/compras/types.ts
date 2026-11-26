@@ -235,7 +235,12 @@ export interface Cotizacion {
   origen: string;
   drive_fila: number | null;
   created_at: string;
-  proveedores?: { nombre: string } | null;
+  /**
+   * El `cuit` viaja para avisar en la comparativa que al proveedor le falta:
+   * sin él la orden de compra no se puede generar, y enterarse recién ahí es
+   * enterarse después de haber pedido y cargado todos los presupuestos.
+   */
+  proveedores?: { nombre: string; cuit?: string | null } | null;
 }
 
 export interface HistorialItem {

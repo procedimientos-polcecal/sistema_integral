@@ -4,6 +4,7 @@ import { monedaExacta, fecha } from "@/lib/compras/constants";
 import { diferenciaPorcentual, detalleCotizacion, textoDePlazos } from "@/lib/compras/comparativa";
 import type { Cotizacion } from "@/lib/compras/types";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import MarcaSinCuit from "./MarcaSinCuit";
 
 /**
  * La comparativa mientras Compras la arma.
@@ -48,6 +49,7 @@ export default function ComparativaTabla({
                 <td className="px-3 py-2">
                   <div className={c.elegida ? "font-semibold" : ""}>
                     {c.proveedores?.nombre ?? "—"}
+                    <MarcaSinCuit proveedor={c.proveedores} />
                     {c.elegida && <span className="ml-1.5 text-xs text-green-700">✓ elegida</span>}
                     {c.origen === "drive" && (
                       <span className="ml-1.5 text-xs text-slate-400">de la planilla</span>

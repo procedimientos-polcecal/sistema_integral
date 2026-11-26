@@ -4,7 +4,7 @@
 > Lo escrito a mano —para qué sirve cada módulo, cómo está armada una ruta y
 > las trampas— está en [API.md](API.md). Acá sólo hay lo que sale del código.
 
-Al 2026-11-26: **322 rutas** y **502 handlers** en 25 carpetas.
+Al 2026-11-26: **324 rutas** y **504 handlers** en 25 carpetas.
 
 ## Cómo leer la columna «guarda»
 
@@ -42,7 +42,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | secreto del cron | 21 |
 | secreto propio | 3 |
 | token contra la base | 1 |
-| permiso de módulo | 210 |
+| permiso de módulo | 212 |
 | sesión | 31 |
 | el proxy | 56 |
 | **ABIERTA** | 0 |
@@ -124,7 +124,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/cantera/voladuras` | POST | permiso de módulo · `puedeEditarCantera` | `cantera_voladuras` | — |
 | `/api/cantera/yacimientos` | GET, POST, PATCH | permiso de módulo · `tieneAccesoCantera` | `cantera_yacimientos` | — |
 
-## compras (30)
+## compras (32)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
@@ -141,6 +141,8 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/compras/odoo/pendientes` | GET, POST | permiso de módulo · `tieneAccesoCompras` | `compras_odoo_ordenes`, `compras_requerimientos` | admin · 60s |
 | `/api/compras/proveedores/[id]` | PATCH | permiso de módulo · `puedeEditarCompras` | `proveedores` | admin |
 | `/api/compras/proveedores/con-odoo` | POST | permiso de módulo · `puedeEditarCompras` | `compras_requerimientos`, `empresas`, `proveedores`, `proveedores_odoo` | admin · 60s |
+| `/api/compras/proveedores/duplicados` | GET | permiso de módulo · `es_admin_check` | `proveedores` | admin · 60s |
+| `/api/compras/proveedores/fusionar` | POST | permiso de módulo · `es_admin_check` | `proveedores`, `usuarios` | admin · audita · 120s |
 | `/api/compras/proveedores/importar` | POST | permiso de módulo · `esAdminCompras` | `proveedores` | admin · 300s |
 | `/api/compras/proveedores` | POST | permiso de módulo · `puedeEditarCompras` | `proveedores` | admin |
 | `/api/compras/requerimientos/[id]/comparativa` | POST | permiso de módulo · `puedeEditarCompras` | `compras_cotizaciones`, `compras_requerimientos`, `proveedores` | admin |
@@ -561,6 +563,8 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/compras/odoo/pendientes` | `lib/compras/auth`, `lib/compras/pendientesDeOdoo`, `lib/core/paginado`, `lib/odoo/client`, `lib/odoo/pushOrden`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/proveedores/[id]` | `lib/compras/altaDeProveedor`, `lib/compras/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/proveedores/con-odoo` | `lib/compras/altaDeProveedor`, `lib/compras/auth`, `lib/core/cuit`, `lib/core/paginado`, `lib/odoo/client`, `lib/odoo/partnerDeProveedor`, `lib/odoo/proveedores`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/compras/proveedores/duplicados` | `lib/compras/proveedoresDeLaPlanilla`, `lib/compras/sheets`, `lib/core/duplicadosDeProveedor`, `lib/core/fusionDeProveedores`, `lib/core/paginado`, `lib/core/route-utils`, `lib/core/sheets`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/compras/proveedores/fusionar` | `lib/core/auditoria`, `lib/core/fusionDeProveedores`, `lib/core/route-utils`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/proveedores/importar` | `lib/compras/auth`, `lib/compras/importarProveedores`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/proveedores` | `lib/compras/altaDeProveedor`, `lib/compras/auth`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/requerimientos/[id]/comparativa` | `lib/compras/auth`, `lib/compras/comparativa`, `lib/compras/congelada`, `lib/compras/drive`, `lib/compras/sheets`, `lib/core/proveedores`, `lib/supabase/admin`, `lib/supabase/server` |

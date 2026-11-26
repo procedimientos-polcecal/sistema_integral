@@ -1,12 +1,15 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
 import MultiSelect from "@/components/MultiSelect";
 import { Modal } from "@/components/Modal";
-import { laEleccionQueQueda } from "@/lib/calidad/ensayos/eleccionDeMuestras";
+import {
+  laEleccionQueQueda,
+  losTildesQueSiguen,
+} from "@/lib/calidad/ensayos/eleccionDeMuestras";
 import {
   COMBINACIONES_DE_LA_COMPARACION,
   compararMuestras,
@@ -35,6 +38,12 @@ export interface MuestraParaLaLista {
   id: string;
   fecha: string;
   observaciones: string | null;
+  /**
+   * De qué producto es. Desde el 26/11/2026 el selector puede traer las
+   * muestras de varios —los del mismo juego de tamices—, así que ya no alcanza
+   * con saber cuál está elegido arriba.
+   */
+  producto_id: string;
 }
 
 // `disabled:pointer-events-none` y no sólo `disabled:opacity-50`: sin eso el
@@ -590,8 +599,7 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
 }
 
 /**
- * El selector de muestras del producto: se tildan las que se quieran y se
- * aplican de una.
+ * El selector de muestras: se tildan las que se quieran y se aplican de una.
  *
  * **Lo tildado vive acá y no en la URL, y por eso hay un botón.** `MultiSelect`
  * avisa en cada tilde, que es lo correcto en los listados —el filtro corre en
@@ -606,78 +614,168 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
  * resuelve solo lo que antes había que cuidar a mano —que el «(n de m)» de la
  * etiqueta se numere contra la lista entera del producto—, porque ya no se
  * saca nada de la lista.
+ *
+ * **Y desde el 26/11/2026 una casilla suma los otros productos del mismo juego
+ * de tamices**, que es como se compara Arena Chocolata con Arena caliza LN.
+ * Tres cosas de esa casilla que no se deducen del código:
+ *
+ * - **Arranca prendida si lo elegido ya cruza el grupo.** Quien abre un enlace
+ *   compartido de dos productos tiene que ver las dos listas; si no, el
+ *   selector diría una cosa y los chips otra.
+ * - **No vive en la URL.** Lo que se comparte es qué muestras se comparan,
+ *   nunca cómo se llegó a elegirlas — y al volver se deduce sola de lo de
+ *   arriba.
+ * - **Sólo se nombran los productos del grupo que tienen alguna muestra.** Hoy
+ *   Calcio 1-2 declara el juego grueso y no tiene ninguna: nombrarlo promete
+ *   una curva que no existe.
  */
 function ElegirMuestras({
   productoId,
-  productoNombre,
+  productos,
+  comparten,
+  juego,
   delSelector,
   elegidas,
   ir,
 }: {
   productoId: string;
-  productoNombre: string;
+  /** El catálogo entero, para poner el nombre del producto en cada etiqueta. */
+  productos: { id: string; nombre: string }[];
+  /** Los otros productos que declaran el mismo juego de tamices. */
+  comparten: { id: string; nombre: string }[];
+  /** El juego que declara el producto elegido, para decirlo en pantalla. */
+  juego: number[];
+  /** Las muestras del producto elegido **y las del resto del grupo**. */
   delSelector: MuestraParaLaLista[];
-  /** Todo lo elegido, que puede incluir muestras de otros productos. */
+  /** Todo lo elegido, que puede incluir muestras de cualquier producto. */
   elegidas: string[];
   ir: (producto: string, ids: string[]) => void;
 }) {
-  const delProducto = useMemo(() => delSelector.map((m) => m.id), [delSelector]);
-  const yaEstaban = useMemo(
-    () => delProducto.filter((id) => elegidas.includes(id)),
-    [delProducto, elegidas]
+  const nombres = useMemo(() => new Map(productos.map((p) => [p.id, p.nombre])), [productos]);
+  const nombreDe = useCallback(
+    (id: string) => nombres.get(id) ?? "Producto sin nombre",
+    [nombres]
   );
 
-  const [tildadas, setTildadas] = useState<string[]>(yaEstaban);
+  /**
+   * Las del grupo que no son del producto elegido, agrupadas por producto en
+   * el orden del catálogo. Intercalarlas por fecha —que es como vienen de la
+   * base— deja una lista donde hay que leer el nombre de cada renglón para
+   * saber de qué producto es.
+   */
+  const delResto = useMemo(
+    () =>
+      comparten.flatMap((p) => delSelector.filter((m) => m.producto_id === p.id)),
+    [comparten, delSelector]
+  );
+  const delProducto = useMemo(
+    () => delSelector.filter((m) => m.producto_id === productoId),
+    [delSelector, productoId]
+  );
+
+  /** Los del grupo que tienen alguna muestra: son los que se nombran. */
+  const conMuestras = useMemo(
+    () => comparten.filter((p) => delSelector.some((m) => m.producto_id === p.id)),
+    [comparten, delSelector]
+  );
+
+  const [conElGrupo, setConElGrupo] = useState(() =>
+    delResto.some((m) => elegidas.includes(m.id))
+  );
+
+  const visibles = useMemo(
+    () => (conElGrupo ? [...delProducto, ...delResto] : delProducto),
+    [conElGrupo, delProducto, delResto]
+  );
+  const idsVisibles = useMemo(() => visibles.map((m) => m.id), [visibles]);
+
+  const [tildadas, setTildadas] = useState<string[]>(() =>
+    idsVisibles.filter((id) => elegidas.includes(id))
+  );
   const [yendo, empezarAIr] = useTransition();
 
+  /** Prender o apagar la casilla cambia qué se ve, no lo que alguien decidió. */
+  function cambiarElAlcance(prendida: boolean) {
+    const ahora = prendida
+      ? [...delProducto, ...delResto].map((m) => m.id)
+      : delProducto.map((m) => m.id);
+    setTildadas(losTildesQueSiguen(tildadas, idsVisibles, ahora, elegidas));
+    setConElGrupo(prendida);
+  }
+
   const opciones = useMemo(() => {
+    // El producto va en la etiqueta sólo cuando hay más de uno a la vista: con
+    // uno solo repetiría su nombre en cada renglón. Es la misma pregunta que
+    // se hace `compararMuestras` para los chips y la leyenda.
     const etiquetas = etiquetasDeMuestras(
-      delSelector.map((m) => ({
-        producto: productoNombre,
+      visibles.map((m) => ({
+        producto: nombreDe(m.producto_id),
         fecha: m.fecha,
         observaciones: m.observaciones,
       })),
-      false
+      conElGrupo
     );
-    return delSelector.map((m, i): [string, string] => [m.id, etiquetas[i]]);
-  }, [delSelector, productoNombre]);
+    return visibles.map((m, i): [string, string] => [m.id, etiquetas[i]]);
+  }, [visibles, conElGrupo, nombreDe]);
 
-  const quedaria = laEleccionQueQueda(elegidas, delProducto, tildadas);
+  const quedaria = laEleccionQueQueda(elegidas, idsVisibles, tildadas);
   const hayCambio =
     quedaria.length !== elegidas.length || quedaria.some((id, i) => id !== elegidas[i]);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {/*
-        Su botón es `w-full` —nació para una fila de filtros en grilla—, así
-        que acá va dentro de algo que le dé el ancho.
-      */}
-      <div className="w-60 max-w-full">
-        <MultiSelect
-          valores={tildadas}
-          onCambio={setTildadas}
-          // «Elegí las muestras» y no «Elegí una muestra»: el resumen cerrado
-          // dice cuántas de **este** producto están tildadas, y vacío puede
-          // ser tanto «todavía no elegí nada» como «destildé las que había»,
-          // que no es «agregar otra».
-          vacio="Elegí las muestras"
-          plural="muestras"
-          opciones={opciones}
-          limpiar="Destildar todas"
-        />
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        {/*
+          Su botón es `w-full` —nació para una fila de filtros en grilla—, así
+          que acá va dentro de algo que le dé el ancho.
+        */}
+        <div className="w-60 max-w-full">
+          <MultiSelect
+            valores={tildadas}
+            onCambio={setTildadas}
+            // «Elegí las muestras» y no «Elegí una muestra»: el resumen cerrado
+            // dice cuántas de lo que está a la vista están tildadas, y vacío
+            // puede ser tanto «todavía no elegí nada» como «destildé las que
+            // había», que no es «agregar otra».
+            vacio="Elegí las muestras"
+            plural="muestras"
+            opciones={opciones}
+            limpiar="Destildar todas"
+          />
+        </div>
+        <button
+          type="button"
+          // Sin `disabled:opacity-50` al lado: `globals.css` ya le pone el
+          // apagado y el `:hover:not(:disabled)` a los cuatro `.btn-*`, y una
+          // utilidad que repite lo que la clase sin capa ya declara no gana
+          // nunca — sólo promete que sí.
+          className="btn-secondary"
+          disabled={!hayCambio || yendo}
+          onClick={() => empezarAIr(() => ir(productoId, quedaria))}
+        >
+          {yendo ? "Buscando…" : "Comparar"}
+        </button>
       </div>
-      <button
-        type="button"
-        // Sin `disabled:opacity-50` al lado: `globals.css` ya le pone el
-        // apagado y el `:hover:not(:disabled)` a los cuatro `.btn-*`, y una
-        // utilidad que repite lo que la clase sin capa ya declara no gana
-        // nunca — sólo promete que sí.
-        className="btn-secondary"
-        disabled={!hayCambio || yendo}
-        onClick={() => empezarAIr(() => ir(productoId, quedaria))}
-      >
-        {yendo ? "Buscando…" : "Comparar"}
-      </button>
+
+      {conMuestras.length > 0 && (
+        <label className="flex cursor-pointer items-start gap-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            className="mt-0.5 shrink-0 accent-[var(--primary)]"
+            checked={conElGrupo}
+            onChange={(e) => cambiarElAlcance(e.target.checked)}
+          />
+          <span>
+            Sumar los{" "}
+            {conMuestras.length === 1 ? "otro producto" : `otros ${conMuestras.length} productos`}{" "}
+            con el mismo juego de tamices
+            {juego.length > 0 && <> ({juego.join(" · ")})</>}:{" "}
+            <span className="text-slate-500">
+              {conMuestras.map((p) => p.nombre).join(", ")}
+            </span>
+          </span>
+        </label>
+      )}
     </div>
   );
 }
@@ -685,15 +783,19 @@ function ElegirMuestras({
 export default function CurvaClient({
   productos,
   productoId,
-  productoNombre,
+  comparten,
+  juego,
   delSelector,
   muestras,
 }: {
   productos: { id: string; nombre: string }[];
   /** "" si no hay producto elegido. */
   productoId: string;
-  productoNombre: string;
-  /** Las muestras del producto elegido, para el selector. */
+  /** Los otros productos que declaran el mismo juego de tamices que el elegido. */
+  comparten: { id: string; nombre: string }[];
+  /** El juego que declara el producto elegido; vacío si no declara ninguno. */
+  juego: number[];
+  /** Las muestras del producto elegido y las del resto de su grupo. */
   delSelector: MuestraParaLaLista[];
   /** Las muestras elegidas, que pueden ser de varios productos. */
   muestras: MuestraParaComparar[];
@@ -711,6 +813,11 @@ export default function CurvaClient({
 
   const elegidas = muestras.map((m) => m.id);
   const producto = productos.find((p) => p.id === productoId);
+
+  // `delSelector` trae además las del resto del grupo, así que cuántas tiene
+  // **este** producto hay que contarlo: su largo diría que Arena Chocolata
+  // tiene 37 muestras porque Calcio 0-2 tiene 25.
+  const cuantasTiene = delSelector.filter((m) => m.producto_id === productoId).length;
 
   // Las etiquetas y los colores de las elegidas salen de la misma función que
   // los usa adentro, sin los tamices apagados —que no los cambian—, para que
@@ -749,7 +856,9 @@ export default function CurvaClient({
             <ElegirMuestras
               key={`${productoId}:${elegidas.join(",")}`}
               productoId={productoId}
-              productoNombre={productoNombre}
+              productos={productos}
+              comparten={comparten}
+              juego={juego}
               delSelector={delSelector}
               elegidas={elegidas}
               ir={ir}
@@ -804,13 +913,16 @@ export default function CurvaClient({
           <LasCurvas key={elegidas.join(",")} muestras={muestras} />
         ) : productoId === "" ? (
           <Aviso>Elegí un producto para ver las muestras que tiene.</Aviso>
-        ) : delSelector.length === 0 ? (
-          <Aviso>{producto?.nombre} todavía no tiene muestras cargadas.</Aviso>
+        ) : cuantasTiene === 0 ? (
+          <Aviso>
+            {producto?.nombre} todavía no tiene muestras cargadas
+            {delSelector.length > 0 && <>, pero sí los otros productos de su juego de tamices</>}.
+          </Aviso>
         ) : (
           <Aviso>
-            {producto?.nombre} tiene {delSelector.length}{" "}
-            {delSelector.length === 1 ? "muestra" : "muestras"}: elegí una para ver su curva, o
-            varias para compararlas.
+            {producto?.nombre} tiene {cuantasTiene}{" "}
+            {cuantasTiene === 1 ? "muestra" : "muestras"}: elegí una para ver su curva, o varias
+            para compararlas.
           </Aviso>
         )}
       </section>

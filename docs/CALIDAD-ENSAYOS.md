@@ -639,6 +639,60 @@ Cuatro cosas que no se deducen del código:
   curva que nadie tocó, y ordenar por el orden de los tildes haría que dos
   personas que eligen lo mismo vean gráficos distintos.
 
+### Comparar productos distintos, los del mismo juego de tamices (26/11/2026)
+
+[spec](superpowers/specs/2026-11-26-calidad-curva-comparar-productos-del-mismo-juego-design.md).
+Se pidió así: comparar Arena Chocolata con Arena caliza LN.
+
+**Cruzar productos ya se podía** desde el 19/11 —los chips sobreviven al cambio
+de producto, y la bajada de la pantalla lo dice—; lo que no había era **cómo
+encontrar con qué producto vale la pena**. Hoy el selector lleva una casilla
+debajo: «Sumar los otros N productos con el mismo juego de tamices (…)», con sus
+nombres, y prendida lista también sus muestras, con el producto adelante en cada
+etiqueta. Para Arena Chocolata suma **34 muestras de 4 productos**, Arena caliza
+LN entre ellos.
+
+Seis cosas que no se deducen del código:
+
+- **El grupo sale del juego DECLARADO del producto y no del que midió cada
+  muestra.** Medido el 26/11/2026: los 12 productos que declaran algo caen en
+  **dos** juegos —`20·50·100·200` y `6·7·10·12·20·50·100·200`, seis cada
+  uno— mientras que lo medido se abre en **cinco**, y **Filler 1 solo midió
+  tres** (23 muestras, 4 y 1). Agrupar por lo medido lo pondría en tres grupos a
+  la vez. Y lo que se perdería ya está resuelto: el eje es la unión, la malla
+  que una muestra no midió queda en `null` y el hueco se nombra debajo de los
+  gráficos.
+- **El juego vacío no empareja con nadie.** 11 de los 23 productos no declaran
+  mallas —ninguno tiene muestras con granulometría, así que no se pierde nada— y
+  juntarlos sería emparejar «Caliza galpón» con «Acopio» por lo único que tienen
+  en común, que es no haber dicho nada.
+- **La casilla arranca prendida si lo elegido ya cruza el grupo**, y **no vive
+  en la URL**: lo que se comparte es qué muestras se comparan, nunca cómo se
+  llegó a elegirlas, y al volver se deduce sola. Sin eso, quien abre un enlace de
+  dos productos vería un selector que dice una cosa y unos chips que dicen otra.
+- **Sólo se nombran los productos del grupo que tienen alguna muestra.** Calcio
+  1-2 declara el juego grueso y tiene cero: nombrarlo promete una curva que no
+  existe.
+- **Prender la casilla no es tildar** (`losTildesQueSiguen`): lo que ya se veía
+  conserva lo que la persona decidió —si destildó algo sin aplicar, abrir el
+  grupo no se lo devuelve— y lo que aparece recién arranca de lo que ya está
+  elegido.
+- **El grupo entero se lee siempre y la casilla no dispara una consulta.** El
+  grupo más grande son 108 muestras de tres columnas, y una segunda vuelta al
+  servidor por prender una casilla se nota más que esas filas. Como `delSelector`
+  pasó a traer el grupo, **su largo ya no es cuántas tiene el producto elegido**:
+  eso se cuenta aparte (`cuantasTiene`), o el cartel diría que Arena Chocolata
+  tiene 37 muestras porque Calcio 0-2 tiene 25.
+
+El desplegable de productos **no** se agrupa ni se filtra: elegir un producto
+sigue siendo elegir cualquiera de los 23, y nada impide seguir cruzando juegos
+distintos a mano. La casilla propone, no restringe.
+
+Qué ofrecería la pantalla para cada producto se ve sin abrirla con
+`npx tsx scripts/que-ofrece-el-selector-de-la-curva.mts`, que imprime lo
+declarado, los juegos que de verdad midió cuando son más de uno, y qué suma la
+casilla.
+
 ## La lista de productos no es el catálogo del núcleo
 
 `productos` tiene las cosas físicas que se despachan. Acá *Filler 1* y *Filler 2*
@@ -712,6 +766,7 @@ retomarlo.
 | La curva de una muestra, con los tamices apagados | `lib/calidad/ensayos/curva.ts` |
 | Las filas del Excel de la curva | `lib/calidad/ensayos/hojaDeLaCurva.ts`, y la ruta `app/api/calidad/ensayos/curva/export/route.ts` |
 | Qué muestras quedan al aplicar el selector | `lib/calidad/ensayos/eleccionDeMuestras.ts` — `laEleccionQueQueda` |
+| Qué productos se pueden comparar entre sí | `lib/calidad/ensayos/juegoDeTamices.ts` — `losQueComparten` |
 | Límites y la muestra evaluada | `lib/calidad/ensayos/limites.ts` — `evaluarMuestra` |
 | Validación de lo que llega | `lib/calidad/ensayos/cuerpoDeLaMuestra.ts` |
 | El juego de tamices | `lib/calidad/ensayos/mallas.ts` |

@@ -428,6 +428,49 @@ el Odoo de local es staging y está congelado desde el 11/09/2026—. La primera
 prueba va con un RI de **una sola empresa**, no con uno de AMBAS: si algo sale
 mal, hay un partner que archivar y no dos.
 
+## El CUIT que falta se avisa al elegir al proveedor (26/11/2026)
+
+El circuito ya frenaba por esto: `armarOrdenes()` devuelve `sin cuit` y el
+mensaje dice qué hacer. El problema era **cuándo** lo dice — al generar la orden,
+o sea después de pedir los presupuestos, cargarlos, armar la comparativa y
+aprobarla—. Medido el 23/11/2026: de los 45 proveedores cotizados en 180 días que
+no llegan a una orden, **40 no tienen CUIT**.
+
+Desde el 26/11/2026 el aviso aparece antes, en dos momentos y sin frenar nada:
+
+- al **elegir al proveedor** en el formulario de presupuesto, como un renglón
+  debajo del selector;
+- al lado de su nombre en **los tres lugares donde se mira la comparativa** — la
+  tabla, la matriz de decisión y las tarjetas del teléfono— con un `· sin CUIT`
+  y el texto entero en el `title` (`MarcaSinCuit`).
+
+Tres cosas que no se deducen del código:
+
+- **No bloquea, a propósito.** A veces se cotiza para comparar y la compra
+  termina en otro proveedor. El freno sigue donde el dato es imprescindible.
+- **Un CUIT inválido avisa distinto que uno que falta.** La consecuencia es la
+  misma —Odoo no lo reconoce— pero un dato ausente y uno mal tipeado no se
+  buscan en el mismo lugar, y por eso `avisoDeCuit()` devuelve dos textos y la
+  marca dice `· CUIT inválido`. El dígito verificador lo comprueba
+  `cuitEsValido()`, que ya existía.
+- **El `cuit` viaja en `ProveedorElegible` sin completar ningún campo.** Es el
+  único dato de la ficha del proveedor que va al formulario y no se autocompleta
+  en ningún lado: está sólo para poder avisar.
+
+Al 26/11/2026 son **267 de 484** los proveedores sin CUIT, así que el aviso no es
+un caso raro: es uno de cada dos. Por qué son tantos y por qué cargarlos no es
+sólo cuestión de escribirlos está en la sección «El padrón tiene a la misma
+empresa dos veces» de [ODOO-INTEGRACION.md](ODOO-INTEGRACION.md).
+
+De ahí sale también la otra punta: **`/compras/proveedores/duplicados`**, la
+pantalla de admin que fusiona las fichas de la misma empresa cargada dos veces
+—105 grupos al 26/11/2026—, que es el camino para 111 de los CUITs que no se
+pueden escribir. Se entra desde «Cargados dos veces», en la lista de
+proveedores. Borra una fila del padrón, así que **se audita con `borrar`**, y lo
+que hay que saber antes de tocarla —cuál queda la decide la planilla y no la
+actividad, el orden de las cuatro escrituras, y las dos clases de choque— está
+en la sección «La pantalla para fusionarlos» de ese mismo documento.
+
 ## Integración con el resto del SdG
 
 - **Proveedores viven en el núcleo**, no dentro de Compras. Mantenimiento ya

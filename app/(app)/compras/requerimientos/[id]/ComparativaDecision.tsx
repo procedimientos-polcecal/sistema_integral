@@ -4,6 +4,7 @@ import { monedaExacta, fecha } from "@/lib/compras/constants";
 import { diferenciaPorcentual, detalleCotizacion, textoDePlazos } from "@/lib/compras/comparativa";
 import type { Cotizacion } from "@/lib/compras/types";
 import { hoyEnArgentina } from "@/lib/core/fechas";
+import MarcaSinCuit from "./MarcaSinCuit";
 
 /**
  * La comparativa en el momento de decidir.
@@ -93,6 +94,7 @@ export default function ComparativaDecision({
               {cotizaciones.map((c) => (
                 <th key={c.id} className="px-3 py-2 text-left font-semibold text-slate-900">
                   {c.proveedores?.nombre ?? "—"}
+                  <MarcaSinCuit proveedor={c.proveedores} />
                 </th>
               ))}
             </tr>
@@ -163,7 +165,10 @@ export default function ComparativaDecision({
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="font-semibold text-slate-900">{c.proveedores?.nombre ?? "—"}</p>
+                <p className="font-semibold text-slate-900">
+                  {c.proveedores?.nombre ?? "—"}
+                  <MarcaSinCuit proveedor={c.proveedores} />
+                </p>
                 <p className="text-xs text-slate-500">{detalleCotizacion(c)}</p>
               </div>
               <div className="shrink-0 text-right">
