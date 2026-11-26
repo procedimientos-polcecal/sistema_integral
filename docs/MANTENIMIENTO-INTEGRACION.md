@@ -4124,6 +4124,20 @@ porque hablar con Google es lo único acá que puede tardar o colgar la función
 y para ese punto está todo guardado; si falla, esa función ya deja escrita la
 marca de borrado fallido y el motivo vuelve en la respuesta.
 
+**Y son dos borrados, no uno.** `borrarLosEventosDeLasOT` borra en Google y
+**no toca la fila de `agenda_eventos`**: su único llamador anterior era el
+borrado de espejo, donde la fila se va sola por el cascade de
+`ordenes_trabajo`. Acá la OT se **cancela**, así que la fila sobrevive — y con
+eso alcanza para que el sistema se denuncie a sí mismo: `revisarLaCasilla` la
+trae (tiene `google_event_id`, tiene `inicio_escrito`, no está divergida y su
+`fin` no pasó), lee de Google el evento cancelado, `queDivergio` contesta
+**«borrado»** y sale un push diciendo que alguien borró el evento, a las mismas
+cinco personas que estaban invitadas. Y «reescribir» lo **resucita** con un
+`PUT status: confirmed` en los cinco calendarios, deshaciendo el paso entero.
+Por eso la ruta borra también la fila, como ya hacía el `DELETE` de
+`agenda/eventos/[id]` — y **sólo si Google pudo**: si no, la fila se queda,
+porque es lo único que sabe dónde está el evento vivo.
+
 **Queda pendiente y no es parte de esto: la cancelación normal desde el PATCH
 de órdenes sigue dejando su evento vivo.** Mientras tanto los dos caminos de
 cancelar hacen cosas distintas con el calendario, que es una inconsistencia
@@ -4132,22 +4146,64 @@ conocida y no un descuido.
 ### Dos cosas más que no se deducen del código
 
 - **El ciclo y sus dos tareas se leen en consultas separadas, no con un
-  embed.** `mant_ciclos_de_ot` → `mant_tareas_preventivas` es uno de los pares
-  ambiguos conocidos del repo —hay dos caminos, la madre y la hija— y un embed
-  sin el FK explícito contesta `300 PGRST201` del otro lado del cable, que no
-  ven `tsc`, ni los tests, ni el build. Vale para esta ruta y para el `GET` de
-  `ciclos/[id]`, que es el que le da al modal el nombre real de la tarea madre
-  y el piso de la fecha.
+  embed, y no es por la ambigüedad del par.** Es cierto que
+  `mant_ciclos_de_ot` → `mant_tareas_preventivas` tiene dos caminos —la madre y
+  la hija—, pero el repo ya lo embebe **nombrando la columna**
+  (`madre:tarea_madre_id(nombre, componente)`), y nombrarla elige el camino:
+  así lo hacen `generarEncadenadas.ts`, la Configuración, la ficha del equipo,
+  `ciclos/[id]/reiniciar` y `avisosDeUsuario`. No hay `300 PGRST201` posible, y
+  el par **no** está —ni tiene por qué estar— en
+  [lib/core/embedsAmbiguos.ts](../lib/core/embedsAmbiguos.ts), que es la lista
+  de los que hay que escribir con el FK explícito. El motivo real es el test:
+  `supabaseDeMentira` **no resuelve embeds**, y esta ruta tiene test de ruta
+  justamente porque lo que hay que probar es el orden de las escrituras — con
+  un embed esa lectura daría `null` en el test y el test estaría probando otra
+  cosa que la que corre en producción. El `GET` de `ciclos/[id]`, que le da al
+  modal el nombre real de la tarea madre y el piso de la fecha, hace lo mismo
+  para que las dos lecturas gemelas estén escritas igual. Esto estuvo escrito
+  al revés un día, en dos docstrings y acá: creerlo lleva a no embeber nunca
+  nada.
 - **El equipo y el sector salen de la propia OT de rotación**, no de releer
   `equipos`: la rotación es del mismo equipo y ya trae `equipment_id`,
   `equipo_raw`, `equipo_code`, `sector_id` y `sector_raw` puestos por el
   generador.
 
+### Qué pasa si falla cada paso, que no es lo mismo en todos
+
+El orden de arriba dice cuál va antes; esto dice qué contesta la ruta cuando
+uno falla, que es otra pregunta. La regla es que **un paso cuyo fallo deja al
+ciclo pidiendo una rotación sobre martillos nuevos nunca contesta 201**:
+
+| Falla | Qué contesta |
+|---|---|
+| el alta en la planilla | 400, y no se tocó nada |
+| la nota del motivo | 500, con la OT del cambio ya creada y la rotación sin cancelar |
+| la cancelación | 500 |
+| **el corte del ciclo** | **500**, nombrando que el generador puede pedir una rotación de más |
+| **leer o soltar las órdenes del ciclo** | **500**, por lo mismo |
+| la planilla de cualquiera de las dos filas | 201 con `planilla_error`: queda encolado |
+| el borrado en Google | 201 con `calendario_error`: queda el aviso en la fila |
+| borrar la fila del evento | 201 con `calendario_error`, pidiendo sacarla desde `/agenda` |
+
+Los dos del medio en negrita son los que la primera versión no miraba. Un 201
+ahí es el anti-objetivo en silencio: con el corte sin mover y la rotación ya
+cancelada, la corrida siguiente mueve el corte sola —la madre nueva sí entra en
+rango, porque su cierre ya no empata con el corte viejo— y la de después
+encuentra a una hija vieja como última, y crea **la vuelta siguiente, que es la
+rotación recién cancelada**.
+
+Y la lectura de las órdenes del ciclo va con `traerTodo` y las suelta de a 200:
+PostgREST corta en 1.000 sin avisar y esto crece con cada vuelta —
+`generarEncadenadas` lee esta misma tabla con este mismo filtro y ya pagina por
+eso—. No es teórico: el 24/11/2026 Hidratación llegó a 427 órdenes en cuatro
+días.
+
 ### Lo que sólo se puede comprobar en la primera corrida real
 
-- **Que el evento desaparezca de los cinco calendarios.** El borrado nunca se
-  llamó desde una cancelación. La primera vez conviene mirar un calendario de
-  verdad, no la respuesta de la ruta.
+- **Que el evento desaparezca de los cinco calendarios, y que no quede su
+  fila.** El borrado nunca se llamó desde una cancelación. La primera vez
+  conviene mirar un calendario de verdad y `/agenda`, no la respuesta de la
+  ruta.
 - **Que la corrida siguiente decida «crear la rotación 1»** y no otra cosa. Se
   ve con `npx tsx scripts/que-haria-el-ciclo.mts`: tiene que decir rotación 1
   contada desde la fecha del cambio.

@@ -43,7 +43,7 @@
  * `docs/superpowers/specs/2026-11-26-mantenimiento-la-rotacion-que-fue-un-cambio-design.md`.
  */
 
-import { comoSeLee } from "@/lib/core/fechas";
+import { comoSeLee, esFechaIso } from "@/lib/core/fechas";
 import { ESTADO_CANCELADA } from "@/lib/mantenimiento/cancelacion";
 import { caraDeLaVuelta } from "@/lib/mantenimiento/cicloDeOT";
 
@@ -55,6 +55,12 @@ export interface RotacionAResolver {
   /** 0 = la madre, 1..n = la hija nº n. */
   ciclo_vuelta: number | null;
   estado: string | null;
+  /**
+   * Hace falta además del estado, y no es redundante: «Registrar el trabajo»
+   * con resultado **Parcial** deja la orden `EN_PROCESO` **con** fecha. Ver
+   * `loQueImpideRegistrarElCambio`.
+   */
+  fecha_cierre: string | null;
 }
 
 export interface CicloDelCambio {
@@ -74,8 +80,6 @@ export interface DatosDelCambio {
   operario_2?: unknown;
   operario_3?: unknown;
 }
-
-const ES_UNA_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Cerrada de verdad: hecha, o decidido que no se hace. */
 const estaCerrada = (estado: string | null): boolean =>
@@ -113,10 +117,25 @@ export function loQueImpideRegistrarElCambio(
     );
   }
 
+  // El estado no alcanza, y las dos mitades van en un `else if` porque una
+  // REALIZADO tiene las dos cosas y nombrarlas por separado no agrega nada.
+  // La segunda existe por un camino vivo: «Registrar el trabajo» con resultado
+  // **Parcial** deja la orden `EN_PROCESO` **con** `fecha_cierre`, y cancelarla
+  // dejaría una `CANCELADA` con fecha de cierre —la fila que
+  // `loQueImpideCancelar` trata como error duro, porque `costoEquipo` la cobra
+  // como gasto real y la columna K del master la muestra con día de cierre—.
+  // No se vacía la fecha: eso borraría el registro parcial de otro.
   if (estaCerrada(orden.estado)) {
     problemas.push(
       `La OT ${orden.ot_number ?? "—"} ya está cerrada: puede que alguien la ` +
       "haya resuelto desde otra pantalla. Actualizá y mirá cómo quedó."
+    );
+  } else if (vino(orden.fecha_cierre)) {
+    problemas.push(
+      `La OT ${orden.ot_number ?? "—"} ya tiene fecha de cierre, así que alguien ` +
+      "registró el trabajo desde otra pantalla: una orden cancelada no lleva " +
+      "fecha de cierre, porque esa fecha dice que se hizo. Actualizá y mirá " +
+      "cómo quedó."
     );
   }
 
@@ -127,7 +146,9 @@ export function loQueImpideRegistrarElCambio(
       `Falta decir cuándo se cambiaron ${ciclo.componente.toLowerCase()}: de ` +
       "esa fecha sale la rotación siguiente."
     );
-  } else if (!ES_UNA_FECHA.test(fecha)) {
+    // `esFechaIso` y no una regex propia: la forma sola no alcanza —`2026-02-30`
+    // la cumple— y lo que sigue a un «sí» acá es escribir la fila en la planilla.
+  } else if (!esFechaIso(fecha)) {
     problemas.push("La fecha del cambio tiene que ser un día del calendario.");
   } else if (fecha > hoy) {
     problemas.push(

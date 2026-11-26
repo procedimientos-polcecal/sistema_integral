@@ -17,6 +17,7 @@ const ROTACION: RotacionAResolver = {
   ciclo_id: "c1",
   ciclo_vuelta: 3,
   estado: "ATRASADO",
+  fecha_cierre: null,
 };
 
 const CICLO: CicloDelCambio = {
@@ -112,6 +113,42 @@ describe("loQueImpideRegistrarElCambio", () => {
       ROTACION, { ...CICLO, desde: null }, { fecha: "2020-01-01" }, HOY
     );
     expect(p).toEqual([]);
+  });
+
+  /*
+   * El estado no alcanza para saber si la orden sigue abierta, y el camino que
+   * lo rompe está vivo: «Registrar el trabajo» con resultado **Parcial** deja
+   * la orden `EN_PROCESO` **con** `fecha_cierre`. Sin esta regla, dos pestañas
+   * —una registra el parcial, la otra aprieta «Fue un cambio»— dejan una
+   * `CANCELADA` con fecha de cierre, que es justo la fila que
+   * `loQueImpideCancelar` trata como error duro: `costoEquipo` la cobra como
+   * gasto real y la columna K del master la muestra con día de cierre.
+   */
+  test("una orden con fecha de cierre se rechaza aunque su estado diga abierta", () => {
+    const p = loQueImpideRegistrarElCambio(
+      { ...ROTACION, estado: "EN_PROCESO", fecha_cierre: "2026-11-25" },
+      CICLO, BIEN, HOY
+    );
+    expect(dice(p)).toMatch(/fecha de cierre/i);
+  });
+
+  test("la rotación abierta sin fecha de cierre sigue pasando", () => {
+    expect(
+      loQueImpideRegistrarElCambio({ ...ROTACION, fecha_cierre: null }, CICLO, BIEN, HOY)
+    ).toEqual([]);
+  });
+
+  /*
+   * La forma sola no alcanza: `2026-02-30` cumple cualquier regex de
+   * `AAAA-MM-DD`. Si pasa, la ruta escribe la fila en la planilla —y consume el
+   * número— antes de que el `insert` reviente contra una columna `date`, que
+   * es el peor de los finales partidos: la orden existe sólo en la planilla y
+   * la sincronización la trae sin `ciclo_id`. Por eso se pregunta con
+   * `esFechaIso`, que reconstruye la fecha, y no con una regex propia.
+   */
+  test("un día que no existe no es una fecha", () => {
+    const p = loQueImpideRegistrarElCambio(ROTACION, CICLO, { fecha: "2026-02-30" }, HOY);
+    expect(dice(p)).toMatch(/día del calendario/i);
   });
 });
 

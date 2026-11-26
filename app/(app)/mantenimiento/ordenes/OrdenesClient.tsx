@@ -1200,8 +1200,11 @@ function OTDetail({
             es el cambio— y en una cerrada tampoco. A diferencia de «Postergar»,
             acá no se explica por qué no está: en una orden que no viene de un
             ciclo nadie espera este botón, así que un cartel sería ruido.
-            `laOTEstaCerrada` cubre REALIZADO y CANCELADA, que es lo mismo que
-            mira el servidor. */}
+            `laOTEstaCerrada` mira el estado **y** `fecha_cierre`, que son las
+            dos cosas que el servidor rechaza: la segunda existe porque
+            «Registrar el trabajo» con resultado Parcial deja la orden
+            EN_PROCESO con fecha, y cancelarla dejaría una CANCELADA con día de
+            cierre. El servidor no confía en esto y lo vuelve a preguntar. */}
         {canEdit && o.ciclo_id && (o.ciclo_vuelta ?? 0) > 0 && !laOTEstaCerrada(o) && (
           <button
             onClick={() => setFueUnCambio(true)}

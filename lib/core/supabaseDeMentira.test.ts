@@ -133,6 +133,28 @@ describe("el `update` y el `alInsertar` del Supabase de mentira", () => {
     expect(b.estado.tablas.t).toEqual([{ id: "a", x: 9 }, { id: "b", x: 1 }]);
   });
 
+  /*
+   * La tercera de la familia. `alBorrar` y `alInsertar` ya existían; sin
+   * `alActualizar` no hay forma de probar qué contesta una ruta cuando un
+   * `update` falla, y una ruta que escribe en varios pasos **tiene** que
+   * decidir eso —si no mira el error, contesta 201 sobre un estado partido—.
+   * Lo pidió el corte del ciclo en `fue-un-cambio`, que es el único paso que
+   * el spec entero argumenta como imprescindible.
+   */
+  it("el update se niega con el error que dice el test, y no toca la fila", async () => {
+    const b = supabaseDeMentira({
+      alActualizar: (tabla) =>
+        tabla === "t" ? { code: "XX000", message: "no se pudo actualizar" } : null,
+    });
+    b.reiniciar({ t: [{ id: "a", x: 1 }] });
+    const t = b.admin.from("t") as unknown as {
+      update(f: object): { eq(c: string, v: unknown): PromiseLike<{ error: { code?: string } | null }> };
+    };
+    const r = await t.update({ x: 9 }).eq("id", "a");
+    expect(r.error?.code).toBe("XX000");
+    expect(b.estado.tablas.t).toEqual([{ id: "a", x: 1 }]);
+  });
+
   it("el insert se niega con el error que dice el test, y no agrega nada", async () => {
     const b = supabaseDeMentira({ alInsertar: () => ({ code: "23505", message: "duplicado" }) });
     b.reiniciar({ t: [] });

@@ -86,6 +86,15 @@ export interface OpcionesDeLaBase {
    * conoce los índices, así que el test dice cuál es la regla.
    */
   alInsertar?: (tabla: string, fila: Fila, filas: readonly Fila[]) => ErrorDeLaBase | null;
+  /**
+   * Si la base se niega a actualizar esta fila, y con qué error. Es la tercera de
+   * la familia y llegó última: existe para probar qué contesta una ruta que
+   * escribe en varios pasos cuando uno de los `update` del medio falla. Sin
+   * esto, un paso que no mira su error se ve exactamente igual que uno que sí.
+   * Se consulta **por fila**, como las otras dos, así que un `update` que toca
+   * varias se niega entero con el primer error y no deja ninguna tocada.
+   */
+  alActualizar?: (tabla: string, fila: Fila, filas: readonly Fila[]) => ErrorDeLaBase | null;
 }
 
 /** Cuántas filas devuelve PostgREST como mucho. */
@@ -375,6 +384,10 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
 
       if (this.accion === "update") {
         const aTocar = filas.filter(coincide);
+        for (const f of aTocar) {
+          const seNego = opciones.alActualizar?.(this.tabla, f, filas) ?? null;
+          if (seNego) return { data: null, error: seNego };
+        }
         for (const f of aTocar) Object.assign(f, this.fila);
         return { data: this.pidioSelect ? aTocar.map((f) => this.proyectar(f)) : null, error: null };
       }

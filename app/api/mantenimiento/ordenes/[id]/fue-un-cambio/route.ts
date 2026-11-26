@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarMantenimiento } from "@/lib/mantenimiento/auth";
 import { cuerpoJson } from "@/lib/core/cuerpo";
+import { traerTodo } from "@/lib/core/paginado";
 import { hoyEnArgentina } from "@/lib/core/fechas";
 import { altaEnLaPlanilla } from "@/lib/mantenimiento/formulario";
 import { loQueHayQueExportar } from "@/lib/mantenimiento/cierreDeOT";
@@ -19,6 +20,16 @@ import {
 } from "@/lib/mantenimiento/cambioFueraDeTurno";
 
 type Params = { params: Promise<{ id: string }> };
+
+/**
+ * Lo mismo que declara `mantenimiento/ordenes`, que hace estrictamente menos:
+ * un `altaEnLaPlanilla`. Ésta hace eso **más** dos `escribirEnLaFilaDeLaOT`
+ * —cada uno relee la columna A entera del master para encontrar la fila— y un
+ * borrado de calendario. Importa cuál es la ventana que un corte abre: entre
+ * la fila ya escrita en la planilla y el `insert` en la base, que es el final
+ * partido que deja una orden existiendo sólo en la planilla.
+ */
+export const maxDuration = 300;
 
 /**
  * POST — esta OT no fue una rotación: fue un cambio.
@@ -293,20 +304,83 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   // ── 5. El corte del ciclo, y lo que el cambio dejó atrás ──────────────────
+  //
+  // Es el único paso que el encabezado argumenta como imprescindible, así que
+  // es el último que puede fallar callado: con el corte sin mover y la rotación
+  // ya cancelada, la corrida siguiente mueve el corte sola —la madre nueva sí
+  // entra en rango, porque su cierre ya no empata con el corte viejo— y la de
+  // después encuentra a una hija vieja como última, y crea la vuelta siguiente,
+  // que es la rotación recién cancelada. Un 201 ahí sería el anti-objetivo en
+  // silencio.
   if (ciclo) {
-    await admin
+    const { error: errorCorte } = await admin
       .from("mant_ciclos_de_ot")
       .update({ desde: fecha, vuelta_desde: 0 })
       .eq("id", ciclo.id);
 
-    const { data: delCiclo } = await admin
-      .from("ordenes_trabajo")
-      .select("id, created_at_app")
-      .eq("ciclo_id", ciclo.id);
+    if (errorCorte) {
+      return NextResponse.json(
+        {
+          error:
+            `Quedó creada la OT ${alta.ot_number} con el cambio y la OT ` +
+            `${rotacion.ot_number ?? "—"} cancelada, pero el ciclo no se movió: ` +
+            `${errorCorte.message}. Avisá antes de que el generador vuelva a ` +
+            "correr, porque puede pedir una rotación sobre los martillos nuevos.",
+        },
+        { status: 500 }
+      );
+    }
 
-    const salen = lasQueSalenDelCiclo(delCiclo ?? [], fecha, [rotacion.id, creada.id]);
-    for (const otId of salen) {
-      await admin.from("ordenes_trabajo").update({ ciclo_id: null }).eq("id", otId);
+    // `traerTodo` y no un `select` pelado: PostgREST corta en 1.000 sin avisar
+    // y esto crece con cada vuelta —`generarEncadenadas` lee esta misma tabla
+    // con este mismo filtro y ya pagina, «porque esto crece con cada vuelta»—.
+    // Una lectura cortada deja adentro del ciclo hijas nacidas después del
+    // cambio, que son justo las que hacen que la corrida siguiente cree la
+    // vuelta siguiente ya atrasada. Y no es teórico acá: el 24/11/2026
+    // Hidratación llegó a 427 órdenes en cuatro días.
+    let delCiclo: { id: string; created_at_app: string | null }[];
+    try {
+      delCiclo = await traerTodo<{ id: string; created_at_app: string | null }>(
+        (desde, hasta) =>
+          admin
+            .from("ordenes_trabajo")
+            .select("id, created_at_app")
+            .eq("ciclo_id", ciclo.id)
+            .order("id")
+            .range(desde, hasta)
+      );
+    } catch (e) {
+      return NextResponse.json(
+        {
+          error:
+            `Quedó todo registrado y el ciclo se movió al ${fecha}, pero no se ` +
+            `pudieron leer sus órdenes para sacarlas: ${e instanceof Error ? e.message : String(e)}. ` +
+            "Avisá: el generador puede pedir una rotación de más.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const salen = lasQueSalenDelCiclo(delCiclo, fecha, [rotacion.id, creada.id]);
+    // De a 200: un `.in()` con muchos ids arma una URL que PostgREST rechaza,
+    // y de a una serían cientos de viajes seguidos adentro de la función.
+    for (let i = 0; i < salen.length; i += 200) {
+      const { error: errorSuelta } = await admin
+        .from("ordenes_trabajo")
+        .update({ ciclo_id: null })
+        .in("id", salen.slice(i, i + 200));
+
+      if (errorSuelta) {
+        return NextResponse.json(
+          {
+            error:
+              `Quedó todo registrado y el ciclo se movió al ${fecha}, pero ` +
+              `algunas órdenes no se pudieron sacar del ciclo: ${errorSuelta.message}. ` +
+              "Avisá: el generador puede pedir una rotación de más.",
+          },
+          { status: 500 }
+        );
+      }
     }
   }
 
@@ -350,8 +424,49 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   // ── 7. El evento de la rotación, que no se va solo ────────────────────────
+  //
+  // **Son dos borrados y hacen falta los dos.** `borrarLosEventosDeLasOT`
+  // borra en Google y no toca la fila: su único llamador anterior era el
+  // borrado de espejo, donde la fila se va sola por el cascade de
+  // `ordenes_trabajo`. Acá la OT se **cancela**, así que la fila sobrevive —y
+  // con eso alcanza para que `revisarLaCasilla` la traiga (tiene
+  // `google_event_id`, tiene `inicio_escrito`, no está divergida y su `fin` no
+  // pasó), lea de Google el evento cancelado, `queDivergio` conteste
+  // **«borrado»** y salga un push diciendo que alguien borró el evento, a las
+  // mismas cinco personas que estaban invitadas—. Y peor: «reescribir» lo
+  // **resucita** con un `PUT status: confirmed` en los cinco calendarios,
+  // deshaciendo este paso entero.
+  //
+  // Si Google no pudo, la fila **se queda**: es lo único que sabe dónde está el
+  // evento vivo, y `borrarLosEventosDeLasOT` ya le dejó el aviso escrito. Es la
+  // misma decisión, con el mismo argumento, que el DELETE de
+  // `agenda/eventos/[id]`.
   const noSePudoBorrar = await borrarLosEventosDeLasOT(admin, [rotacion.id]);
   const calendario_error = noSePudoBorrar.get(rotacion.id) ?? null;
+
+  if (!calendario_error) {
+    const { error: errorFila } = await admin
+      .from("agenda_eventos")
+      .delete()
+      .eq("ot_id", rotacion.id);
+
+    // No voltea nada: el evento ya no está en ningún calendario, que es lo que
+    // importaba. Lo que queda es una fila que la Agenda sigue dibujando y que
+    // el barrido va a marcar como divergida; se dice para que alguien la saque.
+    if (errorFila) {
+      return NextResponse.json(
+        {
+          data: { ot_number: alta.ot_number, cancelada: rotacion.ot_number ?? null },
+          planilla_error,
+          calendario_error:
+            `El evento se borró de los calendarios, pero su fila quedó en la ` +
+            `Agenda del SdG: ${errorFila.message}. Borrala desde /agenda, o el ` +
+            "barrido va a avisar que alguien lo borró en Google.",
+        },
+        { status: 201 }
+      );
+    }
+  }
 
   return NextResponse.json(
     {

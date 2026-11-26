@@ -35,13 +35,17 @@ const google = {
   borrado: new Map<string, string>(),
 };
 
-/** Si la base se niega a guardar la nota del motivo. */
-const falla = { nota: false };
+/** Si la base se niega a guardar la nota del motivo, o a mover el corte. */
+const falla = { nota: false, corte: false };
 
 const base = supabaseDeMentira({
   alInsertar: (tabla) =>
     tabla === "ordenes_trabajo_notas" && falla.nota
       ? { code: "XX000", message: "no se pudo guardar la nota" }
+      : null,
+  alActualizar: (tabla) =>
+    tabla === "mant_ciclos_de_ot" && falla.corte
+      ? { code: "XX000", message: "no se pudo mover el corte" }
       : null,
 });
 
@@ -124,6 +128,14 @@ const ESTADO_INICIAL = () => ({
     { ...LA_ROTACION },
   ],
   ordenes_trabajo_notas: [],
+  // El evento que el generador le creó a la rotación. Existe en los cuatro
+  // ciclos reales: `seguirALasOT` les crea uno al nacer.
+  agenda_eventos: [
+    { id: "ev-rot", ot_id: "ot-rot", casilla: "gerencia@", google_event_id: "g1",
+      inicio: "2026-11-27T11:00:00Z", fin: "2026-11-27T15:00:00Z" },
+    { id: "ev-otra", ot_id: "ot-h2", casilla: "gerencia@", google_event_id: "g2",
+      inicio: "2026-11-18T11:00:00Z", fin: "2026-11-18T15:00:00Z" },
+  ],
 });
 
 const tabla = (nombre: string) => base.estado.tablas[nombre] ?? [];
@@ -141,6 +153,7 @@ beforeEach(() => {
   google.planilla = null;
   google.borrado = new Map();
   falla.nota = false;
+  falla.corte = false;
   base.reiniciar(ESTADO_INICIAL());
 });
 
@@ -271,5 +284,90 @@ describe("POST fue-un-cambio", () => {
   it("una orden que no existe da 404", async () => {
     const res = await post("ot-fantasma", { fecha: "2026-11-24" });
     expect(res.status).toBe(404);
+  });
+
+  /*
+   * `borrarLosEventosDeLasOT` borra en Google y **no toca la fila**: su único
+   * llamador anterior era el borrado de espejo, donde la fila se iba por el
+   * cascade de `ordenes_trabajo`. Acá la OT se cancela, así que la fila
+   * sobrevive —y `revisarLaCasilla` la trae (tiene `google_event_id`, tiene
+   * `inicio_escrito`, no está divergida y su `fin` no pasó), `leerEvento` la
+   * devuelve cancelada, `queDivergio` dice **«borrado»** y sale un push
+   * «Borraron en Google un evento de la Agenda» a las cinco personas que
+   * estaban invitadas—. Y después «reescribir» lo **resucita** en los cinco
+   * calendarios con un `PUT status: confirmed`. O sea: el paso que existe para
+   * que nadie quede citado termina avisando una manipulación que no hubo.
+   */
+  it("borra también la fila del evento, no sólo el evento de Google", async () => {
+    const res = await post("ot-rot", { fecha: "2026-11-24" });
+    expect(res.status).toBe(201);
+    expect(tabla("agenda_eventos").map((e) => e.id)).toEqual(["ev-otra"]);
+  });
+
+  it("si Google no pudo borrarlo, la fila se queda: es lo único que sabe dónde está", async () => {
+    google.borrado = new Map([["ot-rot", "Google no contesta"]]);
+    await post("ot-rot", { fecha: "2026-11-24" });
+    expect(tabla("agenda_eventos").map((e) => e.id)).toEqual(["ev-rot", "ev-otra"]);
+  });
+
+  /*
+   * El paso 5 es el único que el spec entero argumenta como imprescindible, y
+   * era el único que no miraba su error. Con el corte sin mover y la rotación
+   * ya cancelada y fuera del ciclo, la corrida siguiente mueve el corte sola
+   * (la madre nueva está en rango porque su cierre no empata con el viejo) y la
+   * de después encuentra a la hija 2 como última: **crea la vuelta 3, que es la
+   * rotación recién cancelada**. El anti-objetivo, en silencio y con un 201.
+   */
+  it("si el corte no se pudo mover, lo dice en vez de contestar 201", async () => {
+    falla.corte = true;
+    const res = await post("ot-rot", { fecha: "2026-11-24" });
+    expect(res.status).toBe(500);
+    expect(String((await res.json()).error)).toContain("no se pudo mover el corte");
+    expect(tabla("mant_ciclos_de_ot")[0]?.desde).toBe("2026-11-14");
+  });
+
+  /*
+   * PostgREST corta en 1.000 sin avisar, y `generarEncadenadas` lee esta misma
+   * tabla con este mismo filtro usando `traerTodo` «porque esto crece con cada
+   * vuelta». Que un ciclo pase las 1.000 filas no es teórico acá: el 24/11/2026
+   * Hidratación generó 427 OT en cuatro días por el defecto de `laUltimaEnRango`.
+   * Con la lectura cortada, quedan hijas nacidas después del cambio dentro del
+   * ciclo —y ésas son exactamente las que hacen que el ciclo cree la vuelta
+   * siguiente ya atrasada—.
+   */
+  it("con más de mil órdenes en el ciclo, las desengancha a todas", async () => {
+    const muchas = Array.from({ length: 1_200 }, (_, i) =>
+      ot(`ot-m${i}`, 1, { ot_number: 9000 + i, created_at_app: "2026-11-25T09:00:00Z" })
+    );
+    base.reiniciar({ ...ESTADO_INICIAL(), ordenes_trabajo: [
+      ...ESTADO_INICIAL().ordenes_trabajo, ...muchas,
+    ] });
+
+    const res = await post("ot-rot", { fecha: "2026-11-24" });
+    expect(res.status).toBe(201);
+
+    const quedan = tabla("ordenes_trabajo")
+      .filter((o) => o.ciclo_id === "c1")
+      .map((o) => o.id);
+    // La madre recién creada y las dos hijas anteriores al cambio. Ninguna de
+    // las 1.200.
+    expect(quedan).toHaveLength(3);
+  });
+
+  /*
+   * El camino vivo: «Registrar el trabajo» con resultado Parcial deja la orden
+   * `EN_PROCESO` **con** fecha de cierre. La regla es de `cambioFueraDeTurno`;
+   * lo que prueba este test es que la ruta le pase la fila entera y no sólo el
+   * estado, que es el cableado.
+   */
+  it("una orden con fecha de cierre se rechaza aunque su estado diga abierta", async () => {
+    base.reiniciar({ ...ESTADO_INICIAL(), ordenes_trabajo: [
+      ot("ot-h1", 1), ot("ot-h2", 2),
+      { ...LA_ROTACION, estado: "EN_PROCESO", fecha_cierre: "2026-11-25" },
+    ] });
+
+    const res = await post("ot-rot", { fecha: "2026-11-24" });
+    expect(res.status).toBe(400);
+    expect(tabla("ordenes_trabajo")).toHaveLength(3);
   });
 });
