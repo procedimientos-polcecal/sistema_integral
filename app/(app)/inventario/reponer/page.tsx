@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
-import { nivelInventarioDe } from "@/lib/inventario/auth";
+import { nivelInventarioDe, esNivelDeEdicion } from "@/lib/inventario/auth";
 import { traerTodo } from "@/lib/core/paginado";
 import { hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
 import {
@@ -9,6 +9,9 @@ import {
   type ArticuloConFaltante, type MovimientoDelConsumo, type RequerimientoConCodigo,
   type EntradaDeRequerimiento,
 } from "@/lib/inventario/reponer";
+import {
+  desestimacionesPorArticulo, type Desestimacion,
+} from "@/lib/inventario/desestimar";
 import ReponerClient from "./ReponerClient";
 
 /**
@@ -35,7 +38,7 @@ export default async function ReponerPage() {
   const desde = sumarDias(hoy, -DIAS_DE_CONSUMO);
 
   const [
-    articulos, movimientos, requerimientos, entradasConRi,
+    articulos, movimientos, requerimientos, entradasConRi, desestimadas,
     { data: areas }, { data: empresas }, { data: ubicaciones },
   ] =
     await Promise.all([
@@ -69,19 +72,36 @@ export default async function ReponerPage() {
           .select("requerimiento_id, tipo")
           .not("requerimiento_id", "is", null).range(d, h)
       ),
+      /*
+       * Los faltantes que alguien desestimó. Van con `.catch(() => [])`
+       * **a propósito**: la migración que crea esta tabla la aplica una
+       * persona a mano, y entre el despliegue y ese momento la consulta
+       * contesta un error. Sin la red, la pantalla entera dejaría de abrir por
+       * una función que todavía no existe; con ella se comporta como el día
+       * anterior. Es la misma ventana que ya mordió al nombrar una columna
+       * nueva en un `select()`.
+       */
+      traerTodo<Desestimacion>((d, h) =>
+        supabase.from("inventario_faltantes_desestimados")
+          .select("articulo_id, ultimo_movimiento, motivo, desestimado_por_nombre, desestimado_en")
+          .range(d, h)
+      ).catch(() => [] as Desestimacion[]),
       supabase.from("compras_areas").select("id, nombre").eq("activo", true).order("orden"),
       supabase.from("empresas").select("id, nombre").order("nombre"),
       supabase.from("compras_ubicaciones").select("id, nombre").eq("activo", true).order("orden"),
     ]);
 
-  const { paraPedir, yaPedidos } = clasificarParaReponer(
-    articulos, movimientos, requerimientos, hoy, riConEntrada(entradasConRi)
+  const { paraPedir, yaPedidos, desestimados } = clasificarParaReponer(
+    articulos, movimientos, requerimientos, hoy,
+    riConEntrada(entradasConRi), desestimacionesPorArticulo(desestimadas)
   );
 
   return (
     <ReponerClient
       paraPedir={paraPedir}
       yaPedidos={yaPedidos}
+      desestimados={desestimados}
+      puedeDesestimar={esNivelDeEdicion(nivel)}
       areas={areas ?? []}
       empresas={empresas ?? []}
       ubicaciones={ubicaciones ?? []}

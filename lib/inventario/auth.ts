@@ -52,13 +52,25 @@ export async function tieneAccesoInventario(
   return (await nivelInventarioDe(supabase, userId)) !== null;
 }
 
+/**
+ * Qué niveles pueden escribir en Inventario.
+ *
+ * Vive acá y no repetido en cada lado porque una pantalla que muestra el botón
+ * y una ruta que lo rechaza son el mismo error visto de los dos lados, y el
+ * día que el umbral cambie se corrige en un solo lugar. Lo usan
+ * `puedeEditarInventario` —que es lo que miran las rutas— y la página de «Para
+ * reponer», que ya tiene el nivel en la mano y no necesita preguntarlo de
+ * nuevo.
+ */
+export const esNivelDeEdicion = (nivel: UsuarioModulo["nivel"] | null) =>
+  nivel === "edicion" || nivel === "admin";
+
 /** Registrar movimientos. Es el `operador` de la app de origen. */
 export async function puedeEditarInventario(
   supabase: SupabaseClient,
   userId: string
 ): Promise<boolean> {
-  const nivel = await nivelInventarioDe(supabase, userId);
-  return nivel === "edicion" || nivel === "admin";
+  return esNivelDeEdicion(await nivelInventarioDe(supabase, userId));
 }
 
 /** Dar de alta y editar artículos. */
