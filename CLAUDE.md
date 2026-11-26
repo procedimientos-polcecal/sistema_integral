@@ -689,11 +689,35 @@ etiqueta con su campo. Va `grid-cols-1 sm:grid-cols-3`. Dos columnas entran
 el escaneo no hace.
 
 Lo detecta `node scripts/revisar-responsive.mjs`, que busca cuatro cosas: grillas
-de tres o más columnas sin breakpoint, `w-[Npx]` y `min-w-[Npx]` mayores a 343, y
-`<table>` sin un contenedor con scroll. El escaneo a mano del 16/10/2026 encontró
+de tres o más columnas sin breakpoint, `w-[N]` y `min-w-[N]` mayores a 343 —en
+`px` **y desde el 26/11/2026 también en `rem`**, a 16 px cada uno—, y `<table>`
+sin un contenedor con scroll. El escaneo a mano del 16/10/2026 encontró
 30 lugares que no entraban en 313 pantallas; el script es ese escaneo convertido
 en código. **No ve la sintaxis arbitraria** (`grid-cols-[repeat(12,1fr)]`): esa
-hay que medirla a mano.
+hay que medirla a mano — las seis del árbol se miraron el 26/11/2026 y las seis
+son de una columna en el teléfono.
+
+**Los `rem` estaban excluidos a propósito y con argumento escrito, y la premisa
+venció.** Decía que la conversión depende del tamaño de fuente de la raíz, con
+el dato de que los dos `rem` del árbol eran `16rem` = 256 px y entraban. Hoy son
+nueve y dos pasan el ancho útil. El argumento se cerró midiendo: `globals.css`
+no le declara `font-size` a `html`, así que la raíz es el default y el ×16 se
+puede afirmar — **si algún día se lo declara, ese número deja de valer** y hay
+que cambiarlo en el script. Esa nota se defendía con que «si aparece uno que no,
+lo va a encontrar la pasada visual»; la pasada visual corrió y en efecto los
+encontró, pero sólo porque alguien se puso a mirar, que es lo que el script
+existe para no necesitar.
+
+**Y dejarlos entrar destapó un hueco que estaba desde el principio: el chequeo
+de anchos no miraba si había un contenedor con scroll**, cosa que el de
+`<table>` sí hacía. Los dos `rem` grandes del árbol son tablas anchas bien
+envueltas, así que salieron como **ROMPE sobre código correcto** — y un rojo que
+no es un defecto es lo que enseña a no mirar la salida, el mismo motivo por el
+que el lint no está en el CI. Las dos preguntas comparten ahora una sola
+definición de «envuelto» (`hayContenedorConScrollArriba`), que mira doce líneas
+hacia arriba y **se equivoca hacia callarse**: para un chequeo que no está en el
+CI, un falso negativo lo encuentra la pasada visual y un falso positivo lo
+apaga.
 
 ## Y `className="input w-20"` no mide 20
 
@@ -735,15 +759,15 @@ clase sin capa, y las otras dos muerden igual de callado:
 | Clase | Declara | Lo que no se aplica al lado |
 |---|---|---|
 | `.card` | `border` (el atajo, o sea también el color) | `border-red-300`, `border-amber-300`, `border-l-*` |
-| `.card` | `box-shadow` | `ring-*`, `shadow-*` |
-| `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost` | `color` y `font-size` | `text-red-700`, `text-xs`, `text-sm` |
-| `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost` | `cursor` | `disabled:cursor-not-allowed`, `cursor-*` |
+| `.card` | `box-shadow` | `ring-*`, `shadow-*` — y también `hover:shadow-*`, que el `:hover` no esquiva nada. Desde el 26/11/2026 el levantarse lo da `a.card:hover, button.card:hover` en `globals.css`, así que una tarjeta clicable no necesita declararlo |
+| `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost`, `.btn-ghost-danger` | `color` y `font-size` | `text-red-700`, `text-xs`, `text-sm` |
+| `.btn-secondary`, `.btn-danger`, `.btn-primary`, `.btn-ghost`, `.btn-ghost-danger` | `cursor` | `disabled:cursor-not-allowed`, `cursor-*` |
 
-**Los cuatro `.btn-*` están en la lista a propósito, y `.btn-ghost` entró
-último.** Una tabla incompleta es lo que hace que el próximo lector la dé por
-segura: si falta una clase, el que la use va a creer que la suya sí deja pasar
-las utilidades. Antes de agregar un `.btn-*` nuevo a `globals.css`, va también
-acá con lo que declare.
+**Los cinco `.btn-*` están en la lista a propósito, y `.btn-ghost-danger` entró
+último** (26/11/2026). Una tabla incompleta es lo que hace que el próximo lector
+la dé por segura: si falta una clase, el que la use va a creer que la suya sí
+deja pasar las utilidades. Antes de agregar un `.btn-*` nuevo a `globals.css`,
+va también acá con lo que declare.
 
 Medido el 31/10/2026 en Seguridad e Higiene: los dos botones del resumen de
 condiciones declaraban su borde de alerta y lo pintaban gris, «Sacar» —lo
@@ -752,10 +776,47 @@ cinco `text-xs` medían 14 px. **Ninguna de las tres cosas rompe nada y ésa es
 la trampa**: la pantalla se ve bien, sólo que no dice lo que el código dice que
 dice.
 
-Qué hacer según el caso: un color de estado va por `style` —es lo que ya hacen
-los badges de Mantenimiento—; para un botón rojo existe `.btn-danger`; y una
-utilidad que no puede ganar **se saca**, porque una clase que no hace nada y
-promete que sí es peor que no tenerla.
+**Y medido de nuevo el 26/11/2026, esta vez en todo el árbol y con el navegador
+en vez de la cascada: eran 28 utilidades muertas en 19 archivos** —6 bordes de
+alerta de `.card` que se veían grises, 12 `hover:` de `.card` que no hacían
+nada, 7 `text-xs` sobre un `.btn-*` que medían 14 px y 4 «Eliminar»/«Borrar»
+que pedían rojo y salían grises—, más un `input w-auto` que medía 327 px. Lo
+que vale guardar de esa pasada son tres cosas:
+
+- **El comentario de `.card` en `globals.css` afirmaba que los `hover:shadow-lg`
+  de las tarjetas de KPI «siguen sumando el efecto de levantarse», y era
+  falso.** Un comentario que promete que una utilidad muerta funciona es peor
+  que la utilidad: es lo que hace que el siguiente escriba otra.
+- **Y medir un `:hover` desde acá tiene dos trampas encima.** Una ya estaba
+  anotada: leer `getComputedStyle` pegado al hover devuelve el valor de reposo,
+  porque corre contra la transición. La otra apareció el 26/11/2026 y es peor,
+  porque no se parece a un error: **con el panel del navegador oculto la página
+  corre en segundo plano y no recalcula estilos**, así que `getComputedStyle`
+  devuelve lo de antes —ni siquiera un `element.style.boxShadow = "none"` se ve
+  reflejado— y **todo parece muerto, lo esté o no**. Se arregla forzando un
+  repintado entre el hover y la lectura (una captura alcanza) y, sobre todo,
+  teniendo un **control positivo**: un caso que sí tiene que cambiar. Sin él no
+  se distingue «la utilidad no se aplica» de «la medición no se actualizó», y
+  las dos veces que acá se dio por muerta una regla fue con esa ambigüedad
+  arriba de la mesa.
+- **Contarlas con `grep` sobre `className="…"` da de menos.** Así salían 11
+  `hover:` y eran 12: `components/KpiCard.tsx` arma la clase en una variable
+  (`const clases = "card … hover:shadow-lg"`), que ningún patrón de atributo ve.
+- **Las cinco tarjetas de los tableros de Compras, Despacho, Inventario,
+  Producción y Remises no usan `.card`**: son `rounded-xl border bg-white` a
+  mano, y por eso su `hover:shadow-md` sí anda. O sea que la pantalla que se
+  salvó es la que no usó la clase de la casa.
+
+Qué hacer según el caso, con lo que se eligió el 26/11 al lado:
+
+| Caso | Qué va | Por qué no lo otro |
+|---|---|---|
+| Color de estado en una `.card` | `style={{ borderColor: "var(--borde-aviso)" }}` | Es lo que ya hacen los badges de Mantenimiento. Los tokens `--borde-aviso` y `--borde-alerta` existen para que el mismo hex no quede copiado en tres archivos |
+| Tarjeta clicable que se levanta | nada: lo hace `a.card:hover, button.card:hover` en `globals.css` | Acotado a `a` y `button` porque **lo que se levanta es lo que se puede apretar**; una tarjeta de sólo lectura que reacciona al mouse promete un clic que no existe |
+| Botón rojo con borde | `.btn-danger` | — |
+| Acción destructiva adentro de un `<td>`, al lado de otro ghost | `.btn-ghost-danger` | `.btn-danger` es 14 px con borde y 9×16 contra los 13 px sin borde y 6×10 del ghost: mete un botón de otro peso al lado de su hermano y ensancha una columna que en el teléfono ya va con scroll |
+| Hay que forzar un tamaño o un color puntual | el `!` de Tailwind (`!text-xs`), que sí gana | Ya estaba en el repo (`remises/hoy/RouteCard.tsx`) y conserva la intención del autor, que sacar la clase pierde |
+| La utilidad no se puede hacer ganar y no hace falta | **se saca** | Una clase que no hace nada y promete que sí es peor que no tenerla |
 
 **Hay una variante que la tabla no puede expresar, porque no es una utilidad
 que pierde sino una regla que falta.** Hasta el 04/11/2026 `globals.css`

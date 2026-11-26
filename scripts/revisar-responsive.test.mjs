@@ -108,10 +108,42 @@ describe("revisarResponsive", () => {
     expect(revisar(`<div className="min-w-[480px]">`)).toHaveLength(1);
   });
 
-  it("min-w-[480px] con prefijo de breakpoint no sale, ni en rem", () => {
-    // `sm:` lo excluye el mismo lookbehind; `rem` no se convierte a propósito,
-    // porque el script mira texto y no mide.
+  it("min-w-[480px] con prefijo de breakpoint no sale, y 16rem tampoco", () => {
+    // `sm:` lo excluye el lookbehind. El `16rem` seguía sin salir cuando los
+    // `rem` ni se miraban y sigue sin salir ahora que sí: son 256 px y entran
+    // en los 343. Que el resultado no cambie es justamente lo que hace que
+    // este test no diga nada del motivo — por eso están los dos de abajo.
     expect(revisar(`<div className="sm:min-w-[480px] min-w-[16rem]">`)).toEqual([]);
+  });
+
+  it("min-w-[40rem] sale como ROMPE y dice los px", () => {
+    // Desde el 26/11/2026 los `rem` entran, a 16 px cada uno. Antes esto era
+    // invisible, y el árbol ya tenía dos de más de 343: `min-w-[34rem]` y
+    // `min-w-[40rem]`. El hallazgo dice lo escrito **y** lo que mide, porque
+    // con `rem` el número de la clase ya no es el que se compara contra 343.
+    const roto = revisar(`<div className="min-w-[40rem]">`);
+    expect(roto).toHaveLength(1);
+    expect(roto[0].severidad).toBe("ROMPE");
+    expect(roto[0].que).toContain("min-w-[40rem]");
+    expect(roto[0].que).toContain("640 px");
+  });
+
+  it("un ancho grande adentro de un contenedor con scroll no sale", () => {
+    // Es el patrón correcto de una tabla ancha y el mismo que el chequeo de
+    // `<table>` viene exigiendo: si no puede estirar la página, no es un
+    // hallazgo. Sin esto, dejar entrar los `rem` daba dos ROMPE sobre código
+    // bueno, y un rojo que no es un defecto enseña a no mirar la salida.
+    const envuelto = `      <div className="overflow-x-auto">\n        <table className="w-full min-w-[40rem]" />`;
+    expect(revisar(envuelto)).toEqual([]);
+  });
+
+  it("pero el mismo ancho lejos del contenedor sí sale", () => {
+    // La otra mitad, que es la que hace que el perdón valga algo: el
+    // contenedor se busca sólo 12 líneas hacia arriba, así que esto no es
+    // «cualquier overflow en el archivo me salva».
+    const lejos = `      <div className="overflow-x-auto">\n${relleno(15)}\n        <table className="w-full min-w-[40rem]" />`;
+    const hallazgos = revisar(lejos);
+    expect(hallazgos.some((h) => h.que.includes("min-w-[40rem]"))).toBe(true);
   });
 
   it("los calendarios de la lista de excepciones no salen", () => {

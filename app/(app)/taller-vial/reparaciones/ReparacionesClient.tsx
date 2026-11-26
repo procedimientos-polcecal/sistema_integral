@@ -246,7 +246,7 @@ export default function ReparacionesClient({
                             {abierta ? "Ocultar" : "Ver / agregar"}
                           </button>
                           {puedeEditar && (
-                            <button className="btn-ghost text-red-600" onClick={() => borrar(r.id)}>Borrar</button>
+                            <button className="btn-ghost-danger" onClick={() => borrar(r.id)}>Borrar</button>
                           )}
                         </td>
                       </tr>

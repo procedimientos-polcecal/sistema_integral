@@ -142,7 +142,7 @@ export default function UsuariosClient({
                 <td>{u.activo ? "Sí" : "No"}</td>
                 <td className="text-right whitespace-nowrap">
                   <button onClick={() => setEditando(u)} className="btn-ghost">Editar</button>
-                  <button onClick={() => eliminar(u)} className="btn-ghost text-red-600">Eliminar</button>
+                  <button onClick={() => eliminar(u)} className="btn-ghost-danger">Eliminar</button>
                 </td>
               </tr>
             ))}

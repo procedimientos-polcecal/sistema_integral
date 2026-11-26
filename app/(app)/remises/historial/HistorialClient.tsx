@@ -81,7 +81,7 @@ function PlantillasSection({ turnos }: { turnos: any[] }) {
                   <div className="flex items-center gap-2 mt-2">
                     <input type="date" value={aplicando.fecha} onChange={(e) => setAplicando({ p, fecha: e.target.value })}
                       className="border border-slate-300 rounded-md px-2 py-1 text-sm" />
-                    <button onClick={aplicar} className="btn-primary text-xs">Confirmar</button>
+                    <button onClick={aplicar} className="btn-primary !text-xs">Confirmar</button>
                     <button onClick={() => setAplicando(null)} className="text-xs text-slate-500 hover:underline">Cancelar</button>
                   </div>
                 )}
@@ -165,7 +165,7 @@ function HistorialSection({ turnos }: { turnos: any[] }) {
                   <div className="flex items-center gap-2 mt-2">
                     <input type="date" value={reutilizando.fecha} onChange={(e) => setReutilizando({ g, fecha: e.target.value })}
                       className="border border-slate-300 rounded-md px-2 py-1 text-sm" />
-                    <button onClick={reutilizar} className="btn-primary text-xs">Confirmar</button>
+                    <button onClick={reutilizar} className="btn-primary !text-xs">Confirmar</button>
                     <button onClick={() => setReutilizando(null)} className="text-xs text-slate-500 hover:underline">Cancelar</button>
                   </div>
                 )}
@@ -173,7 +173,7 @@ function HistorialSection({ turnos }: { turnos: any[] }) {
                   <div className="flex items-center gap-2 mt-2">
                     <input value={guardandoPlantilla.nombre} onChange={(e) => setGuardandoPlantilla({ g, nombre: e.target.value })}
                       className="border border-slate-300 rounded-md px-2 py-1 text-sm flex-1" />
-                    <button onClick={guardarPlantilla} className="btn-primary text-xs">Guardar</button>
+                    <button onClick={guardarPlantilla} className="btn-primary !text-xs">Guardar</button>
                     <button onClick={() => setGuardandoPlantilla(null)} className="text-xs text-slate-500 hover:underline">Cancelar</button>
                   </div>
                 )}
