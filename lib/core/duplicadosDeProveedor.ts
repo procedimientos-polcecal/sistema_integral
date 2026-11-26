@@ -29,12 +29,63 @@
  */
 
 import { normalizarCuit } from "./cuit";
-import { nombresParecidos } from "./proveedores";
+import { claveDeProveedor, nombresParecidos } from "./proveedores";
 
 export interface ProveedorParaAgrupar {
   id: string;
   nombre: string;
   cuit: string | null;
+}
+
+/** Una ficha que en realidad es una celda con varios proveedores adentro. */
+export interface FichaCompuesta {
+  id: string;
+  nombre: string;
+  /** Los proveedores que nombra, como están escritos en su propia ficha. */
+  partes: string[];
+}
+
+/**
+ * Las fichas que no son un proveedor sino **una celda con varios adentro**.
+ *
+ * Pasa cuando a un mismo pedido se le compró a más de uno y quien llenó la
+ * planilla escribió «TORRACO, BOLSAFLEX» en la columna PROVEEDOR.
+ * `asegurarProveedores()` no sabe leer eso: toma la celda entera como el
+ * nombre de un proveedor nuevo. Al 26/11/2026 son **19 fichas de 395**, cada
+ * una con **exactamente un requerimiento** colgando.
+ *
+ * **No son duplicados y por eso se apartan antes de agrupar.** Mezcladas,
+ * ensucian un grupo entero: «PLATINO, ZMG, TRACK MAR, EQUIPARTES» arrastra a
+ * «PLATINO», «TRACK MAR» y «EQUIPARTES» —que son tres proveedores de verdad— a
+ * un solo grupo de nueve fichas donde ya no se ve cuál es el duplicado real
+ * (ahí lo era «PLATINO» contra «Platino», y nada más).
+ *
+ * **Y fusionarlas no serviría igual**: mientras la celda de la planilla siga
+ * diciendo «TORRACO, BOLSAFLEX», la sincronización vuelve a crear la ficha en
+ * la corrida siguiente. Lo que hay que decidir —a qué proveedor queda apuntando
+ * ese requerimiento, si es que a uno solo— no se puede contestar desde acá.
+ *
+ * El reconocimiento es conservador a propósito: **cada** pedazo tiene que ser
+ * un proveedor que ya existe por su cuenta en el padrón. Con eso, un nombre que
+ * lleva una coma por otro motivo —«Pagano y Kopaitich SRL»— no entra.
+ */
+export function fichasCompuestas(
+  proveedores: readonly ProveedorParaAgrupar[]
+): FichaCompuesta[] {
+  const porClave = new Map<string, string>();
+  for (const p of proveedores) porClave.set(claveDeProveedor(p.nombre), p.id);
+
+  const compuestas: FichaCompuesta[] = [];
+  for (const p of proveedores) {
+    const partes = p.nombre.split(/\s*[,;]\s*|\s+-\s+/).map((x) => x.trim()).filter(Boolean);
+    if (partes.length < 2) continue;
+    const todasExisten = partes.every((x) => {
+      const otro = porClave.get(claveDeProveedor(x));
+      return otro !== undefined && otro !== p.id;
+    });
+    if (todasExisten) compuestas.push({ id: p.id, nombre: p.nombre, partes });
+  }
+  return compuestas;
 }
 
 export interface GrupoDeDuplicados {
@@ -55,16 +106,24 @@ export interface GrupoDeDuplicados {
  * los que quedaron sueltos: una fila no puede estar en dos grupos, porque
  * fusionar uno cambiaría el otro mientras alguien lo mira.
  *
+ * Las fichas compuestas se apartan antes de empezar, así que no aparecen en
+ * ningún grupo.
+ *
  * **Un grupo de nombres parecidos donde ninguno tiene CUIT no se devuelve.** No
  * es que no sea un duplicado: es que fusionarlo no destraba nada —ninguna de
  * las dos filas se iba a conectar con Odoo igual— y llenaría la pantalla de
  * decisiones sin consecuencia. Son datos a ordenar, no un circuito frenado.
  */
 export function gruposDeDuplicados(
-  proveedores: readonly ProveedorParaAgrupar[]
+  entrada: readonly ProveedorParaAgrupar[]
 ): GrupoDeDuplicados[] {
   const grupos: GrupoDeDuplicados[] = [];
   const yaAgrupado = new Set<string>();
+
+  // Las celdas con varios proveedores adentro no son duplicados de nadie y
+  // ensucian el grupo al que se peguen: ver `fichasCompuestas`.
+  const compuestas = new Set(fichasCompuestas(entrada).map((f) => f.id));
+  const proveedores = entrada.filter((p) => !compuestas.has(p.id));
 
   const porCuit = new Map<string, string[]>();
   for (const p of proveedores) {

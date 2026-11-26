@@ -498,6 +498,40 @@ se unifique la columna PROVEEDOR de la planilla, **10** son los del párrafo de
 arriba, **4** tienen dos fichas con CUIT y **2** son parecidos que no se
 contienen.
 
+### 19 fichas del padrón no son un proveedor: son un RI con varios
+
+Lo encontró el usuario mirando la pantalla el 26/11/2026, y explica de una vez
+el grupo más feo de la lista. «PLATINO, ZMG, TRACK MAR, EQUIPARTES» no es una
+empresa mal escrita: es **una celda de la planilla con cuatro proveedores
+adentro**, porque a ese pedido se le compró a los cuatro.
+`asegurarProveedores()` no sabe leer eso y toma la celda entera como el nombre
+de un proveedor nuevo.
+
+Medidas: **19 fichas**, y cada una cuelga **exactamente un requerimiento** —19
+filas en total—. Las reconoce `fichasCompuestas()` de
+[lib/core/duplicadosDeProveedor.ts](../lib/core/duplicadosDeProveedor.ts), y el
+reconocimiento es conservador a propósito: parte por coma o por guion y exige
+que **cada** pedazo sea un proveedor que ya existe por su cuenta. Con eso,
+«Pagano y Kopaitich SRL» no entra.
+
+**No son duplicados, así que se apartan antes de agrupar, y eso no es cosmético
+— es lo que vuelve legible el resto.** Una compuesta arrastra a un mismo grupo a
+todos los proveedores que nombra: «PLATINO, ZMG, TRACK MAR, EQUIPARTES» armaba
+un grupo de nueve fichas donde ya no se veía que el único duplicado real era
+«PLATINO» contra «Platino». Apartando las 19, los grupos de nombre parecido
+pasaron de 101 a 30 y **aparecieron 10 fusiones que estaban escondidas**:
+Platino, Track Mar, Equipartes, Singla, Fase 3, Bolsagro, Bralbol, Recycle
+Bags, Todo Ruleman y Echevarne Hnos.
+
+**Y fusionarlas no las sacaría igual**: mientras la celda siga diciendo
+«TORRACO, BOLSAFLEX», la sincronización la vuelve a crear en la corrida
+siguiente. Por eso la pantalla las lista aparte, sin botón, diciendo qué son.
+Lo que hay que decidir —a qué proveedor queda apuntando ese requerimiento, si
+es que a uno solo— no se contesta desde acá: `compras_requerimientos` tiene un
+`proveedor_id` y una compra repartida entre cuatro no entra ahí. Los invitados
+a cotizar sí tienen tabla propia (`compras_requerimiento_proveedores`), pero el
+adjudicado es uno.
+
 ### Lo que el archivo no cambia nunca
 
 **El `nombre`.** Volvió con 18 nombres cambiados y 77 pasados a mayúscula por

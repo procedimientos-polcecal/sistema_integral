@@ -47,8 +47,18 @@ interface Grupo {
   filas: Fila[];
 }
 
+/** Una ficha que no es un proveedor sino una celda con varios adentro. */
+interface CeldaConVarios {
+  id: string;
+  nombre: string;
+  partes: string[];
+  cuelgan: Record<string, number>;
+  total: number;
+}
+
 interface Respuesta {
   grupos: Grupo[];
+  celdasConVarios: CeldaConVarios[];
   padron: number;
   planillaLeida: boolean;
   porQueNoSeLeyoLaPlanilla: string | null;
@@ -196,6 +206,35 @@ export default function DuplicadosClient() {
               Sólo los {listos.length} que se pueden fusionar sin tocar la planilla
             </label>
           )}
+        </div>
+      )}
+
+      {datos && !cargando && datos.celdasConVarios?.length > 0 && (
+        <div className="card space-y-2">
+          <p className="font-semibold text-slate-900">
+            {datos.celdasConVarios.length} fichas que no son un proveedor
+          </p>
+          <p className="text-sm text-slate-600">
+            Son celdas de la planilla con <strong>varios proveedores adentro</strong>, porque a ese
+            pedido se le compró a más de uno y la columna PROVEEDOR los nombra a todos. La
+            sincronización no sabe leer eso y toma la celda entera como un proveedor nuevo.{" "}
+            <strong>No se arreglan desde acá</strong>: fusionarlas no las saca, porque mientras la
+            celda diga lo mismo la próxima corrida las vuelve a crear. Lo que hay que decidir es a
+            qué proveedor queda apuntando cada uno de esos pedidos.
+          </p>
+          <ul className="space-y-1 text-sm">
+            {datos.celdasConVarios.map((c) => (
+              <li key={c.id} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-semibold text-slate-900">{c.nombre}</span>
+                <span className="text-slate-500">
+                  {c.partes.length} proveedores ·{" "}
+                  <span title={detalleDeLoQueCuelga(c.cuelgan)}>
+                    {c.total} {c.total === 1 ? "fila cuelga" : "filas cuelgan"}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

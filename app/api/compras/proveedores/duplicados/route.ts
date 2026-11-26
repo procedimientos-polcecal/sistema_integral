@@ -5,7 +5,7 @@ import { es_admin_check } from "@/lib/core/route-utils";
 import { traerTodo } from "@/lib/core/paginado";
 import { leerVariosRangos, listarPestanas, letraDeColumna } from "@/lib/core/sheets";
 import { esPestanaDeArea, indexarColumnas } from "@/lib/compras/sheets";
-import { gruposDeDuplicados } from "@/lib/core/duplicadosDeProveedor";
+import { fichasCompuestas, gruposDeDuplicados } from "@/lib/core/duplicadosDeProveedor";
 import { TABLAS_QUE_APUNTAN } from "@/lib/core/fusionDeProveedores";
 import {
   contarNombresDeLaPlanilla,
@@ -128,7 +128,14 @@ export async function GET() {
   );
 
   const grupos = gruposDeDuplicados(proveedores);
-  const enGrupos = new Set(grupos.flatMap((g) => g.ids));
+  /*
+   * Las celdas con varios proveedores adentro van aparte y no como un grupo:
+   * no son duplicados de nadie y fusionarlas no las saca, porque la planilla
+   * las vuelve a crear mientras la celda diga lo mismo. Se muestran igual
+   * porque son 19 fichas del padrón que no son proveedores.
+   */
+  const compuestas = fichasCompuestas(proveedores);
+  const enGrupos = new Set([...grupos.flatMap((g) => g.ids), ...compuestas.map((f) => f.id)]);
 
   // Las 19 en paralelo: no dependen entre sí y la pantalla las necesita todas
   // para dibujarse una vez.
@@ -195,8 +202,19 @@ export async function GET() {
     };
   });
 
+  const celdasConVarios = compuestas.map((f) => {
+    const cuelgan: Record<string, number> = {};
+    let total = 0;
+    for (const { tabla, porProveedor } of conteos) {
+      const n = porProveedor.get(f.id) ?? 0;
+      if (n > 0) { cuelgan[tabla] = n; total += n; }
+    }
+    return { ...f, cuelgan, total };
+  });
+
   return NextResponse.json({
     grupos: salida,
+    celdasConVarios,
     padron: proveedores.length,
     planillaLeida: planilla !== null,
     porQueNoSeLeyoLaPlanilla: porQueNoSeLeyo,
