@@ -10,6 +10,7 @@ import {
   cuerpoDelCorreo,
   destinatariosDelCorreo,
   hayAlgoQueMandar,
+  juntarAusentesDelDia,
   repartirAusentesDelDia,
   repartirVacacionesYAusencias,
   soloLoQueCorrespondeAlDia,
@@ -54,6 +55,12 @@ import {
  *   antes sería trabajo para tirar los 23 de 46 días sin movimientos. Y
  *   sobre todo: **si disparasen, el correo saldría todos los días**, porque
  *   hubo alguien ausente los 46 días de 46.
+ *
+ * - **Quién no viene se lee de dos tablas.** `ausencias` no alcanza: 20 de los
+ *   41 períodos de vacaciones no crearon ausencia, y son justamente las
+ *   licencias largas. Medido el 26/11/2026: ese día había 0 ausencias y 3
+ *   personas de vacaciones, así que la sección salía vacía. El porqué y cómo
+ *   se evita contar dos veces al mismo están en `lib/rrhh/novedadesDelDia.ts`.
  *
  * - **Lo que se cargó hoy pero ya terminó no se informa** (17/11/2026). Una
  *   ausencia del 02/11 cargada el 16/11 es trabajo administrativo poniéndose
@@ -109,9 +116,9 @@ export async function GET(request: Request) {
 
   const EMPLEADO = "empleados(apellido, nombre, legajo)";
 
-  let ausencias, vacaciones, francos, ausentesDelDia;
+  let ausencias, vacaciones, francos, ausentesDelDia, vacacionesEnCurso;
   try {
-    [ausencias, vacaciones, francos, ausentesDelDia] = await Promise.all([
+    [ausencias, vacaciones, francos, ausentesDelDia, vacacionesEnCurso] = await Promise.all([
       traerPaginado(
         () =>
           admin
@@ -150,9 +157,9 @@ export async function GET(request: Request) {
         "francos del día"
       ),
       // Los que no vienen HOY, se haya cargado su ausencia cuando se haya
-      // cargado. Es la única consulta que no mira `created_at`: acá la pregunta
-      // no es qué se movió sino quién falta, y una licencia de 29 días se
-      // cargó una vez y hace falta los 29.
+      // cargado. Las dos últimas consultas son las únicas que no miran
+      // `created_at`: acá la pregunta no es qué se movió sino quién falta, y
+      // una licencia de 29 días se cargó una vez y hace falta los 29.
       traerPaginado(
         () =>
           admin
@@ -163,6 +170,21 @@ export async function GET(request: Request) {
             .order("fecha_desde", { ascending: true })
             .order("id", { ascending: true }),
         "ausentes del día"
+      ),
+      // Y la segunda puerta: un período de vacaciones abierto. Hace falta
+      // porque 20 de los 41 no tienen ausencia y por lo tanto no están en la
+      // consulta de arriba de ninguna forma (decisión 7). El `ausencia_id` no
+      // es dato del correo: es lo que después evita contar dos veces al mismo.
+      traerPaginado(
+        () =>
+          admin
+            .from("vacaciones")
+            .select(`id, fecha_desde, fecha_hasta, ausencia_id, ${EMPLEADO}`)
+            .lte("fecha_desde", dia)
+            .gte("fecha_hasta", dia)
+            .order("fecha_desde", { ascending: true })
+            .order("id", { ascending: true }),
+        "vacaciones en curso"
       ),
     ]);
   } catch (e) {
@@ -246,12 +268,21 @@ export async function GET(request: Request) {
   // calcularla antes sería trabajo para tirar los 23 de 46 días sin
   // movimientos.
   const { empiezanOTerminan, siguenAusentes } = repartirAusentesDelDia(
-    (ausentesDelDia as Fila[]).map((a) => ({
-      empleado: uno(a.empleados as never),
-      fecha_desde: a.fecha_desde as string,
-      fecha_hasta: a.fecha_hasta as string,
-      tipo: a.tipo as string,
-    })),
+    juntarAusentesDelDia(
+      (ausentesDelDia as Fila[]).map((a) => ({
+        id: a.id as string,
+        empleado: uno(a.empleados as never),
+        fecha_desde: a.fecha_desde as string,
+        fecha_hasta: a.fecha_hasta as string,
+        tipo: a.tipo as string,
+      })),
+      (vacacionesEnCurso as Fila[]).map((v) => ({
+        empleado: uno(v.empleados as never),
+        fecha_desde: v.fecha_desde as string,
+        fecha_hasta: v.fecha_hasta as string,
+        ausencia_id: (v.ausencia_id as string | null) ?? null,
+      }))
+    ),
     dia
   );
 
@@ -331,7 +362,14 @@ export async function GET(request: Request) {
     mandado: enviados > 0,
     dia,
     cuenta,
-    ausentes: { empiezanOTerminan: empiezanOTerminan.length, siguenAusentes: siguenAusentes.length },
+    ausentes: {
+      empiezanOTerminan: empiezanOTerminan.length,
+      siguenAusentes: siguenAusentes.length,
+      // De qué tabla salieron, que es lo que después permite ver si la segunda
+      // puerta sirvió de algo sin volver a consultar nada.
+      deAusencias: (ausentesDelDia as Fila[]).length,
+      deVacaciones: (vacacionesEnCurso as Fila[]).length,
+    },
     quedaronAfuera,
     asunto,
     enviados,

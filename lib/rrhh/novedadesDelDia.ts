@@ -84,6 +84,35 @@ import { labelTipoAusencia } from "./tiposAusencia";
  *    cambian» y después «todos» pondría a la misma persona dos veces en el
  *    mismo correo, que es exactamente lo que la decisión 1 evita del otro lado.
  *
+ * 7. **Quién no viene se le pregunta a DOS tablas, y la segunda es
+ *    `vacaciones`** (26/11/2026, a pedido). Preguntarle sólo a `ausencias`
+ *    deja afuera justo las licencias más largas: de los 41 períodos de
+ *    vacaciones, **20 no tienen `ausencia_id`** —son los de antes del
+ *    16/11/2026, cuando una de las dos puertas de carga no creaba la
+ *    ausencia— y ésos no están en `ausencias` de ninguna forma. Medido sobre
+ *    los 46 días hasta el 26/11/2026: **37 tenían al menos una vacación en
+ *    curso que el correo no nombraba**, y en **6 de esos días el único que
+ *    faltaba estaba de vacaciones**, así que la sección salía vacía con gente
+ *    de licencia. El 26/11, sin ir más lejos: 0 ausencias y 3 personas de
+ *    vacaciones.
+ *
+ *    Esto **no** se arregla solo con el tiempo. Las que nazcan de ahora en más
+ *    van a estar atadas, pero un período viejo que sigue abierto se sigue
+ *    perdiendo, y los tres del 26/11 son de ésos.
+ *
+ *    **Juntar dos tablas es juntar dos formas de decir lo mismo**, así que una
+ *    vacación se descarta por dos caminos: si su `ausencia_id` está entre las
+ *    ausencias del día, y si hay una ausencia de tipo `VACACIONES` del mismo
+ *    legajo con las mismas fechas. El primero es el caso normal —20 de las 21
+ *    atadas tienen las fechas idénticas a su ausencia— y el segundo cubre que
+ *    alguien haya cargado las dos cosas por separado, que hoy no pasa en
+ *    ninguna de las 41. Es la decisión 6 otra vez: nadie dos veces en el mismo
+ *    correo.
+ *
+ *    Y una `TARDANZA` no entra acá aunque cubra el día, porque la persona
+ *    viene. Hoy no cambia nada —hay 0 cargadas— y es la misma regla que
+ *    Disponibilidad, donde está escrito el porqué.
+ *
  * ## Lo que esto cuesta, dicho
  *
  * Medido sobre los 46 días desde el 01/10/2026: con las tres cosas, **23 de 46
@@ -146,6 +175,25 @@ export interface AusentePorHoy {
   fecha_desde: string;
   fecha_hasta: string;
   tipo: string;
+}
+
+/**
+ * Una ausencia que cubre el día, tal como la trae su tabla.
+ *
+ * Lleva el `id` porque es lo único que permite reconocer que una vacación del
+ * día es esta misma licencia escrita del otro lado (decisión 7).
+ */
+export interface AusenciaEnCurso extends AusentePorHoy {
+  id?: string | null;
+}
+
+/** Un período de vacaciones que cubre el día. La segunda puerta de la decisión 7. */
+export interface VacacionEnCurso {
+  empleado: PersonaDeLaNovedad | null;
+  fecha_desde: string;
+  fecha_hasta: string;
+  /** La ausencia que lo generó, cuando la hay. Null en los 20 períodos viejos. */
+  ausencia_id: string | null;
 }
 
 export interface NovedadesDelDia {
@@ -298,6 +346,67 @@ export function soloLoQueCorrespondeAlDia(n: NovedadesDelDia, dia: string): Nove
     francosTomados: n.francosTomados.filter((f) => tocaElDiaOElFuturo(f.fecha_tomado, dia)),
     francosGenerados: n.francosGenerados.filter((f) => tocaElDiaOElFuturo(f.fecha_generado, dia)),
   };
+}
+
+/**
+ * Los tipos de ausencia que cubren un día sin que la persona falte.
+ *
+ * Una tardanza llega tarde y trabaja: ponerla entre los que no vienen es
+ * decirle al que arma el turno que le falta alguien que está. Es la misma
+ * regla que Disponibilidad, donde además está medido que el mismo dato cuenta
+ * distinto según quién pregunta.
+ */
+const NO_FALTA_ESE_DIA = new Set(["TARDANZA"]);
+
+/** Legajo + fechas: dos filas con esta misma clave son la misma licencia. */
+function clavePeriodo(a: {
+  empleado: PersonaDeLaNovedad | null;
+  fecha_desde: string;
+  fecha_hasta: string;
+}): string {
+  const quien = a.empleado?.legajo ?? comoSeLlama(a.empleado);
+  return [quien, a.fecha_desde.slice(0, 10), a.fecha_hasta.slice(0, 10)].join("|");
+}
+
+/**
+ * Junta en una sola lista a todos los que no vienen ese día, vengan de
+ * `ausencias` o de `vacaciones`.
+ *
+ * Es la decisión 7 del encabezado, y está separada en su propia función por lo
+ * mismo que `repartirVacacionesYAusencias`: es la que sostiene la decisión y
+ * tiene que poder fijarse con un test.
+ *
+ * **El orden es por fecha de inicio** y no el de llegada. Las dos listas vienen
+ * de dos consultas distintas, así que pegarlas una atrás de la otra dejaría
+ * todas las vacaciones juntas al final: quien lee el correo vería dos listas
+ * ordenadas y no una.
+ */
+export function juntarAusentesDelDia(
+  ausencias: AusenciaEnCurso[],
+  vacaciones: VacacionEnCurso[]
+): AusentePorHoy[] {
+  const faltan = ausencias.filter((a) => !NO_FALTA_ESE_DIA.has(a.tipo));
+
+  // Los dos caminos por los que una vacación ya está contada: atada por id, o
+  // escrita aparte como una ausencia de tipo VACACIONES con las mismas fechas.
+  const atadas = new Set(faltan.map((a) => a.id).filter((id): id is string => !!id));
+  const yaEscritas = new Set(faltan.filter((a) => a.tipo === "VACACIONES").map(clavePeriodo));
+
+  const deVacaciones: AusentePorHoy[] = vacaciones
+    .filter((v) => !(v.ausencia_id && atadas.has(v.ausencia_id)))
+    .map((v) => ({
+      empleado: v.empleado,
+      fecha_desde: v.fecha_desde,
+      fecha_hasta: v.fecha_hasta,
+      tipo: "VACACIONES",
+    }))
+    .filter((v) => !yaEscritas.has(clavePeriodo(v)));
+
+  return [...faltan, ...deVacaciones].sort(
+    (a, b) =>
+      a.fecha_desde.slice(0, 10).localeCompare(b.fecha_desde.slice(0, 10)) ||
+      comoSeLlama(a.empleado).localeCompare(comoSeLlama(b.empleado))
+  );
 }
 
 /**
