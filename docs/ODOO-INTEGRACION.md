@@ -457,6 +457,47 @@ enteras** en vez de con un `.in()`, porque la pregunta es «cuántas filas por
 proveedor» para ~250 ids y un `.in()` de ese tamaño arma una URL que PostgREST
 rechaza con un 400 sin decir por qué.
 
+### La tanda del 26/11/2026: 81 fichas menos
+
+Se corrió `npx tsx scripts/fusionar-duplicados-de-nombre.mts --aplicar`, que es
+esta misma pantalla aplicada de una vez a los grupos donde la decisión no tiene
+nada que decidir. El padrón pasó de **484 a 403** fichas: 7 las fusionó una
+persona desde la pantalla —los **4 grupos de «mismo CUIT» ya no existen**— y 74
+la tanda, moviendo **919 filas** de las 19 tablas. Cero huérfanas después, y las
+81 quedaron en `auditoria` con el verbo `borrar`.
+
+**La regla de la tanda es a propósito más angosta que la de la pantalla: sólo
+borra fichas que NO tienen CUIT.** El grupo de «mismo CUIT» está probado; el de
+«nombre parecido» lo arma un comparador de cadenas, y borrar por parecido una
+ficha identificada con su CUIT es la clase de error que no se nota nunca —el
+dato aparece bajo la empresa que no es—. Así que si la que se iría tiene CUIT,
+el grupo queda para la pantalla, sean dos CUIT distintos o no.
+
+Eso deja afuera **10 grupos donde la que nombra la planilla es justamente la que
+no tiene CUIT** —«ABADIE» contra «ABADIE Gas y garrafas», «BERNER» contra
+«Berner (Shell)»—. Ahí hay una salida buena y la tanda no la toma sola: dejar
+viva a la de la planilla, que **hereda** el CUIT de la otra, porque el único
+campo que no se copia nunca es el `nombre`. Termina igual —una sola ficha, con
+su CUIT— pero para llegar hay que borrar una ficha con CUIT, y eso lo mira una
+persona.
+
+**Y una trampa del agrupador que sólo se ve con los datos adelante.**
+`nombresParecidos` arma el grupo **encadenando desde un ancla**, así que dos
+nombres que no se contienen entre sí terminan juntos por un tercero:
+«Ravioli Rodamientos», «Mr Rodamientos» y «Rodamientos Tandil» son **tres
+negocios distintos** unidos por el rubro. Agrandar la lista `DEL_RUBRO` a ojo no
+sirve —medido: «rodamientos» no lo usa ningún proveedor de afuera de ese grupo,
+o sea que por frecuencia no se distingue de un apellido—. Lo que sí separa el
+caso es pedir que **todos los pares del grupo se contengan**: un duplicado de
+verdad es el nombre corto adentro del largo («Cortadi» en «Cortadi Domingo
+Oscar») y el corto no agrega nada propio. La tanda lo exige; **la pantalla no**,
+y por eso ahí el grupo sigue apareciendo como lo que es, una sugerencia.
+
+De los 38 grupos que quedan, **ninguno es de «mismo CUIT»**: **22** esperan que
+se unifique la columna PROVEEDOR de la planilla, **10** son los del párrafo de
+arriba, **4** tienen dos fichas con CUIT y **2** son parecidos que no se
+contienen.
+
 ### Lo que el archivo no cambia nunca
 
 **El `nombre`.** Volvió con 18 nombres cambiados y 77 pasados a mayúscula por
