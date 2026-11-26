@@ -45,7 +45,9 @@ import type { EstadoAprobacion, EstadoCompra, Prioridad } from "@/lib/compras/ty
 import {
   obtenerToken as tokenGoogle, cuentaDeServicio, SCOPE_SHEETS, SCOPE_SHEETS_LECTURA,
 } from "@/lib/core/google";
-import { leerValores, estaCalculando, errorDeCalculo } from "@/lib/core/sheets";
+import {
+  leerValores, estaCalculando, errorDeCalculo, urlDeVariosRangos, repartirRangos,
+} from "@/lib/core/sheets";
 
 const HOJA_MASTER = "Requerimientos internos";
 
@@ -166,6 +168,44 @@ async function leerPestana(pestana: string): Promise<string[][]> {
   const valores = ((await res.json()).values ?? []) as string[][];
   if (estaCalculando(valores)) throw errorDeCalculo(pestana);
   return valores;
+}
+
+/**
+ * Las mismas pestañas que `leerPestana`, pero en **una sola** llamada.
+ *
+ * Es la hermana de arriba y no un atajo: repite su token, su texto de error
+ * crudo —que es el que viaja a `compras_sincronizaciones.error` y a la cola de
+ * pendientes— y su guarda de planilla calculando, rango por rango. Lo único
+ * que cambia es cuántas veces se le habla a Google.
+ *
+ * POR QUÉ, medido el 26/11/2026
+ *
+ * La cuota que muerde es `ReadRequestsPerMinutePerUser` = **60**, y la comparten
+ * los siete módulos porque la "user" es la única cuenta de servicio. Esta
+ * importación leía **once pestañas de a una** —el master más las diez por
+ * área—, o sea doce llamadas con `listarPestanas`, cada diez minutos. Ese día a
+ * las 13:41 la ventana se llenó entre esta corrida, un alta desde la app y los
+ * reintentos de quien miraba la pantalla: el RI 2379 quedó sin prioridad ni
+ * empresa y la importación de las 13:42 murió con un 429 a los 76 ms.
+ *
+ * Ahora son dos. Y como `leerPestana` no pide `valueRenderOption`, las once
+ * se leían ya del mismo modo: juntarlas no cambia un solo valor. Esa es la
+ * condición para poder juntarlas y está explicada en `leerVariosRangos`.
+ *
+ * Lo que NO cambia: una pestaña a medio calcular sigue tirando la corrida
+ * entera, igual que antes. El `for` de abajo sólo arma el mapa en memoria y la
+ * primera escritura a la base está doscientas líneas más allá, así que cortar
+ * en la lectura —al principio o por la mitad— deja lo mismo: nada escrito.
+ */
+async function leerVariasPestanas(pestanas: readonly string[]): Promise<string[][][]> {
+  if (pestanas.length === 0) return [];
+  const token = await obtenerToken(false);
+  const res = await fetch(urlDeVariosRangos(idPlanilla(), pestanas, false), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
+  const json = (await res.json()) as { valueRanges?: { values?: string[][] }[] };
+  return repartirRangos(pestanas, json.valueRanges ?? []);
 }
 
 async function listarPestanas(): Promise<string[]> {
@@ -501,8 +541,14 @@ export async function importarDesdeSheets(
     const porRi = new Map<number, FilaPlanilla>();
     let leidas = 0;
 
-    for (const pestana of aLeer) {
-      const filas = await leerPestana(pestana);
+    // Las once de una vez y no una por vuelta: ver `leerVariasPestanas`. El
+    // orden que vuelve es el de `aLeer`, y eso importa: el master va primero
+    // porque define el alta, y las pestañas por área pasan después para
+    // sumarle la etapa de compra. Leerlas en otro orden cambiaría qué gana.
+    const contenido = await leerVariasPestanas(aLeer);
+
+    for (const [i, pestana] of aLeer.entries()) {
+      const filas = contenido[i];
       if (filas.length < 2) continue;
 
       const idx = indexarColumnas(filas[0]);

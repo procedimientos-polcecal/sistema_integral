@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   estaCalculando, filaSiguienteSegunLaColumna, laPlanillaEncogio, textoParaLaCelda,
-  tramosDeLaFila,
+  tramosDeLaFila, urlDeVariosRangos, repartirRangos,
 } from "./sheets";
 
 /**
@@ -190,5 +190,66 @@ describe("un texto que la planilla no tiene que interpretar", () => {
   it("vacio sigue siendo vacio: es como se borra una celda", () => {
     expect(textoParaLaCelda("")).toBe("");
     expect(textoParaLaCelda(null)).toBe("");
+  });
+});
+
+/**
+ * Leer varios rangos de una vez existe por la cuota de 60 lecturas por minuto
+ * que comparten todos los modulos, no por velocidad. Lo que se prueba aca es lo
+ * unico que puede romperse en silencio: que cada resultado vuelva al rango que
+ * lo pidio.
+ */
+describe("leer varios rangos en una sola llamada", () => {
+  const ALTAS = "Altas del sistema!A:B";
+  const RESPUESTAS = "Respuestas de formulario 1!A:B";
+
+  it("repite ranges una vez por rango, escapando el nombre de la pestaña", () => {
+    const url = urlDeVariosRangos("ID1", [ALTAS, RESPUESTAS], false);
+    expect(url).toContain("/values:batchGet?");
+    expect(url).toContain("ranges=Altas%20del%20sistema!A%3AB");
+    expect(url).toContain("ranges=Respuestas%20de%20formulario%201!A%3AB");
+  });
+
+  /** La opcion es de la llamada: una sola vez, no una por rango. */
+  it("sinFormato va una sola vez, al final", () => {
+    const url = urlDeVariosRangos("ID1", [ALTAS, RESPUESTAS], true);
+    expect(url.match(/valueRenderOption=UNFORMATTED_VALUE/g)).toHaveLength(1);
+  });
+
+  it("sin sinFormato no se manda la opcion, que es como leia antes", () => {
+    expect(urlDeVariosRangos("ID1", [ALTAS], false)).not.toContain("valueRenderOption");
+  });
+
+  it("devuelve un resultado por rango, en el orden en que se pidieron", () => {
+    const reparto = repartirRangos(
+      [ALTAS, RESPUESTAS],
+      [{ values: [["alta"]] }, { values: [["respuesta"]] }]
+    );
+    expect(reparto).toEqual([[["alta"]], [["respuesta"]]]);
+  });
+
+  /** Un rango vacio no es un error: es lo mismo que devuelve una lectura suelta. */
+  it("un rango sin datos vuelve como arreglo vacio", () => {
+    expect(repartirRangos([ALTAS], [{}])).toEqual([[]]);
+  });
+
+  /**
+   * El fallo que importa. Si Google contesta de menos y se reparte por orden,
+   * el contenido de una pestaña se lee como si fuera el de otra y nada avisa.
+   */
+  it("si vuelven menos rangos de los pedidos no se lee nada", () => {
+    expect(() => repartirRangos([ALTAS, RESPUESTAS], [{ values: [["alta"]] }])).toThrow(
+      /se pidieron 2/
+    );
+  });
+
+  it("y la guarda de la planilla calculando sigue valiendo, nombrando el rango", () => {
+    expect(() =>
+      repartirRangos([ALTAS, RESPUESTAS], [{ values: [["x"]] }, { values: [["Cargando..."]] }])
+    ).toThrow(/Respuestas de formulario 1/);
+  });
+
+  it("sin rangos no se arma ninguna URL", () => {
+    expect(repartirRangos([], [])).toEqual([]);
   });
 });
