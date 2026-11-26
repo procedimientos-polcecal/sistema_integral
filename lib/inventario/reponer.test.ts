@@ -360,9 +360,13 @@ describe("con que valores se abre el alta", () => {
     expect(a.descripcion).toBe("MINI PLAFON LED 18 W");
   });
 
-  it("el detalle dice los numeros reales, para que quien aprueba no tenga que buscarlos", () => {
+  it("el detalle dice por que se pide y nada mas", () => {
+    // Los numeros salieron a pedido: eran una foto del momento del alta que el
+    // RI se lleva escrita para siempre, y el stock de verdad esta en el
+    // articulo, al dia. El mismo texto para cualquier articulo.
     const a = altaDeReposicion(art({ stock_actual: 0, stock_seguridad: 4 }));
-    expect(a.detalle).toBe("Reposición de stock. Había 0 de un mínimo de 4.");
+    expect(a.detalle).toBe("Reposición de stock");
+    expect(altaDeReposicion(art({ stock_actual: 7, stock_seguridad: 9 })).detalle).toBe(a.detalle);
   });
 });
 

@@ -353,18 +353,24 @@ export function avisoDePedidoAbierto(pedido: RiAbierto): AvisoDePedido {
  * la diferencia propondría sistemáticamente menos de lo que se termina
  * comprando.
  *
+ * **El detalle extra dice sólo «Reposición de stock»**, a pedido. Antes agregaba
+ * «Había 0 de un mínimo de 4», y esos dos números son una foto del momento en
+ * que alguien apretó el botón: el RI los lleva escritos para siempre y nadie
+ * los vuelve a actualizar, así que a la semana el texto afirma un stock que ya
+ * no es. Lo que hoy pasa a ese campo es **por qué** se pide, que es lo único
+ * que no se puede mirar en otro lado — el stock y el mínimo están en el
+ * artículo, a un click, y siempre al día.
+ *
  * Todo es editable antes de enviar: esto propone, no decide. Y vive acá porque
- * lo arman dos pantallas: con una copia en cada una, este texto y esta regla se
- * separan sin que nadie lo note.
+ * lo arman tres pantallas —«Para reponer», el stock y los artículos—: con una
+ * copia en cada una, este texto y esta regla se separan sin que nadie lo note.
  */
 export function altaDeReposicion(articulo: ArticuloConFaltante): AltaDeReposicion {
   return {
     descripcion: articulo.descripcion,
     codigo: articulo.codigo,
     cantidad: String(articulo.stock_seguridad),
-    detalle:
-      `Reposición de stock. Había ${articulo.stock_actual} ` +
-      `de un mínimo de ${articulo.stock_seguridad}.`,
+    detalle: "Reposición de stock",
   };
 }
 
