@@ -8,6 +8,7 @@ import Select from "@/components/Select";
 import { Modal, PieDeModal } from "@/components/Modal";
 import { comoSeLee } from "@/lib/core/fechas";
 import { avisoDelPendiente } from "@/lib/mantenimiento/reintentoDePendientes";
+import { loQueEntraDeMotivo } from "@/lib/mantenimiento/cambioFueraDeTurno";
 
 interface CicloDelModal {
   repeticiones: number;
@@ -38,6 +39,13 @@ interface Operario {
  *     preguntarlo está medido: de los 74 cambios de martillos cerrados en los
  *     cuatro equipos, 62 tienen horas y 61 tienen operario 1.
  *
+ * **El «por qué» sí se pregunta, y es optativo.** Se suma al motivo que queda
+ * escrito en la orden cancelada, que ya dice cuándo se cambiaron y en qué OT
+ * quedó registrado — por eso no hace falta exigirlo, y por eso lo escrito no
+ * reemplaza esa frase: es lo único que nombra la orden del cambio. Va a la
+ * misma celda (la columna X), así que el tope del campo sale de
+ * `loQueEntraDeMotivo`, la misma función con la que el servidor lo valida.
+ *
  * No hay campo de contratista —74 de 74 de esos cambios son INTERNO y cero
  * tienen contratista— ni de observaciones, que viven sólo en la celda W de la
  * planilla y en una orden recién creada no se pueden escribir: su fila llega
@@ -60,9 +68,9 @@ export default function FueUnCambioModal({
 }) {
   const { valores, cambiar, tocado, tirar } = useBorrador(
     claveDelBorrador("mantenimiento-fue-un-cambio", { tipo: "ot", id: orden.id }),
-    { cuando: "", horas: "", operario_1: "", operario_2: "", operario_3: "" },
+    { cuando: "", horas: "", motivo: "", operario_1: "", operario_2: "", operario_3: "" },
   );
-  const { cuando, horas } = valores;
+  const { cuando, horas, motivo } = valores;
 
   const [ciclo, setCiclo] = useState<CicloDelModal | null>(null);
   const [operarios, setOperarios] = useState<Operario[]>([]);
@@ -86,6 +94,16 @@ export default function FueUnCambioModal({
   const cambio = (ciclo?.tareaMadre ?? "el cambio").toLowerCase();
   const pieza = (ciclo?.componente ?? "las piezas").toLowerCase();
 
+  // Lo mismo que arma la ruta, para que el tope del campo salga de la misma
+  // función con la que el servidor lo valida y no de un número copiado acá.
+  const entraDeMotivo = loQueEntraDeMotivo({
+    repeticiones: ciclo?.repeticiones ?? 0,
+    desde: ciclo?.desde ?? null,
+    tareaMadre: ciclo?.tareaMadre ?? "el cambio",
+    tareaHija: ciclo?.tareaHija ?? "la rotación",
+    componente: ciclo?.componente ?? "las piezas",
+  });
+
   async function registrar() {
     setGuardando(true);
     setError("");
@@ -96,6 +114,7 @@ export default function FueUnCambioModal({
       body: JSON.stringify({
         fecha: cuando,
         horas: horas.trim(),
+        motivo: motivo.trim() || null,
         operario_1: valores.operario_1.trim() || null,
         operario_2: valores.operario_2.trim() || null,
         operario_3: valores.operario_3.trim() || null,
@@ -198,6 +217,29 @@ export default function FueUnCambioModal({
                 </div>
               </label>
             </div>
+
+            <label className="block space-y-1">
+              <span className="block text-xs font-medium text-slate-600">
+                Por qué se cambiaron en vez de rotarse
+              </span>
+              {/* Optativo: el motivo que queda escrito en la orden cancelada ya
+                  dice cuándo se cambiaron y en qué OT quedó registrado, así que
+                  esto se suma a esa frase y no la reemplaza. El tope sale de la
+                  misma función que valida el servidor, para que el campo no deje
+                  escribir algo que después se rechaza. */}
+              <textarea
+                value={motivo}
+                onChange={(e) => { cambiar({ motivo: e.target.value }); setError(""); }}
+                disabled={guardando}
+                rows={3}
+                maxLength={entraDeMotivo}
+                placeholder="Opcional. Por ejemplo: se partieron dos martillos y no daba para rotar."
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+              <span className="block text-right text-xs text-slate-400">
+                {motivo.length} / {entraDeMotivo}
+              </span>
+            </label>
 
             <label className="block space-y-1">
               <span className="block text-xs font-medium text-slate-600">Quiénes lo hicieron</span>

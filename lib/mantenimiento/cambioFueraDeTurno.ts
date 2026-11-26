@@ -45,6 +45,7 @@
 
 import { comoSeLee, esFechaIso } from "@/lib/core/fechas";
 import { ESTADO_CANCELADA } from "@/lib/mantenimiento/cancelacion";
+import { MAXIMO_DE_NOTA } from "@/lib/mantenimiento/notas";
 import { caraDeLaVuelta } from "@/lib/mantenimiento/cicloDeOT";
 
 /** La OT de rotación sobre la que se aprieta el botón. */
@@ -75,6 +76,8 @@ export interface CicloDelCambio {
 /** Lo que llega del formulario, sin confiar en su forma. */
 export interface DatosDelCambio {
   fecha: unknown;
+  /** Lo que la persona quiera agregar al motivo. Optativo: ver abajo. */
+  motivo?: unknown;
   horas?: unknown;
   operario_1?: unknown;
   operario_2?: unknown;
@@ -161,6 +164,20 @@ export function loQueImpideRegistrarElCambio(
     );
   }
 
+  // Optativo a propósito: la frase automática ya dice cuándo se cambió y en qué
+  // OT quedó, que es lo que una cancelada necesita decir. Exigirlo sería pedir
+  // que alguien repita lo que el sistema ya sabe para poder seguir.
+  if (vino(datos.motivo)) {
+    const entra = loQueEntraDeMotivo(ciclo);
+    const largo = String(datos.motivo).trim().length;
+    if (largo > entra) {
+      problemas.push(
+        `El motivo no puede pasar de ${entra} caracteres (tiene ${largo}): ` +
+        "va en la misma celda que la frase que nombra la orden del cambio."
+      );
+    }
+  }
+
   if (vino(datos.horas)) {
     const n = Number(datos.horas);
     if (!Number.isFinite(n) || n < 0) {
@@ -199,17 +216,46 @@ export function descripcionDelCambio(
  * **Nombra la orden del cambio**, que es lo que el texto del botón de reinicio
  * no hace: ahí dice «el ciclo se reinició» y no deja de dónde agarrarse para
  * encontrar el trabajo que sí se hizo.
+ *
+ * `loQueEscribieron` **se suma y nunca reemplaza**, y ésa es toda la decisión
+ * del campo que lo trae. La frase automática es la única que nombra la OT del
+ * cambio, así que dejar que un texto a mano la pise rompería justo lo que el
+ * párrafo de arriba dice que hace falta — y al revés, no ofrecer el campo
+ * obliga a quien cancela a no poder decir nada propio, que es lo que se pidió
+ * arreglar. Va al final y no al principio porque lo primero que alguien
+ * necesita leer en la celda X es a dónde se fue el trabajo.
  */
 export function elMotivoDeLaRotacion(
   ciclo: CicloDelCambio,
   fecha: string,
   otDelCambio: number,
+  loQueEscribieron?: unknown,
 ): string {
-  return (
+  const automatico =
     `Los ${ciclo.componente.toLowerCase()} se cambiaron el ${comoSeLee(fecha)}, ` +
     "antes de que tocara esta rotación. Quedó registrado en la OT " +
-    `${otDelCambio} y esta orden ya no corresponde.`
-  );
+    `${otDelCambio} y esta orden ya no corresponde.`;
+
+  const suyo = String(loQueEscribieron ?? "").trim();
+  return suyo ? `${automatico} ${suyo}` : automatico;
+}
+
+/**
+ * Cuántos caracteres le quedan a quien escribe el motivo.
+ *
+ * Las dos partes terminan en **la misma celda** de la columna X, así que el
+ * tope de `MAXIMO_DE_NOTA` es del total y no de lo tipeado: medir sólo la parte
+ * de la persona dejaría pasar una nota de 1.120 caracteres sin que nada avise.
+ *
+ * Se mide contra una frase automática de molde —la fecha siempre ocupa diez
+ * caracteres y el número de OT nunca llega a siete cifras—, porque al validar
+ * la orden del cambio **todavía no existe** y no hay número real que medir. Da
+ * de menos por unos pocos caracteres, que es el lado correcto para equivocarse.
+ * La usan la validación y el `maxLength` del campo, para que el formulario no
+ * deje escribir algo que la ruta después rechaza.
+ */
+export function loQueEntraDeMotivo(ciclo: CicloDelCambio): number {
+  return MAXIMO_DE_NOTA - elMotivoDeLaRotacion(ciclo, "2026-12-31", 9_999_999).length - 1;
 }
 
 /**

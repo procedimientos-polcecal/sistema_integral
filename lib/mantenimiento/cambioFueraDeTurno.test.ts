@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { ESTADO_CANCELADA } from "@/lib/mantenimiento/cancelacion";
+import { MAXIMO_DE_NOTA } from "@/lib/mantenimiento/notas";
 import {
   descripcionDelCambio,
   elMotivoDeLaRotacion,
@@ -150,6 +151,30 @@ describe("loQueImpideRegistrarElCambio", () => {
     const p = loQueImpideRegistrarElCambio(ROTACION, CICLO, { fecha: "2026-02-30" }, HOY);
     expect(dice(p)).toMatch(/día del calendario/i);
   });
+
+  /*
+   * El motivo que escribe una persona es optativo: la frase automática ya dice
+   * lo que una cancelada necesita decir —cuándo se cambió y en qué OT quedó—,
+   * así que exigirlo sería pedir que repitan lo que el sistema ya sabe.
+   */
+  test("el motivo escrito a mano no es obligatorio", () => {
+    expect(loQueImpideRegistrarElCambio(ROTACION, CICLO, BIEN, HOY)).toEqual([]);
+    expect(
+      loQueImpideRegistrarElCambio(ROTACION, CICLO, { ...BIEN, motivo: "   " }, HOY)
+    ).toEqual([]);
+  });
+
+  /*
+   * El tope se mide contra lo que **queda** después de la frase automática, no
+   * contra los 1.000 pelados: las dos cosas terminan en la misma celda de la
+   * columna X, y validar sólo la parte tipeada dejaría pasar una nota de 1.120.
+   */
+  test("un motivo que no entra en la celda se rechaza, y dice cuánto entra", () => {
+    const p = loQueImpideRegistrarElCambio(
+      ROTACION, CICLO, { ...BIEN, motivo: "x".repeat(MAXIMO_DE_NOTA) }, HOY
+    );
+    expect(dice(p)).toMatch(/no puede pasar de \d+ caracteres/i);
+  });
 });
 
 describe("descripcionDelCambio", () => {
@@ -164,6 +189,25 @@ describe("descripcionDelCambio", () => {
     expect(descripcionDelCambio(CICLO, { ...ROTACION, ot_number: null })).toBe(
       "Cambio de Martillos — se hizo antes de la rotación a 4ª cara (3 de 3), " +
       "que quedó cancelada."
+    );
+  });
+});
+
+describe("elMotivoDeLaRotacion con lo que escribió una persona", () => {
+  /*
+   * Se suma, nunca reemplaza: la frase automática es la que nombra la OT del
+   * cambio, y es de lo único de lo que se puede agarrar quien después busque
+   * el trabajo que sí se hizo.
+   */
+  test("suma lo escrito al final y conserva la frase automática", () => {
+    const texto = elMotivoDeLaRotacion(CICLO, "2026-11-24", 3211, "Se partieron dos.");
+    expect(texto).toContain("Quedó registrado en la OT 3211");
+    expect(texto).toContain("Se partieron dos.");
+  });
+
+  test("sin nada escrito queda igual que antes", () => {
+    expect(elMotivoDeLaRotacion(CICLO, "2026-11-24", 3211, "   ")).toBe(
+      elMotivoDeLaRotacion(CICLO, "2026-11-24", 3211)
     );
   });
 });

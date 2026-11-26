@@ -275,7 +275,9 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   // ── 3. El motivo, antes que el estado ─────────────────────────────────────
-  const motivo = elMotivoDeLaRotacion(elCiclo, fecha, alta.ot_number);
+  // Lo que escribió la persona se suma al final; la frase automática, que es
+  // la que nombra la OT del cambio, no se puede perder. Ver su docstring.
+  const motivo = elMotivoDeLaRotacion(elCiclo, fecha, alta.ot_number, body.motivo);
 
   const { error: errorNota } = await admin
     .from("ordenes_trabajo_notas")

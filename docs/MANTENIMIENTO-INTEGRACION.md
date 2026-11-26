@@ -4079,7 +4079,7 @@ no entra, la rotación no se cancela. Acá importa el doble, porque una
 divergencia del contraste: sonaría una alarma por una cancelación que el
 sistema hizo bien.
 
-### Lo que el formulario no pregunta, y por qué
+### Qué pregunta el formulario, y qué no
 
 Lo aprieta **el que acomoda las órdenes**, no el que estuvo en la máquina —se
 preguntó—. De ahí:
@@ -4099,6 +4099,17 @@ preguntó—. De ahí:
   tienen contratista**. Ofrecerlo dejaría una fila que se contradice:
   `costoEquipo` da cero mano de obra propia en cuanto hay contratista, y
   `loQueFaltaParaCerrar` con INTERNO pide operarios y no pide el contratista.
+- **El «por qué» se pregunta y es optativo** (26/11/2026, a pedido: el campo
+  faltaba). Lo escrito **se suma** al motivo que queda en la orden cancelada y
+  nunca lo reemplaza, porque la frase automática es la única que nombra la OT
+  del cambio y es de lo único de lo que se puede agarrar quien después busque el
+  trabajo que sí se hizo. Optativo porque esa misma frase ya dice cuándo se
+  cambiaron y en qué orden quedó: exigirlo sería pedir que alguien repita lo que
+  el sistema ya sabe. Y el tope del campo **no son los 1.000 de una nota**: las
+  dos partes terminan en la misma celda de la columna X, así que lo calcula
+  `loQueEntraDeMotivo` contra una frase de molde —857 caracteres hoy— y de ahí
+  salen el `maxLength` del campo y la validación de la ruta, para que el
+  formulario no deje escribir algo que el servidor después rechaza.
 - **No hay campo de observaciones.** No tienen columna en `ordenes_trabajo`
   —`repartirRegistroDeOT` las deja fuera a propósito— y viven sólo en la celda
   W de la planilla. La W de una orden recién creada no se puede escribir,

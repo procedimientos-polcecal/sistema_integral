@@ -287,6 +287,26 @@ describe("POST fue-un-cambio", () => {
   });
 
   /*
+   * El campo del motivo es el cableado: la regla de que se suma y no reemplaza
+   * vive en `cambioFueraDeTurno`, y lo que este test mira es que la ruta se lo
+   * pase — sin eso el campo del formulario se escribe y no llega a ningún lado,
+   * que es el modo de falla que no se ve.
+   */
+  it("guarda en la nota lo que la persona escribió, y no pierde la frase automática", async () => {
+    await post("ot-rot", { fecha: "2026-11-24", motivo: "Se partieron dos." });
+    const nota = String(tabla("ordenes_trabajo_notas")[0]?.texto ?? "");
+    expect(nota).toContain("Quedó registrado en la OT 3211");
+    expect(nota).toContain("Se partieron dos.");
+  });
+
+  it("un motivo que no entra en la celda se rechaza y no escribe nada", async () => {
+    const res = await post("ot-rot", { fecha: "2026-11-24", motivo: "x".repeat(1000) });
+    expect(res.status).toBe(400);
+    expect(tabla("ordenes_trabajo")).toHaveLength(3);
+    expect(tabla("ordenes_trabajo_notas")).toHaveLength(0);
+  });
+
+  /*
    * `borrarLosEventosDeLasOT` borra en Google y **no toca la fila**: su único
    * llamador anterior era el borrado de espejo, donde la fila se iba por el
    * cascade de `ordenes_trabajo`. Acá la OT se cancela, así que la fila
