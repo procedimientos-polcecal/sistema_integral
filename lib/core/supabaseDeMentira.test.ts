@@ -25,6 +25,7 @@ import { supabaseDeMentira, cumpleElOr, type BaseDeMentira } from "./supabaseDeM
 /** Lo que de la consulta usa este archivo. El fake devuelve `unknown`. */
 interface Consultable extends PromiseLike<{ data: Record<string, unknown>[] | null }> {
   select(columnas: string): Consultable;
+  eq(columna: string, valor: unknown): Consultable;
   is(columna: string, valor: unknown): Consultable;
   not(columna: string, operador: string, valor: unknown): Consultable;
 }
@@ -210,5 +211,21 @@ describe("los filtros que trajo el conteo de atrasadas", () => {
 
   it("un operador que no simula revienta en vez de dejar pasar la fila", () => {
     expect(() => cumpleElOr({ x: "1" }, "x.like.*hola*")).toThrow(/sólo sabe/);
+  });
+});
+
+describe("el select(\"*\") del Supabase de mentira", () => {
+  /*
+   * `*` no es el nombre de una columna. La proyeccion lo trataba como si lo
+   * fuera, asi que `select("*")` devolvia `{ "*": undefined }`: una fila que
+   * existe y no tiene ni una columna. El efecto en una ruta es que todo lo que
+   * lee de esa fila sale `undefined` y la validacion la rechaza por motivos
+   * inventados, **sin un solo error** (26/11/2026, escribiendo el test de
+   * `fue-un-cambio`, que lee la OT entera porque necesita hasta las columnas
+   * que `loQueHayQueExportar` mire manana).
+   */
+  it("trae la fila entera", async () => {
+    const { data } = await tabla("eventos").select("*").eq("id", "con");
+    expect(data).toEqual([{ id: "con", divergencia: "movido" }]);
   });
 });

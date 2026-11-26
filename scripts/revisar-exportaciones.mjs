@@ -227,6 +227,21 @@ export const REGISTRO = {
       "exportación hubiera funcionado. Exportar no sirve si el otro lado no " +
       "sabe leer lo que se escribió.",
   },
+  "app/api/mantenimiento/ordenes/[id]/fue-un-cambio/route.ts": {
+    estrategia: "cola",
+    porque:
+      "Escribe **dos** filas del master, y cada una tiene su cola. La orden nueva " +
+      "del cambio nace cerrada, así que lleva estado, cierre, horas y los tres " +
+      "operarios; la rotación que reemplaza queda CANCELADA y lleva la M más la " +
+      "observación previa con el motivo. Las dos anotan `sheets_pendiente` con " +
+      "`elPendienteDelIntento`. La de la orden nueva **falla casi siempre en el " +
+      "primer intento** y es lo esperado: su fila llega al master por " +
+      "`IMPORTRANGE` minutos después de crearse, igual que en el alta y en " +
+      "`generarEncadenadas`. Sin la cola, la sincronización siguiente leería las " +
+      "celdas vacías y devolvería las dos órdenes a POR_HACER: reviviría la " +
+      "rotación sobre martillos que ya se cambiaron, que es el anti-objetivo que " +
+      "este botón existe para cerrar.",
+  },
   "lib/mantenimiento/planillaDelAviso.ts": {
     estrategia: "delega",
     porque:

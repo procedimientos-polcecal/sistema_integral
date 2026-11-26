@@ -303,7 +303,11 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
 
     /** Sólo las columnas pedidas, como PostgREST. Lo que lleva `:` es un embed. */
     private proyectar(fila: Fila): Fila {
-      if (!this.columnas) return fila;
+      // `*` no es el nombre de una columna: es todas. Tratarlo como un nombre
+      // devolvía `{ "*": undefined }` —una fila que existe y no tiene ni una
+      // columna—, así que una ruta que lee la OT entera veía `undefined` en
+      // todo y la rechazaba por motivos inventados, sin un solo error.
+      if (!this.columnas || this.columnas.trim() === "*") return fila;
       const salida: Fila = {};
       for (const c of this.columnas.split(/,(?![^(]*\))/).map((x) => x.trim())) {
         if (c.includes(":")) {
