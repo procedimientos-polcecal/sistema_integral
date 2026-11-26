@@ -2,7 +2,6 @@
 
 import {
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -32,6 +31,9 @@ import type { FilaDeLaComparacion, SerieDeLaComparacion } from "@/lib/calidad/en
  * tamizó, indistinguible de un dato. El porqué completo está en
  * `lib/calidad/ensayos/comparacion.ts`.
  *
+ * **La leyenda no es la de recharts y vive en otro archivo**
+ * (`LeyendaDeLaCurva.tsx`): ver el comentario de ahí.
+ *
  * Sin línea punteada con la curva previa a la exclusión y sin marca en el hueco
  * del tamiz apagado.
  */
@@ -40,38 +42,17 @@ const num = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
 
 const comoMalla = (v: unknown) => `#${v}`;
 
-/**
- * Lo que la leyenda muestra de cada etiqueta.
- *
- * La etiqueta puede traer una observación de hasta 40 caracteres, y seis de
- * ésas envuelven varias filas dentro de un panel de alto fijo (`h-64`): la
- * leyenda se come el dibujo, y en un teléfono lo tapa. El chip de arriba y el
- * tooltip siguen mostrándola entera.
- */
-const LARGO_EN_LA_LEYENDA = 26;
-
-const paraLaLeyenda = (v: unknown) => {
-  const texto = String(v);
-  return texto.length > LARGO_EN_LA_LEYENDA ? `${texto.slice(0, LARGO_EN_LA_LEYENDA)}…` : texto;
-};
-
 function Curva({
   filas,
   series,
   campo,
   nombre,
-  etiquetasEnteras = false,
   tope,
   piso,
 }: {
   filas: FilaDeLaComparacion[];
   series: SerieDeLaComparacion[];
   campo: "retenido" | "acumulado" | "pasante";
-  /**
-   * Sin cortar la etiqueta de la leyenda. Lo usa la vista ampliada, donde hay
-   * ancho de sobra y la etiqueta entera es justo lo que se va a leer.
-   */
-  etiquetasEnteras?: boolean;
   /**
    * Cómo se llama la magnitud. Es lo que el tooltip usa **cuando hay una sola
    * muestra**: ahí la etiqueta sería la fecha, que ya está en el título del
@@ -120,16 +101,6 @@ function Curva({
           formatter={(v, nombre) => [`${num.format(Number(v))} %`, nombre]}
           contentStyle={{ fontSize: 12, borderRadius: 8 }}
         />
-        {/*
-          Con una sola muestra la leyenda repetiría el título del panel y le
-          comería alto al dibujo, que en el teléfono ya es poco.
-        */}
-        {series.length > 1 && (
-          <Legend
-            wrapperStyle={{ fontSize: etiquetasEnteras ? 12 : 11 }}
-            formatter={etiquetasEnteras ? undefined : paraLaLeyenda}
-          />
-        )}
         {series.map((serie) => (
           <Line
             key={serie.id}
@@ -157,35 +128,16 @@ function Curva({
 export interface PropsDeLosGraficos {
   filas: FilaDeLaComparacion[];
   series: SerieDeLaComparacion[];
-  /** Ver `etiquetasEnteras` de `Curva`: lo pasa la vista ampliada. */
-  etiquetasEnteras?: boolean;
 }
 
 /** Lo que quedó retenido en cada tamiz, en % del peso tamizado. */
-export function CurvaDeRetenido({ filas, series, etiquetasEnteras }: PropsDeLosGraficos) {
-  return (
-    <Curva
-      filas={filas}
-      series={series}
-      campo="retenido"
-      nombre="Retenido"
-      etiquetasEnteras={etiquetasEnteras}
-    />
-  );
+export function CurvaDeRetenido({ filas, series }: PropsDeLosGraficos) {
+  return <Curva filas={filas} series={series} campo="retenido" nombre="Retenido" />;
 }
 
 /** El acumulado de cada tamiz: sube de 0 a 100 %, de ahí el techo en 100. */
-export function CurvaDeAcumulado({ filas, series, etiquetasEnteras }: PropsDeLosGraficos) {
-  return (
-    <Curva
-      filas={filas}
-      series={series}
-      campo="acumulado"
-      nombre="Acumulado"
-      etiquetasEnteras={etiquetasEnteras}
-      tope={100}
-    />
-  );
+export function CurvaDeAcumulado({ filas, series }: PropsDeLosGraficos) {
+  return <Curva filas={filas} series={series} campo="acumulado" nombre="Acumulado" tope={100} />;
 }
 
 /**
@@ -193,16 +145,8 @@ export function CurvaDeAcumulado({ filas, series, etiquetasEnteras }: PropsDeLos
  * 0 %. Lleva techo en 100 **y** piso en 0, los dos como mínimo y no como valor
  * fijo: un pasante negativo —lo retenido supera al peso— tiene que verse.
  */
-export function CurvaDePasante({ filas, series, etiquetasEnteras }: PropsDeLosGraficos) {
+export function CurvaDePasante({ filas, series }: PropsDeLosGraficos) {
   return (
-    <Curva
-      filas={filas}
-      series={series}
-      campo="pasante"
-      nombre="Pasante"
-      etiquetasEnteras={etiquetasEnteras}
-      tope={100}
-      piso={0}
-    />
+    <Curva filas={filas} series={series} campo="pasante" nombre="Pasante" tope={100} piso={0} />
   );
 }

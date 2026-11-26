@@ -1077,13 +1077,17 @@ function SalidaDelPanolDelRenglon({
     setCandidatas(null);
     setMotivo("");
     setError("");
-    setVerTodas(todas);
     try {
       const res = await fetch(todas ? `${url}?todas=1` : url);
       const body = await res.json().catch(() => ({}));
       if (!res.ok) { setError(body.error ?? "No se pudieron traer las salidas del pañol."); return; }
       setCandidatas(body.candidatas ?? []);
       setMotivo(body.motivo ?? "");
+      // El estado sale de lo que el servidor **hizo** y no de lo que se le pidió.
+      // La ruta devuelve `todas` justamente para esto: fijarlo antes del fetch
+      // dejaba la pantalla afirmando «estás viendo todas» aunque el pedido
+      // fallara, y es lo que decide cuál de los dos botones se ofrece.
+      setVerTodas(body.todas ?? todas);
     } catch {
       setError("No se pudieron traer las salidas del pañol: no hay conexión con el servidor.");
     }
@@ -1252,6 +1256,30 @@ function SalidaDelPanolDelRenglon({
               </button>
               <span className="text-slate-400">
                 {" "}— sin el corte de los {DIAS_DE_LA_VENTANA} días, desde la primera entrada del artículo.
+              </span>
+            </p>
+          )}
+          {/* Y la vuelta, que no es prolijidad. Levantar la ventana la levanta
+              **hacia adelante**, y el orden es «la más nueva primero»: las
+              salidas posteriores que entran ordenan ANTES y empujan afuera a las
+              que la lista corta mostraba, porque el tope de diez sigue puesto.
+              Medido el 24/11/2026 sobre las 766 entradas con RI
+              (`scripts/que-mostraria-la-trazabilidad.mts`): de las 545 que
+              ofrecen candidatas, «ver todas» pierde alguna de las que mostraba
+              en 168, y en **121 no queda ninguna**. Sin este botón, quien
+              apretó «ver todas» buscando una más perdía de vista la que estaba
+              mirando y no tenía cómo recuperarla. */}
+          {candidatas && verTodas && (
+            <p className="mt-1">
+              <button
+                onClick={() => abrir(false)}
+                disabled={ocupado}
+                className="underline text-[var(--primary)] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Volver a las últimas
+              </button>
+              <span className="text-slate-400">
+                {" "}— las de los {DIAS_DE_LA_VENTANA} días desde la entrada.
               </span>
             </p>
           )}

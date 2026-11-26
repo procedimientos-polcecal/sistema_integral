@@ -2,11 +2,23 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarCompras } from "@/lib/compras/auth";
+import { empresaParaGuardar } from "@/lib/compras/altaDeProveedor";
 
 const CAMPOS = [
   "nombre", "cuit", "rubro", "contacto", "telefono",
   "email", "notas", "es_contratista", "activo",
 ] as const;
+
+/*
+ * `empresa_id` y `trabaja_con_ambas` no entran por `CAMPOS`: van juntas y hay
+ * un check que prohíbe las dos cargadas a la vez, así que pasan por
+ * `empresaParaGuardar()`, que decide cuál gana. Y entran sólo si el cuerpo las
+ * nombra: sin eso, un PATCH de otro campo le borraría la empresa al proveedor.
+ */
+function deQueEmpresa(body: Record<string, unknown>): Record<string, unknown> {
+  if (!("empresa_id" in body) && !("trabaja_con_ambas" in body)) return {};
+  return empresaParaGuardar(body);
+}
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -23,6 +35,7 @@ export async function POST(request: Request) {
 
   const registro: Record<string, unknown> = { nombre };
   for (const campo of CAMPOS) if (campo !== "nombre" && campo in body) registro[campo] = body[campo];
+  Object.assign(registro, deQueEmpresa(body));
 
   const { data, error } = await createAdminClient()
     .from("proveedores").insert(registro).select("*").single();

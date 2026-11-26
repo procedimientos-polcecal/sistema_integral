@@ -5,8 +5,9 @@ import { nivelInventarioDe } from "@/lib/inventario/auth";
 import { traerTodo } from "@/lib/core/paginado";
 import { hoyEnArgentina, sumarDias } from "@/lib/core/fechas";
 import {
-  clasificarParaReponer, DIAS_DE_CONSUMO,
+  clasificarParaReponer, riConEntrada, DIAS_DE_CONSUMO,
   type ArticuloConFaltante, type MovimientoDelConsumo, type RequerimientoConCodigo,
+  type EntradaDeRequerimiento,
 } from "@/lib/inventario/reponer";
 import ReponerClient from "./ReponerClient";
 
@@ -33,7 +34,10 @@ export default async function ReponerPage() {
   const hoy = hoyEnArgentina();
   const desde = sumarDias(hoy, -DIAS_DE_CONSUMO);
 
-  const [articulos, movimientos, requerimientos, { data: areas }, { data: empresas }, { data: ubicaciones }] =
+  const [
+    articulos, movimientos, requerimientos, entradasConRi,
+    { data: areas }, { data: empresas }, { data: ubicaciones },
+  ] =
     await Promise.all([
       // `traerTodo` y no `.limit()`: PostgREST corta en 1000 y no avisa, y hoy
       // hay 521 artículos con faltante.
@@ -55,12 +59,24 @@ export default async function ReponerPage() {
           .select("id, nro_ri, codigo, fecha, estado_aprobacion, estado_compra")
           .not("codigo", "is", null).range(d, h)
       ),
+      // Las entradas que nombran el RI que las trajo. **No se acotan a la
+      // ventana de consumo**: un pedido de hace ocho meses pudo recibirse hace
+      // siete, y con el filtro de 90 días esa entrada no entraría y el RI
+      // seguiría figurando como abierto para siempre. Son 766 filas hoy y
+      // `traerTodo` porque crecen con cada recepción.
+      traerTodo<EntradaDeRequerimiento>((d, h) =>
+        supabase.from("inventario_movimientos")
+          .select("requerimiento_id, tipo")
+          .not("requerimiento_id", "is", null).range(d, h)
+      ),
       supabase.from("compras_areas").select("id, nombre").eq("activo", true).order("orden"),
       supabase.from("empresas").select("id, nombre").order("nombre"),
       supabase.from("compras_ubicaciones").select("id, nombre").eq("activo", true).order("orden"),
     ]);
 
-  const { paraPedir, yaPedidos } = clasificarParaReponer(articulos, movimientos, requerimientos, hoy);
+  const { paraPedir, yaPedidos } = clasificarParaReponer(
+    articulos, movimientos, requerimientos, hoy, riConEntrada(entradasConRi)
+  );
 
   return (
     <ReponerClient

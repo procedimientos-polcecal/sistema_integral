@@ -2,19 +2,22 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
 import { nivelCalidadDe } from "@/lib/calidad/auth";
-import { traerMuestra } from "@/lib/calidad/ensayos/consultas";
-import { TOPE_DE_MUESTRAS, type MuestraParaComparar } from "@/lib/calidad/ensayos/comparacion";
+import { traerMuestrasConRetenidos, traerProductos } from "@/lib/calidad/ensayos/consultas";
+import type { MuestraParaComparar } from "@/lib/calidad/ensayos/comparacion";
+import { MUESTRAS_QUE_SE_ACEPTAN } from "@/lib/calidad/ensayos/muestrasPedidas";
+import { nombreDelArchivoDeLaCurva } from "@/lib/calidad/ensayos/nombreDelArchivo";
 import { filasDeLaHoja, leerApagadas } from "@/lib/calidad/ensayos/hojaDeLaCurva";
 import { colocarImagenes, medidasDelPng } from "@/lib/calidad/ensayos/imagenesDeLaHoja";
 import { xlsxConImagenesResponse } from "@/lib/core/xlsxExport";
 
 /**
  * El Excel de la curva granulométrica: la tabla y una foto de los gráficos,
- * para pegar en un informe. Acepta hasta `TOPE_DE_MUESTRAS` muestras, que es lo
- * que la pantalla deja comparar.
+ * para pegar en un informe. **Comparar no tiene tope** desde el 25/11/2026, así
+ * que lo único que limita es `MUESTRAS_QUE_SE_ACEPTAN`: lo que entra en un
+ * `.in()`.
  *
- * **Los números no vienen del navegador.** La ruta lee cada muestra y sus
- * retenidos de la base con `traerMuestra(id)` y arma las filas con eso. Del
+ * **Los números no vienen del navegador.** La ruta lee las muestras y sus
+ * retenidos de la base con `traerMuestrasConRetenidos(ids)` y arma las filas con eso. Del
  * cliente llegan sólo tres cosas: los ids, los tamices apagados —que son estado
  * de pantalla y no se guardan en ningún lado— y las imágenes de los gráficos.
  * Aceptar valores medidos en el cuerpo sería dejar que el informe diga otra
@@ -31,7 +34,7 @@ import { xlsxConImagenesResponse } from "@/lib/core/xlsxExport";
  * lo que importa, sí salen de la base.
  *
  * Cuerpo `multipart/form-data`:
- *   muestras    JSON con un array de uuid, de 1 a TOPE_DE_MUESTRAS
+ *   muestras    JSON con un array de uuid, de 1 a MUESTRAS_QUE_SE_ACEPTAN
  *   muestra_id  uuid de una sola muestra — la forma vieja, que se sigue
  *               aceptando para que una pantalla abierta durante el despliegue
  *               no quede rota
@@ -40,6 +43,7 @@ import { xlsxConImagenesResponse } from "@/lib/core/xlsxExport";
  *
  * Specs: docs/superpowers/specs/2026-11-11-calidad-curva-pasante-y-excel-design.md
  *        docs/superpowers/specs/2026-11-19-calidad-curva-comparar-muestras-design.md
+ *        docs/superpowers/specs/2026-11-25-calidad-curva-imagen-y-sin-tope-design.md
  */
 
 /** Los gráficos del Excel, en el orden en que se apilan, con su nombre en el formulario. */
@@ -95,24 +99,15 @@ function leerIds(formulario: FormData): string[] | { problema: string } {
   if (!Array.isArray(ids) || ids.length === 0) {
     return { problema: "Las muestras tienen que ser una lista con al menos una." };
   }
-  if (ids.length > TOPE_DE_MUESTRAS) {
-    return { problema: `Son ${TOPE_DE_MUESTRAS} muestras como máximo y llegaron ${ids.length}.` };
+  if (ids.length > MUESTRAS_QUE_SE_ACEPTAN) {
+    return {
+      problema: `Son ${MUESTRAS_QUE_SE_ACEPTAN} muestras como máximo por consulta y llegaron ${ids.length}.`,
+    };
   }
   if (!ids.every((id) => typeof id === "string" && UUID.test(id))) {
     return { problema: "Alguna de las muestras no tiene un id válido." };
   }
   return ids as string[];
-}
-
-/** Con una muestra, el producto y su fecha; con varias, cuántas son y el día de hoy. */
-function nombreDelArchivo(muestras: MuestraParaComparar[]): string {
-  if (muestras.length === 1) {
-    // El nombre del archivo no admite barras ni los demás separadores de ruta.
-    const producto = muestras[0].producto.replace(/[\\/:*?"<>|]/g, "-");
-    return `Curva granulométrica - ${producto} - ${muestras[0].fecha}.xlsx`;
-  }
-  const hoy = new Date().toISOString().slice(0, 10);
-  return `Curva granulométrica - ${muestras.length} muestras - ${hoy}.xlsx`;
 }
 
 export async function POST(request: Request) {
@@ -159,37 +154,31 @@ export async function POST(request: Request) {
     imagenes.push({ png, ...medidas });
   }
 
-  // De a una y no con un `.in()`: son seis como mucho por el tope, y un `.in()`
-  // con muchos ids arma una URL que PostgREST rechaza con un 400 sin decir por
-  // qué. El orden es el que mandó el cliente, que es el de la pantalla.
-  const traidas = await Promise.all(ids.map((id) => traerMuestra(supabase, id)));
-  if (traidas.some((d) => d === null)) {
+  // En dos consultas y no en dos por muestra: ver `traerMuestrasConRetenidos`.
+  // El orden es el que mandó el cliente, que es el de la pantalla. Y los nombres de
+  // producto salen de una sola lectura y no de una por muestra: el catálogo
+  // entero son 23 filas (medido el 25/11/2026), y antes esto era un
+  // `maybeSingle()` adentro del bucle.
+  const [traidas, productos] = await Promise.all([
+    traerMuestrasConRetenidos(supabase, ids),
+    traerProductos(supabase),
+  ]);
+  // Acá una muestra que falta es un error y no se saltea, al revés que en la
+  // pantalla: el informe diría que compara N muestras y traería menos, sin
+  // explicar la diferencia.
+  if (traidas.length !== ids.length) {
     return problema("No se encontró alguna de las muestras.", 404);
   }
 
-  const nombres = new Map<string, string>();
-  const muestras: MuestraParaComparar[] = [];
-  for (const datos of traidas) {
-    const { muestra, retenidos } = datos!;
-
-    if (!nombres.has(muestra.producto_id)) {
-      const { data: producto } = await supabase
-        .from("calidad_ensayos_productos")
-        .select("nombre")
-        .eq("id", muestra.producto_id)
-        .maybeSingle();
-      nombres.set(muestra.producto_id, producto?.nombre ?? "Producto sin nombre");
-    }
-
-    muestras.push({
-      id: muestra.id,
-      producto: nombres.get(muestra.producto_id)!,
-      fecha: muestra.fecha,
-      observaciones: muestra.observaciones,
-      pesoMuestraG: muestra.granulometria_peso_muestra_g,
-      retenidos: retenidos.map((r) => ({ malla: r.malla, retenido_g: r.retenido_g })),
-    });
-  }
+  const nombres = new Map(productos.map((p) => [p.id, p.nombre]));
+  const muestras: MuestraParaComparar[] = traidas.map(({ muestra, retenidos }) => ({
+    id: muestra.id,
+    producto: nombres.get(muestra.producto_id) ?? "Producto sin nombre",
+    fecha: muestra.fecha,
+    observaciones: muestra.observaciones,
+    pesoMuestraG: muestra.granulometria_peso_muestra_g,
+    retenidos: retenidos.map((r) => ({ malla: r.malla, retenido_g: r.retenido_g })),
+  }));
 
   const filas = filasDeLaHoja(muestras, apagadas);
 
@@ -198,7 +187,7 @@ export async function POST(request: Request) {
   // taparía su última fila.
   const sobreLaHoja = colocarImagenes(imagenes, COLUMNA_DE_LAS_IMAGENES);
 
-  return await xlsxConImagenesResponse(nombreDelArchivo(muestras), [
+  return await xlsxConImagenesResponse(nombreDelArchivoDeLaCurva(muestras, { extension: "xlsx" }), [
     {
       nombre: "Curva",
       filas,

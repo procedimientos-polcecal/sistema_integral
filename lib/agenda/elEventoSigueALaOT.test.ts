@@ -103,11 +103,11 @@ describe("planDelEvento", () => {
   const fila = (e: Record<string, unknown> = {}, o: Record<string, unknown> = {}) =>
     ({ ...evento(), aviso: null as string | null, orden: orden(o), ...e });
 
-  it("una OT cerrada no se toca, cambie o no su fecha, o esté vacía", () => {
-    for (const fecha_ejecucion of ["2026-11-10", null]) {
-      expect(planDelEvento(fila({}, { fecha_cierre: "2026-11-04", fecha_ejecucion })))
-        .toEqual({ tipo: "nada", mover: null, aviso: undefined, volverAAlertar: false });
-    }
+  it("una OT cerrada despues de su inicio no se toca, y sin fecha tampoco", () => {
+    expect(planDelEvento(fila({}, { fecha_cierre: "2026-11-12", fecha_ejecucion: "2026-11-10" })))
+      .toEqual({ tipo: "nada", mover: null, aviso: undefined, volverAAlertar: false });
+    expect(planDelEvento(fila({}, { fecha_cierre: "2026-11-04", fecha_ejecucion: null })))
+      .toEqual({ tipo: "nada", mover: null, aviso: undefined, volverAAlertar: false });
   });
 
   it("una OT REALIZADA sin fecha_cierre tampoco se toca (168 de 986 están así)", () => {
@@ -180,6 +180,87 @@ describe("planDelEvento", () => {
     expect(planDelEvento(fila({ aviso: AVISO_DE_TOPE })).aviso).toBeNull();
     // Y si en el día nuevo vuelve a topear, se vuelve a escribir.
     expect(planDelEvento(fila({ aviso: null }), 9).aviso).toBe(AVISO_DE_TOPE);
+  });
+});
+
+describe("una OT cerrada antes de empezar", () => {
+  const orden = (extra: Record<string, unknown> = {}) => ({
+    fecha_ejecucion: "2026-11-10", fecha_ejecucion_pendiente: null, fecha_cierre: null, ...extra,
+  });
+  const fila = (e: Record<string, unknown> = {}, o: Record<string, unknown> = {}) =>
+    ({ ...evento(), aviso: null as string | null, orden: orden(o), ...e });
+  const NADA_ESPERADO = { tipo: "nada", mover: null, aviso: undefined, volverAAlertar: false };
+
+  it("el evento se mueve al dia del cierre", () => {
+    const p = planDelEvento(fila({}, { fecha_cierre: "2026-11-04" }));
+    expect(p.tipo).toBe("mover");
+    expect(p.mover!.inicio).toContain("2026-11-04");
+  });
+
+  /* Idempotencia: la sincronizacion corre cada diez minutos. Con el evento ya en
+   * el dia del cierre no se escribe nada, ni siquiera un update de aviso. */
+  it("una vez movido no se vuelve a mover", () => {
+    // 08:00 de Argentina del 04/11, en el mismo formato que la constante INICIO.
+    expect(planDelEvento(fila({ inicio: "2026-11-04T11:00:00+00:00" }, { fecha_cierre: "2026-11-04" })))
+      .toEqual(NADA_ESPERADO);
+  });
+
+  it("un cierre de mas de un ano no mueve: avisa nombrando las dos fechas", () => {
+    const p = planDelEvento(fila({}, { fecha_cierre: "2016-11-04" }));
+    expect(p.tipo).toBe("avisar");
+    expect(p.aviso).toContain("2016-11-04");
+    expect(p.aviso).toContain("2026-11-10");
+  });
+
+  it("el aviso del cierre no creible empieza exactamente asi y no repite el articulo", () => {
+    const p = planDelEvento(fila({}, { fecha_cierre: "2016-11-04" }));
+    expect(p.aviso!.startsWith("La orden se cerró el 2016-11-04, ")).toBe(true);
+    expect(p.aviso).not.toContain("el el");
+  });
+
+  it("el aviso del cierre no creible no se reescribe en cada corrida", () => {
+    const primero = planDelEvento(fila({}, { fecha_cierre: "2016-11-04" }));
+    expect(planDelEvento(fila({ aviso: primero.aviso }, { fecha_cierre: "2016-11-04" })))
+      .toEqual(NADA_ESPERADO);
+  });
+
+  it("corregido el cierre, el aviso del cierre no creible se limpia aunque la OT siga cerrada", () => {
+    const primero = planDelEvento(fila({}, { fecha_cierre: "2016-11-04" }));
+    // Sigue cerrada, pero ahora despues de su inicio: ya no adelanta nada.
+    expect(planDelEvento(fila({ aviso: primero.aviso }, { fecha_cierre: "2026-11-12" })))
+      .toEqual({ tipo: "nada", mover: null, aviso: null, volverAAlertar: false });
+  });
+
+  it("y un aviso que no es el suyo no lo toca", () => {
+    expect(planDelEvento(fila({ aviso: AVISO_DE_TOPE }, { fecha_cierre: "2026-11-12" })))
+      .toEqual(NADA_ESPERADO);
+  });
+
+  it("el aviso de un borrado fallido le gana al del cierre no creible: no se lo pisa", () => {
+    // El del borrado es el unico registro de un evento vivo en cinco calendarios
+    // que ninguna fila nombra; el del cierre se vuelve a deducir de las fechas.
+    const deBorrado = `${AVISO_DE_BORRADO}. Google dijo: 503`;
+    expect(planDelEvento(fila({ aviso: deBorrado }, { fecha_cierre: "2016-11-04" })))
+      .toEqual(NADA_ESPERADO);
+  });
+
+  it("un evento divergido no se pisa, tambien cuando la OT cerro antes", () => {
+    const p = planDelEvento(fila({ divergencia: "movido" }, { fecha_cierre: "2026-11-04" }));
+    expect(p.tipo).toBe("respetar");
+    expect(p.mover).toBeNull();
+  });
+
+  /* Sin turno del taller no se sabe a que hora ponerlo. */
+  it("sin turno del taller se avisa en vez de inventar una hora", () => {
+    expect(planDelEvento(fila({ turno: null }, { fecha_cierre: "2026-11-04" })).tipo).toBe("avisar");
+  });
+
+  /* El apilado corre sobre el dia del cierre, pase o no pase. */
+  it("el apilado cuenta sobre el dia del cierre y puede topear a las 20:00", () => {
+    const p = planDelEvento(fila({}, { fecha_cierre: "2026-11-04" }), 20);
+    expect(p.tipo).toBe("mover");
+    expect(p.mover!.inicio).toContain("2026-11-04");
+    expect(p.aviso).toBe(AVISO_DE_TOPE);
   });
 });
 
@@ -461,14 +542,41 @@ describe("seguirALasOT", () => {
     expect(actualizarEvento).not.toHaveBeenCalled();
   });
 
-  it("una OT cerrada no se toca", async () => {
+  it("una OT cerrada despues de su inicio no se toca", async () => {
     const { cliente, hechos } = clienteFalso({
       eventos: [FILA_DE_EVENTO({
-        ordenes_trabajo: { ot_number: 2900, fecha_ejecucion: "2026-11-10", fecha_ejecucion_pendiente: null, fecha_cierre: "2026-11-04" },
+        ordenes_trabajo: { ot_number: 2900, fecha_ejecucion: "2026-11-10", fecha_ejecucion_pendiente: null, fecha_cierre: "2026-11-12" },
       })],
     });
     const r = await seguirALasOT(cliente);
     expect(r).toMatchObject({ movidos: 0, avisados: 0, respetados: 0 });
+    expect(hechos.filter((h) => h.op === "update")).toEqual([]);
+  });
+
+  it("un cierre no creible escribe el aviso en la fila, lo cuenta y no llama a Google", async () => {
+    const { cliente, hechos } = clienteFalso({
+      eventos: [FILA_DE_EVENTO({
+        ordenes_trabajo: { ot_number: 2900, fecha_ejecucion: "2026-11-10", fecha_ejecucion_pendiente: null, fecha_cierre: "2016-11-04" },
+      })],
+    });
+    const r = await seguirALasOT(cliente);
+    expect(r).toMatchObject({ movidos: 0, avisados: 1, respetados: 0 });
+    const updates = hechos.filter((h) => h.op === "update");
+    expect(updates).toHaveLength(1);
+    expect(updates[0].columnas).toEqual({ aviso: expect.stringContaining("2016-11-04") });
+    expect(actualizarEvento).not.toHaveBeenCalled();
+    expect(crearEvento).not.toHaveBeenCalled();
+  });
+
+  it("un cierre no creible no pisa el aviso de un borrado fallido guardado", async () => {
+    const { cliente, hechos } = clienteFalso({
+      eventos: [FILA_DE_EVENTO({
+        aviso: `${AVISO_DE_BORRADO}. Google dijo: 503`,
+        ordenes_trabajo: { ot_number: 2900, fecha_ejecucion: "2026-11-10", fecha_ejecucion_pendiente: null, fecha_cierre: "2016-11-04" },
+      })],
+    });
+    const r = await seguirALasOT(cliente);
+    expect(r).toMatchObject({ movidos: 0, avisados: 0 });
     expect(hechos.filter((h) => h.op === "update")).toEqual([]);
   });
 
@@ -518,7 +626,7 @@ const enArgentina = (dia: string, hora: string) => {
 /** Un evento de OT que hoy está en `dia` a `hora` y cuya orden pide el día `destino`. */
 const EVENTO_EN = (p: {
   n: number; dia: string; hora: string; destino: string;
-  turno?: string; especialidad?: string | null; aviso?: string | null;
+  turno?: string; especialidad?: string | null; aviso?: string | null; cierre?: string | null;
 }) =>
   FILA_DE_EVENTO({
     id: `${String(p.n).padStart(8, "0")}-89ab-cdef-0123-456789abcdef`,
@@ -527,7 +635,7 @@ const EVENTO_EN = (p: {
     aviso: p.aviso ?? null,
     ordenes_trabajo: {
       ot_number: 2900 + p.n, fecha_ejecucion: p.destino, fecha_ejecucion_pendiente: null,
-      fecha_cierre: null, especialidad: p.especialidad ?? "MECÁNICO",
+      fecha_cierre: p.cierre ?? null, especialidad: p.especialidad ?? "MECÁNICO",
     },
   });
 
@@ -543,6 +651,24 @@ describe("al mover un evento de OT a otra fecha", () => {
     vi.mocked(actualizarEvento).mockResolvedValue(
       ENGOOGLE("2026-11-20T08:00:00-03:00", "2026-11-20T09:30:00-03:00")
     );
+  });
+
+  /* Dos OT cerradas el mismo dia, misma especialidad y mismo turno. Si el
+   * destino del apilado se calculara sobre la fecha de inicio, las dos caerian
+   * a la misma hora en el dia del cierre, sin error y sin aviso. */
+  it("dos OT cerradas el mismo dia se apilan en ese dia y no se pisan", async () => {
+    const { cliente, hechos } = clienteFalso({
+      eventos: [
+        EVENTO_EN({ n: 1, dia: "2026-11-03", hora: "08:00", destino: "2026-11-10", cierre: "2026-11-04" }),
+        EVENTO_EN({ n: 2, dia: "2026-11-03", hora: "08:00", destino: "2026-11-11", cierre: "2026-11-04" }),
+      ],
+    });
+    await seguirALasOT(cliente);
+    const uno = horarioDe(hechos, 1)!;
+    const dos = horarioDe(hechos, 2)!;
+    expect(uno).toContain("2026-11-04");
+    expect(dos).toContain("2026-11-04");
+    expect(uno).not.toBe(dos);
   });
 
   /** Lo que faltaba: llegaba con la hora vieja y se encimaba con otra de su especialidad. */

@@ -18,8 +18,8 @@
  *
  * Pero el número que este script imprime **no se lee como "falta subir eso"**,
  * y confundirlo lleva a subir 73 MB para no agregar un solo dato. Los cinco
- * orígenes ACUMULAN: el archivo de hoy contiene lo de los días que faltan.
- * Medido el 11/11/2026, y por eso se escribe acá en vez de volver a medirlo:
+ * orígenes de zips ACUMULAN: el archivo de hoy contiene lo de los días que
+ * faltan. Medido el 11/11/2026, y por eso se escribe acá en vez de medirlo:
  *
  * - Filler 1, el zip del 15/09 (que no está en Drive) y el del 11/11 (que sí)
  *   arrancan los dos en la misma fila —`26/2/2026;15:21;1201`— y el segundo
@@ -27,6 +27,12 @@
  * - Hornos, su planilla de noviembre pasó de 58.713 a 63.746 bytes a lo largo
  *   de veinte zips, sin bajar nunca.
  * - Portería, `PLANILLA PESAJES.xlsx` de 130.872 a 130.909, igual.
+ *
+ * **El sexto origen, la balanza, NO acumula**, y eso se supo recién el
+ * 25/11/2026: sus CSV son una ventana corrida que el software purga cada
+ * tanto. Para ese origen un día perdido SÍ cuesta el dato, y por eso su
+ * entrada lleva `fusionar: true` y la historia la guarda Drive (ver
+ * fusionar.mjs). Lo de abajo vale para los cinco de zips, no para él.
  *
  * Así que lo que un día faltante cuesta **no es el dato, es la foto**: no se
  * puede saber cómo se veía una planilla el 07/11. El subidor nunca prometió
@@ -39,12 +45,17 @@ import { createSign } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
+import { fusionarLineas } from "./fusionar.mjs";
+
 const args = process.argv.slice(2);
 const detalle = args.includes("--detalle");
 const rutaConfig = resolve(args.find((a) => !a.startsWith("--")) ?? "subir-zips.config.json");
 
-const config = JSON.parse(readFileSync(rutaConfig, "utf8").replace(/^﻿/, ""));
-const cuenta = JSON.parse(readFileSync(resolve(config.credencial), "utf8"));
+const config = JSON.parse(readFileSync(rutaConfig, "utf8").replace(/^\uFEFF/, ""));
+// El BOM se saca de los dos, y no sólo de la configuración: la credencial es
+// justo el archivo que alguien copia a mano a una máquina nueva y abre con el
+// Bloc de notas, que se lo agrega al guardar. Mismo motivo que en subir-zips.
+const cuenta = JSON.parse(readFileSync(resolve(config.credencial), "utf8").replace(/^\uFEFF/, ""));
 
 const b64url = (x) => Buffer.from(typeof x === "string" ? x : JSON.stringify(x)).toString("base64url");
 
@@ -79,7 +90,7 @@ async function leerDrive(tok) {
   do {
     const p = new URLSearchParams({
       q: `'${config.carpetaDrive}' in parents and trashed = false`,
-      fields: "nextPageToken, files(name, size, modifiedTime)",
+      fields: "nextPageToken, files(id, name, size, modifiedTime)",
       pageSize: "200",
       supportsAllDrives: "true",
       includeItemsFromAllDrives: "true",
@@ -90,10 +101,20 @@ async function leerDrive(tok) {
     });
     if (!res.ok) throw new Error(`Drive ${res.status}: ${(await res.text()).slice(0, 300)}`);
     const j = await res.json();
-    for (const f of j.files ?? []) salida.set(f.name, { tamano: Number(f.size ?? 0), mod: f.modifiedTime });
+    for (const f of j.files ?? [])
+      salida.set(f.name, { id: f.id, tamano: Number(f.size ?? 0), mod: f.modifiedTime });
     pagina = j.nextPageToken;
   } while (pagina);
   return salida;
+}
+
+/** El contenido de un archivo de Drive. latin1 por lo mismo que en subir-zips. */
+async function bajarTexto(tok, id) {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`, {
+    headers: { Authorization: `Bearer ${tok}` },
+  });
+  if (!res.ok) throw new Error(`Drive ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  return Buffer.from(await res.arrayBuffer()).toString("latin1");
 }
 
 const dia = (d) =>
@@ -132,7 +153,7 @@ for (const origen of config.origenes) {
       .map((n) => {
         const ruta = join(origen.carpeta, n);
         const s = statSync(ruta);
-        return s.isFile() ? { nombre: n, mtime: s.mtime, tamano: s.size } : null;
+        return s.isFile() ? { nombre: n, ruta, mtime: s.mtime, tamano: s.size } : null;
       })
       .filter(Boolean);
   } catch (e) {
@@ -142,16 +163,35 @@ for (const origen of config.origenes) {
   }
 
   if (origen.carpetaEntera) {
-    const faltan = archivos.filter((a) => {
+    // Comparar por tamaño sólo vale si el archivo de Drive es una copia del
+    // del servidor. Con `fusionar` no lo es —Drive guarda además lo que el
+    // origen ya purgó, así que es legítimamente MÁS GRANDE— y la pregunta
+    // honesta pasa a ser otra: ¿queda alguna fila del servidor sin subir?
+    // Se contesta con la MISMA función que usa el subidor para decidirlo, a
+    // propósito: dos definiciones de "ya está" darían dos respuestas.
+    const faltan = [];
+    for (const a of archivos) {
       const d = enDrive.get(`${etiqueta} ${a.nombre}`);
-      return !d || d.tamano !== a.tamano;
-    });
+      if (!d) {
+        faltan.push(a);
+        continue;
+      }
+      if (!origen.fusionar) {
+        if (d.tamano !== a.tamano) faltan.push(a);
+        continue;
+      }
+      const { agregadas } = fusionarLineas(await bajarTexto(tok, d.id), readFileSync(a.ruta, "latin1"));
+      if (agregadas) faltan.push({ ...a, detalle: `${agregadas} fila(s) sin subir` });
+    }
     console.log(`## ${etiqueta}  ·  ${archivos.length} archivos en el servidor`);
     if (faltan.length === 0) console.log("   OK   los que están en el servidor están en Drive\n");
     else {
-      console.log(`   ROMPE  ${faltan.length} no están en Drive o difieren en tamaño`);
+      console.log(
+        `   ROMPE  ${faltan.length} ${origen.fusionar ? "tienen filas que no llegaron a Drive" : "no están en Drive o difieren en tamaño"}`,
+      );
       problemas++;
-      if (detalle) for (const a of faltan) console.log(`          ${a.nombre} (${a.tamano} bytes)`);
+      if (detalle)
+        for (const a of faltan) console.log(`          ${a.nombre} (${a.detalle ?? `${a.tamano} bytes`})`);
       console.log("");
     }
     continue;

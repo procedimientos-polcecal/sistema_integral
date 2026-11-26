@@ -32,15 +32,6 @@ import { curvaDeLaMuestra } from "./curva";
  */
 
 /**
- * Cuántas muestras se pueden comparar a la vez.
- *
- * Seis, por dos razones medidas: el producto más cargado tiene 23 muestras y
- * superponerlas es ruido, y seis es lo que una paleta distingue de verdad
- * impresa en gris, que es donde termina el Excel.
- */
-export const TOPE_DE_MUESTRAS = 6;
-
-/**
  * Un color por muestra, el mismo en los tres gráficos.
  *
  * El primero es el verde que ya usaba la pantalla con una sola curva, para que
@@ -88,6 +79,40 @@ export const TRAZOS_DE_LA_COMPARACION: (string | undefined)[] = [
   "1 3",
   "8 3 2 3 2 3",
 ];
+
+/**
+ * Cuántas muestras se distinguen de verdad: seis colores por seis trazos.
+ *
+ * **No es un tope**, que es lo que había hasta el 25/11/2026 y por un error de
+ * conteo: el color y el trazo se indexaban los dos con `i % 6`, así que la
+ * séptima curva repetía el par entero de la primera y seis parecía el techo.
+ * Son dos ejes, y recorrer el segundo una vuelta más tarde que el primero da
+ * 36 pares distintos. Pasadas las 36 se repite, y eso la pantalla lo dice.
+ */
+export const COMBINACIONES_DE_LA_COMPARACION =
+  COLORES_DE_LA_COMPARACION.length * TRAZOS_DE_LA_COMPARACION.length;
+
+/**
+ * El color y el trazo de la serie número `i`.
+ *
+ * `trazo` se omite cuando la línea es llena, para que la prop llegue
+ * `undefined` a recharts y no como la cadena `"undefined"`.
+ *
+ * La propiedad que sostiene todo: **para `i` de 0 a 5 el término de la vuelta
+ * es 0**, así que las primeras seis series quedan exactamente como estaban
+ * antes de que el tope se sacara —el verde con línea llena primero—. Dos
+ * series chocan sólo si coinciden en `i % 6` y en `floor(i / 6) % 6`, o sea
+ * si `i ≡ j (mod 36)`.
+ *
+ * La cuenta depende de que las dos listas midan lo mismo; hay un test que lo
+ * fija, porque con largos distintos el período deja de ser el producto.
+ */
+export function parDeLaSerie(i: number): { color: string; trazo?: string } {
+  const color = COLORES_DE_LA_COMPARACION[i % COLORES_DE_LA_COMPARACION.length];
+  const vuelta = Math.floor(i / COLORES_DE_LA_COMPARACION.length);
+  const trazo = TRAZOS_DE_LA_COMPARACION[(i + vuelta) % TRAZOS_DE_LA_COMPARACION.length];
+  return trazo === undefined ? { color } : { color, trazo };
+}
 
 export interface MuestraParaComparar {
   id: string;
@@ -141,6 +166,13 @@ export interface Comparacion {
    * `granulometria()` ya tiene un texto para ella que viaja en `problema`.
    */
   sinGranulometria: string[];
+  /**
+   * Si hay más muestras que pares de color y trazo, o sea si dos curvas quedan
+   * dibujadas idénticas. Es el único hecho que la pantalla avisa sobre la
+   * cantidad: que doce superpuestas se lean con esfuerzo lo ve quien mira, y
+   * un cartel diciéndolo sería opinión del sistema sobre el trabajo ajeno.
+   */
+  seRepitenLosPares: boolean;
 }
 
 /** Hasta dónde se lee una observación en la etiqueta antes de cortarla. */
@@ -227,10 +259,7 @@ export function compararMuestras(
   const series: SerieDeLaComparacion[] = muestras.map((m, i) => ({
     id: m.id,
     etiqueta: etiquetas[i],
-    color: COLORES_DE_LA_COMPARACION[i % COLORES_DE_LA_COMPARACION.length],
-    ...(TRAZOS_DE_LA_COMPARACION[i % TRAZOS_DE_LA_COMPARACION.length] === undefined
-      ? {}
-      : { trazo: TRAZOS_DE_LA_COMPARACION[i % TRAZOS_DE_LA_COMPARACION.length] }),
+    ...parDeLaSerie(i),
     claves: { retenido: `r${i}`, acumulado: `a${i}`, pasante: `p${i}` },
     ...(calculadas[i].problema === undefined ? {} : { problema: calculadas[i].problema }),
   }));
@@ -266,5 +295,12 @@ export function compararMuestras(
     }))
     .filter((d) => d.faltan.length > 0);
 
-  return { mallas, filas, series, disparejas, sinGranulometria };
+  return {
+    mallas,
+    filas,
+    series,
+    disparejas,
+    sinGranulometria,
+    seRepitenLosPares: muestras.length > COMBINACIONES_DE_LA_COMPARACION,
+  };
 }

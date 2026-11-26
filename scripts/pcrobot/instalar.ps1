@@ -164,7 +164,7 @@ $origenes = @(
   @{ nombre = "Planta 02";       carpeta = "\\$Servidor\EXTERIOR\Planta 02";       obligatorio = $false; ignorar = " - (INICIO|AL INICIAR) " },
   @{ nombre = "Hornos";          carpeta = "\\$Servidor\EXTERIOR\Hornos";          obligatorio = $false },
   @{ nombre = "Porteria";        carpeta = "\\$Servidor\EXTERIOR\Porteria";        obligatorio = $false },
-  @{ nombre = "Pesadas Balanza"; carpeta = "\\$Servidor\EXTERIOR\Pesadas Balanza"; obligatorio = $false; carpetaEntera = $true }
+  @{ nombre = "Pesadas Balanza"; carpeta = "\\$Servidor\EXTERIOR\Pesadas Balanza"; obligatorio = $false; carpetaEntera = $true; fusionar = $true }
 )
 
 $incluidos = @()
