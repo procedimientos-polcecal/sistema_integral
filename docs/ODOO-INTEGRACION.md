@@ -332,6 +332,380 @@ Cuatro cosas que salen de ahí:
 - **Odoo tiene 298 CUITs que el SdG no tiene.** El padrón de Odoo es bastante más
   grande, así que traer proveedores desde Odoo es una oportunidad concreta.
 
+## El padrón tiene a la misma empresa dos veces, y eso es lo que frena el cruce
+
+Del 26/11/2026, y es lo primero que hay que saber antes de intentar «cargarle
+el CUIT a los que faltan»: **cargarlo puede desconectar a los que hoy andan.**
+
+Se exportó un CSV con los 311 proveedores sin CUIT y administración completó
+**166**. Medido contra la base antes de escribir nada:
+
+| | |
+|---|---|
+| CUITs completados | 166 |
+| De ésos, **que ya tenía otra fila del padrón** | **111** |
+| De esas otras filas, **enlazadas a Odoo hoy** | 98 |
+| Que se podían escribir sin pisar a nadie | 50 |
+| Con el dígito verificador mal | 0 |
+
+Escribir los 166 no habría sumado 166 proveedores conectados: `cruzarProveedores()`
+manda a `cuitRepetidoEnSdG` **todo CUIT que aparezca en dos filas y no enlaza a
+ninguna de las dos**, así que habría **desconectado 98 que funcionaban**. Por eso
+`lib/odoo/padronDesdeElArchivo.ts` escribe el CUIT libre e informa el par, y por
+eso el camino para los 111 no es escribir sino **fusionar**.
+
+Se escribieron los 50. El padrón pasó de 168 a 218 con CUIT y el cruce de 130 a
+**197 proveedores enlazables**; los 50 estaban todos en Odoo. El inventario de
+los pares lo saca `npx tsx scripts/proveedores-duplicados.mts [salida.csv]`, que
+no escribe nada: al 26/11/2026 son **4 grupos con el mismo CUIT y 101 grupos de
+nombre parecido donde sólo una tiene CUIT**.
+
+### Cuál de las dos queda no lo puede decidir un script
+
+La regla no es «la que tiene más actividad». Es **la que nombra la planilla de
+Compras**, porque `asegurarProveedores()` crea la fila que no encuentra por
+nombre: borrar esa la trae de vuelta vacía en la corrida siguiente, que es el
+incidente del 14/09/2026 otra vez. Y hay un tercer caso donde ninguna de las dos
+lo es: «SINGLA, FASE 3» y «PLATINO, ZMG, TRACK MAR, EQUIPARTES» son celdas de la
+planilla que nombraron a varios proveedores y nacieron como una fila sola.
+
+Lo que sí decide el script, y está en el CSV, es si el par está **inerte**: dos
+filas con la misma `claveProveedor` ya las unifica la sincronización —
+`indicePorClave()` le da los datos a la que tiene CUIT— y la otra no recibe
+nada. Con claves distintas, en cambio, son dos proveedores vivos: «CANDIA» tiene
+258 filas colgando y no tiene CUIT, «Candia Rubén Horacio» tiene 1 y sí lo
+tiene; «PIPARO» tiene 438 y «Omar Piparo» 3. Fusionar es re-apuntar las **19
+tablas** que cuelgan de `proveedores` (`node scripts/que-cuelga-de.mjs
+proveedores`), y seis de ellas hacen fallar el borrado si quedan filas.
+
+### La pantalla para fusionarlos: `/compras/proveedores/duplicados`
+
+Del 26/11/2026, sólo **admin del núcleo** —no edición de Compras—, porque
+`proveedores` es catálogo del núcleo y una fusión mal hecha no rompe Compras:
+re-apunta los requerimientos, las facturas, los partes de contratista y el
+kardex de Inventario de una empresa a otra.
+
+La trae `GET /api/compras/proveedores/duplicados` y la ejecuta
+`POST /api/compras/proveedores/fusionar`. Van separadas por lo mismo que el
+cruce con Odoo tiene `preview` y `enlazar`: **lo que no se deshace se mira
+antes**.
+
+**Las tres columnas que muestra de cada fila son tres preguntas distintas**, y
+la tercera es la que decide. Cuánto cuelga de la ficha es lo que uno miraría
+solo, y lleva a elegir mal justo en los casos que importan; si está enlazada a
+Odoo dice cuál puede generar una orden hoy; y **si la planilla la nombra** dice
+si borrarla sirve de algo. Por eso la fila que viene marcada es la que la
+planilla nombra más veces, y sólo cuando la planilla no nombra a ninguna, la
+que más filas tiene.
+
+**Medido contra la planilla real de Compras el 26/11/2026**, sobre los 105
+grupos: en **70** la planilla escribe **un solo nombre** de los dos —las dos
+filas del padrón caen en la misma celda, así que fusionar alcanza—; en **15**
+no nombra a ninguna, y nada las puede recrear; y en **20** escribe **dos o
+más**. Esos 20 son los que la pantalla frena con un cartel: la fila que se
+borre vuelve en la corrida siguiente, así que **primero se unifica la columna
+PROVEEDOR de la planilla y después se fusiona acá**. Suman 569 filas colgando,
+o sea que no son el caso chico. El filtro «sólo los que se pueden fusionar sin
+tocar la planilla» existe por eso.
+
+Ojo con la cuenta: lo que se cuentan son **claves normalizadas de la planilla**
+y no filas del padrón. `ALBERDI` y `Alberdi` son 272 apariciones del **mismo**
+nombre, no dos; contar filas da 74 grupos «con dos nombres» en vez de 20.
+
+**El orden de las cuatro escrituras no es casual, porque no hay transacción.**
+PostgREST no tiene una, así que lo único que se puede elegir es **en qué estado
+queda si se corta a la mitad**:
+
+1. el registro de auditoría —antes de tocar nada; si no entra, no se fusiona,
+   igual que el borrado de espejo—;
+2. mover las 19 tablas;
+3. borrar la fila que se va;
+4. **recién ahí** escribirle a la que queda el CUIT y lo que le falte.
+
+El 4 va último a propósito. Al revés —escribir el CUIT y después borrar— un
+fallo en el borrado deja **dos filas con el mismo CUIT**, y eso es peor que no
+haber hecho nada: `cruzarProveedores()` no enlaza ningún CUIT repetido, así que
+habría desconectado las dos. Con este orden, un fallo a mitad de camino deja a
+la que se va vacía y viva —exactamente el estado de antes— y la operación se
+puede repetir. Si falla el 4, el CUIT no se pierde: está en el `contexto` de la
+fila de auditoría, que ya se escribió, y la respuesta lo dice.
+
+**Los choques son de dos clases y se tratan distinto.** En dos tablas
+`proveedor_id` es sólo la mitad de una clave única, así que la fila de la que se
+va puede no entrar: el mismo requerimiento con los dos proveedores invitados (3
+casos) y el mismo enlace a Odoo en la misma empresa (5 casos). Ahí la fila
+repetida no dice nada que la otra no diga, así que se borra. Pero en
+`cantera_contratistas` y `despacho_recepcion_proveedores` el `proveedor_id`
+**es** la clave primaria entera: la fila lleva datos propios y borrarla los
+pierde, así que se frena antes de escribir nada y lo decide una persona. Esa
+comprobación corre sobre **todas** las filas del grupo antes de la primera
+escritura: frenar a mitad de una tanda dejaría la primera fusionada y la
+segunda no, que es el peor de los estados.
+
+**Dos CUITs válidos distintos no se fusionan nunca**: son dos empresas, no un
+duplicado, y el 409 lo dice.
+
+**El `nombre` no se copia jamás** —es con lo que la sincronización reconoce al
+proveedor—, pero los otros 18 campos sí, **sólo si la que queda los tiene
+vacíos**; `activo`, `es_contratista` y `trabaja_con_ambas` se juntan con un O
+lógico.
+
+Dos cosas más de la ruta de lectura: **la planilla se lee «si se puede»** y, si
+falla, contesta `planilla: null` con el motivo tal cual lo dio Google en vez de
+dibujar una columna vacía que parezca un dato; y **las 19 tablas se leen
+enteras** en vez de con un `.in()`, porque la pregunta es «cuántas filas por
+proveedor» para ~250 ids y un `.in()` de ese tamaño arma una URL que PostgREST
+rechaza con un 400 sin decir por qué.
+
+### La tanda del 26/11/2026: 81 fichas menos
+
+Se corrió `npx tsx scripts/fusionar-duplicados-de-nombre.mts --aplicar`, que es
+esta misma pantalla aplicada de una vez a los grupos donde la decisión no tiene
+nada que decidir. El padrón pasó de **484 a 403** fichas: 7 las fusionó una
+persona desde la pantalla —los **4 grupos de «mismo CUIT» ya no existen**— y 74
+la tanda, moviendo **919 filas** de las 19 tablas. Cero huérfanas después, y las
+81 quedaron en `auditoria` con el verbo `borrar`.
+
+**La regla de la tanda es a propósito más angosta que la de la pantalla: sólo
+borra fichas que NO tienen CUIT.** El grupo de «mismo CUIT» está probado; el de
+«nombre parecido» lo arma un comparador de cadenas, y borrar por parecido una
+ficha identificada con su CUIT es la clase de error que no se nota nunca —el
+dato aparece bajo la empresa que no es—. Así que si la que se iría tiene CUIT,
+el grupo queda para la pantalla, sean dos CUIT distintos o no.
+
+Eso deja afuera **10 grupos donde la que nombra la planilla es justamente la que
+no tiene CUIT** —«ABADIE» contra «ABADIE Gas y garrafas», «BERNER» contra
+«Berner (Shell)»—. Ahí hay una salida buena y la tanda no la toma sola: dejar
+viva a la de la planilla, que **hereda** el CUIT de la otra, porque el único
+campo que no se copia nunca es el `nombre`. Termina igual —una sola ficha, con
+su CUIT— pero para llegar hay que borrar una ficha con CUIT, y eso lo mira una
+persona.
+
+**Y una trampa del agrupador que sólo se ve con los datos adelante.**
+`nombresParecidos` arma el grupo **encadenando desde un ancla**, así que dos
+nombres que no se contienen entre sí terminan juntos por un tercero:
+«Ravioli Rodamientos», «Mr Rodamientos» y «Rodamientos Tandil» son **tres
+negocios distintos** unidos por el rubro. Agrandar la lista `DEL_RUBRO` a ojo no
+sirve —medido: «rodamientos» no lo usa ningún proveedor de afuera de ese grupo,
+o sea que por frecuencia no se distingue de un apellido—. Lo que sí separa el
+caso es pedir que **todos los pares del grupo se contengan**: un duplicado de
+verdad es el nombre corto adentro del largo («Cortadi» en «Cortadi Domingo
+Oscar») y el corto no agrega nada propio. La tanda lo exige; **la pantalla no**,
+y por eso ahí el grupo sigue apareciendo como lo que es, una sugerencia.
+
+De los 38 grupos que quedan, **ninguno es de «mismo CUIT»**: **22** esperan que
+se unifique la columna PROVEEDOR de la planilla, **10** son los del párrafo de
+arriba, **4** tienen dos fichas con CUIT y **2** son parecidos que no se
+contienen.
+
+### 19 fichas del padrón no son un proveedor: son un RI con varios
+
+Lo encontró el usuario mirando la pantalla el 26/11/2026, y explica de una vez
+el grupo más feo de la lista. «PLATINO, ZMG, TRACK MAR, EQUIPARTES» no es una
+empresa mal escrita: es **una celda de la planilla con cuatro proveedores
+adentro**, porque a ese pedido se le compró a los cuatro.
+`asegurarProveedores()` no sabe leer eso y toma la celda entera como el nombre
+de un proveedor nuevo.
+
+Medidas: **19 fichas**, y cada una cuelga **exactamente un requerimiento** —19
+filas en total—. Las reconoce `fichasCompuestas()` de
+[lib/core/duplicadosDeProveedor.ts](../lib/core/duplicadosDeProveedor.ts), y el
+reconocimiento es conservador a propósito: parte por coma o por guion y exige
+que **cada** pedazo sea un proveedor que ya existe por su cuenta. Con eso,
+«Pagano y Kopaitich SRL» no entra.
+
+**No son duplicados, así que se apartan antes de agrupar, y eso no es cosmético
+— es lo que vuelve legible el resto.** Una compuesta arrastra a un mismo grupo a
+todos los proveedores que nombra: «PLATINO, ZMG, TRACK MAR, EQUIPARTES» armaba
+un grupo de nueve fichas donde ya no se veía que el único duplicado real era
+«PLATINO» contra «Platino». Apartando las 19, los grupos de nombre parecido
+pasaron de 101 a 30 y **aparecieron 10 fusiones que estaban escondidas**:
+Platino, Track Mar, Equipartes, Singla, Fase 3, Bolsagro, Bralbol, Recycle
+Bags, Todo Ruleman y Echevarne Hnos.
+
+**Y fusionarlas no las sacaría igual**: mientras la celda siga diciendo
+«TORRACO, BOLSAFLEX», la sincronización la vuelve a crear en la corrida
+siguiente. Por eso la pantalla las lista aparte, sin botón, diciendo qué son.
+Lo que hay que decidir —a qué proveedor queda apuntando ese requerimiento, si
+es que a uno solo— no se contesta desde acá: `compras_requerimientos` tiene un
+`proveedor_id` y una compra repartida entre cuatro no entra ahí. Los invitados
+a cotizar sí tienen tabla propia (`compras_requerimiento_proveedores`), pero el
+adjudicado es uno.
+
+### Los 10 que se fusionaron al revés, y la trampa de la lista que se mueve
+
+El 26/11/2026, a pedido del usuario y mirándolos uno por uno, se resolvieron
+los 10 grupos donde **la ficha que nombra la planilla es la que no tiene
+CUIT**: ABADIE, BERNER, BOGGIO, ORITI, INDUMEC, YICAR, PAPEL MISIONERO, EL
+MANU MATERIALES, MESSINEO y MARTINESE. Sobrevive la de la planilla y **hereda**
+el CUIT, la razón social y el enlace a Odoo de la otra, que se borra. Son 10
+fichas menos y 101 filas re-apuntadas; el padrón quedó en **369**.
+
+**El enlace a Odoo no se pierde al borrar la ficha que lo tenía.**
+`proveedores_odoo` está en `TABLAS_QUE_APUNTAN` con `choque: borrar` sobre
+`empresa_id`, y eso sólo borra la fila repetida cuando la que queda ya tiene
+una para esa empresa. Acá ninguna tenía, así que las filas se re-apuntaron:
+comprobado contra el `contexto` de las propias filas de auditoría, **16
+enlaces traían las diez borradas y 16 quedaron**. Lo único que no se copia
+nunca es el `nombre`.
+
+Lo corre `scripts/fusionar-duplicados-de-nombre.mts --la-de-la-planilla`, un
+modo aparte y no el de siempre: la regla normal **no borra una ficha con CUIT**
+y ésta sí, así que sólo se usa sobre grupos que una persona aprobó.
+
+**Y la trampa que apareció al hacerlo, que vale para cualquier tanda sobre esta
+pantalla: la lista se mueve mientras uno la mira.** Se le mostraron al usuario
+10 grupos, contestó que sí, y el ensayo de ese momento daba **12** — porque
+entre una cosa y la otra él había fusionado otros a mano desde la pantalla, y
+cada fusión destraba grupos que antes estaban tapados. Dos de esos 12 nunca los
+había visto, y uno era justamente «RAVIOLI», el de los rodamientos que se había
+marcado como dudoso. Por eso el script acepta **`--solo "NOMBRE|OTRO"`**, que
+limita la corrida a los grupos cuya ficha sobreviviente se llame así e imprime
+cuáles deja afuera: aprobar «estos diez» y correr «lo que dé hoy» no son lo
+mismo.
+
+### El 27/11/2026: se tocó la planilla, y el padrón quedó en 349
+
+Diecisiete fusiones más, **20 fichas borradas** y 78 filas re-apuntadas: de
+**369 a 349**. Cero huérfanas después de cada tanda. Se hicieron de a pares
+nombrados a mano (`--pares "QUEDA = SE_VA, OTRA ; …"`), que saltea el agrupador
+entero — cuando una persona ya miró el grupo, el encadenamiento desde un ancla
+sobra y estorba. Lo que no se saltea es la validación: `problemaParaFusionar()`
+y el freno de los choques corren igual, y un nombre que no esté en el padrón
+corta la corrida antes de escribir nada.
+
+**Primero, el bug que fabricaba los duplicados.** `asegurarProveedores()`
+deduplicaba los nombres de la columna PROVEEDOR **por el texto de la celda** y
+recién después comparaba contra el padrón **por clave**. Dos escrituras de la
+misma empresa —«FERRETERIA MARFRA» y «FERRETERÍA MARFRA»— sobrevivían a ese
+`Set` y entraban como dos filas en el mismo `insert`: dos fichas creadas en el
+**mismo segundo**, las dos vacías, con los pedidos repartidos. Los cuatro pares
+que esto creó así son FERRETERIA MARFRA, PINTURERIA ARCO IRIS, OLAVARRIA GOMA y
+RM SEGURIDAD AMBIENTAL. Ahora las dos preguntas —«esto ya existe» y «esto es lo
+mismo que aquello»— se contestan con el mismo comparador, en
+`nombresQueFaltan()`, que salió exportado porque adentro de la sincronización no
+se podía probar.
+
+**Segundo, y es lo que ahorra el trabajo: los 11 grupos que esperaban una
+edición de la planilla ya no la esperaban.** Se habían listado como «hay que
+unificar la columna PROVEEDOR primero», y medido ese día la planilla **ya dice
+una sola forma de cada uno**: «FERRETERÍA RANDAZZO», «PETRO TANDIL», «GRASSO»,
+«FERRETERIA MARFRA», «ARCO IRIS», «FIPHSA», «ALERTA 2DA OFERTA», «GUSTAVO
+RIGO», «ECHEVARNE», «JOSE HOFFER» y «MARTINEZ MARIO» aparecen **cero veces** en
+las 2.160 celdas. Las fichas duplicadas eran el rastro de lo que la planilla
+decía antes. Siete se fusionaron derecho, y dos —PETROTANDIL y MARIO MARTINEZ—
+ya tenían una sola ficha.
+
+Conviene saber **dónde se mide eso**: el master `Requerimientos internos` va de
+A a N y **no tiene columna PROVEEDOR**, así que la única fuente son las 9
+pestañas `RI *`, donde la P está tipeada a mano al lado del derrame.
+
+**Tercero, las 70 celdas que sí hubo que escribir.** En cuatro casos la
+planilla nombra justamente la ficha **sin** CUIT: `RANDAZZO` (46 celdas),
+`FIPH SA` (10), `RIGO` (10) y `HOFFER` (4), mientras el CUIT y el enlace a Odoo
+viven en «Ferretería Randazzo», «FiphSA», «Gustavo Rigo» y «Jose Hoffer».
+Fusionar sin tocar la planilla obliga a elegir entre dos males —dejar viva la de
+la planilla, que hereda el CUIT pero deja el padrón diciendo «RANDAZZO», o dejar
+viva la del CUIT, que la sincronización recrea vacía—. El usuario eligió la
+tercera: cambiar las celdas. Lo hace
+`scripts/unificar-proveedor-en-la-planilla.mts`, de a una celda y releyendo
+justo antes para comprobar que la fila sigue siendo el mismo N° de RI, porque
+las columnas A a M son el derrame de un `FILTER` y se corren solas.
+
+**Y una trampa de Google que parte la corrida al medio sin corromper nada.**
+Sheets permite **60 lecturas por minuto por usuario**; una celda cuesta una
+lectura más una escritura, así que 70 celdas sin freno se pasan de largo. La
+primera corrida murió en la **tercera** celda con dos ya escritas, porque los
+ensayos previos ya habían gastado el minuto. Volver a correrlo es seguro —una
+celda ya cambiada deja de coincidir con la tabla de reemplazos, así que retoma
+donde quedó— pero el 429 no dice que la columna quedó a medio unificar. De ahí
+la pausa fija y el reintento que espera el minuto entero.
+
+**La prueba de que ninguna vuelve** no es haber borrado bien: es que las 2.160
+celdas con proveedor, que son **187 nombres distintos por clave**, resuelven
+todas contra una ficha que ya existe. Eso es exactamente lo que
+`asegurarProveedores()` decide, así que la próxima sincronización no crea
+ninguna.
+
+### La carrera: 49 celdas escritas y revertidas el mismo día
+
+Es lo más caro que dejó el 27/11/2026 y no estaba en ningún plan. Se midieron
+tres grupos —PETROTANDIL, PINTURERIA ARCO IRIS, MARIO MARTINEZ—, se decidió
+cambiar sus 49 celdas de la planilla para conservar el nombre bueno, y se
+escribieron las 49. **Mientras tanto, en paralelo, una persona estaba fusionando
+esos mismos tres grupos desde `/compras/proveedores/duplicados`**, eligiendo
+como sobreviviente la ficha contraria: la que la planilla nombra, que hereda el
+CUIT.
+
+El resultado era correcto por los dos lados y destructivo junto. Para cuando el
+script terminó, «Petro Tandil», «Pinturería y ferretería Arco Iris» y «MARTINEZ
+MARIO» **ya no existían** —el CUIT 30-53523084-2 había pasado a vivir en la
+ficha «PETROTANDIL»— y la planilla había quedado pidiendo tres proveedores que
+el padrón no tenía. La próxima sincronización los habría creado vacíos: el
+script habría fabricado exactamente lo que vino a eliminar. Se revirtieron las
+49 en el acto y la columna quedó consistente, pero **la ventana entre escribir y
+revertir fue de minutos, y el cron corre solo**.
+
+Dos cosas salieron de ahí, y la segunda importa más que la primera:
+
+- **`unificar-proveedor-en-la-planilla.mts` relee el padrón y corta** si algún
+  nombre destino no existe, antes de tocar una celda. Se ejercitó con un nombre
+  inventado: sale 1 y no escribe nada. (Detalle de Windows que se arregló de
+  paso: `process.exit()` con el cliente de Supabase recién usado aborta con un
+  `Assertion failed` de libuv y el proceso termina en **127**, que dice «no se
+  pudo ejecutar» cuando lo que pasó es «se ejecutó y decidió no escribir».)
+- **Eso achica la ventana pero no la cierra**, porque nada impide fusionar entre
+  la comprobación y la última escritura. Lo que la cierra es que la pantalla
+  **deje de permitir elegir un sobreviviente que la planilla no nombra**. Hoy
+  sólo avisa con un cartel ámbar, y esa permisividad ya causó las dos cosas: las
+  tres fichas vacías del 26/11 a las 18:42:20 —cuatro minutos después de
+  fusionar— y esta carrera. Mientras sea un cartel, vuelve a pasar.
+
+### Dos CUIT que son un solo proveedor: `--distinto-cuit`
+
+`problemaParaFusionar()` frena cuando las dos fichas tienen CUIT y no coinciden,
+con razón: son **dos contribuyentes distintos ante la AFIP** y facturarle a uno
+no es facturarle al otro. El mensaje señala el camino bueno —corregir el que
+esté mal cargado y recién después fusionar—.
+
+Queda un caso que no es ninguno de los dos: **el mismo negocio con dos
+personerías**. El 27/11/2026 fueron dos pares, los dos con una persona física
+contra una sociedad, y los dos nacidos el 06/11 **en el mismo segundo**,
+cotizando una orden de servicio, sin que quien los dio de alta viera que ya
+existía el otro:
+
+| | CUIT | Razón social |
+|---|---|---|
+| `Romanelli` | 20-05515425-3 | ROMANELLI OSCAR ALFREDO |
+| `Gruas Romanelli` | 30-71918988-8 | GRUAS Y MONTAJES ROMANELLI S.R.L. |
+| `PAGANO` | 20-22388623-0 | PAGANO BIASSI VICTOR |
+| `Pagano y Kopaitich SRL` | 30-67398951-5 | PAGANO Y KOPAITICH SRL |
+
+El usuario resolvió **Romanelli sí y Pagano no**: en el primero la dirección de
+la ficha vieja dice «Grúas e Hidrogruas Romanelli», y en el segundo son dos
+cosas distintas. Que la respuesta haya sido distinta para dos pares de la misma
+forma es justamente la razón por la que esto no se automatiza.
+
+Lo hace `--distinto-cuit "QUEDA|OTRA"`, que **sólo vale con `--pares`** y pide
+las dos cosas juntas: el par nombrado a mano y la bandera escrita. Apaga ese
+freno y nada más, y lo decide sobre los valores de los CUIT y no sobre el texto
+del mensaje —parsear la cadena ataría el script a cómo está redactada, y el día
+que alguien la mejore se apagaría otro control sin que nada avise—.
+
+**Lo que se pierde es el CUIT de la que se va**, y es irrecuperable desde el
+padrón: si mañana facturan por separado, el comprobante de la sociedad cae bajo
+la razón social de la persona física. Por eso la fila de `auditoria` lo nombra
+en el `motivo` además de guardarlo en el `contexto`: *«se descarta el
+30719189888 de GRUAS Y MONTAJES ROMANELLI S.R.L. y queda el 20-05515425-3»*.
+Quien lea eso dentro de un año reconstruye a qué contribuyente dejamos de
+nombrar sin cruzar dos campos.
+
+### Lo que el archivo no cambia nunca
+
+**El `nombre`.** Volvió con 18 nombres cambiados y 77 pasados a mayúscula por
+Excel, y `nombre` es con lo que la sincronización de Compras reconoce al
+proveedor. Se informan y no se escriben.
+
 ## Qué hay hoy (spike)
 
 **`lib/odoo/client.ts`** — cliente JSON-RPC con `fetch` a mano, sin dependencias

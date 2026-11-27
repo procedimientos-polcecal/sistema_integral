@@ -12,6 +12,11 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarLeer, crearEn, mensajeDeOdoo } from "./client";
+import {
+  buscarCandidatos, crearPartnerDeProveedor, hayQueCrearlo,
+} from "./partnerDeProveedor";
+import { elegirPartnerDelEmisor } from "./proveedores";
+import { normalizarCuit } from "@/lib/core/cuit";
 import { resolverContextoDeOdoo } from "./contexto";
 import { armarOrdenes } from "./ordenDeCompra";
 import { leerCatalogoComprable, type ProductoComprable } from "./catalogo";
@@ -48,6 +53,13 @@ interface FilaRequerimiento {
   paga_ambas: boolean;
   fecha_necesidad: string | null;
   proveedor_id: string | null;
+  /**
+   * El proveedor embebido, por su CUIT y su nombre: es lo que hace falta para
+   * crear el `res.partner` cuando todavía no existe en esa empresa de Odoo.
+   * PostgREST lo devuelve como objeto o como arreglo según la relación, así
+   * que se resuelve con `cuitDelProveedor()`.
+   */
+  proveedores: { nombre: string; cuit: string | null } | { nombre: string; cuit: string | null }[] | null;
   /** El "Costo + IVA" que carga el encargado: total con IVA, sin el envío. */
   costo_iva: number | null;
   costo_envio: number | null;
@@ -88,7 +100,7 @@ export async function empujarOrdenesDeRequerimiento(
   const { data: ri, error: errorRi } = await admin
     .from("compras_requerimientos")
     .select(
-      "id, nro_ri, descripcion, codigo, cantidad, empresa_id, paga_ambas, fecha_necesidad, proveedor_id, costo_iva, costo_envio, moneda"
+      "id, nro_ri, descripcion, codigo, cantidad, empresa_id, paga_ambas, fecha_necesidad, proveedor_id, costo_iva, costo_envio, moneda, proveedores!compras_requerimientos_proveedor_id_fkey(nombre, cuit)"
     )
     .eq("id", requerimientoId)
     .maybeSingle<FilaRequerimiento>();
@@ -167,6 +179,109 @@ export async function empujarOrdenesDeRequerimiento(
   );
   if (!contexto.ok) return await anotarPendiente(admin, ri.id, contexto.problemas);
 
+  /*
+   * El proveedor que todavía no está en esta empresa de Odoo, se crea acá.
+   *
+   * Éste es el momento y no el del alta: acá hay una compra de verdad detrás y
+   * la empresa ya está decidida por el RI. Crear el partner al dar de alta
+   * habría puesto en la contabilidad proveedores de presupuestos que no
+   * prosperan, y el 40% de los RI son AMBAS, o sea dos partners por alta.
+   *
+   * **Se busca antes de crear**, aunque `proveedores_odoo` ya haya dicho que
+   * no hay enlace: alguien pudo haberlo creado en Odoo mientras tanto, y un
+   * partner duplicado allá no se borra una vez que tiene documentos.
+   *
+   * El enlace se guarda **inmediatamente después de cada creación** y no al
+   * final: con un RI de AMBAS, si la segunda empresa falla, el partner de la
+   * primera ya quedó anotado y el reintento no lo crea de nuevo.
+   */
+  /*
+   * Por qué quedó sin partner cada empresa, para que el cartel lo diga.
+   * `armarOrdenes` no lo puede saber: depende de lo que Odoo contestó acá.
+   */
+  const motivoSinPartner = new Map<string, string>();
+
+  const cuit = cuitDelProveedor(ri);
+  if (cuit) {
+    try {
+      for (const e of empresasDelRi) {
+        if (partnerPorEmpresa.has(e.id)) continue;
+
+        /*
+         * La búsqueda va **adentro** del loop a propósito, y no una vez para
+         * todo el RI: con AMBAS, la segunda vuelta tiene que ver el partner
+         * que acaba de crear la primera para no crearlo dos veces en la misma
+         * empresa. Son dos viajes a Odoo por un RI de AMBAS, y es el precio de
+         * que la segunda vuelta mire la realidad y no una foto vieja.
+         */
+        const candidatos = await buscarCandidatos(cuit);
+        const eleccion = elegirPartnerDelEmisor(candidatos, e.odoo_company_id!);
+
+        // Un empate que `elegirPartnerDelEmisor` no resuelve no se rompe
+        // creando uno más: se deja como está y el problema lo levanta
+        // `armarOrdenes`, que es quien sabe decirlo en pantalla. Eso lo decide
+        // `hayQueCrearlo`, que pregunta por **esta** empresa y no por el CUIT.
+        let partnerId = eleccion.partner?.id ?? null;
+        if (!partnerId && hayQueCrearlo(candidatos, e.odoo_company_id!)) {
+          const nombre = nombreDelProveedor(ri);
+          /*
+           * Sin nombre no se inventa uno. Un `res.partner` llamado «RI 1933»
+           * queda para siempre en la contabilidad y no se borra una vez que
+           * tiene documentos: es mejor frenar y decirlo.
+           */
+          if (!nombre) {
+            return await anotarPendiente(admin, ri.id, [
+              `El proveedor del RI ${ri.nro_ri} tiene CUIT pero no nombre, así que no se ` +
+                `puede crear en Odoo sin inventarle uno.`,
+            ]);
+          }
+          partnerId = await crearPartnerDeProveedor({ nombre, cuit }, e.odoo_company_id!);
+        }
+        if (!partnerId) {
+          if (eleccion.motivo) motivoSinPartner.set(e.id, eleccion.motivo);
+          continue;
+        }
+
+        /*
+         * El error de este insert **se mira**. Si no se puede anotar el
+         * enlace, no se escribe la orden: el encabezado de la migración
+         * `20260903091434` dice que un enlace mal puesto manda la orden de
+         * compra a otro proveedor, y una orden cuyo `partner_id` no quedó
+         * registrado en ninguna parte es la misma pérdida de rastro.
+         */
+        const { error: errorEnlace } = await admin.from("proveedores_odoo").insert({
+          proveedor_id: ri.proveedor_id,
+          empresa_id: e.id,
+          odoo_partner_id: partnerId,
+          cuit: normalizarCuit(cuit),
+        });
+
+        if (errorEnlace) {
+          // 23505 es el `unique (empresa_id, odoo_partner_id)`: ese partner ya
+          // es de otro proveedor del SdG, o sea que el padrón tiene dos filas
+          // para el mismo CUIT. No es un error de Odoo: es un duplicado acá.
+          return await anotarPendiente(admin, ri.id, [
+            errorEnlace.code === "23505"
+              ? `Ese proveedor de Odoo ya está enlazado a otro proveedor del SdG: hay dos ` +
+                `fichas para el mismo CUIT y hay que unificarlas antes de generar la orden.`
+              : `No se pudo anotar el enlace con Odoo: ${errorEnlace.message}`,
+          ]);
+        }
+
+        partnerPorEmpresa.set(e.id, partnerId);
+      }
+    } catch (e) {
+      // Como el resto del archivo: lo que Odoo dijo queda anotado y se puede
+      // reintentar, en vez de salir como un 500 que no dice nada. El
+      // reintento no duplica: lo ya creado quedó en `proveedores_odoo`.
+      return await anotarPendiente(admin, ri.id, [
+        `No se pudo crear el proveedor en Odoo: ${
+          e instanceof Error ? e.message : mensajeDeOdoo(e as never)
+        }`,
+      ]);
+    }
+  }
+
   const paraOrden: EmpresaParaOrden[] = empresasDelRi.map((e) => {
     const datos = contexto.contexto.porEmpresa[e.odoo_company_id!];
     return {
@@ -174,6 +289,13 @@ export async function empujarOrdenesDeRequerimiento(
       nombre: e.nombre,
       odooCompanyId: e.odoo_company_id!,
       odooPartnerId: partnerPorEmpresa.get(e.id) ?? null,
+      /*
+       * `false` siempre: para cuando se llega acá, el loop de arriba **ya
+       * intentó** crearlo. Si igual falta, es porque no se podía crear, y
+       * prometerlo otra vez manda a la persona a repetir lo mismo.
+       */
+      seVaACrear: false,
+      motivoSinPartner: motivoSinPartner.get(e.id) ?? null,
       pickingTypeId: datos.pickingTypeId,
       impuestoId: datos.impuestoId,
     };
@@ -250,6 +372,7 @@ export async function empujarOrdenesDeRequerimiento(
       cantidad: ri.cantidad,
       empresaId: ri.empresa_id,
       pagaAmbas: ri.paga_ambas,
+      proveedorCuit: cuitDelProveedor(ri),
       fechaNecesidad: ri.fecha_necesidad,
     },
     fuente.precio,
@@ -583,7 +706,7 @@ export async function ensayarOrdenesDeRequerimiento(
   const { data: ri } = await admin
     .from("compras_requerimientos")
     .select(
-      "id, nro_ri, descripcion, codigo, cantidad, empresa_id, paga_ambas, fecha_necesidad, proveedor_id, costo_iva, costo_envio, moneda"
+      "id, nro_ri, descripcion, codigo, cantidad, empresa_id, paga_ambas, fecha_necesidad, proveedor_id, costo_iva, costo_envio, moneda, proveedores!compras_requerimientos_proveedor_id_fkey(nombre, cuit)"
     )
     .eq("id", requerimientoId)
     .maybeSingle<FilaRequerimiento>();
@@ -644,6 +767,43 @@ export async function ensayarOrdenesDeRequerimiento(
     (enlaces ?? []).map((e) => [e.empresa_id as string, e.odoo_partner_id as number])
   );
 
+  /*
+   * El ensayo anticipa lo que el push va a hacer con el proveedor, que es la
+   * única forma de que lo que muestra sea verdad. Son tres desenlaces y los
+   * tres se resuelven con la misma consulta:
+   *
+   * - el partner existe y sirve -> el ensayo lo usa, aunque todavía no haya
+   *   fila en `proveedores_odoo`: el push la va a escribir;
+   * - no hay ninguno -> `seVaACrear`, y el cartel lo anuncia;
+   * - hay pero no sirve -> se dice el obstáculo, sin prometer nada.
+   *
+   * Acá alcanza **una** consulta para las dos empresas, al revés que en el
+   * push: el ensayo no crea nada, así que no hay nada nuevo que la segunda
+   * vuelta necesite ver.
+   */
+  const cuitDelRi = cuitDelProveedor(ri);
+  const seVaACrear = new Map<string, boolean>();
+  const motivoSinPartner = new Map<string, string>();
+
+  if (cuitDelRi) {
+    try {
+      const candidatos = await buscarCandidatos(cuitDelRi);
+      for (const e of empresasDelRi) {
+        if (partnerPorEmpresa.has(e.id) || e.odoo_company_id === null) continue;
+        const eleccion = elegirPartnerDelEmisor(candidatos, e.odoo_company_id);
+        if (eleccion.partner) {
+          partnerPorEmpresa.set(e.id, eleccion.partner.id);
+          continue;
+        }
+        seVaACrear.set(e.id, hayQueCrearlo(candidatos, e.odoo_company_id));
+        if (eleccion.motivo) motivoSinPartner.set(e.id, eleccion.motivo);
+      }
+    } catch {
+      // Un ensayo sin esto sigue sirviendo: lo que se pierde es la promesa,
+      // y quedarse callado es mejor que prometer sin haber mirado.
+    }
+  }
+
   const armado = armarOrdenes(
     {
       nroRi: ri.nro_ri,
@@ -652,6 +812,7 @@ export async function ensayarOrdenesDeRequerimiento(
       cantidad: ri.cantidad,
       empresaId: ri.empresa_id,
       pagaAmbas: ri.paga_ambas,
+      proveedorCuit: cuitDelProveedor(ri),
       fechaNecesidad: ri.fecha_necesidad,
     },
     fuente.precio,
@@ -660,6 +821,8 @@ export async function ensayarOrdenesDeRequerimiento(
       nombre: e.nombre,
       odooCompanyId: e.odoo_company_id!,
       odooPartnerId: partnerPorEmpresa.get(e.id) ?? null,
+      seVaACrear: seVaACrear.get(e.id) ?? false,
+      motivoSinPartner: motivoSinPartner.get(e.id) ?? null,
       pickingTypeId: contexto.contexto.porEmpresa[e.odoo_company_id!]?.pickingTypeId ?? 0,
       impuestoId: contexto.contexto.porEmpresa[e.odoo_company_id!]?.impuestoId ?? null,
     })),
@@ -724,7 +887,45 @@ export async function ensayarOrdenesDeRequerimiento(
     yaCreadas,
     contexto: contexto.contexto,
     producto: { sugerencia, catalogo },
-    // Lo que se le mandaría a Odoo, tal cual, sin mandarlo.
-    armado,
+    /*
+     * Lo que se le mandaría a Odoo, tal cual, sin mandarlo.
+     *
+     * Con una salvedad: la pantalla **sólo** lee `armado.advertencias`, y los
+     * `problemas` no los muestra. Un «se va a crear el proveedor» que queda
+     * ahí adentro no lo ve nadie, y el ensayo es la confirmación previa a la
+     * escritura: una confirmación que no se muestra no confirma nada. Así que
+     * eso sube al cartel ámbar. Sigue siendo un problema —la orden todavía no
+     * se puede armar, y los vals lo dicen—, pero deja de ser invisible.
+     */
+    armado: {
+      ...armado,
+      advertencias: [
+        ...(armado.ok ? armado.advertencias : []),
+        ...(armado.ok
+          ? []
+          : armado.problemas
+              .filter((p) => p.tipo === "sin proveedor enlazado")
+              .map((p) => p.detalle)),
+      ],
+    },
   };
+}
+
+/**
+ * El CUIT del proveedor del RI, venga el embebido como objeto o como arreglo.
+ *
+ * PostgREST devuelve una cosa o la otra según cómo resuelva la relación, y
+ * equivocarse acá no da error: da `undefined`, que se lee como «no tiene
+ * CUIT» y manda a cargar uno que ya estaba. Es la misma precaución que
+ * `valorHoraDe()` toma en RRHH con su embed.
+ */
+function cuitDelProveedor(ri: Pick<FilaRequerimiento, "proveedores">): string | null {
+  const p = Array.isArray(ri.proveedores) ? ri.proveedores[0] : ri.proveedores;
+  return p?.cuit ?? null;
+}
+
+/** El nombre del proveedor del RI, con el mismo cuidado del embed. */
+function nombreDelProveedor(ri: Pick<FilaRequerimiento, "proveedores">): string | null {
+  const p = Array.isArray(ri.proveedores) ? ri.proveedores[0] : ri.proveedores;
+  return p?.nombre ?? null;
 }

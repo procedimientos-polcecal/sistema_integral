@@ -5,7 +5,8 @@ import {
   datosDePagoDe, alCambiarDeProveedor,
   diferenciaPorcentual, detalleCotizacion, costosParaElPedido,
   totalEnPesos, faltaLaCotizacion, numero, plazosDePago,
-  casillaMarcada, eleccionDeLaPlanilla,
+  casillaMarcada, eleccionDeLaPlanilla, anchoUsado, indiceDeLaColumnaDelId,
+  anchoDeLaFilaEscrita,
 } from "./comparativa";
 import type { CotizacionLeida } from "./comparativa";
 
@@ -251,6 +252,64 @@ describe("fila para escribir en la planilla", () => {
   });
 
   /** Los mismos datos de arriba, para variar de a un campo por caso. */
+  const baseDeLaFila = () => {
+    const r = mapearEncabezados(ENCABEZADO);
+    if (!r.ok) throw new Error("encabezado inválido");
+    return {
+      idx: r.idx, numeroFila: 7, nroRi: 1850, fecha: "2026-08-21",
+      area: "Mantenimiento", descripcion: "Filtro de aceite",
+    };
+  };
+  const cotizacionDeLaFila: CotizacionLeida = {
+    proveedor_nombre: "Repuestos SA", marca: "XCMG", unidad_medida: "unidad",
+    precio_unitario: 1500.5, cantidad: 4, costo_envio: 800,
+    descuento: 0.1, iva: 0.21, precio_hasta: "2026-08-31",
+    plazos_pago_dias: [30], condiciones_pago: "Transferencia",
+    disponibilidad: "4-7 días", comentario: "",
+  };
+
+  it("escribe el id de la cotización tal cual en la columna del sistema", () => {
+    const fila = filaParaPlanilla({
+      ...baseDeLaFila(), cotizacion: cotizacionDeLaFila,
+      idCotizacion: "abc-123", idxIdSistema: COLUMNAS_COMPARATIVA.length,
+    });
+    // Sin prefijo ni apóstrofo: el eco se reconoce comparando contra
+    // String(cotizacion.id).
+    expect(fila[COLUMNAS_COMPARATIVA.length]).toBe("abc-123");
+  });
+
+  it("sin columna del sistema la fila no crece", () => {
+    const sin = filaParaPlanilla({
+      ...baseDeLaFila(), cotizacion: cotizacionDeLaFila, idCotizacion: "abc-123",
+    });
+    const conMenosUno = filaParaPlanilla({
+      ...baseDeLaFila(), cotizacion: cotizacionDeLaFila, idCotizacion: "abc-123", idxIdSistema: -1,
+    });
+    expect(sin).toHaveLength(COLUMNAS_COMPARATIVA.length);
+    expect(conMenosUno).toHaveLength(COLUMNAS_COMPARATIVA.length);
+  });
+
+  // El DELETE de un presupuesto vacía la fila con este mismo ancho: si las dos
+  // cuentas se separan, el uuid queda colgado en la planilla.
+  it("el ancho de la fila escrita es el que dice anchoDeLaFilaEscrita", () => {
+    for (const idxId of [-1, 10, COLUMNAS_COMPARATIVA.length, 20]) {
+      const fila = filaParaPlanilla({
+        ...baseDeLaFila(), cotizacion: cotizacionDeLaFila,
+        idCotizacion: "abc-123", idxIdSistema: idxId,
+      });
+      expect(fila).toHaveLength(anchoDeLaFilaEscrita(idxId));
+    }
+  });
+
+  // USER_ENTERED convierte en fórmula lo que arranca con = + - @
+  it("un comentario que arranca con = va como texto", () => {
+    const b = baseDeLaFila();
+    const fila = filaParaPlanilla({
+      ...b, cotizacion: { ...cotizacionDeLaFila, comentario: "=A1+1" },
+    });
+    expect(fila[b.idx.comentario]).toBe("'=A1+1");
+  });
+
   const cotizacionBase: CotizacionLeida = {
     proveedor_nombre: "Repuestos SA", marca: "XCMG", unidad_medida: "unidad",
     precio_unitario: 1500.5, cantidad: 4, costo_envio: 800,
@@ -806,4 +865,55 @@ describe("la comparativa no deja entrar una formula de quien cotiza", () => {
   it("el total sigue siendo formula", () => {
     expect(armarCon(base, "Filtro de aceite")[12]).toBe("=H7*I7*(1+L7)-(H7*I7*K7)+J7");
   });
+});
+
+describe("la columna ID SISTEMA", () => {
+  it("reconoce la columna del id cuando está", () => {
+    const mapa = mapearEncabezados([...COLUMNAS_COMPARATIVA, "ID SISTEMA"]);
+    expect(mapa.ok && mapa.idx.id_sistema).toBe(19);
+  });
+
+  // Las 200 planillas son clones derivados: una sin la columna se lee igual.
+  it("una planilla sin esa columna sigue siendo válida", () => {
+    const mapa = mapearEncabezados([...COLUMNAS_COMPARATIVA]);
+    expect(mapa.ok && mapa.idx.id_sistema).toBe(-1);
+  });
+
+  // Medido el 26/11/2026: los anchos reales son 16, 19 y 20, y REPUESTOS
+  // MÁQUINAS ya usa la T para EQUIPO. La letra fija pisaría datos.
+  it("el ancho usado sale del encabezado y de las filas, no de la plantilla", () => {
+    expect(anchoUsado(["A", "B"], [["x", "y", "z"]])).toBe(3);
+    expect(anchoUsado(["A", "B", "C"], [["x"]])).toBe(3);
+  });
+
+  it("las celdas vacías del final no cuentan como ancho usado", () => {
+    expect(anchoUsado(["A", "", ""], [["x", "", " "]])).toBe(1);
+    expect(anchoUsado([], [])).toBe(0);
+  });
+
+  it("indiceDeLaColumnaDelId la busca por nombre aunque la planilla no sea válida", () => {
+    expect(indiceDeLaColumnaDelId(["X", "id sistema"])).toBe(1);
+    expect(indiceDeLaColumnaDelId(["X", "Y"])).toBe(-1);
+  });
+
+  // Vaciar la fila con `COLUMNAS_COMPARATIVA.length` dejaba el uuid colgado en
+  // una planilla de 19 o 20 columnas —donde el id cae en la 19 o la 20— y lo
+  // limpiaba en una de 16: el borrado terminaba dependiendo del ancho de la
+  // planilla, que es justo lo que la columna por nombre existe para no hacer.
+  it("el ancho de la fila escrita llega hasta la columna del id", () => {
+    expect(anchoDeLaFilaEscrita(19)).toBe(20);
+    expect(anchoDeLaFilaEscrita(20)).toBe(21);
+  });
+
+  it("sin columna de id, el ancho es el de la plantilla", () => {
+    expect(anchoDeLaFilaEscrita(-1)).toBe(COLUMNAS_COMPARATIVA.length);
+    expect(anchoDeLaFilaEscrita(undefined)).toBe(COLUMNAS_COMPARATIVA.length);
+  });
+
+  // La planilla de 16 columnas: el id cae adentro de las 19 de la plantilla y
+  // el ancho no se achica, que es como se venía escribiendo.
+  it("un id anterior a la última columna de la plantilla no agranda la fila", () => {
+    expect(anchoDeLaFilaEscrita(10)).toBe(COLUMNAS_COMPARATIVA.length);
+  });
+
 });

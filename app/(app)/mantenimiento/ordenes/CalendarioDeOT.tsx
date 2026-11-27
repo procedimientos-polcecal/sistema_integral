@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Select from "@/components/Select";
 import { norm } from "@/lib/core/texto";
 import {
@@ -9,9 +9,13 @@ import {
 import { ESPECIALIDADES } from "@/lib/mantenimiento/ordenes";
 import { TIPOS_DE_OT, QUIENES_DE_OT } from "@/lib/mantenimiento/filtrosOt";
 import { oficioDeLaEspecialidad } from "@/lib/mantenimiento/genteDelDia";
+import {
+  SIN_ESPECIALIDAD, SIN_FILTROS, pasaElFiltro, type Filtros,
+} from "@/lib/mantenimiento/filtrosDelCalendario";
 import type { DiaDelCalendario } from "@/lib/mantenimiento/calendarioDeOT";
 import { porQueNoSePuedeMover, porQueNoSePuedeMoverA } from "@/lib/mantenimiento/moverLaOT";
 import { porQueNoSePuedeAsignar } from "@/lib/mantenimiento/asignarOperario";
+import { armarUrlDeImpresion, type Periodo } from "@/lib/mantenimiento/urlDeImpresion";
 import type { Oficio } from "@/lib/mantenimiento/programacion";
 import {
   colorDeEspecialidad, textoSobreLaEspecialidad, LEYENDA_DE_ESPECIALIDADES,
@@ -75,16 +79,6 @@ export const OFICIOS: Record<Oficio, { uno: string; varios: string }> = {
 };
 const ORDEN_DE_OFICIOS: Oficio[] = ["mecanico", "electricista", "lubricador"];
 
-/** El valor del filtro de especialidad que busca las órdenes que no la tienen. */
-const SIN_ESPECIALIDAD = "__SIN__";
-
-interface Filtros {
-  especialidad: string;
-  tipo: string;
-  quien: string;
-}
-const SIN_FILTROS: Filtros = { especialidad: "", tipo: "", quien: "" };
-
 /**
  * Qué hace la pantalla con el día que se toca. Es una unión y no dos props
  * sueltas a propósito: «elegir una fecha» y «mover una orden» no pueden estar
@@ -127,18 +121,6 @@ export type ModoDelCalendario =
       onAsignar: ((orden: OrdenDelDia, dia: string) => void) | null;
     };
 
-function pasaElFiltro(o: OrdenDelDia, f: Filtros): boolean {
-  if (f.especialidad) {
-    const vacia = !norm(o.especialidad);
-    if (f.especialidad === SIN_ESPECIALIDAD ? !vacia : norm(o.especialidad) !== norm(f.especialidad)) {
-      return false;
-    }
-  }
-  if (f.tipo && norm(o.tipo) !== norm(f.tipo)) return false;
-  if (f.quien && norm(o.quien) !== norm(f.quien)) return false;
-  return true;
-}
-
 /** Los inicios primero: son los que se ven en las tres fichas y los que importan al elegir. */
 function ordenadas(ordenes: OrdenDelDia[]): OrdenDelDia[] {
   return [...ordenes].sort(
@@ -168,6 +150,64 @@ function cuentaPorSector(ordenes: OrdenDelDia[]): { sector: string; cantidad: nu
 }
 
 /** El fondo del día: se oscurece con la cantidad, porque el color de las fichas no alcanza para contar. */
+/**
+ * Lo que la grilla le cuenta al padre de lo que está mirando. Lleva los filtros
+ * y los días —y no sólo el rango— porque los indicadores y las hojas impresas
+ * se calculan de eso, sin volver a pedirle nada al servidor.
+ */
+export interface EstadoDelCalendario {
+  /** "YYYY-MM". */
+  mes: string;
+  /** El primer y el último día que la grilla pidió: lunes a domingo de las semanas del mes. */
+  desde: string;
+  hasta: string;
+  filtros: Filtros;
+  /** Vacío mientras carga o si el pedido falló. */
+  dias: DiaDelCalendario[];
+  /**
+   * Llevar la grilla al mes de hoy. Va acá y no es una prop de control porque
+   * **el mes es estado de este componente**: un `mes` que entre desde afuera
+   * serían dos dueños de lo mismo, y las flechas dejarían de andar en cuanto el
+   * padre no las escuchara. Así el padre puede ofrecer «Ir a hoy» —la barra de
+   * indicadores lo necesita cuando el mes que se mira no contiene hoy— sin
+   * saber nada de cómo se guarda el mes.
+   *
+   * Su identidad es estable, como la del resto del objeto.
+   */
+  irAlMesDeHoy: () => void;
+}
+
+/** Identidad estable para «todavía no hay días»: ver el efecto que llama a `onEstado`. */
+const SIN_DIAS: DiaDelCalendario[] = [];
+
+/**
+ * El enlace que abre una hoja para imprimir, en una pestaña nueva.
+ *
+ * Es un `<a>` y no un `onClick` con `window.open` para que el clic del medio y
+ * «abrir en otra pestaña» anden, y porque un enlace lo lee el lector de
+ * pantalla como lo que es.
+ *
+ * Lleva `no-print` porque la hoja no se pide desde la hoja. Hoy desde esta
+ * pantalla nadie imprime, así que no cambia nada; el día que alguien apriete
+ * Ctrl+P acá, sí.
+ */
+function EnlaceDeImpresion({ href, children, className = "" }: {
+  href: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`no-print ${className}`}
+    >
+      {children}
+    </a>
+  );
+}
+
 function fondoDelDia(n: number): string {
   if (n === 0) return "#ffffff";
   if (n === 1) return "#f1f5f9";
@@ -178,7 +218,7 @@ function fondoDelDia(n: number): string {
 }
 
 export default function CalendarioDeOT({
-  modo, recarga = 0, franjaDeLaSemana, onRango,
+  modo, recarga = 0, franjaDeLaSemana, onEstado,
 }: {
   modo: ModoDelCalendario;
   /**
@@ -196,19 +236,23 @@ export default function CalendarioDeOT({
    */
   franjaDeLaSemana?: (lunes: string) => React.ReactNode;
   /**
-   * Qué rango está pidiendo la grilla. El mes es estado de acá —se cambia con
-   * las flechas— así que el padre no tiene otra forma de saber para qué
-   * semanas traer lo suyo.
+   * Qué está mirando la grilla: el mes, el rango que pidió, los filtros puestos
+   * y los días que llegaron. Todo eso es estado de acá —el mes se cambia con
+   * las flechas y los filtros son tres desplegables de esta barra—, así que el
+   * padre no tiene otra forma de saberlo.
+   *
+   * Lo usan dos cosas de `MesDeOrdenes`: traer el taller para las mismas
+   * semanas, y dibujar los indicadores de arriba **con el filtro puesto**, sin
+   * pedirle nada más al servidor.
    *
    * **Tiene que ser estable entre renders**, o sea un `useCallback` y no una
    * arrow escrita en el JSX: va en las dependencias de un efecto que llama al
    * padre, así que una identidad nueva por render es un bucle infinito. Y lo
-   * que el padre guarde tiene que conservar su identidad cuando el rango no
-   * cambió (`MesDeOrdenes` devuelve el mismo objeto), por lo mismo. La de al
-   * lado, `franjaDeLaSemana`, **sí** puede ir inline: no está en ninguna
-   * dependencia.
+   * que el padre guarde tiene que conservar su identidad cuando nada cambió
+   * (`MesDeOrdenes` compara antes de setear), por lo mismo. La de al lado,
+   * `franjaDeLaSemana`, **sí** puede ir inline: no está en ninguna dependencia.
    */
-  onRango?: (desde: string, hasta: string) => void;
+  onEstado?: (e: EstadoDelCalendario) => void;
 }) {
   const hoy = hoyEnArgentina();
   const valor = modo.tipo === "elegir" ? modo.valor : "";
@@ -267,9 +311,6 @@ export default function CalendarioDeOT({
     return () => { cancelado = true; };
   }, [desde, hasta, mes, intento, recarga]);
 
-  // El rango, para quien quiera traer lo suyo para las mismas semanas.
-  useEffect(() => { onRango?.(desde, hasta); }, [desde, hasta, onRango]);
-
   // En el teléfono el panel queda debajo de la grilla: al abrirlo hay que verlo.
   useEffect(() => {
     if (diaAbierto) panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -284,6 +325,34 @@ export default function CalendarioDeOT({
   const cargando = !laFoto && !elFallo;
   const error = elFallo && elFallo.pedido > (laFoto?.pedido ?? -1) ? elFallo.mensaje : null;
   const dias = laFoto?.dias ?? null;
+
+  /*
+   * Lo que la grilla está mirando, para el padre. Va acá abajo y no arriba
+   * porque necesita `dias`, que sale de la foto.
+   *
+   * `SIN_DIAS` es una constante de módulo y no un `[]` escrito acá: un arreglo
+   * nuevo por render entraría en las dependencias con identidad distinta cada
+   * vez, que es el bucle infinito contra el que advierte la prop.
+   */
+  /*
+   * `hoyEnArgentina()` adentro y no el `hoy` de arriba, para que la dependencia
+   * quede vacía y la identidad **no cambie nunca**.
+   *
+   * No es prolijidad: la app vive instalada en los teléfonos y puede quedar
+   * abierta días. Con `[hoy]`, al cruzar la medianoche esto se rearma, pero el
+   * padre conserva el objeto viejo —compara los otros campos, que no se
+   * movieron—, así que «Ir a hoy» queda apuntando al mes de ayer. Se nota sólo
+   * cruzando un fin de mes, que es cuando importa.
+   */
+  const irAlMesDeHoy = useCallback(() => {
+    setMes(hoyEnArgentina().slice(0, 7));
+    setDiaAbierto(null);
+    setDiaRechazado(null);
+  }, []);
+
+  useEffect(() => {
+    onEstado?.({ mes, desde, hasta, filtros, dias: dias ?? SIN_DIAS, irAlMesDeHoy });
+  }, [onEstado, mes, desde, hasta, filtros, dias, irAlMesDeHoy]);
 
   const porDia = useMemo(() => {
     const m = new Map<string, DiaDelCalendario>();
@@ -350,6 +419,26 @@ export default function CalendarioDeOT({
   }, [desde, hasta]);
 
   const [anio, nroMes] = mes.split("-").map(Number);
+
+  /*
+   * ── LOS ENLACES DE IMPRIMIR ───────────────────────────────────────────────
+   *
+   * Los arma este componente y no el padre, aunque la hoja sea de otra página:
+   * el mes, los tres filtros y el día abierto son estado de acá, y subirlos
+   * tocaría las tres pantallas que montan el calendario.
+   *
+   * **Sólo en modo `programar`.** El otro modo es el campo de fecha del alta de
+   * una OT: ahí el calendario es un selector adentro de un formulario, y un
+   * botón que abre otra pestaña en el medio de una carga no es una ayuda.
+   *
+   * `taller` es un pedido y no un permiso: dice que esta pantalla está
+   * mostrando la rotación —o sea que recibió `franjaDeLaSemana`— y la hoja lo
+   * vuelve a autorizar del lado del servidor.
+   */
+  const seImprime = modo.tipo === "programar";
+  const pideElTaller = Boolean(franjaDeLaSemana);
+  const urlDeLaHoja = (periodo: Periodo, d: string, h: string) =>
+    armarUrlDeImpresion({ periodo, desde: d, hasta: h, filtros, taller: pideElTaller });
 
   return (
     <div className="space-y-2">
@@ -439,6 +528,14 @@ export default function CalendarioDeOT({
                 : `${totalDelMes} ${totalDelMes === 1 ? "orden" : "órdenes"} en el mes${hayFiltro ? ", con ese filtro" : ""}`}
             </div>
           )}
+          {seImprime && (
+            <EnlaceDeImpresion
+              href={urlDeLaHoja("mes", desde, hasta)}
+              className="mt-1 inline-block text-[11px] text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+            >
+              Imprimir el mes
+            </EnlaceDeImpresion>
+          )}
         </div>
         <button
           type="button"
@@ -498,7 +595,7 @@ export default function CalendarioDeOT({
                   todo está detrás del login. */}
               <div className="space-y-px">
                 {semanas.map((semana) => (
-                  <div key={semana[0]}>
+                  <div key={semana[0]} className={seImprime ? "pb-2" : undefined}>
                     {franjaDeLaSemana?.(semana[0])}
                     <div className="grid grid-cols-7 gap-px rounded-lg overflow-hidden bg-slate-200 border border-slate-200">
                       {semana.map((dia) => (
@@ -516,6 +613,21 @@ export default function CalendarioDeOT({
                         />
                       ))}
                     </div>
+                    {/* Debajo de la grilla y no arriba: la franja del taller
+                        lleva `rounded-t-lg` para pegarse a la grilla, y
+                        cualquier cosa en el medio parte esa unión. Queda a 2px
+                        de la grilla que nombra y a 8px de la semana siguiente,
+                        que es lo que dice de cuál de las dos habla. */}
+                    {seImprime && (
+                      <div className="mt-0.5 flex justify-end">
+                        <EnlaceDeImpresion
+                          href={urlDeLaHoja("semana", semana[0], semana[6])}
+                          className="px-1 text-[11px] text-slate-400 underline-offset-2 hover:text-slate-800 hover:underline"
+                        >
+                          Imprimir esta semana
+                        </EnlaceDeImpresion>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -552,6 +664,7 @@ export default function CalendarioDeOT({
               dia={porDia.get(diaAbierto) ?? null}
               diaIso={diaAbierto}
               filtros={filtros}
+              urlDeImpresion={seImprime ? urlDeLaHoja("dia", diaAbierto, diaAbierto) : null}
               elegirElDia={modo.tipo === "elegir" ? modo.onElegir : null}
               onMover={modo.tipo === "programar" && modo.puedeMover ? empezarAMover : null}
               onAsignar={modo.tipo === "programar" ? modo.onAsignar : null}
@@ -677,11 +790,13 @@ function CeldaDelDia({
 // ─── El panel del día ───────────────────────────────────────────────────────
 
 function PanelDelDia({
-  dia, diaIso, filtros, elegirElDia, onMover, onAsignar, onCerrar,
+  dia, diaIso, filtros, elegirElDia, onMover, onAsignar, onCerrar, urlDeImpresion,
 }: {
   dia: DiaDelCalendario | null;
   diaIso: string;
   filtros: Filtros;
+  /** La hoja de ese día, o `null` si desde esta pantalla no se imprime. */
+  urlDeImpresion: string | null;
   /** El pie que manda la fecha al campo, en el modo `elegir`. */
   elegirElDia: ((dia: string) => void) | null;
   /** Empezar a mover una orden, en el modo `programar`. */
@@ -722,6 +837,14 @@ function PanelDelDia({
               ? "Sin órdenes ese día"
               : `${ordenes.length} ${ordenes.length === 1 ? "orden" : "órdenes"}`}
           </div>
+          {urlDeImpresion && (
+            <EnlaceDeImpresion
+              href={urlDeImpresion}
+              className="mt-1 inline-block text-[11px] text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
+            >
+              Imprimir este día
+            </EnlaceDeImpresion>
+          )}
         </div>
         <button
           type="button"

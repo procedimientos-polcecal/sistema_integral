@@ -18,6 +18,7 @@
  */
 
 import { norm, coincide } from "@/lib/core/texto";
+import { sigueDesestimado, type Desestimacion } from "./desestimar";
 
 /**
  * La ventana de consumo, en días. Medido el 02/10/2026 sobre los 497 faltantes
@@ -99,9 +100,23 @@ export interface ConPedido extends Candidato {
   diasDelRi: number;
 }
 
+/** Un faltante que alguien decidió no reponer, con quién lo decidió y por qué. */
+export interface Desestimado extends Candidato {
+  desestimacion: Desestimacion;
+}
+
 export interface Reposicion {
   paraPedir: Candidato[];
   yaPedidos: ConPedido[];
+  /**
+   * Los que alguien desestimó y todavía nadie movió.
+   *
+   * **Van a una lista aparte y no se esconden**, por lo mismo que `yaPedidos`:
+   * quien busca algo que sabe que falta tiene que poder distinguir «el sistema
+   * no lo vio» de «alguien dijo que no». Esconderlos del todo además dejaría un
+   * click sin vuelta atrás — y acá la vuelta atrás es la mitad de la función.
+   */
+  desestimados: Desestimado[];
 }
 
 /**
@@ -353,18 +368,24 @@ export function avisoDePedidoAbierto(pedido: RiAbierto): AvisoDePedido {
  * la diferencia propondría sistemáticamente menos de lo que se termina
  * comprando.
  *
+ * **El detalle extra dice sólo «Reposición de stock»**, a pedido. Antes agregaba
+ * «Había 0 de un mínimo de 4», y esos dos números son una foto del momento en
+ * que alguien apretó el botón: el RI los lleva escritos para siempre y nadie
+ * los vuelve a actualizar, así que a la semana el texto afirma un stock que ya
+ * no es. Lo que hoy pasa a ese campo es **por qué** se pide, que es lo único
+ * que no se puede mirar en otro lado — el stock y el mínimo están en el
+ * artículo, a un click, y siempre al día.
+ *
  * Todo es editable antes de enviar: esto propone, no decide. Y vive acá porque
- * lo arman dos pantallas: con una copia en cada una, este texto y esta regla se
- * separan sin que nadie lo note.
+ * lo arman tres pantallas —«Para reponer», el stock y los artículos—: con una
+ * copia en cada una, este texto y esta regla se separan sin que nadie lo note.
  */
 export function altaDeReposicion(articulo: ArticuloConFaltante): AltaDeReposicion {
   return {
     descripcion: articulo.descripcion,
     codigo: articulo.codigo,
     cantidad: String(articulo.stock_seguridad),
-    detalle:
-      `Reposición de stock. Había ${articulo.stock_actual} ` +
-      `de un mínimo de ${articulo.stock_seguridad}.`,
+    detalle: "Reposición de stock",
   };
 }
 
@@ -463,7 +484,7 @@ export function filtrarParaReponer<T extends Candidato>(lista: T[], consulta: st
 }
 
 /**
- * Parte los artículos en los dos grupos de la pantalla.
+ * Parte los artículos en los tres grupos de la pantalla.
  *
  * Entra el que tiene faltante, está activo y tuvo **al menos una salida** en la
  * ventana. Se ordena por cantidad de salidas: lo que más se mueve queda arriba,
@@ -472,19 +493,40 @@ export function filtrarParaReponer<T extends Candidato>(lista: T[], consulta: st
  * El que además tiene un RI abierto va a `yaPedidos` y no a `paraPedir`, con
  * cuál es y de cuándo. No se oculta: quien busca algo que sabe que falta tiene
  * que poder distinguir "el sistema no lo vio" de "ya está pedido", que son dos
- * problemas con dos arreglos distintos.
+ * problemas con dos arreglos distintos. Por eso mismo hay un tercer grupo y no
+ * un filtro: el que alguien desestimó sale de la propuesta pero sigue estando,
+ * con quién lo decidió y por qué.
+ *
+ * **`desestimaciones` no tiene valor por defecto**, por lo mismo que
+ * `yaRecibidos`: un mapa vacío es la respuesta correcta cuando nadie desestimó
+ * nada, y un parámetro opcional haría que olvidarse de pasarlo se vea igual
+ * —la pantalla volvería a proponer, callada, lo que alguien ya contestó—.
  */
 export function clasificarParaReponer(
   articulos: ArticuloConFaltante[],
   movimientos: MovimientoDelConsumo[],
   requerimientos: RequerimientoConCodigo[],
   hoy: string,
-  yaRecibidos: ReadonlySet<string>
+  yaRecibidos: ReadonlySet<string>,
+  desestimaciones: ReadonlyMap<string, Desestimacion>
 ): Reposicion {
   // El consumo, por código: cuántas salidas y cuál fue la última.
   const consumo = new Map<string, { salidas: number; diasDesdeLaUltima: number }>();
+  /*
+   * Y aparte el día del último movimiento **de cualquier tipo**, que es contra
+   * lo que se mide si una desestimación sigue en pie. Son dos cuentas distintas
+   * sobre el mismo recorrido: el consumo cuenta salidas dentro de la ventana
+   * —es lo que justifica un pedido— y esto busca el hecho más nuevo, sea
+   * entrada, salida o ajuste.
+   *
+   * Alcanza con los movimientos que llegan acá aunque vengan acotados a la
+   * ventana: para estar en esta pantalla el artículo necesita una salida
+   * adentro de ella, así que su movimiento más nuevo también está adentro. Si
+   * la desestimación es más vieja que la ventana, cualquiera de los que se ven
+   * ya es posterior y la levanta, que es lo correcto.
+   */
+  const ultimoMovimiento = new Map<string, string>();
   for (const m of movimientos) {
-    if (m.tipo !== "salida") continue;
     const c = clave(m.codigo);
     if (!c || !m.fecha) continue;
 
@@ -492,6 +534,11 @@ export function clasificarParaReponer(
     // Fuera de la ventana, o en el futuro —que es una fila mal cargada y no un
     // consumo—, no cuenta.
     if (d === null || d < 0 || d > DIAS_DE_CONSUMO) continue;
+
+    const dia = m.fecha.slice(0, 10);
+    if (dia > (ultimoMovimiento.get(c) ?? "")) ultimoMovimiento.set(c, dia);
+
+    if (m.tipo !== "salida") continue;
 
     const previo = consumo.get(c);
     consumo.set(c, {
@@ -506,6 +553,7 @@ export function clasificarParaReponer(
 
   const paraPedir: Candidato[] = [];
   const yaPedidos: ConPedido[] = [];
+  const desestimados: Desestimado[] = [];
 
   for (const articulo of articulos) {
     if (articulo.activo === false) continue;
@@ -516,6 +564,22 @@ export function clasificarParaReponer(
     if (!uso) continue;
 
     const base: Candidato = { articulo, salidas: uso.salidas, diasDesdeLaUltima: uso.diasDesdeLaUltima };
+
+    /*
+     * La desestimación se mira **antes** que el pedido abierto, así que gana
+     * sobre las otras dos listas. Es la regla más simple de explicar —«lo
+     * desestimé y no aparece más hasta que se mueva»— y es la que se pidió. La
+     * otra lectura posible, que un RI abierto le gane porque «ya pedido» es más
+     * informativo que «desestimado», deja al sistema contestando que no puede
+     * sacar algo de la lista; y si se pidió igual, la desestimación ya no le
+     * estorba a nadie.
+     */
+    const desestimacion = desestimaciones.get(articulo.id);
+    if (sigueDesestimado(desestimacion, ultimoMovimiento.get(c) ?? null)) {
+      desestimados.push({ ...base, desestimacion: desestimacion as Desestimacion });
+      continue;
+    }
+
     const pedido = abiertos.get(c);
 
     if (!pedido) {
@@ -537,5 +601,6 @@ export function clasificarParaReponer(
   return {
     paraPedir: ordenarParaReponer(paraPedir, ORDEN_POR_DEFECTO),
     yaPedidos: ordenarParaReponer(yaPedidos, ORDEN_POR_DEFECTO),
+    desestimados: ordenarParaReponer(desestimados, ORDEN_POR_DEFECTO),
   };
 }

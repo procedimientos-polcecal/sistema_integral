@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { puedeEditarCompras } from "@/lib/compras/auth";
 import { leerComparativa, vaciarFila } from "@/lib/compras/drive";
-import { COLUMNAS_COMPARATIVA } from "@/lib/compras/comparativa";
+import { anchoDeLaFilaEscrita, indiceDeLaColumnaDelId } from "@/lib/compras/comparativa";
 
 const CAMPOS = [
   "marca", "unidad_medida", "precio_unitario", "cantidad", "costo_envio",
@@ -128,9 +128,15 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (ri.comparativa_drive_id && cotizacion.drive_fila && cotizacion.origen === "app") {
     try {
       const planilla = await leerComparativa(ri.comparativa_drive_id);
+      // El ancho sale de donde sale el de la escritura, no de una constante.
+      // Con `COLUMNAS_COMPARATIVA.length` fijo, la columna `ID SISTEMA` —que cae
+      // en el índice 19 o 20 según la planilla— quedaba afuera del rango y el
+      // uuid sobrevivía solo en una fila vacía: la relectura lo vería como el
+      // eco de un presupuesto que ya no existe. Ver `anchoDeLaFilaEscrita`.
       await vaciarFila(
         ri.comparativa_drive_id, planilla.pestana,
-        cotizacion.drive_fila, COLUMNAS_COMPARATIVA.length
+        cotizacion.drive_fila,
+        anchoDeLaFilaEscrita(indiceDeLaColumnaDelId(planilla.encabezado))
       );
     } catch (e) {
       avisoDrive =

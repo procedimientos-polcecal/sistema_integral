@@ -131,6 +131,23 @@ export const NAV: NavItem[] = [
       // lo que esas órdenes dicen que ya se viene haciendo.
       { label: "Tareas preventivas", href: "/mantenimiento/tareas-preventivas", modulo: "mantenimiento" },
       /*
+       * «Mantenimientos programados» VUELVE AL MENÚ EL 25/11/2026.
+       *
+       * Esa pantalla configura el motor `periodicas`, que es la otra mitad de
+       * lo que crea órdenes solo, y **nada en la aplicación la enlazaba**: se
+       * llegaba tipeando la URL. Una pantalla a la que sólo se llega tipeando
+       * la URL es una que no existe, y los números lo dicen — medido el
+       * 24/11/2026: **1** programado en toda la base y **cero** OT nacidas de
+       * uno en toda la historia.
+       *
+       * Va debajo de «Tareas preventivas» porque es lo que sigue: el catálogo
+       * dice qué tareas tiene un equipo y esto dice cada cuánto se generan
+       * solas. La sección «Lo que crea órdenes solo» de la Configuración
+       * también la enlaza, pero esa pantalla es de administradores y ésta la
+       * ve cualquiera con el módulo.
+       */
+      { label: "Mantenimientos programados", href: "/mantenimiento/mantenimientos", modulo: "mantenimiento" },
+      /*
        * ACÁ VIVÍA «Cargar sin señal», Y SE SACÓ EL 02/11/2026.
        *
        * `/cargar` sigue existiendo y no se tocó: es donde se ve y se corrige
@@ -240,6 +257,13 @@ export const NAV: NavItem[] = [
        * notificación no sale —fuera de 7:00 a 21:00 no sale—.
        */
       { label: "Consultas de repuestos", href: "/compras/consultas", modulo: "compras" },
+      /*
+       * Acá empieza lo que se consulta, después de las bandejas de trabajo.
+       * Comparativas es la primera de las tres porque es la que se abre para
+       * decidir algo —qué salió este repuesto la vez pasada— y no para
+       * mantener un dato.
+       */
+      { label: "Comparativas", href: "/compras/comparativas", modulo: "compras" },
       { label: "Proveedores", href: "/compras/proveedores", modulo: "compras" },
       { label: "Ubicaciones", href: "/compras/ubicaciones", modulo: "compras" },
       { label: "Configuración", href: "/compras/configuracion", modulo: "compras", soloAdmin: true },

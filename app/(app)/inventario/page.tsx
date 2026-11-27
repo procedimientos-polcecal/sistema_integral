@@ -141,7 +141,7 @@ export default async function InventarioDashboardPage() {
       </div>
 
       {pendientes && pendientes.length > 0 && (
-        <section className="card mt-5 border-amber-200 bg-amber-50/40 p-4">
+        <section className="card mt-5 bg-amber-50/40 p-4" style={{ borderColor: "var(--borde-aviso)" }}>
           <h2 className="section-title text-amber-800">Sin sincronizar a la planilla</h2>
           <p className="mt-1 text-xs text-amber-700">
             Su stock se va a revertir en la próxima sincronización si no se corrige.

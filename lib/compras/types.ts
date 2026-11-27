@@ -52,6 +52,18 @@ export interface Proveedor {
   es_contratista: boolean;
   activo: boolean;
 
+  /*
+   * Con cuál de las dos empresas trabaja. En Odoo hay un perfil por empresa
+   * —POLCECAL es la `res.company` 1 y POLYSAN la 2— y acá el padrón es uno
+   * solo, así que esto es lo que dice a cuál de los dos va el `res.partner`.
+   * Las dos columnas son excluyentes por un check: con `trabaja_con_ambas` en
+   * true, `empresa_id` va en null. Los dos en falso/null quieren decir «no se
+   * sabe», que es el estado de las 393 filas que no lo declararon, y entonces
+   * lo decide el pedido que se esté cotizando.
+   */
+  empresa_id: string | null;
+  trabaja_con_ambas: boolean;
+
   // Lo que hace falta para pagarle, traído de la base de datos de
   // administración. Casi todo puede venir vacío: se cargó lo que la planilla
   // tenía.
@@ -223,7 +235,12 @@ export interface Cotizacion {
   origen: string;
   drive_fila: number | null;
   created_at: string;
-  proveedores?: { nombre: string } | null;
+  /**
+   * El `cuit` viaja para avisar en la comparativa que al proveedor le falta:
+   * sin él la orden de compra no se puede generar, y enterarse recién ahí es
+   * enterarse después de haber pedido y cargado todos los presupuestos.
+   */
+  proveedores?: { nombre: string; cuit?: string | null } | null;
 }
 
 export interface HistorialItem {

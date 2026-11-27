@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { usuarioActual } from "@/lib/core/sesion";
 import { traerTodo } from "@/lib/core/paginado";
 import { permisosComprasActuales } from "@/lib/compras/sesion";
+import { esAdminDelNucleo } from "@/lib/core/access";
 import ProveedoresClient from "./ProveedoresClient";
 import type { Proveedor } from "@/lib/compras/types";
 
@@ -35,13 +36,23 @@ export default async function ProveedoresPage() {
     };
   }
 
+  const { data: empresas } = await supabase
+    .from("empresas").select("id, nombre").eq("activo", true).order("nombre");
+
   const { nivel } = await permisosComprasActuales();
+
+  // El enlace a «fusionar duplicados» sólo para quien va a poder entrar: la
+  // pantalla es de admin del núcleo —mueve 19 tablas de seis módulos— y no de
+  // edición de Compras, así que mostrarlo a los demás es ofrecer un redirect.
+  const { data: quien } = await supabase.from("usuarios").select("rol").eq("id", user.id).single();
 
   return (
     <ProveedoresClient
       proveedores={(proveedores ?? []) as Proveedor[]}
       estadisticas={estadisticas}
+      empresas={empresas ?? []}
       canEdit={nivel === "edicion" || nivel === "admin"}
+      puedeFusionar={esAdminDelNucleo(quien?.rol)}
     />
   );
 }

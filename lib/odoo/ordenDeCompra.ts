@@ -34,6 +34,11 @@ export interface RequerimientoParaOrden {
   empresaId: string | null;
   pagaAmbas: boolean;
   fechaNecesidad: string | null;
+  /**
+   * El CUIT del proveedor, para distinguir «falta enlazarlo» de «no sabemos
+   * quién es». Sin CUIT no hay partner que crear ni que buscar.
+   */
+  proveedorCuit: string | null;
 }
 
 /**
@@ -68,6 +73,20 @@ export interface EmpresaParaOrden {
   odooCompanyId: number;
   /** El `res.partner` del proveedor **en esta empresa**, de `proveedores_odoo`. */
   odooPartnerId: number | null;
+  /**
+   * Con `odooPartnerId` en null: si el sistema lo va a crear solo.
+   *
+   * Lo decide `hayQueCrearlo()` y lo contesta quien llama, porque depende de
+   * algo que esta función no tiene: los candidatos que Odoo devolvió para ese
+   * CUIT **en esta empresa**. Son dos situaciones que se parecen y mandan a
+   * lugares distintos: «no está, lo creo solo» no pide nada a nadie, y «está
+   * pero archivado / en la otra empresa / hay dos» pide que alguien lo
+   * resuelva en Odoo. Prometer la creación en el segundo caso deja a la
+   * persona generando la orden una y otra vez contra el mismo cartel.
+   */
+  seVaACrear?: boolean;
+  /** Con `seVaACrear` en false: por qué el partner que hay no sirve. */
+  motivoSinPartner?: string | null;
   /** `stock.picking.type` de recepción de esta empresa. */
   pickingTypeId: number;
   /**
@@ -137,6 +156,7 @@ export interface OrdenParaOdoo {
 
 export type Problema =
   | { tipo: "sin proveedor enlazado"; empresa: string; detalle: string }
+  | { tipo: "sin cuit"; detalle: string }
   | { tipo: "sin impuesto"; empresa: string; detalle: string }
   | { tipo: "sin precio"; detalle: string }
   | { tipo: "sin cantidad"; detalle: string }
@@ -225,15 +245,36 @@ export function armarOrdenes(
   }
 
   for (const empresa of empresas) {
-    if (empresa.odooPartnerId === null) {
+    /*
+     * Faltar el partner y faltar el CUIT son dos problemas distintos, y
+     * confundirlos manda a buscar al lugar equivocado. Medido el 23/11/2026:
+     * de los 45 proveedores cotizados en 180 días que no llegan a una orden,
+     * **40 no tienen CUIT**. Con CUIT el partner lo crea el push solo; sin
+     * CUIT no hay nada que crear, porque es lo único con que Odoo reconoce a
+     * un proveedor. Por eso el `sin cuit` va primero y excluye al otro: decir
+     * los dos sería decirle a alguien que haga dos cosas cuando hay una sola.
+     */
+    if (empresa.odooPartnerId === null && !ri.proveedorCuit) {
+      problemas.push({
+        tipo: "sin cuit",
+        detalle:
+          `El proveedor del RI ${ri.nroRi} no tiene CUIT cargado, que es lo único con que ` +
+          `se lo reconoce en Odoo. Cargáselo en la ficha del proveedor y volvé a intentar.`,
+      });
+    } else if (empresa.odooPartnerId === null) {
+      // El mensaje dice qué hacer, no que algo falló: pasa seguido, porque de
+      // los proveedores de Odoo sólo 147 están en las dos empresas. Y dice
+      // cosas distintas según si el sistema lo resuelve solo o no — ver
+      // `seVaACrear`.
+      const comun = `El proveedor del RI ${ri.nroRi} no está en ${empresa.nombre} dentro de Odoo.`;
       problemas.push({
         tipo: "sin proveedor enlazado",
         empresa: empresa.nombre,
-        // El mensaje dice qué hacer, no que algo falló: pasa seguido, porque de
-        // los proveedores de Odoo sólo 147 están en las dos empresas.
-        detalle:
-          `El proveedor del RI ${ri.nroRi} no existe en ${empresa.nombre} dentro de Odoo. ` +
-          `Hay que darlo de alta ahí, o revisar su CUIT en el padrón del SdG.`,
+        detalle: empresa.seVaACrear
+          ? `${comun} Se va a crear al generar la orden.`
+          : empresa.motivoSinPartner
+            ? `${comun} ${empresa.motivoSinPartner}`
+            : `${comun} Hay que enlazarlo o darlo de alta allá antes de generar la orden.`,
       });
     }
 

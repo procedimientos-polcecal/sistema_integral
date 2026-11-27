@@ -6,6 +6,7 @@ import {
   ORDENES_DE_REPOSICION, ORDEN_POR_DEFECTO,
   DIAS_DE_CONSUMO,
 } from "./reponer";
+import type { Desestimacion } from "./desestimar";
 import type {
   ArticuloConFaltante, MovimientoDelConsumo, RequerimientoConCodigo,
   Candidato, OrdenDeReposicion, EntradaDeRequerimiento,
@@ -45,6 +46,8 @@ const ri = (p: Partial<RequerimientoConCodigo> = {}): RequerimientoConCodigo => 
  * recepcion. Los que si hablan de ella arman el suyo con `recibido()`.
  */
 const NADA: ReadonlySet<string> = new Set<string>();
+/** Y nadie desestimó nada, que es el caso de siempre. */
+const NADIE: ReadonlyMap<string, Desestimacion> = new Map<string, Desestimacion>();
 
 describe("que RI esta abierto", () => {
   it("un pedido en curso esta abierto", () => {
@@ -70,7 +73,7 @@ describe("que RI esta abierto", () => {
 
 describe("que entra en para reponer", () => {
   it("faltante y consumo reciente entra", () => {
-    const r = clasificarParaReponer([art()], [salida("00018", "2026-09-20")], [], HOY, NADA);
+    const r = clasificarParaReponer([art()], [salida("00018", "2026-09-20")], [], HOY, NADA, NADIE);
     expect(r.paraPedir.map((c) => c.articulo.codigo)).toEqual(["00018"]);
     expect(r.yaPedidos).toEqual([]);
   });
@@ -82,6 +85,8 @@ describe("que entra en para reponer", () => {
       [],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir).toEqual([]);
     expect(r.yaPedidos).toEqual([]);
@@ -92,20 +97,20 @@ describe("que entra en para reponer", () => {
    * Es el ruido que esta pantalla existe para no mostrar.
    */
   it("con faltante pero sin salidas en la ventana no entra, aunque este en cero", () => {
-    const r = clasificarParaReponer([art()], [salida("00018", "2026-03-01")], [], HOY, NADA);
+    const r = clasificarParaReponer([art()], [salida("00018", "2026-03-01")], [], HOY, NADA, NADIE);
     expect(r.paraPedir).toEqual([]);
   });
 
   it("un articulo sin ningun movimiento no entra", () => {
-    const r = clasificarParaReponer([art()], [], [], HOY, NADA);
+    const r = clasificarParaReponer([art()], [], [], HOY, NADA, NADIE);
     expect(r.paraPedir).toEqual([]);
   });
 
   it("una salida de hace exactamente 90 dias entra; una de 91 no", () => {
-    const justo = clasificarParaReponer([art()], [salida("00018", "2026-07-04")], [], HOY, NADA);
+    const justo = clasificarParaReponer([art()], [salida("00018", "2026-07-04")], [], HOY, NADA, NADIE);
     expect(justo.paraPedir).toHaveLength(1);
 
-    const tarde = clasificarParaReponer([art()], [salida("00018", "2026-07-03")], [], HOY, NADA);
+    const tarde = clasificarParaReponer([art()], [salida("00018", "2026-07-03")], [], HOY, NADA, NADIE);
     expect(tarde.paraPedir).toEqual([]);
   });
 
@@ -117,6 +122,8 @@ describe("que entra en para reponer", () => {
       [],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir).toEqual([]);
   });
@@ -128,6 +135,8 @@ describe("que entra en para reponer", () => {
       [],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir).toEqual([]);
   });
@@ -139,13 +148,15 @@ describe("que entra en para reponer", () => {
       [ri()],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir).toEqual([]);
     expect(r.yaPedidos).toEqual([]);
   });
 
   it("una salida con fecha en el futuro no cuenta", () => {
-    const r = clasificarParaReponer([art()], [salida("00018", "2026-10-20")], [], HOY, NADA);
+    const r = clasificarParaReponer([art()], [salida("00018", "2026-10-20")], [], HOY, NADA, NADIE);
     expect(r.paraPedir).toEqual([]);
   });
 
@@ -156,6 +167,8 @@ describe("que entra en para reponer", () => {
       [],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir).toEqual([]);
   });
@@ -167,6 +180,8 @@ describe("que entra en para reponer", () => {
       [],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir[0].salidas).toBe(3);
     expect(r.paraPedir[0].diasDesdeLaUltima).toBe(2);
@@ -175,7 +190,7 @@ describe("que entra en para reponer", () => {
 
 describe("lo que ya esta pedido", () => {
   it("con un RI abierto va a yaPedidos y no a paraPedir", () => {
-    const r = clasificarParaReponer([art()], [salida("00018", "2026-09-20")], [ri()], HOY, NADA);
+    const r = clasificarParaReponer([art()], [salida("00018", "2026-09-20")], [ri()], HOY, NADA, NADIE);
     expect(r.paraPedir).toEqual([]);
     expect(r.yaPedidos).toHaveLength(1);
     expect(r.yaPedidos[0].ri.nro_ri).toBe(2015);
@@ -194,6 +209,8 @@ describe("lo que ya esta pedido", () => {
       [ri({ fecha: "2026-09-22T00:00:00+00:00" })],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.yaPedidos[0].diasDelRi).toBe(10);
   });
@@ -209,6 +226,8 @@ describe("lo que ya esta pedido", () => {
       [ri({ fecha: "2026-10-03T00:30:00+00:00" })],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.yaPedidos[0].diasDelRi).toBe(0);
   });
@@ -220,6 +239,8 @@ describe("lo que ya esta pedido", () => {
       [ri({ estado_compra: "RECIBIDO" })],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir).toHaveLength(1);
     expect(r.yaPedidos).toEqual([]);
@@ -232,6 +253,8 @@ describe("lo que ya esta pedido", () => {
       [ri({ estado_aprobacion: "DENEGADA" })],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir).toHaveLength(1);
   });
@@ -251,6 +274,8 @@ describe("lo que ya esta pedido", () => {
       ],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.yaPedidos[0].ri.nro_ri).toBe(1956);
     expect(r.yaPedidos[0].cuantosAbiertos).toBe(3);
@@ -263,6 +288,8 @@ describe("lo que ya esta pedido", () => {
       [ri({ codigo: "99999" })],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir).toHaveLength(1);
   });
@@ -274,6 +301,8 @@ describe("lo que ya esta pedido", () => {
       [ri({ codigo: null })],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir).toHaveLength(1);
   });
@@ -285,6 +314,8 @@ describe("lo que ya esta pedido", () => {
       [ri({ codigo: "00018 " })],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.yaPedidos).toHaveLength(1);
   });
@@ -302,6 +333,8 @@ describe("el orden", () => {
       [],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir.map((c) => c.articulo.codigo)).toEqual(["B", "C", "A"]);
   });
@@ -314,6 +347,8 @@ describe("el orden", () => {
       [],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir.map((c) => c.articulo.codigo)).toEqual(["B", "A"]);
   });
@@ -325,6 +360,8 @@ describe("el orden", () => {
       [],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir.map((c) => c.articulo.codigo)).toEqual(["A", "B"]);
   });
@@ -336,6 +373,8 @@ describe("el orden", () => {
       [ri({ id: "ra", codigo: "A" }), ri({ id: "rb", codigo: "B" })],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.yaPedidos.map((c) => c.articulo.codigo)).toEqual(["B", "A"]);
   });
@@ -360,9 +399,13 @@ describe("con que valores se abre el alta", () => {
     expect(a.descripcion).toBe("MINI PLAFON LED 18 W");
   });
 
-  it("el detalle dice los numeros reales, para que quien aprueba no tenga que buscarlos", () => {
+  it("el detalle dice por que se pide y nada mas", () => {
+    // Los numeros salieron a pedido: eran una foto del momento del alta que el
+    // RI se lleva escrita para siempre, y el stock de verdad esta en el
+    // articulo, al dia. El mismo texto para cualquier articulo.
     const a = altaDeReposicion(art({ stock_actual: 0, stock_seguridad: 4 }));
-    expect(a.detalle).toBe("Reposición de stock. Había 0 de un mínimo de 4.");
+    expect(a.detalle).toBe("Reposición de stock");
+    expect(altaDeReposicion(art({ stock_actual: 7, stock_seguridad: 9 })).detalle).toBe(a.detalle);
   });
 });
 
@@ -587,7 +630,7 @@ describe("ordenar la lista", () => {
       salida("00002", "2026-09-30"),
       salida("00002", "2026-09-29"),
     ];
-    const { paraPedir } = clasificarParaReponer(articulos, movimientos, [], HOY, NADA);
+    const { paraPedir } = clasificarParaReponer(articulos, movimientos, [], HOY, NADA, NADIE);
     expect(paraPedir.map((c) => c.articulo.codigo)).toEqual(["00002", "00001"]);
   });
 });
@@ -708,6 +751,8 @@ describe("un RI que ya recibio mercaderia", () => {
       [ri({ id: "r2082", codigo: "00288" })],
       HOY,
       new Set(["r2082"])
+    ,
+      NADIE
     );
     expect(r.yaPedidos).toHaveLength(0);
     expect(r.paraPedir.map((c) => c.articulo.codigo)).toEqual(["00288"]);
@@ -720,6 +765,8 @@ describe("un RI que ya recibio mercaderia", () => {
       [ri({ id: "r2082", codigo: "00288" })],
       HOY,
       NADA
+    ,
+      NADIE
     );
     expect(r.paraPedir).toHaveLength(0);
     expect(r.yaPedidos.map((c) => c.ri.nro_ri)).toEqual([2015]);
@@ -735,7 +782,136 @@ describe("un RI que ya recibio mercaderia", () => {
       [ri({ id: "r2082", codigo: "00288" })],
       HOY,
       new Set(["otro-ri"])
+    ,
+      NADIE
     );
     expect(r.yaPedidos).toHaveLength(1);
+  });
+});
+
+describe("un faltante desestimado", () => {
+  /** Lo desestimaron viendo hasta el movimiento de ese dia. */
+  const desestimado = (articuloId: string, hasta: string | null) =>
+    new Map<string, Desestimacion>([[articuloId, {
+      articulo_id: articuloId,
+      ultimo_movimiento: hasta,
+      motivo: "Se discontinuó",
+      desestimado_por_nombre: "Juan Pérez",
+      desestimado_en: "2026-09-21T10:00:00+00:00",
+    }]]);
+
+  it("sale de «para pedir» y va a su propia lista", () => {
+    const r = clasificarParaReponer(
+      [art({ id: "a1", codigo: "00018" })],
+      [salida("00018", "2026-09-20")],
+      [],
+      HOY,
+      NADA,
+      desestimado("a1", "2026-09-20")
+    );
+    expect(r.paraPedir).toHaveLength(0);
+    expect(r.desestimados.map((c) => c.articulo.codigo)).toEqual(["00018"]);
+    // Y se lleva con que explicarse: sin esto la fila dice que no hay que
+    // pedirla y no quien lo decidio.
+    expect(r.desestimados[0].desestimacion.motivo).toBe("Se discontinuó");
+  });
+
+  it("vuelve a «para pedir» con un movimiento de un dia posterior", () => {
+    const r = clasificarParaReponer(
+      [art({ id: "a1", codigo: "00018" })],
+      [salida("00018", "2026-09-20"), salida("00018", "2026-09-25")],
+      [],
+      HOY,
+      NADA,
+      desestimado("a1", "2026-09-20")
+    );
+    expect(r.desestimados).toHaveLength(0);
+    expect(r.paraPedir.map((c) => c.articulo.codigo)).toEqual(["00018"]);
+  });
+
+  it("una ENTRADA tambien lo despierta, aunque parezca lo contrario", () => {
+    // Si entro mercaderia y el articulo sigue con faltante, lo que se repuso no
+    // alcanzo: es un hecho nuevo sobre el que la decision se tomo sin saberlo.
+    const r = clasificarParaReponer(
+      [art({ id: "a1", codigo: "00018" })],
+      [salida("00018", "2026-09-20"), { codigo: "00018", tipo: "entrada", fecha: "2026-09-26" }],
+      [],
+      HOY,
+      NADA,
+      desestimado("a1", "2026-09-20")
+    );
+    expect(r.paraPedir).toHaveLength(1);
+  });
+
+  it("el paso del tiempo solo no lo despierta", () => {
+    const r = clasificarParaReponer(
+      [art({ id: "a1", codigo: "00018" })],
+      [salida("00018", "2026-07-10")],
+      [],
+      "2026-10-02",
+      NADA,
+      desestimado("a1", "2026-07-10")
+    );
+    expect(r.desestimados).toHaveLength(1);
+  });
+
+  it("le gana a «ya pedidos», que es la regla que se pidio", () => {
+    // "Lo desestime y no aparece mas hasta que se mueva" es una sola regla. La
+    // otra lectura -que un RI abierto le gane- deja al sistema contestando que
+    // no puede sacar algo de la lista.
+    const r = clasificarParaReponer(
+      [art({ id: "a1", codigo: "00018" })],
+      [salida("00018", "2026-09-20")],
+      [ri({ codigo: "00018" })],
+      HOY,
+      NADA,
+      desestimado("a1", "2026-09-20")
+    );
+    expect(r.yaPedidos).toHaveLength(0);
+    expect(r.desestimados).toHaveLength(1);
+  });
+
+  it("desestimar uno no toca a los demas", () => {
+    const r = clasificarParaReponer(
+      [art({ id: "a1", codigo: "00018" }), art({ id: "a2", codigo: "00600" })],
+      [salida("00018", "2026-09-20"), salida("00600", "2026-09-20")],
+      [],
+      HOY,
+      NADA,
+      desestimado("a1", "2026-09-20")
+    );
+    expect(r.paraPedir.map((c) => c.articulo.codigo)).toEqual(["00600"]);
+    expect(r.desestimados.map((c) => c.articulo.codigo)).toEqual(["00018"]);
+  });
+
+  it("la desestimacion de OTRO articulo no lo saca", () => {
+    // Se indexa por id y no por codigo: el codigo se repite en el movimiento
+    // para poder leer el kardex, pero el que manda es el articulo resuelto.
+    const r = clasificarParaReponer(
+      [art({ id: "a1", codigo: "00018" })],
+      [salida("00018", "2026-09-20")],
+      [],
+      HOY,
+      NADA,
+      desestimado("otro", "2026-09-20")
+    );
+    expect(r.paraPedir).toHaveLength(1);
+    expect(r.desestimados).toHaveLength(0);
+  });
+
+  it("los desestimados salen ordenados como las otras dos listas", () => {
+    const r = clasificarParaReponer(
+      [art({ id: "a1", codigo: "A" }), art({ id: "a2", codigo: "B" })],
+      [salida("A", "2026-09-20"), salida("B", "2026-09-20"), salida("B", "2026-09-21")],
+      [],
+      HOY,
+      NADA,
+      new Map<string, Desestimacion>([
+        ["a1", { articulo_id: "a1", ultimo_movimiento: "2026-09-20", motivo: null, desestimado_por_nombre: null, desestimado_en: "2026-09-21T10:00:00+00:00" }],
+        ["a2", { articulo_id: "a2", ultimo_movimiento: "2026-09-21", motivo: null, desestimado_por_nombre: null, desestimado_en: "2026-09-21T10:00:00+00:00" }],
+      ])
+    );
+    // Por uso: B tiene dos salidas y A una.
+    expect(r.desestimados.map((c) => c.articulo.codigo)).toEqual(["B", "A"]);
   });
 });

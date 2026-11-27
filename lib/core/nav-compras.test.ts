@@ -46,6 +46,10 @@ describe("menu de Compras", () => {
       // Al lado de las otras dos bandejas de trabajo: lo que hay que contestar,
       // junto a lo que hay que aprobar.
       "Consultas de repuestos",
+      // Acá arranca lo que se consulta, después de las bandejas de trabajo.
+      // Comparativas va primera de las tres: se abre para decidir algo —qué
+      // salió este repuesto la vez pasada— y no para mantener un dato.
+      "Comparativas",
       "Proveedores",
       "Ubicaciones",
       "Configuración",

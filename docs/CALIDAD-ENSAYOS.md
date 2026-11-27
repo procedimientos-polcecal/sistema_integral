@@ -384,8 +384,9 @@ bajando un archivo y abriéndolo.
 
 ### Comparar varias muestras (19/11/2026)
 
-La pantalla acepta **hasta seis muestras a la vez** y las superpone en los tres
-gráficos y en el Excel. Spec:
+La pantalla superpone **varias muestras** en los tres gráficos y en el Excel.
+Nació con un tope de seis, que se sacó el 25/11/2026 —ver «Comparar ya no
+tiene tope» más abajo—. Spec:
 [2026-11-19-calidad-curva-comparar-muestras-design.md](superpowers/specs/2026-11-19-calidad-curva-comparar-muestras-design.md)
 · plan:
 [2026-11-19-calidad-curva-comparar-muestras.md](superpowers/plans/2026-11-19-calidad-curva-comparar-muestras.md).
@@ -506,11 +507,191 @@ Dos cosas que no se deducen del código:
   cuadrito gris en la esquina de cada gráfico que nadie puede apretar.
 
 En la vista ampliada la leyenda muestra la etiqueta entera; en la grilla se
-corta en 26 caracteres, porque seis observaciones de 40 envuelven varias filas
-dentro de un panel de alto fijo y se comen el dibujo.
+corta en 26 caracteres, porque una observación de 40 por muestra envuelve
+varias filas debajo de un panel de ~287 px.
 
 Lo que **no** hace: no se salta de un gráfico a otro sin cerrar. Son dos clics
 y no se midió que hagan falta menos.
+
+### Bajar un gráfico como imagen (25/11/2026)
+
+Cada panel —y la vista ampliada— tiene un botón que baja **ese** gráfico como
+PNG. Antes el único camino era bajar el Excel y recortar la imagen de adentro.
+
+Tres cosas que no se deducen del código:
+
+- **Es el mismo camino del Excel cortado un paso antes.** La foto la saca
+  `fotoDe()`, que comparten los dos botones: si cada uno rasterizara por su
+  cuenta, la imagen que alguien pega en un correo podría dejar de ser la misma
+  que la del informe. De ahí salen gratis el `scale: 4` y el fondo blanco
+  explícito —un PNG transparente pegado en un correo oscuro se ve ilegible—.
+- **La guarda del `svg.recharts-surface` vale igual acá.** Un clic mientras
+  cargan los chunks `dynamic` de recharts fotografía el esqueleto gris, que es
+  un PNG perfectamente válido. El `ref` existe desde el principio, así que
+  preguntar por él no dice nada.
+- **Conviene bajarla desde la vista ampliada.** El `scale: 4` sube la
+  densidad, pero no desenvuelve un rótulo cortado: en la grilla la leyenda se
+  corta en 26 caracteres y en el modal sale entera.
+- **Y bajar desde el modal necesita un `onclone`.** `html2canvas` clona el
+  documento entero en un iframe y respeta el `overflow` de los ancestros al
+  pintar; el cuerpo del `Modal` es `overflow-y-auto` con `max-h-full`, así que
+  un gráfico ampliado más alto que la pantalla —lo que pasa en cuanto la
+  leyenda ocupa dos renglones— saldría **cortado por abajo, justo donde está
+  la leyenda, y sin que nada avise**. El `onclone` suelta el recorte de los
+  ancestros **en el clon**, nunca en la pantalla, y corre antes de que se midan
+  los límites del nodo (verificado contra el paquete instalado:
+  `onclone(documentClone, referenceElement)`). Para los paneles de la grilla
+  no hace nada, porque no tienen ancestro que recorte.
+
+El nombre lo arma `lib/calidad/ensayos/nombreDelArchivo.ts`, que **se mudó
+desde la ruta del Excel** porque ahora lo necesitan los dos lados —el PNG no
+pasa por el servidor—. De paso el día dejó de salir de un `toISOString()`, que
+después de las 21:00 de Argentina fechaba el archivo mañana.
+
+### Comparar ya no tiene tope (25/11/2026)
+
+Hasta el 25/11/2026 se comparaban **seis** muestras. El tope se sacó, y lo que
+importa es por qué se podía sacar.
+
+La medición que lo justificaba sigue siendo cierta: una línea tiene que verse
+contra el blanco, lo que la deja por debajo de 0,37 de luminancia, y seis
+valores en esa banda no pasan de ~1,2 de contraste entre sí. **El color no
+separa en papel; separa el trazo.** Lo que estaba mal era la conclusión: el
+color y el trazo se indexaban **los dos con `i % 6`**, así que la séptima curva
+repetía el par entero de la primera. Son dos ejes, y recorriendo el segundo una
+vuelta más tarde que el primero —`TRAZOS[(i + floor(i / 6)) % 6]`— salen **36
+pares distintos**. Las primeras seis quedan exactamente como estaban, porque
+para `i` de 0 a 5 el término de la vuelta es 0.
+
+Cuatro cosas que no se deducen del código:
+
+- **El techo que queda es técnico y no de producto**: `MUESTRAS_QUE_SE_ACEPTAN`
+  son 200, que es lo que entra en un `.in()` de PostgREST. Y tiene que ser
+  técnico porque esto crece rápido: del 19 al 25/11/2026 las muestras con
+  granulometría pasaron de 106 a 135, los productos que tienen alguna de 8 a 11
+  y el más cargado de 23 a 28. Un tope de 40 se alcanzaría en dos semanas.
+- **Un id mal formado pasó a ser peligroso, y por eso ahora se filtra.** Con
+  las muestras traídas de a una, un id cualquiera no encontraba nada y la
+  pantalla salteaba *esa* muestra. Con un solo `.in()`, Postgres rechaza la
+  consulta entera con `22P02` y no vuelve **ninguna**: un enlace de tres
+  muestras al que el chat le truncó el último id abriría la pantalla vacía sin
+  un solo mensaje. `leerMuestrasPedidas` tira lo que no tiene forma de UUID,
+  con la misma expresión que ya validaba la ruta del Excel.
+- **Leer 200 muestras de a una serían 400 consultas.** La pantalla y la ruta
+  usaban `traerMuestra` por id, con el argumento escrito de que «son seis como
+  mucho». Hoy usan `traerMuestrasConRetenidos`, que son dos consultas. Y los
+  retenidos van por `traerTodo()`: medido el 25/11/2026 son 4,9 mallas por
+  muestra y 8 como máximo, así que 200 muestras dan entre 980 y 1.600
+  renglones y PostgREST corta en 1.000 sin avisar — el síntoma sería que a las
+  últimas curvas les faltan tamices, que se ve igual que una muestra que midió
+  menos. Su `order` lleva `muestra_id` antes que `malla` para que paginar no
+  repita ni saltee; comprobado contra producción con tandas de 50.
+- **La leyenda dejó de ser la de recharts.** Aquélla se dibuja adentro del área
+  del `LineChart`, que mide `h-64` fijo: con ocho entradas o más le come el
+  alto al dibujo hasta dejarlo en nada. Ahora es markup propio
+  (`LeyendaDeLaCurva.tsx`), **debajo del gráfico y dentro del panel** para que
+  siga entrando en la foto, y **vive en otro archivo que no importa recharts**
+  —importarla desde `GraficosDeLaCurva.tsx` traería los ~350 KB que el
+  `dynamic` existe para evitar—. Su muestra lleva el trazo, y el chip de arriba
+  también: sin tope, dos muestras pueden compartir color y distinguirse sólo
+  por el trazo, y un punto de color las haría ver iguales justo donde se elige
+  cuál sacar.
+- **El único aviso sobre la cantidad es que se repita un par.** Pasadas las 36
+  dos curvas quedan dibujadas idénticas, y eso es un hecho. Que doce
+  superpuestas se lean con esfuerzo lo ve quien mira: un cartel diciéndolo
+  sería opinión del sistema sobre el trabajo de quien compara.
+
+### Elegir varias de una, con casillas (25/11/2026)
+
+El selector de muestras era de **un valor**: agregar cinco eran cinco
+desplegables abiertos y cinco viajes al servidor. Lo pidió el usuario el mismo
+día que se sacó el tope, que es cuando empezó a doler: sin tope, comparar
+veintiocho muestras eran veintiocho vueltas.
+
+Hoy es un `MultiSelect` —el componente de la casa para *varios* valores, el
+mismo de los filtros de los listados— con un botón **«Comparar»** al lado.
+Cuatro cosas que no se deducen del código:
+
+- **Lo tildado es estado local y por eso hay un botón.** `MultiSelect` avisa en
+  cada tilde, que en un listado es correcto porque el filtro corre en el
+  cliente y es gratis. Acá cada aviso sería un `router.push`, o sea una vuelta
+  entera al servidor con sus dos consultas **por tilde**; y peor que lento,
+  `elegidas` baja del servidor, así que mientras una navegación está en vuelo
+  los tildes siguientes parten del conjunto viejo y se pisan entre ellos. Se
+  junta todo en el componente y se aplica una vez. De ahí también la `key` que
+  lo remonta con cada navegación: sin ella seguiría mostrando lo del producto
+  anterior.
+- **Muestra el producto entero, con las ya elegidas tildadas**, y no «lo que
+  falta» como el desplegable viejo. Eso resuelve solo algo que antes había que
+  cuidar a mano: que el «(n de m)» de la etiqueta se numere contra la lista
+  entera del producto y no contra las que quedan —con tres muestras del mismo
+  día, elegir una dejaba a las otras dos diciendo «(1 de 2)» y «(2 de 2)»
+  mientras su chip decía «(1 de 3)»—.
+- **Aplicar no puede tocar lo que el selector no ve**, que es lo que prueba
+  `laEleccionQueQueda` (`lib/calidad/ensayos/eleccionDeMuestras.ts`). Lo
+  elegido puede cruzar productos, y el selector muestra uno solo: destildar
+  todo saca las de **este** producto y deja las otras donde estaban. Para
+  sacar una de otro producto está la × de su chip, que es el único lugar que
+  las ve.
+- **Lo que ya estaba elegido no se mueve, y lo que entra lo hace en el orden
+  del producto.** El orden decide el color y el trazo de cada curva
+  (`parDeLaSerie`), así que reordenar al aplicar le cambiaría el color a una
+  curva que nadie tocó, y ordenar por el orden de los tildes haría que dos
+  personas que eligen lo mismo vean gráficos distintos.
+
+### Comparar productos distintos, los del mismo juego de tamices (26/11/2026)
+
+[spec](superpowers/specs/2026-11-26-calidad-curva-comparar-productos-del-mismo-juego-design.md).
+Se pidió así: comparar Arena Chocolata con Arena caliza LN.
+
+**Cruzar productos ya se podía** desde el 19/11 —los chips sobreviven al cambio
+de producto, y la bajada de la pantalla lo dice—; lo que no había era **cómo
+encontrar con qué producto vale la pena**. Hoy el selector lleva una casilla
+debajo: «Sumar los otros N productos con el mismo juego de tamices (…)», con sus
+nombres, y prendida lista también sus muestras, con el producto adelante en cada
+etiqueta. Para Arena Chocolata suma **34 muestras de 4 productos**, Arena caliza
+LN entre ellos.
+
+Seis cosas que no se deducen del código:
+
+- **El grupo sale del juego DECLARADO del producto y no del que midió cada
+  muestra.** Medido el 26/11/2026: los 12 productos que declaran algo caen en
+  **dos** juegos —`20·50·100·200` y `6·7·10·12·20·50·100·200`, seis cada
+  uno— mientras que lo medido se abre en **cinco**, y **Filler 1 solo midió
+  tres** (23 muestras, 4 y 1). Agrupar por lo medido lo pondría en tres grupos a
+  la vez. Y lo que se perdería ya está resuelto: el eje es la unión, la malla
+  que una muestra no midió queda en `null` y el hueco se nombra debajo de los
+  gráficos.
+- **El juego vacío no empareja con nadie.** 11 de los 23 productos no declaran
+  mallas —ninguno tiene muestras con granulometría, así que no se pierde nada— y
+  juntarlos sería emparejar «Caliza galpón» con «Acopio» por lo único que tienen
+  en común, que es no haber dicho nada.
+- **La casilla arranca prendida si lo elegido ya cruza el grupo**, y **no vive
+  en la URL**: lo que se comparte es qué muestras se comparan, nunca cómo se
+  llegó a elegirlas, y al volver se deduce sola. Sin eso, quien abre un enlace de
+  dos productos vería un selector que dice una cosa y unos chips que dicen otra.
+- **Sólo se nombran los productos del grupo que tienen alguna muestra.** Calcio
+  1-2 declara el juego grueso y tiene cero: nombrarlo promete una curva que no
+  existe.
+- **Prender la casilla no es tildar** (`losTildesQueSiguen`): lo que ya se veía
+  conserva lo que la persona decidió —si destildó algo sin aplicar, abrir el
+  grupo no se lo devuelve— y lo que aparece recién arranca de lo que ya está
+  elegido.
+- **El grupo entero se lee siempre y la casilla no dispara una consulta.** El
+  grupo más grande son 108 muestras de tres columnas, y una segunda vuelta al
+  servidor por prender una casilla se nota más que esas filas. Como `delSelector`
+  pasó a traer el grupo, **su largo ya no es cuántas tiene el producto elegido**:
+  eso se cuenta aparte (`cuantasTiene`), o el cartel diría que Arena Chocolata
+  tiene 37 muestras porque Calcio 0-2 tiene 25.
+
+El desplegable de productos **no** se agrupa ni se filtra: elegir un producto
+sigue siendo elegir cualquiera de los 23, y nada impide seguir cruzando juegos
+distintos a mano. La casilla propone, no restringe.
+
+Qué ofrecería la pantalla para cada producto se ve sin abrirla con
+`npx tsx scripts/que-ofrece-el-selector-de-la-curva.mts`, que imprime lo
+declarado, los juegos que de verdad midió cuando son más de uno, y qué suma la
+casilla.
 
 ## La lista de productos no es el catálogo del núcleo
 
@@ -584,6 +765,8 @@ retomarlo.
 | Retenidos y acumulados | `lib/calidad/ensayos/granulometria.ts` |
 | La curva de una muestra, con los tamices apagados | `lib/calidad/ensayos/curva.ts` |
 | Las filas del Excel de la curva | `lib/calidad/ensayos/hojaDeLaCurva.ts`, y la ruta `app/api/calidad/ensayos/curva/export/route.ts` |
+| Qué muestras quedan al aplicar el selector | `lib/calidad/ensayos/eleccionDeMuestras.ts` — `laEleccionQueQueda` |
+| Qué productos se pueden comparar entre sí | `lib/calidad/ensayos/juegoDeTamices.ts` — `losQueComparten` |
 | Límites y la muestra evaluada | `lib/calidad/ensayos/limites.ts` — `evaluarMuestra` |
 | Validación de lo que llega | `lib/calidad/ensayos/cuerpoDeLaMuestra.ts` |
 | El juego de tamices | `lib/calidad/ensayos/mallas.ts` |

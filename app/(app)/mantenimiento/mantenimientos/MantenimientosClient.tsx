@@ -1,5 +1,7 @@
 "use client";
 
+import { PROGRAMAS as SCHEDULE_OPTIONS } from "@/lib/mantenimiento/configurarElCiclo";
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -11,17 +13,6 @@ import { Modal, PieDeModal } from "@/components/Modal";
 import GenerarOTDeMantenimiento from "./GenerarOTDeMantenimiento";
 import { TIPOS_DE_MANTENIMIENTO, etiquetaDeTipo } from "@/lib/mantenimiento/otDesdeMantenimiento";
 
-const SCHEDULE_OPTIONS = [
-  { value: "DIARIO",     label: "Diario" },
-  { value: "SEMANAL",    label: "Semanal" },
-  { value: "QUINCENAL",  label: "Quincenal" },
-  { value: "MENSUAL",    label: "Mensual" },
-  { value: "TRIMESTRAL", label: "Trimestral" },
-  { value: "SEMESTRAL",  label: "Semestral" },
-  { value: "ANUAL",      label: "Anual" },
-  { value: "PERSONALIZADO", label: "Personalizado (días)" },
-  { value: "FECHA_FIJA", label: "Fecha fija (única)" },
-];
 
 const STATUS_COLORS: Record<string, string> = {
   active:    "bg-green-100 text-green-800",

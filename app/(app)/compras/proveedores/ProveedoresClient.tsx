@@ -2,6 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { moneda } from "@/lib/compras/constants";
 import type { Proveedor } from "@/lib/compras/types";
 import Select from "@/components/Select";
@@ -9,16 +10,29 @@ import { Modal, PieDeModal } from "@/components/Modal";
 
 type Estadistica = { pedidos: number; monto: number };
 
+/** Lo que vale el desplegable de empresa cuando el proveedor es de las dos. */
+const AMBAS = "ambas";
+
 export default function ProveedoresClient({
-  proveedores, estadisticas, canEdit,
+  proveedores, estadisticas, empresas, canEdit, puedeFusionar,
 }: {
   proveedores: Proveedor[];
   estadisticas: Record<string, Estadistica>;
+  /** Las dos empresas del grupo, que en Odoo son dos perfiles separados. */
+  empresas: { id: string; nombre: string }[];
   canEdit: boolean;
+  /** Admin del núcleo: es el único que entra a fusionar duplicados. */
+  puedeFusionar: boolean;
 }) {
   const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
   const [orden, setOrden] = useState<"monto" | "nombre">("monto");
+  /*
+   * Filtrar por empresa. «sinDeclarar» es una opción de verdad y no un
+   * descarte: son 393 de las 484 filas —las que nadie declaró—, y es la lista
+   * que hay que mirar para completarlas.
+   */
+  const [empresa, setEmpresa] = useState("");
   // Qué proveedor tiene desplegados sus datos. Uno por vez: son ocho campos y
   // varios abiertos a la vez convierten la lista en una pared de texto.
   const [abierto, setAbierto] = useState<string | null>(null);
@@ -27,7 +41,7 @@ export default function ProveedoresClient({
 
   const filas = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    const base = q
+    const porTexto = q
       ? proveedores.filter(
           (p) =>
             p.nombre.toLowerCase().includes(q) ||
@@ -36,12 +50,24 @@ export default function ProveedoresClient({
         )
       : proveedores;
 
+    /*
+     * Pedir una empresa trae también a los de las dos: si se busca «quién le
+     * vende a POLYSAN», el que le vende a las dos le vende a POLYSAN. Lo que
+     * no entra es el que no lo declaró, que tiene su propia opción.
+     */
+    const base =
+      empresa === ""
+        ? porTexto
+        : empresa === "sinDeclarar"
+          ? porTexto.filter((p) => !p.trabaja_con_ambas && !p.empresa_id)
+          : porTexto.filter((p) => p.trabaja_con_ambas || p.empresa_id === empresa);
+
     return [...base].sort((a, b) =>
       orden === "nombre"
         ? a.nombre.localeCompare(b.nombre, "es")
         : (estadisticas[b.id]?.monto ?? 0) - (estadisticas[a.id]?.monto ?? 0)
     );
-  }, [proveedores, busqueda, orden, estadisticas]);
+  }, [proveedores, busqueda, empresa, orden, estadisticas]);
 
   return (
     <div className="space-y-4">
@@ -52,14 +78,24 @@ export default function ProveedoresClient({
             {proveedores.length} proveedores. El padrón lo comparten Compras y Mantenimiento.
           </p>
         </div>
-        {canEdit && (
-          <button
-            onClick={() => setCreando(true)}
-            className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)]"
-          >
-            + Nuevo proveedor
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {puedeFusionar && (
+            <Link
+              href="/compras/proveedores/duplicados"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Cargados dos veces
+            </Link>
+          )}
+          {canEdit && (
+            <button
+              onClick={() => setCreando(true)}
+              className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)]"
+            >
+              + Nuevo proveedor
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -69,6 +105,16 @@ export default function ProveedoresClient({
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
         />
+        <Select
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          value={empresa}
+          onChange={(e) => setEmpresa(e.target.value)}
+          aria-label="Empresa"
+        >
+          <option value="">Las dos empresas</option>
+          {empresas.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+          <option value="sinDeclarar">Sin declarar</option>
+        </Select>
         <Select
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
           value={orden}
@@ -117,6 +163,18 @@ export default function ProveedoresClient({
                             contratista
                           </span>
                         )}
+                        {/*
+                          La empresa sólo se muestra cuando el proveedor es de
+                          una sola: «las dos» es lo normal —91 de los 130
+                          enlazados— y un cartelito en casi todas las filas no
+                          informa nada. Y «no se sabe» tampoco se pinta: para
+                          eso está el filtro «Sin declarar».
+                        */}
+                        {!p.trabaja_con_ambas && p.empresa_id && (
+                          <span className="ml-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                            {empresas.find((e) => e.id === p.empresa_id)?.nombre ?? "otra empresa"}
+                          </span>
+                        )}
                         {!p.activo && <span className="ml-1.5 text-xs text-slate-400">(inactivo)</span>}
                       </td>
                       <td className="px-3 py-2 text-slate-600">{p.rubro ?? "—"}</td>
@@ -158,6 +216,7 @@ export default function ProveedoresClient({
       {(editando || creando) && (
         <ModalProveedor
           proveedor={editando}
+          empresas={empresas}
           onClose={() => { setEditando(null); setCreando(false); }}
           onSaved={() => { setEditando(null); setCreando(false); router.refresh(); }}
         />
@@ -228,9 +287,10 @@ function DatosDelProveedor({ p }: { p: Proveedor }) {
 }
 
 function ModalProveedor({
-  proveedor, onClose, onSaved,
+  proveedor, empresas, onClose, onSaved,
 }: {
   proveedor: Proveedor | null;
+  empresas: { id: string; nombre: string }[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -245,6 +305,16 @@ function ModalProveedor({
     es_contratista: proveedor?.es_contratista ?? false,
     activo: proveedor?.activo ?? true,
   });
+
+  /*
+   * De qué empresa es. Vive aparte del resto del formulario porque son dos
+   * columnas excluyentes —`empresa_id` y `trabaja_con_ambas`— que acá se
+   * manejan como un solo desplegable de tres opciones, y el servidor las
+   * vuelve a separar con `empresaParaGuardar()`.
+   */
+  const [empresa, setEmpresa] = useState(
+    proveedor?.trabaja_con_ambas ? AMBAS : (proveedor?.empresa_id ?? "")
+  );
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
@@ -262,6 +332,8 @@ function ModalProveedor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
+          empresa_id: empresa === AMBAS || empresa === "" ? null : empresa,
+          trabaja_con_ambas: empresa === AMBAS,
           nombre: form.nombre.trim(),
           cuit: form.cuit.trim() || null,
           rubro: form.rubro.trim() || null,
@@ -316,6 +388,22 @@ function ModalProveedor({
               </Campo>
             ))}
           </div>
+
+          <Campo label="Empresa">
+            <Select
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              value={empresa}
+              onChange={(e) => setEmpresa(e.target.value)}
+            >
+              <option value="">No se sabe</option>
+              <option value={AMBAS}>Las dos</option>
+              {empresas.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+            </Select>
+            <span className="mt-1 block text-xs text-slate-500">
+              En Odoo hay un perfil por empresa: esto decide en cuál se busca y se crea
+              el proveedor al generarle una orden de compra.
+            </span>
+          </Campo>
 
           <Campo label="Notas">
             <textarea

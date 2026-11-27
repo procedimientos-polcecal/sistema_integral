@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import InfoTip from "@/components/InfoTip";
 import MultiSelect from "@/components/MultiSelect";
 import { useCargar } from "@/lib/core/useCargar";
@@ -96,7 +97,12 @@ export default function CorreoDeNovedades() {
       </h2>
       <p className="text-xs text-slate-500 mb-4">
         Sale todos los días a las 15:50 desde <strong>gestiondepersonas@polcecal.com</strong>, con las
-        ausencias, vacaciones y francos cargados ese día. <strong>Si no hubo novedades, no se manda.</strong>
+        ausencias, vacaciones y francos cargados ese día. <strong>Si no hubo novedades, no se manda.</strong>{" "}
+        Esta lista es la del envío automático; para mandarlo en el momento y elegir a quién, está{" "}
+        <Link href="/rrhh/correo-novedades" className="underline">
+          Mandar novedades
+        </Link>
+        .
       </p>
 
       {problema && (

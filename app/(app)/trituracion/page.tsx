@@ -170,7 +170,7 @@ export default async function TrituracionInicioPage({
           <Link
             key={planta.id}
             href={`/trituracion/partes?planta=${planta.id}`}
-            className="card block p-4 transition hover:-translate-y-0.5 hover:shadow-lg"
+            className="card block p-4 transition hover:-translate-y-0.5"
             style={{ borderTop: `3px solid ${color}`, background: `linear-gradient(180deg, ${COLOR_CLARO[color] ?? "#FFF"} 0%, #FFFFFF 70%)` }}
           >
             <div className="flex items-center gap-2 font-semibold text-slate-900">

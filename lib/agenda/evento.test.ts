@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DURACION_OT_MINUTOS, INVITADOS_DE_UNA_OT, TURNOS_DEL_TALLER, datosDeLaOT, fechaParaElCalendario,
   CASILLA_DE_MANTENIMIENTO, advertenciaDeReenviarDivergido, duenoDelEventoDeLaOT, faltaConfirmarElPisado,
-  invitacionesDeLaOT, leyendaDelDuenoDeLaOT,
+  invitacionesDeLaOT, leyendaDelDuenoDeLaOT, elCierreQueAdelanta, laFechaQueMandaEnElEvento,
   horarioDeLaOT, invitadosExtraDeLaOT, laOTEstaCerrada, instanteDe, problemasDeMandarLaOT, problemasDelEvento,
 } from "./evento";
 import { invitadosLimpios } from "./pedido";
@@ -307,5 +307,68 @@ describe("faltaConfirmarElPisado", () => {
   it("confirmado, pasa", () => {
     expect(faltaConfirmarElPisado("movido", true)).toBeNull();
     expect(faltaConfirmarElPisado("borrado", true)).toBeNull();
+  });
+});
+
+describe("el cierre que adelanta al inicio", () => {
+  const cerradaEl = (cierre: string | null, inicio: string | null, extra = {}) =>
+    ({ fecha_ejecucion: inicio, fecha_ejecucion_pendiente: null, fecha_cierre: cierre, estado: "REALIZADO", ...extra });
+
+  it("un cierre anterior al inicio manda, y la fecha es la del cierre", () => {
+    expect(elCierreQueAdelanta(cerradaEl("2026-11-18", "2026-11-24")))
+      .toEqual({ tipo: "manda-el-cierre", fecha: "2026-11-18" });
+  });
+
+  it("un cierre en el mismo dia o despues no es el caso", () => {
+    expect(elCierreQueAdelanta(cerradaEl("2026-11-24", "2026-11-24"))).toBeNull();
+    expect(elCierreQueAdelanta(cerradaEl("2026-11-25", "2026-11-24"))).toBeNull();
+  });
+
+  it("una OT abierta no es el caso, ni una cerrada sin fecha de cierre", () => {
+    expect(elCierreQueAdelanta({ fecha_ejecucion: "2026-11-24", fecha_cierre: null, estado: "POR_HACER" })).toBeNull();
+    expect(elCierreQueAdelanta({ fecha_ejecucion: "2026-11-24", fecha_cierre: null, estado: "REALIZADO" })).toBeNull();
+    expect(elCierreQueAdelanta({ fecha_ejecucion: "2026-11-24", fecha_cierre: null, estado: "CANCELADA" })).toBeNull();
+  });
+
+  it("sin fecha de inicio no hay contra que comparar", () => {
+    expect(elCierreQueAdelanta(cerradaEl("2026-11-18", null))).toBeNull();
+  });
+
+  /* La OT 953: cerrada en «2016-01-28» contra un inicio del 2026-01-27. Es un
+   * 2016 por un 2026 —seria un dia de brecha bien escrito—, y es la unica de las
+   * 73 que pasa el ano. */
+  it("mas de un ano de brecha no se cree: la OT 953 y su 2016 por 2026", () => {
+    expect(elCierreQueAdelanta(cerradaEl("2016-01-28", "2026-01-27")))
+      .toEqual({ tipo: "no-creible", cierre: "2016-01-28", inicio: "2026-01-27", dias: 3652 });
+  });
+
+  it("los 89 dias de la OT 1671 si se creen: el corte es el ano y no el mes", () => {
+    expect(elCierreQueAdelanta(cerradaEl("2026-02-03", "2026-05-03"))).toMatchObject({ tipo: "manda-el-cierre" });
+  });
+
+  /* Review Focus: la columna es `date` y Postgres normaliza, pero la funcion es
+   * pura y recibe lo que le den. Una fecha que no es un dia no puede terminar en
+   * el inicio de un evento. */
+  it("un cierre que no es un dia no es el caso", () => {
+    for (const malo of ["2026-11-18 00:00:00", "18/11/2026", "  ", "2026-13-01"]) {
+      expect(elCierreQueAdelanta(cerradaEl(malo, "2026-11-24"))).toBeNull();
+    }
+  });
+
+  /* Review Focus: la que manda es la pendiente, que es la que el SdG fijo y la
+   * planilla todavia no devolvio. Medir contra `fecha_ejecucion` daria 2 dias de
+   * brecha donde hay 6. */
+  it("la brecha se mide contra la fecha que manda, o sea la pendiente", () => {
+    expect(elCierreQueAdelanta({
+      fecha_ejecucion: "2026-11-20", fecha_ejecucion_pendiente: "2026-11-24",
+      fecha_cierre: "2026-11-18", estado: "REALIZADO",
+    })).toEqual({ tipo: "manda-el-cierre", fecha: "2026-11-18" });
+  });
+
+  it("laFechaQueMandaEnElEvento devuelve la del cierre solo cuando el cierre manda", () => {
+    expect(laFechaQueMandaEnElEvento(cerradaEl("2026-11-18", "2026-11-24"))).toBe("2026-11-18");
+    expect(laFechaQueMandaEnElEvento(cerradaEl("2026-11-25", "2026-11-24"))).toBe("2026-11-24");
+    expect(laFechaQueMandaEnElEvento(cerradaEl("2016-01-28", "2026-01-27"))).toBe("2026-01-27");
+    expect(laFechaQueMandaEnElEvento({ fecha_ejecucion: null, fecha_cierre: "2026-11-18" })).toBeNull();
   });
 });

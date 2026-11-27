@@ -61,8 +61,16 @@ export async function traerMuestras(
 }
 
 /**
- * Todas las muestras de **un producto**, de la más nueva a la más vieja, para
- * elegir una en la pantalla de la curva granulométrica.
+ * Todas las muestras de **unos productos**, de la más nueva a la más vieja,
+ * para elegirlas en la pantalla de la curva granulométrica.
+ *
+ * **Son varios productos y no uno desde el 26/11/2026**: el selector ofrece,
+ * con una casilla, las muestras de los otros productos que declaran el mismo
+ * juego de tamices (`losQueComparten`). Van en una consulta y no en una por
+ * producto —son hasta seis por juego, medido— y la casilla **no decide qué se
+ * lee**: se trae el grupo entero siempre y el cliente filtra, porque el grupo
+ * más grande son 108 muestras de tres columnas y una segunda vuelta al
+ * servidor por prender una casilla se nota más que esas filas.
  *
  * **Sin ventana de fechas, a diferencia de `traerMuestras()`.** La pantalla
  * acepta la muestra en la URL para poder mandarla por chat: con una ventana, un
@@ -71,21 +79,25 @@ export async function traerMuestras(
  * pocas por producto, pero el Excel que esto reemplaza traía 623 de tres años,
  * así que va con `traerTodo()` igual que las demás.
  *
- * Trae sólo lo que la lista necesita (id, fecha y observaciones): los
- * retenidos de la muestra elegida se piden aparte, con `traerMuestra()`.
+ * Trae sólo lo que la lista necesita (id, fecha, observaciones y de qué
+ * producto es): los retenidos de las elegidas se piden aparte, con
+ * `traerMuestrasConRetenidos()`.
  */
-export async function traerMuestrasDeProducto(
+export async function traerMuestrasDeProductos(
   supabase: SupabaseClient,
-  productoId: string
-): Promise<Pick<Muestra, "id" | "fecha" | "observaciones">[]> {
-  return traerTodo<Pick<Muestra, "id" | "fecha" | "observaciones">>((desde, hasta) =>
-    supabase
-      .from("calidad_ensayos_muestras")
-      .select("id, fecha, observaciones")
-      .eq("producto_id", productoId)
-      .order("fecha", { ascending: false })
-      .order("cargado_en", { ascending: false })
-      .range(desde, hasta)
+  productoIds: string[]
+): Promise<Pick<Muestra, "id" | "fecha" | "observaciones" | "producto_id">[]> {
+  if (productoIds.length === 0) return [];
+
+  return traerTodo<Pick<Muestra, "id" | "fecha" | "observaciones" | "producto_id">>(
+    (desde, hasta) =>
+      supabase
+        .from("calidad_ensayos_muestras")
+        .select("id, fecha, observaciones, producto_id")
+        .in("producto_id", productoIds)
+        .order("fecha", { ascending: false })
+        .order("cargado_en", { ascending: false })
+        .range(desde, hasta)
   );
 }
 
@@ -176,4 +188,76 @@ export async function traerMuestra(
     .order("malla");
 
   return { muestra: muestra as Muestra, retenidos: (retenidos ?? []) as Retenido[] };
+}
+
+/**
+ * Varias muestras con sus retenidos, en **dos** consultas y no en dos por
+ * muestra.
+ *
+ * Nació el 25/11/2026, el día que la curva dejó de tener tope de muestras.
+ * Hasta entonces la pantalla y la ruta del Excel llamaban a `traerMuestra` una
+ * vez por id, con el argumento escrito de que «son seis como mucho». Sacado el
+ * tope, el techo pasó a ser el lote de un `.in()` —200 ids, ver
+ * `MUESTRAS_QUE_SE_ACEPTAN`—, y de a una eso serían **400 consultas**.
+ *
+ * Dos cosas que no se deducen leyéndola:
+ *
+ * - **Los retenidos van por `traerTodo()` y no por un select pelado.** Medido
+ *   el 25/11/2026: 4,9 mallas por muestra de promedio y 8 como máximo, así que
+ *   200 muestras dan entre 980 y 1.600 renglones y PostgREST corta en 1.000
+ *   sin avisar. Es justo el tamaño donde el corte pasa desapercibido: la curva
+ *   de las últimas muestras saldría incompleta, que se ve igual que una
+ *   muestra que midió menos tamices.
+ * - **El `order` lleva `muestra_id` antes que `malla`.** Paginar sobre un
+ *   orden que no desempata puede repetir y saltear filas entre tandas.
+ *
+ * Devuelve en el orden en que llegaron los ids —que es el de la pantalla— y
+ * **saltea las que no están** en vez de devolver un hueco: un enlace viejo
+ * puede nombrar una muestra borrada y las otras siguen siendo válidas.
+ *
+ * **Eso vale para un uuid válido que no existe, y no para cualquier texto.**
+ * Al ir todos en un solo `.in()`, un id mal formado hace que Postgres rechace
+ * la consulta entera con `22P02` y acá no vuelva ninguna. Quien llama tiene
+ * que filtrar por forma antes: lo hacen `leerMuestrasPedidas` en la pantalla y
+ * el `UUID` de la ruta del Excel.
+ */
+export async function traerMuestrasConRetenidos(
+  supabase: SupabaseClient,
+  ids: string[]
+): Promise<{ muestra: Muestra; retenidos: Retenido[] }[]> {
+  if (ids.length === 0) return [];
+
+  const { data: muestras } = await supabase
+    .from("calidad_ensayos_muestras")
+    .select(
+      "id, fecha, producto_id, observaciones, humedad_p_recipiente, humedad_p_inicial, humedad_p_final, peso_vol_gramos, peso_vol_volumen_cc, cal_util_ml_acido, cal_util_peso_muestra_g, granulometria_peso_muestra_g, cargado_por, cargado_en, actualizado_por, actualizado_en"
+    )
+    .in("id", ids);
+
+  const porId = new Map((muestras ?? []).map((m) => [(m as Muestra).id, m as Muestra]));
+  if (porId.size === 0) return [];
+
+  const retenidos = await traerTodo<Retenido>((desde, hasta) =>
+    supabase
+      .from("calidad_ensayos_retenidos")
+      .select("muestra_id, malla, retenido_g")
+      .in("muestra_id", ids)
+      .order("muestra_id")
+      .order("malla")
+      .range(desde, hasta)
+  );
+
+  const susRetenidos = new Map<string, Retenido[]>();
+  for (const r of retenidos) {
+    const lista = susRetenidos.get(r.muestra_id);
+    if (lista) lista.push(r);
+    else susRetenidos.set(r.muestra_id, [r]);
+  }
+
+  return ids
+    .map((id) => {
+      const muestra = porId.get(id);
+      return muestra ? { muestra, retenidos: susRetenidos.get(id) ?? [] } : null;
+    })
+    .filter((d): d is { muestra: Muestra; retenidos: Retenido[] } => d !== null);
 }

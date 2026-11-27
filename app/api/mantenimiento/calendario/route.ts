@@ -15,6 +15,11 @@ import {
   armarElCalendario,
   type OrdenDelCalendario,
 } from "@/lib/mantenimiento/calendarioDeOT";
+import { ordenesDelRango } from "@/lib/mantenimiento/ordenesDelRango";
+import {
+  elRangoEsDemasiadoLargo,
+  ERROR_DE_RANGO_LARGO,
+} from "@/lib/mantenimiento/rangoDelCalendario";
 
 /**
  * El calendario de selección: un mes (o el rango que pida la grilla) de órdenes
@@ -29,15 +34,6 @@ import {
  * rango** y de ahí se arma el mapa por día: una consulta por día serían treinta
  * viajes para un mes que casi siempre está vacío.
  */
-
-/**
- * La grilla pide un mes, y un mes con las semanas parciales de los bordes llega
- * a 42 días (seis semanas). 62 deja margen sobre ese caso, para quien pida dos
- * meses corridos; más que eso es un pedido que no es de la grilla. La
- * comparación admite `hasta` = `desde` + 62 días, o sea 63 días contando los
- * dos extremos.
- */
-const MAXIMO_DE_DIAS = 62;
 
 /** Una fecha de la base como `YYYY-MM-DD` pelado, igual que en las rutas hermanas. */
 function soloElDia(v: unknown): string {
@@ -69,11 +65,11 @@ export async function GET(request: Request) {
   if (desde > hasta) {
     return NextResponse.json({ error: "desde no puede ser posterior a hasta" }, { status: 400 });
   }
-  if (sumarDias(desde, MAXIMO_DE_DIAS) < hasta) {
-    return NextResponse.json(
-      { error: `El rango no puede pasar de ${MAXIMO_DE_DIAS} días` },
-      { status: 400 }
-    );
+  // El tope lo pone `rangoDelCalendario`, compartido con la ruta del taller y
+  // con la hoja impresa: la grilla pide un mes, que con las semanas parciales
+  // de los bordes llega a 42 días, y el resto es margen.
+  if (elRangoEsDemasiadoLargo(desde, hasta)) {
+    return NextResponse.json({ error: ERROR_DE_RANGO_LARGO }, { status: 400 });
   }
 
   // ── Las órdenes, con el cliente de la sesión para que corran las policies ──
@@ -88,31 +84,7 @@ export async function GET(request: Request) {
    */
   let ordenes: OrdenDelCalendario[];
   try {
-    const filas = await traerTodo((d, h) =>
-      supabase
-        .from("ordenes_trabajo")
-        // `id`, `app_created` y `estado` entran para que la grilla pueda decidir
-        // sola si una orden se puede mover (`porQueNoSePuedeMover`) y llamar a
-        // `postergar` sin otro viaje. No son dato sensible: quien llega acá ya
-        // ve las órdenes enteras en el listado.
-        .select(
-          "id, ot_number, fecha_ejecucion, fecha_ejecucion_pendiente, fecha_fin, especialidad, tipo, quien, descripcion, sector_raw, equipo_raw, app_created, estado, operario_1, operario_2, operario_3"
-        )
-        .or(`fecha_ejecucion.lte.${hasta},fecha_ejecucion_pendiente.lte.${hasta}`)
-        .or(
-          `fecha_fin.gte.${desde},fecha_ejecucion.gte.${desde},fecha_ejecucion_pendiente.gte.${desde}`
-        )
-        .order("ot_number")
-        .range(d, h)
-    );
-    ordenes = filas.map((f) => ({
-      ...f,
-      fecha_ejecucion: f.fecha_ejecucion ? soloElDia(f.fecha_ejecucion) : null,
-      fecha_ejecucion_pendiente: f.fecha_ejecucion_pendiente
-        ? soloElDia(f.fecha_ejecucion_pendiente)
-        : null,
-      fecha_fin: f.fecha_fin ? soloElDia(f.fecha_fin) : null,
-    }));
+    ordenes = await ordenesDelRango(supabase, desde, hasta);
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

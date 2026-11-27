@@ -8,6 +8,7 @@ import {
   APROBACION_LABELS, COMPRA_LABELS, PRIORIDAD_LABELS, moneda, fecha, etiquetaEmpresa,
 } from "@/lib/compras/constants";
 import type { EstadoAprobacion, EstadoCompra, Prioridad } from "@/lib/compras/types";
+import { usePuedeEditarCompras } from "@/lib/compras/context";
 
 interface Contadores {
   total: number;
@@ -55,6 +56,7 @@ export default function DashboardClient({
   conCosto: ConCosto[];
   recientes: Reciente[];
 }) {
+  const puedeEditar = usePuedeEditarCompras();
   const costo = (g: ConCosto) => (g.costo_iva ?? 0) + (g.costo_envio ?? 0);
 
   const porMes = useMemo(() => {
@@ -236,8 +238,11 @@ export default function DashboardClient({
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Más</h2>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Acceso href="/compras/seguimiento" label="Seguimiento" />
+          <Acceso href="/compras/comparativas" label="Comparativas" />
           <Acceso href="/compras/proveedores" label="Proveedores" />
           <Acceso href="/compras/ubicaciones" label="Ubicaciones" />
+          {/* La carga escribe: quien sólo mira no la ve. */}
+          {puedeEditar && <Acceso href="/compras/presupuestos" label="Cargar respuesta de proveedor" />}
         </div>
       </div>
     </div>

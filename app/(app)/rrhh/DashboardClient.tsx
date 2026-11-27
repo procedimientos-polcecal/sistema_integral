@@ -53,7 +53,7 @@ function Acceso({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="flex items-center justify-between card px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+      className="flex items-center justify-between card px-4 py-3 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5"
     >
       {label}
       <span className="text-slate-400">→</span>
@@ -246,6 +246,7 @@ export default function DashboardClient({
             <>
               <Acceso href="/rrhh/turnos" label="Turnos" />
               <Acceso href="/rrhh/feriados" label="Feriados" />
+              <Acceso href="/rrhh/correo-novedades" label="Mandar novedades" />
               <Acceso href="/rrhh/configuracion" label="Configuración" />
             </>
           )}

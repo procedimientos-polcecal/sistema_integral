@@ -7,7 +7,12 @@ import { leerLinksDeComparativa, claveProveedor } from "@/lib/compras/sheets";
 import { indicePorClave } from "@/lib/core/proveedores";
 import { archivosPorHacer, idDePlanilla } from "@/lib/compras/vincular";
 import { leerComparativa } from "@/lib/compras/drive";
-import { mapearEncabezados, filasParaEsteRi, parsearFila } from "@/lib/compras/comparativa";
+import {
+  mapearEncabezados, filasParaEsteRi, parsearFila, indiceDeLaColumnaDelId,
+} from "@/lib/compras/comparativa";
+import {
+  esEcoAlReleer, ubicarLoDelSistema, type CotizacionDelSistema,
+} from "@/lib/compras/ecoDelSistema";
 
 export const maxDuration = 300;
 
@@ -146,6 +151,36 @@ export async function POST(request: Request) {
 
   res.archivos_distintos = porArchivo.size;
 
+  // Lo que cargó el sistema, UNA sola vez para toda la tanda.
+  //
+  // Esta consulta estaba adentro del `for (const ri of ris)`, y ahí cuesta una
+  // por pedido: la tanda son 20 archivos y una planilla por artículo cubre
+  // decenas de pedidos —RODAMIENTOS tiene 91 filas—, así que eran centenares de
+  // round-trips en la ruta que se agrupó por archivo justamente para no pagar
+  // por pedido. Se traen todas las `origen = 'app'` de la base y se indexan por
+  // pedido: hoy son 8 y crecen con lo que se cargue, que es muchísimo menos que
+  // los pedidos de una tanda. Filtrar por los ids de la tanda sería un `.in()`
+  // de centenares de uuid, que es la URL que PostgREST rechaza con un 400.
+  const appPorRi = new Map<string, CotizacionDelSistema[]>();
+  if (traerFilas) {
+    const delSistema = await traerTodo<{
+      id: string;
+      requerimiento_id: string;
+      drive_fila: number | null;
+    }>((desde, hasta) =>
+      admin
+        .from("compras_cotizaciones")
+        .select("id, requerimiento_id, drive_fila")
+        .eq("origen", "app")
+        .range(desde, hasta)
+    );
+    for (const c of delSistema) {
+      const lista = appPorRi.get(c.requerimiento_id) ?? [];
+      lista.push({ id: String(c.id), drive_fila: c.drive_fila });
+      appPorRi.set(c.requerimiento_id, lista);
+    }
+  }
+
   // Los que ya están vinculados y ya se abrieron no dan trabajo: se saltean para
   // que cada tanda avance sobre lo que falta. La regla vive en
   // `archivosPorHacer`, que es donde se prueba.
@@ -204,8 +239,36 @@ export async function POST(request: Request) {
       const { propias } = filasParaEsteRi(planilla.filas, mapeo.idx.nro_ri, ri.nro_ri);
       if (propias.length === 0) continue;
 
+      // Lo que cargó el sistema no se vuelve a traer como presupuesto de la
+      // planilla: ver `esEcoAlReleer`. Esta ruta ya sólo borra las de origen
+      // "drive", pero sin el salteo la copia entraría como una "drive" más.
+      const idxId = indiceDeLaColumnaDelId(planilla.encabezado);
+      const { idsDelSistema, filasSinId, correcciones } = ubicarLoDelSistema(
+        propias, idxId, appPorRi.get(ri.id) ?? []
+      );
+
+      // Dónde está hoy cada copia: la fila 'app' ya no se borra y se reinserta,
+      // así que su `drive_fila` dejó de corregirse solo y en estas planillas se
+      // insertan filas en el medio. Ver la ruta de «Volver a traer».
+      if (!dryRun) {
+        for (const c of correcciones) {
+          const { error: errorDeFila } = await admin
+            .from("compras_cotizaciones")
+            .update({ drive_fila: c.drive_fila })
+            .eq("id", c.id);
+          if (errorDeFila) {
+            console.error(
+              `No se pudo corregir la fila de la cotización ${c.id} a ${c.drive_fila}:`,
+              errorDeFila.message
+            );
+          }
+        }
+      }
+
       const nuevas: Record<string, unknown>[] = [];
       for (const { fila, numeroFila } of propias) {
+        if (esEcoAlReleer(fila, idxId, idsDelSistema, numeroFila, filasSinId)) continue;
+
         const leida = parsearFila(fila, mapeo.idx);
         if (!leida) continue;
 

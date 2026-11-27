@@ -3977,6 +3977,252 @@ Tres cosas que no se deducen del código:
   corra, no que lo que genera tenga sentido. Lo que cambió es que ahora el
   generador se niega.
 
+## La rotación que resultó ser un cambio (26/11/2026)
+
+El ciclo pide rotar los martillos a la 3ª cara. En la máquina no se rota: se
+cambian enteros, porque estaban para cambiar. Esa OT **no se puede cerrar**
+—cerrarla diría que se hizo algo que no se hizo— y el ciclo la espera para
+siempre.
+
+Desde el 26/11/2026, en el detalle de esa orden en `/mantenimiento/ordenes`
+hay un botón **«Fue un cambio»**. Pide cuándo se cambiaron, las horas y los
+tres operarios, y en un solo POST
+(`app/api/mantenimiento/ordenes/[id]/fue-un-cambio`) crea la OT del cambio ya
+cerrada y dentro del ciclo, deja el motivo escrito en la rotación, la cancela
+y la saca del ciclo, mueve el corte a la fecha del cambio, exporta las dos
+filas con su cola y borra el evento de la rotación.
+
+El diseño está en
+[el spec](superpowers/specs/2026-11-26-mantenimiento-la-rotacion-que-fue-un-cambio-design.md)
+y el plan en
+[el plan](superpowers/plans/2026-11-26-mantenimiento-la-rotacion-que-fue-un-cambio.md).
+
+### Que esto sea el caso normal y no el raro está medido
+
+Entre cambio y cambio de martillos, contando cuántas rotaciones quedaron
+registradas en el medio, sobre **70 intervalos** en los cuatro equipos del
+ciclo (26/11/2026):
+
+| | |
+|---|---|
+| con **menos** de 3 rotaciones | **60** |
+| con exactamente 3 | 8 |
+| con más de 3 | 2 |
+
+Veintiuno tuvieron **cero**. La salvedad hay que decirla: eso cuenta
+rotaciones **registradas**, no hechas, y casi todos esos intervalos son
+anteriores al ciclo —de las 248 órdenes de martillos medidas el 12/11/2026,
+225 ni siquiera nacieron en el sistema—. Pero las dos lecturas llevan al mismo
+lugar: si se saltean, esto pasa seguido; si se rotan y no se escriben, la OT
+del ciclo queda abierta igual y el botón se usa igual.
+
+El día que se construyó, los cuatro ciclos tenían **una rotación abierta cada
+uno** —las OT 3150, 3190, 3197 y 3198—, así que el botón nació con cuatro
+casos. Y **nunca se había cancelado una OT en esos equipos: 0 de 456**, o sea
+que el botón de la ficha del equipo —el que resolvía media parte de esto— no
+se usó jamás en producción.
+
+### Por qué esta ruta mueve el corte, y no se lo deja al generador
+
+**Es lo único de este mecanismo que no se deduce leyendo el código, y
+simplificarlo produce el anti-objetivo —«generar OT sobre martillos que ya se
+cambiaron»— sin un solo error.**
+
+Lo natural sería no tocar el corte: una madre cerrada es lo que lo mueve, y
+`elCorteQueSigue` lo haría solo en la corrida siguiente. No alcanza, porque
+`laUltimaEnRango` recorta por **`created_at_app`** —cuándo se creó la fila— y
+no por la fecha del trabajo, y además excluye siempre a la madre cuyo cierre
+empata con el corte. Acá la madre **nace hoy con un cierre en el pasado**, que
+es justo la combinación que ese recorte no previó. Con `C` = fecha del cambio
+y `D0` = corte viejo salen dos finales malos:
+
+- **`C` igual a `D0`**: la madre queda excluida de entrada, el corte no se
+  mueve nunca, y la última en rango vuelve a ser la hija cerrada anterior — el
+  ciclo **recrea la rotación que se acaba de cancelar**.
+- **`C` anterior al `created_at_app` de una hija cerrada que siga en el
+  ciclo**: el corte sí se mueve a `C`, pero esa hija queda en rango y pasa a
+  ser la última — el ciclo crea la **vuelta siguiente**, ya atrasada. No es
+  hipotético: PY-C1-03 tenía corte 31/10 y su hija 1 nació alrededor del 01/11.
+
+Por eso la ruta deja `desde = C`, `vuelta_desde = 0` y **saca del ciclo
+(`ciclo_id: null`) toda otra orden suya nacida en el día del cambio o
+después** (`lasQueSalenDelCiclo`). Las anteriores conservan su `ciclo_id` y su
+`ciclo_vuelta`, que es lo que deja contestar después cuántas rotaciones
+produjo cada vuelta. No inventa una punta nueva: de las tres que pueden mover
+el corte —la madre al cerrarse, el botón de reinicio y la carga inicial— ésta
+es la misma que el reinicio.
+
+Los dos escenarios están fijados con tests en `cicloDeOT.test.ts`, y **pasan
+desde el primer momento** porque ejercitan funciones que ya existen: son el
+candado, no TDD mal hecho.
+
+**Y por eso el botón de la ficha del equipo puede mover el corte «a hoy» y
+éste no.** Allá la fecha es hoy, así que todo lo anterior queda afuera de una
+sola vez — es el argumento que su encabezado tiene escrito. Acá la fecha es
+pasada y ese argumento no vale.
+
+### El orden de los pasos, y por qué el alta va primero
+
+Los dos finales partidos no cuestan lo mismo:
+
+- **Alta sí, cancelación no**: existe la orden del cambio —correcto, el trabajo
+  se hizo— y la rotación queda abierta y en el ciclo. Queda una orden suelta
+  que alguien cancela a mano. Recuperable y ruidoso.
+- **Cancelación sí, alta no**: la rotación queda cancelada citando una OT que
+  no existe, del cambio no queda nada, y el ciclo —sin ninguna orden en rango—
+  vuelve a crear la rotación 1 contada desde el corte **viejo**. Mal y en
+  silencio.
+
+Y el motivo entra antes que el estado, como en el PATCH de órdenes: si la nota
+no entra, la rotación no se cancela. Acá importa el doble, porque una
+`CANCELADA` sin motivo es lo que `laCancelacionNoTieneMotivo` informa como
+divergencia del contraste: sonaría una alarma por una cancelación que el
+sistema hizo bien.
+
+### Qué pregunta el formulario, y qué no
+
+Lo aprieta **el que acomoda las órdenes**, no el que estuvo en la máquina —se
+preguntó—. De ahí:
+
+- **La fecha se pregunta, es obligatoria y arranca vacía, nunca en hoy.** Es el
+  mismo criterio que `RegistrarOTModal` desde el 16/11/2026, y acá importa más:
+  si el cambio fue el lunes y esto se acomoda el jueves, el ciclo arranca tres
+  días tarde y **todas** las rotaciones siguientes quedan corridas. Tiene tres
+  reglas: no vacía, no futura, y no anterior al corte —ésa última nombra el
+  piso, porque una fecha anterior haría que el ciclo volviera atrás—.
+- **Las horas van vacías si no se escriben**, nunca las `horas_estimadas` del
+  ciclo. En una orden abierta ese número es una estimación y por eso el
+  generador lo usa; ésta **nace cerrada**, y ahí las horas dicen cuánto duró el
+  trabajo — de ahí salen `horasHombreDe`, el costo por equipo y la columna O.
+- **No hay campo de contratista** y `quien` queda en INTERNO. Medido: de los 74
+  cambios de martillos cerrados en estos equipos, **74 son INTERNO y cero
+  tienen contratista**. Ofrecerlo dejaría una fila que se contradice:
+  `costoEquipo` da cero mano de obra propia en cuanto hay contratista, y
+  `loQueFaltaParaCerrar` con INTERNO pide operarios y no pide el contratista.
+- **El «por qué» se pregunta y es optativo** (26/11/2026, a pedido: el campo
+  faltaba). Lo escrito **se suma** al motivo que queda en la orden cancelada y
+  nunca lo reemplaza, porque la frase automática es la única que nombra la OT
+  del cambio y es de lo único de lo que se puede agarrar quien después busque el
+  trabajo que sí se hizo. Optativo porque esa misma frase ya dice cuándo se
+  cambiaron y en qué orden quedó: exigirlo sería pedir que alguien repita lo que
+  el sistema ya sabe. Y el tope del campo **no son los 1.000 de una nota**: las
+  dos partes terminan en la misma celda de la columna X, así que lo calcula
+  `loQueEntraDeMotivo` contra una frase de molde —857 caracteres hoy— y de ahí
+  salen el `maxLength` del campo y la validación de la ruta, para que el
+  formulario no deje escribir algo que el servidor después rechaza.
+- **No hay campo de observaciones.** No tienen columna en `ordenes_trabajo`
+  —`repartirRegistroDeOT` las deja fuera a propósito— y viven sólo en la celda
+  W de la planilla. La W de una orden recién creada no se puede escribir,
+  porque su fila llega por `IMPORTRANGE` minutos después, y
+  `elPendienteDelIntento` **no encola** un fallo de observaciones a propósito,
+  porque la cola rearma el registro desde la fila y de ahí no salen. El campo
+  habría perdido lo escrito **sin un solo error**.
+
+Las dos cosas se agregan después, reabriendo la orden con «Registrar el
+trabajo», cuando su fila ya existe.
+
+### El evento de la rotación se borra a mano, porque `CANCELADA` no borra nada
+
+`laOTEstaCerrada` hace que `planDelEvento` **deje de mover** el evento —«el
+evento pasado es el registro de lo que se planificó», dice su comentario—, que
+no es lo mismo que borrarlo. Lo único que borra eventos es
+`borrarLosEventosDeLasOT`, y hasta hoy su único llamador era el borrado de
+espejo (`antesDeBorrar`), que corre cuando la fila desaparece de la planilla.
+
+Sin ese paso, cada uso del botón dejaría un evento vivo en cinco calendarios
+citando gente a una rotación que no se va a hacer, con fecha futura. Va último
+porque hablar con Google es lo único acá que puede tardar o colgar la función,
+y para ese punto está todo guardado; si falla, esa función ya deja escrita la
+marca de borrado fallido y el motivo vuelve en la respuesta.
+
+**Y son dos borrados, no uno.** `borrarLosEventosDeLasOT` borra en Google y
+**no toca la fila de `agenda_eventos`**: su único llamador anterior era el
+borrado de espejo, donde la fila se va sola por el cascade de
+`ordenes_trabajo`. Acá la OT se **cancela**, así que la fila sobrevive — y con
+eso alcanza para que el sistema se denuncie a sí mismo: `revisarLaCasilla` la
+trae (tiene `google_event_id`, tiene `inicio_escrito`, no está divergida y su
+`fin` no pasó), lee de Google el evento cancelado, `queDivergio` contesta
+**«borrado»** y sale un push diciendo que alguien borró el evento, a las mismas
+cinco personas que estaban invitadas. Y «reescribir» lo **resucita** con un
+`PUT status: confirmed` en los cinco calendarios, deshaciendo el paso entero.
+Por eso la ruta borra también la fila, como ya hacía el `DELETE` de
+`agenda/eventos/[id]` — y **sólo si Google pudo**: si no, la fila se queda,
+porque es lo único que sabe dónde está el evento vivo.
+
+**Queda pendiente y no es parte de esto: la cancelación normal desde el PATCH
+de órdenes sigue dejando su evento vivo.** Mientras tanto los dos caminos de
+cancelar hacen cosas distintas con el calendario, que es una inconsistencia
+conocida y no un descuido.
+
+### Dos cosas más que no se deducen del código
+
+- **El ciclo y sus dos tareas se leen en consultas separadas, no con un
+  embed, y no es por la ambigüedad del par.** Es cierto que
+  `mant_ciclos_de_ot` → `mant_tareas_preventivas` tiene dos caminos —la madre y
+  la hija—, pero el repo ya lo embebe **nombrando la columna**
+  (`madre:tarea_madre_id(nombre, componente)`), y nombrarla elige el camino:
+  así lo hacen `generarEncadenadas.ts`, la Configuración, la ficha del equipo,
+  `ciclos/[id]/reiniciar` y `avisosDeUsuario`. No hay `300 PGRST201` posible, y
+  el par **no** está —ni tiene por qué estar— en
+  [lib/core/embedsAmbiguos.ts](../lib/core/embedsAmbiguos.ts), que es la lista
+  de los que hay que escribir con el FK explícito. El motivo real es el test:
+  `supabaseDeMentira` **no resuelve embeds**, y esta ruta tiene test de ruta
+  justamente porque lo que hay que probar es el orden de las escrituras — con
+  un embed esa lectura daría `null` en el test y el test estaría probando otra
+  cosa que la que corre en producción. El `GET` de `ciclos/[id]`, que le da al
+  modal el nombre real de la tarea madre y el piso de la fecha, hace lo mismo
+  para que las dos lecturas gemelas estén escritas igual. Esto estuvo escrito
+  al revés un día, en dos docstrings y acá: creerlo lleva a no embeber nunca
+  nada.
+- **El equipo y el sector salen de la propia OT de rotación**, no de releer
+  `equipos`: la rotación es del mismo equipo y ya trae `equipment_id`,
+  `equipo_raw`, `equipo_code`, `sector_id` y `sector_raw` puestos por el
+  generador.
+
+### Qué pasa si falla cada paso, que no es lo mismo en todos
+
+El orden de arriba dice cuál va antes; esto dice qué contesta la ruta cuando
+uno falla, que es otra pregunta. La regla es que **un paso cuyo fallo deja al
+ciclo pidiendo una rotación sobre martillos nuevos nunca contesta 201**:
+
+| Falla | Qué contesta |
+|---|---|
+| el alta en la planilla | 400, y no se tocó nada |
+| la nota del motivo | 500, con la OT del cambio ya creada y la rotación sin cancelar |
+| la cancelación | 500 |
+| **el corte del ciclo** | **500**, nombrando que el generador puede pedir una rotación de más |
+| **leer o soltar las órdenes del ciclo** | **500**, por lo mismo |
+| la planilla de cualquiera de las dos filas | 201 con `planilla_error`: queda encolado |
+| el borrado en Google | 201 con `calendario_error`: queda el aviso en la fila |
+| borrar la fila del evento | 201 con `calendario_error`, pidiendo sacarla desde `/agenda` |
+
+Los dos del medio en negrita son los que la primera versión no miraba. Un 201
+ahí es el anti-objetivo en silencio: con el corte sin mover y la rotación ya
+cancelada, la corrida siguiente mueve el corte sola —la madre nueva sí entra en
+rango, porque su cierre ya no empata con el corte viejo— y la de después
+encuentra a una hija vieja como última, y crea **la vuelta siguiente, que es la
+rotación recién cancelada**.
+
+Y la lectura de las órdenes del ciclo va con `traerTodo` y las suelta de a 200:
+PostgREST corta en 1.000 sin avisar y esto crece con cada vuelta —
+`generarEncadenadas` lee esta misma tabla con este mismo filtro y ya pagina por
+eso—. No es teórico: el 24/11/2026 Hidratación llegó a 427 órdenes en cuatro
+días.
+
+### Lo que sólo se puede comprobar en la primera corrida real
+
+- **Que el evento desaparezca de los cinco calendarios, y que no quede su
+  fila.** El borrado nunca se llamó desde una cancelación. La primera vez
+  conviene mirar un calendario de verdad y `/agenda`, no la respuesta de la
+  ruta.
+- **Que la corrida siguiente decida «crear la rotación 1»** y no otra cosa. Se
+  ve con `npx tsx scripts/que-haria-el-ciclo.mts`: tiene que decir rotación 1
+  contada desde la fecha del cambio.
+- La fila de la orden nueva llega al master minutos después, así que la
+  exportación **va a fallar casi siempre en su primer intento** y quedar
+  encolada. Es lo esperado y le pasa igual al generador; lo que hay que mirar
+  es que el reintento la complete.
+
 ## Pegar un RI a un repuesto y cuánto de lo que viene es de cada OT (13/11/2026)
 
 Mantenimiento escribe el número de un RI sobre el repuesto de una OT, y puede

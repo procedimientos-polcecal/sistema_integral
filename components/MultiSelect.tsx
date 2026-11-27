@@ -23,11 +23,17 @@ const ANCHO_PANEL = 256;
  * un filtro.
  */
 export default function MultiSelect({
-  valores, onCambio, vacio, plural, opciones, buscador,
+  valores, onCambio, vacio, plural, opciones, buscador, limpiar,
 }: {
   /** Los valores tildados. Vacío es "no filtrar por esto". */
   valores: string[];
   onCambio: (valores: string[]) => void;
+  /**
+   * Cómo se lee el botón de destildar todo. Por omisión habla de un filtro,
+   * que es para lo que nació esto; la curva granulométrica lo usa para elegir
+   * qué comparar, y ahí «Quitar este filtro» no nombra nada de la pantalla.
+   */
+  limpiar?: string;
   /** Cómo se lee sin nada tildado: "Todas las áreas". */
   vacio: string;
   /** El sustantivo del resumen cuando hay varios: "áreas" → "3 áreas". */
@@ -191,7 +197,7 @@ export default function MultiSelect({
                 onClick={() => onCambio([])}
                 className="text-xs text-slate-500 underline hover:text-slate-800"
               >
-                Quitar este filtro
+                {limpiar ?? "Quitar este filtro"}
               </button>
             </div>
           )}

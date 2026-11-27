@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { motivoPorElQueNoPasa } from "@/lib/compras/pasarAComparativa";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -191,6 +192,17 @@ export default function RequerimientosClient({
    * esto se escribió. No es un error, así que no va en rojo.
    */
   const [avisoAccion, setAvisoAccion] = useState<string | null>(null);
+
+  /*
+   * Los elegidos para pasar a comparativa en tanda.
+   *
+   * Vive acá y no en la fila porque la barra de acción tiene que saber cuántos
+   * hay, y se limpia al recargar: después de moverlos esas filas ya no están
+   * en el filtro de SIN_INICIAR, así que una selección sobreviviente nombraría
+   * pedidos que la pantalla ya no muestra.
+   */
+  const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
+  const [pasandoTanda, setPasandoTanda] = useState(false);
 
   // La búsqueda espera un momento para no consultar en cada tecla.
   useEffect(() => {
@@ -467,7 +479,104 @@ export default function RequerimientosClient({
   }
 
   // La tabla tiene una columna más cuando se puede gestionar la compra.
-  const columnas = canEdit ? 13 : 12;
+  /*
+   * Qué filas de esta página se pueden elegir.
+   *
+   * La regla es la misma que aplica el servidor —`motivoPorElQueNoPasa`, el
+   * único lugar donde está escrita— para que la casilla no aparezca sobre algo
+   * que después va a ser rechazado. Mostrarla y contestar un error es enseñar
+   * a ignorar los errores.
+   */
+  const elegibles = useMemo(
+    () => filas.filter((f) => motivoPorElQueNoPasa(f) === null),
+    [filas]
+  );
+
+  const elegidos = useMemo(
+    () => elegibles.filter((f) => seleccion.has(f.id)),
+    [elegibles, seleccion]
+  );
+
+  function alternar(id: string) {
+    setSeleccion((previa) => {
+      const copia = new Set(previa);
+      if (copia.has(id)) copia.delete(id);
+      else copia.add(id);
+      return copia;
+    });
+  }
+
+  /**
+   * Pasa los elegidos a comparativa.
+   *
+   * El cartel de confirmación nombra la planilla a propósito: cambiar el
+   * estado desde el sistema marca `editado_en_app` y la importación deja de
+   * pisar ese pedido. Hacerlo de a uno tiene la misma consecuencia, pero de a
+   * sesenta es un solo paso grande y conviene que esté dicho antes y no
+   * después.
+   */
+  async function pasarATanda() {
+    if (elegidos.length === 0) return;
+
+    const cuantos = elegidos.length;
+    const ok = window.confirm(
+      `Pasar ${cuantos} pedido${cuantos === 1 ? "" : "s"} a comparativa.\n\n` +
+        "Desde ahora los gestiona el sistema y la planilla deja de pisarles el " +
+        "estado. La planilla se actualiza sola, de a tandas.\n\n¿Seguimos?"
+    );
+    if (!ok) return;
+
+    setPasandoTanda(true);
+    setErrorAccion("");
+    setAvisoAccion(null);
+
+    try {
+      const res = await fetch("/api/compras/requerimientos/pasar-a-comparativa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: elegidos.map((f) => f.id) }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorAccion(data.error ?? "No se pudieron pasar");
+        return;
+      }
+
+      // Se cuentan las tres cosas por separado porque son tres: los que se
+      // movieron, los que ya están en la planilla y los que esperan su turno
+      // en la cola. Decir sólo «listo» deja a quien mira sin saber por qué la
+      // planilla todavía no cambió.
+      const partes = [`${data.movidos} pedido${data.movidos === 1 ? "" : "s"} a comparativa`];
+      if (data.enCola > 0) {
+        partes.push(
+          `${data.enCola} esperan a escribirse en la planilla, que se hace sola de a poco`
+        );
+      }
+      if (data.noPasan?.length > 0) {
+        partes.push(
+          "quedaron afuera: " +
+            data.noPasan
+              .map((n: { nro_ri: number | null; motivo: string }) => `RI ${n.nro_ri} (${n.motivo})`)
+              .join(", ")
+        );
+      }
+      if (data.bloqueadas?.length > 0) {
+        partes.push("la planilla rechazó: " + data.bloqueadas.join(" · "));
+      }
+      setAvisoAccion(partes.join(" · "));
+
+      setSeleccion(new Set());
+      await cargar();
+    } catch (e) {
+      setErrorAccion(e instanceof Error ? e.message : "No se pudieron pasar");
+    } finally {
+      setPasandoTanda(false);
+    }
+  }
+
+  // La casilla de la tanda agrega su propia columna cuando se puede gestionar.
+  const columnas = canEdit ? 14 : 12;
 
   const totalPantalla = useMemo(
     () => filas.reduce((acc, f) => acc + (f.costo_iva ?? 0) + (f.costo_envio ?? 0), 0),
@@ -640,6 +749,30 @@ export default function RequerimientosClient({
         </div>
       )}
 
+      {/* La barra de la selección. Aparece recién con algo elegido: ocupando
+          lugar siempre sería una fila más de encabezado en una pantalla que ya
+          tiene filtros, buscador y paginado. */}
+      {canEdit && elegidos.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--primary)] bg-white px-4 py-3">
+          <span className="text-sm text-slate-700">
+            {elegidos.length} pedido{elegidos.length === 1 ? "" : "s"} elegido
+            {elegidos.length === 1 ? "" : "s"}
+          </span>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-secondary" onClick={() => setSeleccion(new Set())}>
+              Limpiar
+            </button>
+            <button
+              className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-50"
+              onClick={pasarATanda}
+              disabled={pasandoTanda}
+            >
+              {pasandoTanda ? "Pasando…" : "Pasar a comparativa"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* En un teléfono, tarjetas. Trece columnas no entran en 343 px, y con
           scroll horizontal hay que arrastrar cuatro pantallas para leer una
           fila. La tarjeta muestra lo que se necesita para decidir y esconde el
@@ -666,6 +799,8 @@ export default function RequerimientosClient({
                 ESTADOS_CON_DIALOGO.includes(f.estado_compra) ? abrirDialogo(f) : avanzar(f)
               }
               onEspera={(aEspera) => cambiarEspera(f, aEspera)}
+              elegido={seleccion.has(f.id)}
+              onElegir={() => alternar(f.id)}
             />
           ))
         )}
@@ -677,6 +812,22 @@ export default function RequerimientosClient({
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
+                {canEdit && (
+                  <th className="w-8 px-3 py-2">
+                    {/* Elige los de **esta página**, que son los que están a la
+                        vista. Marcar 62 de los que sólo se ven 50 es prometer
+                        algo que no se puede revisar antes de confirmar. */}
+                    <input
+                      type="checkbox"
+                      aria-label="Elegir todos los de esta página"
+                      disabled={elegibles.length === 0}
+                      checked={elegibles.length > 0 && elegidos.length === elegibles.length}
+                      onChange={(e) =>
+                        setSeleccion(e.target.checked ? new Set(elegibles.map((f) => f.id)) : new Set())
+                      }
+                    />
+                  </th>
+                )}
                 <th className="px-3 py-2 text-left">N° RI</th>
                 <th className="px-3 py-2 text-left">Fecha</th>
                 <th className="px-3 py-2 text-left">Descripción</th>
@@ -706,6 +857,21 @@ export default function RequerimientosClient({
                   const donde = f.compras_ubicaciones?.nombre ?? f.ubicacion_raw;
                   return (
                     <tr key={f.id} className="hover:bg-slate-50">
+                      {canEdit && (
+                        <td className="px-3 py-2">
+                          {/* Sólo sobre lo que de verdad puede pasar: una
+                              casilla sobre un pedido que el servidor va a
+                              rechazar enseña a ignorar los errores. */}
+                          {motivoPorElQueNoPasa(f) === null && (
+                            <input
+                              type="checkbox"
+                              aria-label={`Elegir el RI ${f.nro_ri}`}
+                              checked={seleccion.has(f.id)}
+                              onChange={() => alternar(f.id)}
+                            />
+                          )}
+                        </td>
+                      )}
                       <td className="px-3 py-2 font-mono">
                         <Link href={ficha(f.id)} className="font-semibold text-[var(--primary)] hover:underline">
                           {f.nro_ri}
@@ -866,6 +1032,7 @@ export default function RequerimientosClient({
  */
 function TarjetaRequerimiento({
   f, href, canEdit, aprobadores, usuarioId, procesando, umbralMontoAlto, onAvanzar, onEspera,
+  elegido, onElegir,
 }: {
   f: RequerimientoConRelaciones;
   /** La ficha del RI, con el listado al que volver. */
@@ -877,6 +1044,9 @@ function TarjetaRequerimiento({
   umbralMontoAlto: number;
   onAvanzar: () => void;
   onEspera: (aEspera: boolean) => void;
+  /** Si está marcado para la tanda de «pasar a comparativa». */
+  elegido: boolean;
+  onElegir: () => void;
 }) {
   const dias = f.estado_compra === "RECIBIDO" ? null : diasRestantes(f.fecha_necesidad);
   const vencido = dias !== null && dias < 0;
@@ -889,6 +1059,16 @@ function TarjetaRequerimiento({
       }`}
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        {/* La misma regla que la tabla, con el mismo `motivoPorElQueNoPasa`:
+            la casilla existe sólo donde la acción puede salir bien. */}
+        {canEdit && motivoPorElQueNoPasa(f) === null && (
+          <input
+            type="checkbox"
+            aria-label={`Elegir el RI ${f.nro_ri}`}
+            checked={elegido}
+            onChange={onElegir}
+          />
+        )}
         <Link
           href={href}
           className="font-mono text-xs font-semibold text-[var(--primary)] hover:underline"

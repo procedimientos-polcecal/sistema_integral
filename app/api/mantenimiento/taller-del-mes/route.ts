@@ -23,6 +23,10 @@ import {
 } from "@/lib/mantenimiento/rotacionDeLaSemana";
 import { resolverElCatalogo } from "@/lib/mantenimiento/operarioDelCatalogo";
 import { turnoDelDia } from "@/lib/mantenimiento/asignarOperario";
+import {
+  elRangoEsDemasiadoLargo,
+  ERROR_DE_RANGO_LARGO,
+} from "@/lib/mantenimiento/rangoDelCalendario";
 import type { Grupo, Oficio, Turno } from "@/lib/mantenimiento/programacion";
 
 /**
@@ -58,13 +62,6 @@ import type { Grupo, Oficio, Turno } from "@/lib/mantenimiento/programacion";
  * qué.
  */
 
-/**
- * El mismo tope que `/api/mantenimiento/calendario`, y por el mismo motivo: un
- * mes con las semanas parciales de los bordes llega a 42 días, y 62 deja
- * margen para quien pida dos meses corridos.
- */
-const MAXIMO_DE_DIAS = 62;
-
 /** Una fecha de la base como `YYYY-MM-DD` pelado, igual que en las rutas hermanas. */
 function soloElDia(v: unknown): string {
   return String(v ?? "").slice(0, 10);
@@ -90,11 +87,10 @@ export async function GET(request: Request) {
   if (desde > hasta) {
     return NextResponse.json({ error: "desde no puede ser posterior a hasta" }, { status: 400 });
   }
-  if (sumarDias(desde, MAXIMO_DE_DIAS) < hasta) {
-    return NextResponse.json(
-      { error: `El rango no puede pasar de ${MAXIMO_DE_DIAS} días` },
-      { status: 400 }
-    );
+  // El mismo tope que `/api/mantenimiento/calendario`, de `rangoDelCalendario`:
+  // las dos contestan el mismo pedido de la misma grilla.
+  if (elRangoEsDemasiadoLargo(desde, hasta)) {
+    return NextResponse.json({ error: ERROR_DE_RANGO_LARGO }, { status: 400 });
   }
 
   /*

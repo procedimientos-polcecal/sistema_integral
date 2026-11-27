@@ -6,7 +6,10 @@ import {
   totalCotizacion, PLAZOS_PAGO, DISPONIBILIDADES, plazosAlCambiarDeProveedor, mismosPlazos,
   datosDePagoDe, alCambiarDeProveedor, type ProveedorElegible,
 } from "@/lib/compras/comparativa";
+import { avisoDeCuit } from "@/lib/compras/avisoDeCuit";
+import { numerosDelRenglon } from "@/lib/compras/numeroDeCampo";
 import SelectorProveedor from "../../SelectorProveedor";
+import NuevoProveedorModal from "./NuevoProveedorModal";
 import MultiSelect from "@/components/MultiSelect";
 import Select from "@/components/Select";
 
@@ -25,9 +28,14 @@ import Select from "@/components/Select";
  */
 export default function PresupuestoForm({
   requerimientoId, proveedores, cantidadSugerida, dolar, onListo, onCancelar,
+  empresas, empresaDelPedido, pedidoPagaAmbas,
 }: {
   requerimientoId: string;
   proveedores: ProveedorElegible[];
+  /** Para el alta de un proveedor: a qué perfil de Odoo va. */
+  empresas: { id: string; nombre: string }[];
+  empresaDelPedido: string | null;
+  pedidoPagaAmbas: boolean;
   cantidadSugerida: number | null;
   /** Con qué convertir si el proveedor cotiza en dólares. */
   dolar: { venta: number; fecha: string; alDia: boolean } | null;
@@ -55,6 +63,16 @@ export default function PresupuestoForm({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
+  /*
+   * El alta de un proveedor que no está en la lista. La lista vive acá en vez
+   * de recargar la página a propósito: recargar perdería lo que ya se tipeó
+   * del presupuesto, que es justo lo que el botón viene a evitar.
+   */
+  const [abrirAlta, setAbrirAlta] = useState(false);
+  const [nuevos, setNuevos] = useState<ProveedorElegible[]>([]);
+  const [avisoDelAlta, setAvisoDelAlta] = useState<string | null>(null);
+  const lista = [...proveedores, ...nuevos];
+
   // Lo último que puso el autocompletado. Sirve para dos cosas: saber qué se
   // puede reemplazar al cambiar de proveedor sin pisar lo que escribió una
   // persona, y avisar en pantalla de dónde salió cada valor.
@@ -64,7 +82,7 @@ export default function PresupuestoForm({
 
   function elegirProveedor(id: string) {
     setProveedorId(id);
-    const datos = datosDePagoDe(proveedores.find((p) => p.id === id));
+    const datos = datosDePagoDe(lista.find((p) => p.id === id));
     setPlazos((actual) => plazosAlCambiarDeProveedor(actual, traido.plazos, datos.plazos));
     setCondiciones((actual) => alCambiarDeProveedor(actual, traido.condiciones, datos.condiciones));
     setTraido(datos);
@@ -73,20 +91,33 @@ export default function PresupuestoForm({
   /** Si el campo sigue mostrando lo que trajo la ficha del proveedor. */
   const delProveedor = (valor: string, puesto: string) => puesto !== "" && valor === puesto;
 
-  const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(",", ".")));
+  // Sin CUIT la orden de compra no sale, y hoy 267 de 484 proveedores no lo
+  // tienen. Se dice al elegirlo, no al final del circuito.
+  const avisoDelCuit = avisoDeCuit(lista.find((p) => p.id === proveedorId));
 
-  const total = totalCotizacion({
-    precio_unitario: num(unitario),
-    cantidad: num(cantidad),
-    descuento: (num(descuento) ?? 0) / 100,
-    iva: (num(iva) ?? 0) / 100,
-    costo_envio: num(envio),
-  });
+  // Los cinco campos numéricos los lee `numerosDelRenglon`, el mismo parser
+  // que usa `/compras/presupuestos`. Antes había acá un `num()` propio que
+  // hacía `Number(v.replace(",", "."))`: con eso `"12.500"` entraba como 12,5
+  // —mil veces menos, en el campo que decide a quién se le compra— y un
+  // `"21%"` en el IVA daba NaN, que `?? 0` no atrapa porque NaN no es null.
+  const leido = numerosDelRenglon(
+    { precio: unitario, cantidad, descuento, iva, envio }
+  );
+
+  const total = totalCotizacion(leido.campos);
 
   // El equivalente en pesos, para verlo mientras se escribe.
   const enPesos = divisa === "USD" && dolar ? Math.round(total * dolar.venta * 100) / 100 : null;
 
   async function guardar() {
+    // Un campo ilegible se frena acá y se nombra. La ruta no puede: le llega
+    // un número válido de magnitud equivocada, o un null que no distingue de
+    // un campo vacío.
+    if (leido.problemas.length > 0) {
+      setError(leido.problemas.join(" "));
+      return;
+    }
+
     setGuardando(true);
     setError("");
 
@@ -97,12 +128,12 @@ export default function PresupuestoForm({
         proveedor_id: proveedorId,
         marca: marca.trim() || null,
         unidad_medida: unidad.trim() || null,
-        precio_unitario: num(unitario),
+        precio_unitario: leido.campos.precio_unitario,
         moneda: divisa,
-        cantidad: num(cantidad),
-        costo_envio: num(envio),
-        descuento: (num(descuento) ?? 0) / 100,
-        iva: (num(iva) ?? 0) / 100,
+        cantidad: leido.campos.cantidad,
+        costo_envio: leido.campos.costo_envio,
+        descuento: leido.campos.descuento,
+        iva: leido.campos.iva,
         precio_hasta: precioHasta || null,
         plazos_pago_dias: plazos,
         condiciones_pago: condiciones.trim() || null,
@@ -128,14 +159,45 @@ export default function PresupuestoForm({
         </div>
       )}
 
+      {avisoDelAlta && (
+        <div className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">{avisoDelAlta}</div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-3">
-        <Campo label="Proveedor" ancho="sm:col-span-2">
-          <SelectorProveedor
-            proveedores={proveedores}
-            valor={proveedorId}
-            onCambio={elegirProveedor}
-          />
-        </Campo>
+        {/*
+          El botón va **afuera** del `Campo`, que renderiza un `<label>`.
+          Adentro, un click en «Nuevo» activa además el control asociado a esa
+          etiqueta —el campo del selector de proveedores—, así que abría el
+          buscador detrás del modal que se estaba abriendo.
+        */}
+        <div className="flex items-end gap-1.5 sm:col-span-2">
+          <div className="min-w-0 flex-1">
+            <Campo label="Proveedor">
+              <SelectorProveedor
+                proveedores={lista}
+                valor={proveedorId}
+                onCambio={elegirProveedor}
+              />
+            </Campo>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAbrirAlta(true)}
+            className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            Nuevo
+          </button>
+        </div>
+
+        {/*
+          El aviso va acá y no al guardar: no frena nada —se puede cotizar con
+          un proveedor sin CUIT y a veces la compra termina en otro—, pero deja
+          de ser una sorpresa al final del circuito. El freno sigue estando en
+          la generación de la orden, que es donde el dato es imprescindible.
+        */}
+        {avisoDelCuit && (
+          <p className="text-sm text-amber-700 sm:col-span-3">{avisoDelCuit}</p>
+        )}
         <Campo label="Marca"><Texto valor={marca} set={setMarca} /></Campo>
 
         <Campo label="Precio unitario">
@@ -251,8 +313,66 @@ export default function PresupuestoForm({
           </button>
         </div>
       </div>
+
+      {abrirAlta && (
+        <NuevoProveedorModal
+          requerimientoId={requerimientoId}
+          empresas={empresas}
+          empresaDelPedido={empresaDelPedido}
+          pedidoPagaAmbas={pedidoPagaAmbas}
+          onCerrar={() => setAbrirAlta(false)}
+          onUsarExistente={(id) => {
+            elegirProveedor(id);
+            setAbrirAlta(false);
+            setAvisoDelAlta(null);
+          }}
+          onCreado={(proveedor, resultado) => {
+            setNuevos((previos) => [...previos, proveedor]);
+            elegirProveedor(proveedor.id);
+            setAbrirAlta(false);
+            setAvisoDelAlta(avisoDelResultado(resultado));
+          }}
+        />
+      )}
     </div>
   );
+}
+
+/**
+ * Qué decirle a quien acaba de dar de alta un proveedor.
+ *
+ * Los tres desenlaces significan cosas distintas y por eso se dicen distinto:
+ * quedó enlazado, no está en Odoo todavía —y entonces se crea al generar la
+ * orden, que no es un problema sino el plan—, o hay varios candidatos y hace
+ * falta que alguien de administración elija.
+ */
+function avisoDelResultado(r: {
+  enlaces: { empresa: string }[];
+  sinEnlazar: { empresa: string; motivo: string }[];
+  avisoDeOdoo: string | null;
+}): string {
+  if (r.avisoDeOdoo) {
+    return `El proveedor quedó creado, pero no se pudo consultar Odoo: ${r.avisoDeOdoo}`;
+  }
+
+  const partes: string[] = [];
+  if (r.enlaces.length) {
+    partes.push(`Quedó enlazado con Odoo en ${r.enlaces.map((e) => e.empresa).join(" y ")}.`);
+  }
+  for (const s of r.sinEnlazar) partes.push(`${s.empresa}: ${s.motivo}`);
+  if (!r.enlaces.length && !r.sinEnlazar.length) {
+    partes.push("El proveedor quedó creado.");
+  }
+  /*
+   * La promesa se hace **sólo** cuando no hay ningún obstáculo anotado. Si
+   * `sinEnlazar` trae motivos —archivado, en la otra empresa, hay que elegir—
+   * el que decide es ese motivo: prometer la creación ahí deja a la persona
+   * generando la orden contra el mismo cartel una y otra vez.
+   */
+  if (!r.enlaces.length && !r.sinEnlazar.length) {
+    partes.push("Se va a crear en Odoo cuando se genere la orden de compra.");
+  }
+  return partes.join(" ");
 }
 
 function Campo({ label, ancho = "", nota, children }: {

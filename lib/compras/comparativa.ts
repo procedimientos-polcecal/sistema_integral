@@ -42,7 +42,7 @@ export type ClaveColumna =
   | "nro_ri" | "fecha" | "area" | "descripcion" | "proveedor" | "marca"
   | "unidad_medida" | "precio_unitario" | "cantidad" | "envio" | "descuento"
   | "iva" | "precio_total" | "precio_hasta" | "plazos" | "condiciones_pago"
-  | "disponibilidad" | "comentario" | "eleccion";
+  | "disponibilidad" | "comentario" | "eleccion" | "id_sistema";
 
 /**
  * Cómo puede venir escrito cada encabezado. El primero es el nombre canónico.
@@ -74,6 +74,10 @@ const ALIAS: Record<ClaveColumna, string[]> = {
   disponibilidad: ["DISPONIBILIDAD", "ENTREGA"],
   comentario: ["COMENTARIO", "COMENTARIOS", "OBSERVACIONES"],
   eleccion: ["ELECCIÓN", "ELECCION", "ELEGIDO"],
+  // La escribe el sistema, una por fila que él mismo agrega, para distinguir
+  // sus filas de las que tipeó una persona. NO es imprescindible: las 200
+  // planillas todavía no la tienen y tienen que seguir leyéndose igual.
+  id_sistema: ["ID SISTEMA"],
 };
 
 /** Sin estas columnas la planilla no es una comparativa y no se toca. */
@@ -111,6 +115,60 @@ export function mapearEncabezados(encabezado: string[]): ResultadoMapeo {
   return faltan.length > 0
     ? { ok: false, faltan, encontrados: encabezado.filter((h) => String(h ?? "").trim() !== "") }
     : { ok: true, idx };
+}
+
+/**
+ * Dónde está la columna `ID SISTEMA` en este encabezado, o -1.
+ *
+ * Aparte de `mapearEncabezados` porque ésa devuelve `ok: false` sin índices
+ * cuando falta algo imprescindible, y la pregunta de dónde va el id no depende
+ * de eso.
+ */
+export function indiceDeLaColumnaDelId(encabezado: string[]): number {
+  const normalizado = encabezado.map(norm);
+  for (const nombre of ALIAS.id_sistema) {
+    const i = normalizado.indexOf(norm(nombre));
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * Cuántas columnas usa de verdad una comparativa, contando de a una desde la A.
+ *
+ * Es la última columna con algo, en el encabezado o en cualquier fila. No es el
+ * ancho de la plantilla: medido el 26/11/2026 sobre 30 de las 200, los anchos
+ * son 16, 19 y 20, y REPUESTOS MÁQUINAS ya usa la T para EQUIPO con datos
+ * adentro. «La primera libre después de las 19» dejaría tres huecos en la de 16
+ * y pisaría el equipo en la de 20.
+ */
+export function anchoUsado(encabezado: string[], filas: string[][]): number {
+  let ancho = 0;
+  for (const fila of [encabezado, ...filas]) {
+    for (let i = fila.length - 1; i >= ancho; i--) {
+      if (String(fila[i] ?? "").trim() !== "") { ancho = i + 1; break; }
+    }
+  }
+  return ancho;
+}
+
+/**
+ * Cuántas columnas ocupa la fila que el sistema escribe en una comparativa.
+ *
+ * Es la cuenta de `filaParaPlanilla` sacada afuera, **para que el borrado use el
+ * mismo ancho que la escritura y no una constante**. Con
+ * `COLUMNAS_COMPARATIVA.length` fijo, vaciar la fila de un presupuesto 'app'
+ * dejaba el uuid colgado sobre una fila por lo demás vacía en las planillas
+ * donde `ID SISTEMA` cae en el índice 19 o 20 —las de 19 y 20 columnas, que son
+ * dos de los tres anchos medidos— y lo limpiaba en las de 16: el resultado
+ * dependía del ancho de la planilla, que es lo que ubicar la columna por nombre
+ * existe para evitar.
+ *
+ * `idxIdSistema` es el índice 0-based que devuelve `asegurarLaColumnaDelId` o
+ * `indiceDeLaColumnaDelId`; -1 o ausente es una planilla sin esa columna.
+ */
+export function anchoDeLaFilaEscrita(idxIdSistema?: number): number {
+  return Math.max(COLUMNAS_COMPARATIVA.length, (idxIdSistema ?? -1) + 1);
 }
 
 /** "NRO RI (o N° RI, NUMERO RI)", para que se pueda corregir la planilla. */
@@ -489,10 +547,23 @@ export function filaParaPlanilla(args: {
   idx: Indice;
   numeroFila: number;
   nroRi: number;
+  /** La fecha en que contestó el proveedor; NO la del pedido. */
   fecha: string | null;
   area: string | null;
   descripcion: string | null;
   cotizacion: CotizacionLeida;
+  /**
+   * Id de la cotización, para que el sistema reconozca su propio eco al
+   * releer. Va tal cual —sin `textoParaLaCelda`—: `esEcoDelSistema` lo compara
+   * contra `String(cotizacion.id)`.
+   */
+  idCotizacion?: string | null;
+  /**
+   * Índice 0-based de `ID SISTEMA` que devolvió `asegurarLaColumnaDelId`;
+   * -1 o ausente es una planilla sin esa columna. No sale de `idx` porque la
+   * columna puede haberse creado en esta misma llamada.
+   */
+  idxIdSistema?: number;
   /**
    * En qué moneda se cargó el presupuesto y con qué dólar convertirlo.
    *
@@ -505,7 +576,11 @@ export function filaParaPlanilla(args: {
   dolar?: number | null;
 }): string[] {
   const { idx, numeroFila: n, nroRi, cotizacion: c } = args;
-  const fila: string[] = new Array(COLUMNAS_COMPARATIVA.length).fill("");
+  const idxId = args.idxIdSistema ?? -1;
+  // El ancho que haga falta: la columna del id puede estar más allá de las 19.
+  // Sale de `anchoDeLaFilaEscrita` y no de una cuenta propia porque el DELETE de
+  // un presupuesto vacía la fila con ese mismo número.
+  const fila: string[] = new Array(anchoDeLaFilaEscrita(idxId)).fill("");
 
   const poner = (clave: ClaveColumna, valor: string) => {
     if (idx[clave] >= 0) fila[idx[clave]] = valor;
@@ -540,6 +615,7 @@ export function filaParaPlanilla(args: {
   poner("disponibilidad", textoParaLaCelda(c.disponibilidad));
   poner("comentario", textoParaLaCelda(c.comentario));
   poner("eleccion", "FALSE");
+  if (idxId >= 0 && args.idCotizacion) fila[idxId] = String(args.idCotizacion);
 
   // Sin unitario en la celda no se escribe fórmula ninguna.
   //
@@ -824,5 +900,12 @@ export function plazosAlCambiarDeProveedor(
   return actual.length === 0 || mismosPlazos(actual, puestosAntes) ? nuevos : actual;
 }
 
-/** Un proveedor en el selector del formulario, con lo que se autocompleta de él. */
-export type ProveedorElegible = { id: string; nombre: string } & PagoDelProveedor;
+/**
+ * Un proveedor en el selector del formulario, con lo que se autocompleta de él.
+ *
+ * El `cuit` no se autocompleta en ningún campo: viaja para poder **avisar que
+ * falta** en el momento de elegir al proveedor, que es cuando todavía se puede
+ * hacer algo. Sin él, el único que lo dice es `armarOrdenes()`, y eso llega
+ * después de toda la comparativa — ver `lib/compras/avisoDeCuit.ts`.
+ */
+export type ProveedorElegible = { id: string; nombre: string; cuit: string | null } & PagoDelProveedor;

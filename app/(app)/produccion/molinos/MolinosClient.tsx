@@ -91,7 +91,7 @@ export default function MolinosClient({ fecha, molinos }: { fecha: string; molin
         <section key={m.id} className="space-y-3">
           <h2 className="section-title">{m.nombre}</h2>
           {m.dia.condicion === "no_operativo" && (
-            <div className="card border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
+            <div className="card bg-slate-50 p-4 text-sm text-slate-700" style={{ borderColor: "var(--border-dark)" }}>
               <strong>Día no operativo.</strong> El robot no informó ningún turno del {m.nombre} este día: la planta no
               trabajó. No se cuenta como una parada ni como cuatro turnos en cero, y no entra en las horas ni en la
               utilización.

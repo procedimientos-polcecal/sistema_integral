@@ -1,16 +1,24 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Select from "@/components/Select";
+import MultiSelect from "@/components/MultiSelect";
 import { Modal } from "@/components/Modal";
 import {
-  TOPE_DE_MUESTRAS,
+  laEleccionQueQueda,
+  losTildesQueSiguen,
+} from "@/lib/calidad/ensayos/eleccionDeMuestras";
+import {
+  COMBINACIONES_DE_LA_COMPARACION,
   compararMuestras,
   etiquetasDeMuestras,
   type MuestraParaComparar,
+  type SerieDeLaComparacion,
 } from "@/lib/calidad/ensayos/comparacion";
+import { nombreDelArchivoDeLaCurva } from "@/lib/calidad/ensayos/nombreDelArchivo";
+import { LeyendaDeLaCurva } from "./LeyendaDeLaCurva";
 
 const esqueleto = () => <div className="h-full w-full animate-pulse rounded-lg bg-slate-100" />;
 const CurvaDeRetenido = dynamic(
@@ -30,58 +38,128 @@ export interface MuestraParaLaLista {
   id: string;
   fecha: string;
   observaciones: string | null;
+  /**
+   * De qué producto es. Desde el 26/11/2026 el selector puede traer las
+   * muestras de varios —los del mismo juego de tamices—, así que ya no alcanza
+   * con saber cuál está elegido arriba.
+   */
+  producto_id: string;
 }
 
+// `disabled:pointer-events-none` y no sólo `disabled:opacity-50`: sin eso el
+// botón cambia de fondo al pasarle el mouse mientras está deshabilitado, o sea
+// señala «funciono» justo cuando no hace nada. Es lo mismo que `globals.css`
+// arregló para los `.btn-*` el 04/11/2026.
+const CLASE_DEL_BOTONCITO =
+  "shrink-0 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-slate-500 " +
+  "hover:bg-slate-100 hover:text-slate-700 disabled:pointer-events-none disabled:opacity-50";
+
 /**
- * Un gráfico con su título, listo para sacarle la foto.
+ * Los controles de la esquina del panel.
  *
- * **El fondo y el color del título van en `style`, no en clases.** El botón del
- * Excel rasteriza este nodo con `html2canvas`, y los fondos puestos con
- * utilidades de Tailwind a veces no llegan al rasterizado —está escrito en el
- * encabezado de `reporte/ReporteClient.tsx`—. Acá pesa más que allá: un PNG con
- * el fondo transparente, metido en una celda de Excel, se ve negro o
- * cuadriculado. El blanco también se le pasa a `html2canvas` como
- * `backgroundColor`, para que el lienzo no dependa sólo de este nodo.
+ * **Van con `data-html2canvas-ignore`**, que es el atributo que `html2canvas`
+ * respeta al clonar el nodo: son controles de la pantalla y no parte del
+ * gráfico, y dentro de la foto serían cuadritos grises que nadie puede
+ * apretar.
  */
-function PanelDelGrafico({
+function BotonesDelPanel({
   titulo,
-  nodo,
   alAmpliar,
-  children,
+  alBajar,
+  bajando,
 }: {
   titulo: string;
-  nodo: React.Ref<HTMLDivElement>;
-  alAmpliar: () => void;
-  children: React.ReactNode;
+  alAmpliar?: () => void;
+  alBajar: () => void;
+  bajando: boolean;
 }) {
   return (
-    <div ref={nodo} style={{ background: "#FFFFFF", padding: 4 }}>
-      {/*
-        El encabezado es flex, pero el título conserva su `style`: entra en la
-        foto del Excel y las utilidades de Tailwind no siempre llegan al
-        rasterizado (ver el comentario de arriba).
-      */}
-      <div className="flex items-start justify-between gap-2" style={{ margin: "0 0 8px" }}>
-        <h2 style={{ color: "#334155", fontSize: 14, fontWeight: 600, margin: 0 }}>{titulo}</h2>
-        {/*
-          `data-html2canvas-ignore` saca el botón de la foto: es un control de
-          la pantalla y no parte del gráfico, y en el informe sería un cuadrito
-          gris en la esquina que nadie puede apretar.
-        */}
+    <div data-html2canvas-ignore className="flex shrink-0 items-center gap-1">
+      <button
+        type="button"
+        onClick={alBajar}
+        disabled={bajando}
+        aria-label={`Bajar ${titulo} como imagen`}
+        title="Bajar como imagen"
+        className={CLASE_DEL_BOTONCITO}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {alAmpliar && (
         <button
           type="button"
-          data-html2canvas-ignore
           onClick={alAmpliar}
           aria-label={`Ampliar ${titulo}`}
           title="Ampliar"
-          className="shrink-0 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+          className={CLASE_DEL_BOTONCITO}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
             <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Un gráfico con su título y su leyenda, listo para sacarle la foto.
+ *
+ * **Es el nodo que `html2canvas` rasteriza**, tanto para el Excel como para el
+ * botón de bajar la imagen, y por eso tiene que llevar adentro todo lo que
+ * hace falta para leer el dibujo: el título —si no, un PNG pegado en un correo
+ * no dice si es retenido, acumulado o pasante— y la leyenda.
+ *
+ * **El fondo y el color del título van en `style`, no en clases.** Los fondos
+ * puestos con utilidades de Tailwind a veces no llegan al rasterizado —está
+ * escrito en el encabezado de `reporte/ReporteClient.tsx`—. Acá pesa más que
+ * allá: un PNG con el fondo transparente, metido en una celda de Excel, se ve
+ * negro o cuadriculado. El blanco también se le pasa a `html2canvas` como
+ * `backgroundColor`, para que el lienzo no dependa sólo de este nodo.
+ *
+ * **Lo usan la grilla y la vista ampliada**, que sólo se diferencian en el
+ * alto, en si hay botón de ampliar y en si la leyenda va entera. Compartirlo
+ * es lo que hace que la imagen grande no pueda salir distinta de la chica.
+ */
+function PanelDelGrafico({
+  titulo,
+  nodo,
+  series,
+  alto = "h-64",
+  etiquetasEnteras = false,
+  alAmpliar,
+  alBajar,
+  bajando,
+  children,
+}: {
+  titulo: string;
+  nodo: React.Ref<HTMLDivElement>;
+  /** Para la leyenda, que va dentro del panel justamente para entrar en la foto. */
+  series: SerieDeLaComparacion[];
+  /** Las clases de alto del dibujo. La vista ampliada manda las suyas. */
+  alto?: string;
+  etiquetasEnteras?: boolean;
+  /** Sin esto no se dibuja el botón: en la vista ampliada no hay nada que ampliar. */
+  alAmpliar?: () => void;
+  alBajar: () => void;
+  bajando: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div ref={nodo} style={{ background: "#FFFFFF", padding: 4 }}>
+      <div className="flex items-start justify-between gap-2" style={{ margin: "0 0 8px" }}>
+        <h2 style={{ color: "#334155", fontSize: 14, fontWeight: 600, margin: 0 }}>{titulo}</h2>
+        <BotonesDelPanel
+          titulo={titulo}
+          alAmpliar={alAmpliar}
+          alBajar={alBajar}
+          bajando={bajando}
+        />
       </div>
-      <div className="h-64">{children}</div>
+      <div className={alto}>{children}</div>
+      <LeyendaDeLaCurva series={series} etiquetasEnteras={etiquetasEnteras} />
     </div>
   );
 }
@@ -155,11 +233,19 @@ function enumerarQueFaltan(mallas: number[]): string {
 function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
   const [apagadas, setApagadas] = useState<number[]>([]);
   const [ampliado, setAmpliado] = useState<Ampliable | null>(null);
-  const [bajando, setBajando] = useState(false);
+  /**
+   * Qué se está bajando, y no un `boolean`: los dos caminos comparten el
+   * `html2canvas` y los dos tienen que deshabilitar todos los botones, pero el
+   * botón grande no puede decir «Armando el Excel…» porque alguien apretó el
+   * ícono de imagen de un panel —eso avisa de algo que no está pasando—.
+   */
+  const [bajando, setBajando] = useState<"excel" | "imagen" | null>(null);
   const [falloLaDescarga, setFalloLaDescarga] = useState<string | null>(null);
   const panelRetenido = useRef<HTMLDivElement>(null);
   const panelAcumulado = useRef<HTMLDivElement>(null);
   const panelPasante = useRef<HTMLDivElement>(null);
+  /** El del modal: es una **segunda** copia del gráfico, ver `AMPLIABLES`. */
+  const panelAmpliado = useRef<HTMLDivElement>(null);
 
   const comparacion = useMemo(() => compararMuestras(muestras, apagadas), [muestras, apagadas]);
 
@@ -185,15 +271,103 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
     );
 
   /**
+   * La foto de un panel, en PNG.
+   *
+   * Es el camino que comparten el Excel y el botón de bajar la imagen: el
+   * segundo es el primero **cortado un paso antes**, sin mandarla al servidor.
+   * Si los dos sacaran la foto por su cuenta, la imagen que alguien pega en un
+   * correo podría dejar de ser la misma que la del informe.
+   *
+   * **El `scale: 4` es medido y no un número redondo**: en la hoja del Excel la
+   * imagen mide 640 px de ancho y el informe se imprime, así que con `scale: 2`
+   * la densidad volvía a ser la de la pantalla (~100 dpi, blando). Y tiene que
+   * seguir entrando en el megabyte por imagen que acepta la ruta.
+   */
+  async function fotoDe(nodo: HTMLDivElement): Promise<Blob> {
+    const html2canvas = (await import("html2canvas")).default;
+    const lienzo = await html2canvas(nodo, {
+      scale: 4,
+      backgroundColor: FONDO_DE_LA_FOTO,
+      useCORS: true,
+      logging: false,
+      /**
+       * Soltar el recorte de los ancestros, **en el clon y no en la pantalla**.
+       *
+       * `html2canvas` clona el documento entero en un iframe y respeta el
+       * `overflow` de los ancestros al pintar. El cuerpo del `Modal` es
+       * `overflow-y-auto` con `max-h-full`, así que un gráfico ampliado más
+       * alto que la pantalla —que es lo que pasa en cuanto la leyenda ocupa
+       * dos renglones— se fotografiaría **cortado por abajo, justo donde está
+       * la leyenda**, y sin que nada avise.
+       *
+       * `onclone` recibe el nodo ya clonado (verificado contra el paquete
+       * instalado: `onclone(documentClone, referenceElement)`), y corre antes
+       * de que se midan sus límites, así que el recorte se suelta a tiempo.
+       * Para los paneles de la grilla el bucle no hace nada: no tienen ningún
+       * ancestro que recorte.
+       */
+      onclone: (_documento, clonado) => {
+        for (let padre = clonado.parentElement; padre; padre = padre.parentElement) {
+          padre.style.overflow = "visible";
+          padre.style.maxHeight = "none";
+        }
+      },
+    });
+    const png = await new Promise<Blob | null>((resolver) => lienzo.toBlob(resolver, "image/png"));
+    if (!png) throw new Error("No se pudo sacar la foto del gráfico.");
+    return png;
+  }
+
+  /** El `<a download>` de siempre, con su `revokeObjectURL`. */
+  function bajar(contenido: Blob, nombre: string) {
+    const url = URL.createObjectURL(contenido);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nombre;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Recharts emite un `svg.recharts-surface` recién cuando dibujó, y los `ref`
+   * apuntan al `div` de afuera, que existe desde el principio: preguntar por el
+   * `ref` no dice nada. Sin esto, un clic mientras cargan los chunks `dynamic`
+   * —adentro hay un esqueleto gris— sube un rectángulo gris que es un PNG
+   * perfectamente válido.
+   */
+  function todaviaSeDibuja(nodos: (HTMLDivElement | null)[]): boolean {
+    return nodos.some((nodo) => !nodo?.querySelector("svg.recharts-surface"));
+  }
+
+  /** Un gráfico solo, como PNG, sin pasar por el Excel ni por el servidor. */
+  async function bajarLaImagen(cual: Ampliable, nodo: HTMLDivElement | null) {
+    if (todaviaSeDibuja([nodo])) {
+      setFalloLaDescarga("El gráfico todavía se está dibujando: probá de nuevo en un momento.");
+      return;
+    }
+    setBajando("imagen");
+    setFalloLaDescarga(null);
+    try {
+      bajar(
+        await fotoDe(nodo!),
+        nombreDelArchivoDeLaCurva(muestras, {
+          extension: "png",
+          grafico: AMPLIABLES[cual].titulo,
+        })
+      );
+    } catch (e) {
+      setFalloLaDescarga(`No se pudo bajar la imagen: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setBajando(null);
+    }
+  }
+
+  /**
    * Baja el Excel: la tabla sale de la base y de acá viajan sólo los ids, los
    * tamices apagados y la foto de cada gráfico.
    *
-   * Cada foto sale a `scale: 4`: en la hoja la imagen mide 640 px de ancho y el
-   * informe se imprime, así que con `scale: 2` la densidad volvía a ser la de la
-   * pantalla (~100 dpi, blando). El ancho en la hoja no se toca: el alto sale
-   * del aspecto. El peso tiene que seguir bajo el megabyte por imagen que
-   * acepta la ruta. Si la ruta contesta con un 400, **se muestra el mensaje que
-   * mandó**: es el que dice qué pasó.
+   * Si la ruta contesta con un 400, **se muestra el mensaje que mandó**: es el
+   * que dice qué pasó.
    */
   async function bajarElExcel() {
     const paneles = [
@@ -201,34 +375,22 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
       { campo: "acumulado", nodo: panelAcumulado.current },
       { campo: "pasante", nodo: panelPasante.current },
     ];
-    // Los `ref` apuntan al `div` de afuera, que existe siempre que hay puntos:
-    // preguntar por ellos no dice nada. Lo que tarda son los chunks `dynamic` de
-    // recharts, y mientras cargan adentro hay un esqueleto gris. Recharts emite
-    // un `svg.recharts-surface` cuando dibujó, y eso es lo que se comprueba:
-    // sin esto, un clic en esa ventana sube tres rectángulos grises —PNG
-    // válidos— y el informe sale con la tabla bien y tres cuadros vacíos.
-    if (paneles.some((p) => !p.nodo?.querySelector("svg.recharts-surface"))) {
+    // Sin la guarda, un clic mientras cargan los chunks de recharts sube tres
+    // rectángulos grises —PNG válidos— y el informe sale con la tabla bien y
+    // tres cuadros vacíos.
+    if (todaviaSeDibuja(paneles.map((p) => p.nodo))) {
       setFalloLaDescarga("Los gráficos todavía se están dibujando: probá de nuevo en un momento.");
       return;
     }
 
-    setBajando(true);
+    setBajando("excel");
     setFalloLaDescarga(null);
     try {
-      const html2canvas = (await import("html2canvas")).default;
       const formulario = new FormData();
       formulario.append("muestras", JSON.stringify(muestras.map((m) => m.id)));
       formulario.append("apagadas", JSON.stringify(apagadas));
       for (const { campo, nodo } of paneles) {
-        const lienzo = await html2canvas(nodo!, {
-          scale: 4,
-          backgroundColor: FONDO_DE_LA_FOTO,
-          useCORS: true,
-          logging: false,
-        });
-        const png = await new Promise<Blob | null>((resolver) => lienzo.toBlob(resolver, "image/png"));
-        if (!png) throw new Error("No se pudo sacar la foto de uno de los gráficos.");
-        formulario.append(campo, png, `${campo}.png`);
+        formulario.append(campo, await fotoDe(nodo!), `${campo}.png`);
       }
 
       const res = await fetch("/api/calidad/ensayos/curva/export", { method: "POST", body: formulario });
@@ -237,16 +399,11 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
         throw new Error(cuerpo?.error ?? `El servidor devolvió ${res.status}.`);
       }
 
-      const url = URL.createObjectURL(await res.blob());
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = nombreDelArchivo(res, "Curva granulométrica.xlsx");
-      a.click();
-      URL.revokeObjectURL(url);
+      bajar(await res.blob(), nombreDelArchivo(res, "Curva granulométrica.xlsx"));
     } catch (e) {
       setFalloLaDescarga(`No se pudo bajar el Excel: ${e instanceof Error ? e.message : e}`);
     } finally {
-      setBajando(false);
+      setBajando(null);
     }
   }
 
@@ -303,8 +460,13 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
             todos los tamices apagados no hay filas (y se avisó acá).
           */}
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={bajarElExcel} disabled={bajando} className="btn-secondary">
-              {bajando ? "Armando el Excel…" : "Bajar Excel"}
+            <button
+              type="button"
+              onClick={bajarElExcel}
+              disabled={bajando !== null}
+              className="btn-secondary"
+            >
+              {bajando === "excel" ? "Armando el Excel…" : "Bajar Excel"}
             </button>
             <p className="text-xs text-slate-500">
               La tabla y los tres gráficos, con los tamices que dejaste prendidos.
@@ -319,7 +481,10 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
             <PanelDelGrafico
               titulo={AMPLIABLES.retenido.titulo}
               nodo={panelRetenido}
+              series={comparacion.series}
               alAmpliar={() => setAmpliado("retenido")}
+              alBajar={() => bajarLaImagen("retenido", panelRetenido.current)}
+              bajando={bajando !== null}
             >
               <CurvaDeRetenido filas={comparacion.filas} series={comparacion.series} />
             </PanelDelGrafico>
@@ -327,7 +492,10 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
               <PanelDelGrafico
                 titulo={AMPLIABLES.acumulado.titulo}
                 nodo={panelAcumulado}
+                series={comparacion.series}
                 alAmpliar={() => setAmpliado("acumulado")}
+                alBajar={() => bajarLaImagen("acumulado", panelAcumulado.current)}
+                bajando={bajando !== null}
               >
                 <CurvaDeAcumulado filas={comparacion.filas} series={comparacion.series} />
               </PanelDelGrafico>
@@ -336,7 +504,10 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
             <PanelDelGrafico
               titulo={AMPLIABLES.pasante.titulo}
               nodo={panelPasante}
+              series={comparacion.series}
               alAmpliar={() => setAmpliado("pasante")}
+              alBajar={() => bajarLaImagen("pasante", panelPasante.current)}
+              bajando={bajando !== null}
             >
               <CurvaDePasante filas={comparacion.filas} series={comparacion.series} />
             </PanelDelGrafico>
@@ -350,22 +521,31 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
               ancho="enorme"
             >
               {/*
-                Alto por viewport y no fijo: el modal ya se topea en el alto de
-                la pantalla, y en un teléfono un `h-96` dejaría el gráfico igual
-                de chico que en la grilla, que es lo que se vino a arreglar.
+                El mismo `PanelDelGrafico` de la grilla, con otro alto: así la
+                imagen que se baja desde acá lleva el título y la leyenda igual
+                que la chica. El título se repite con el del `Modal`, y es a
+                propósito: el encabezado del modal no entra en la foto.
+
+                Alto por viewport y no fijo, porque el modal ya se topea en el
+                alto de la pantalla y en un teléfono un `h-96` dejaría el
+                gráfico igual de chico que en la grilla, que es lo que se vino
+                a arreglar. Las etiquetas van enteras: hay 1152 px de ancho y
+                es justo lo que se viene a leer.
               */}
-              <div className="h-[60vh] min-h-72">
+              <PanelDelGrafico
+                titulo={AMPLIABLES[ampliado].titulo}
+                nodo={panelAmpliado}
+                series={comparacion.series}
+                alto="h-[60vh] min-h-72"
+                etiquetasEnteras
+                alBajar={() => bajarLaImagen(ampliado, panelAmpliado.current)}
+                bajando={bajando !== null}
+              >
                 {(() => {
                   const { Componente } = AMPLIABLES[ampliado];
-                  return (
-                    <Componente
-                      filas={comparacion.filas}
-                      series={comparacion.series}
-                      etiquetasEnteras
-                    />
-                  );
+                  return <Componente filas={comparacion.filas} series={comparacion.series} />;
                 })()}
-              </div>
+              </PanelDelGrafico>
               {ampliado === "acumulado" && (
                 <p className="mt-3 text-xs text-slate-500">{NOTA_DEL_ACUMULADO}</p>
               )}
@@ -375,8 +555,22 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
             Un hueco en una curva sólo se entiende si se nombra: una línea que
             se corta sin explicación se lee como un error del sistema.
           */}
-          {(comparacion.disparejas.length > 0 || comparacion.sinGranulometria.length > 0) && (
+          {(comparacion.disparejas.length > 0 ||
+            comparacion.sinGranulometria.length > 0 ||
+            comparacion.seRepitenLosPares) && (
             <div className="space-y-1 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              {/*
+                El único aviso sobre la cantidad, y es un hecho y no una
+                opinión: pasadas las 36 combinaciones de color y trazo, dos
+                curvas quedan dibujadas idénticas. Que doce superpuestas se lean
+                con esfuerzo lo ve quien mira.
+              */}
+              {comparacion.seRepitenLosPares && (
+                <p>
+                  Son más de {COMBINACIONES_DE_LA_COMPARACION} muestras, así que hay curvas que
+                  comparten color y trazo: para distinguirlas hay que mirar el tooltip.
+                </p>
+              )}
               {comparacion.sinGranulometria.length > 0 && (
                 <p>
                   Sin granulometría cargada, así que no dibujan ninguna curva:{" "}
@@ -404,18 +598,204 @@ function LasCurvas({ muestras }: { muestras: MuestraParaComparar[] }) {
   );
 }
 
+/**
+ * El selector de muestras: se tildan las que se quieran y se aplican de una.
+ *
+ * **Lo tildado vive acá y no en la URL, y por eso hay un botón.** `MultiSelect`
+ * avisa en cada tilde, que es lo correcto en los listados —el filtro corre en
+ * el cliente y es gratis—; acá cada aviso sería un `router.push`, o sea una
+ * vuelta entera al servidor con sus dos consultas por tilde. Peor que lento:
+ * `elegidas` baja del servidor, así que mientras una navegación está en vuelo
+ * los tildes siguientes parten del conjunto viejo y se pisan entre ellos. Se
+ * junta todo acá y se aplica una vez.
+ *
+ * **Muestra el producto entero, incluidas las que ya están elegidas**, que
+ * llegan tildadas: ése es el estado y no una lista de «lo que falta». De paso
+ * resuelve solo lo que antes había que cuidar a mano —que el «(n de m)» de la
+ * etiqueta se numere contra la lista entera del producto—, porque ya no se
+ * saca nada de la lista.
+ *
+ * **Y desde el 26/11/2026 una casilla suma los otros productos del mismo juego
+ * de tamices**, que es como se compara Arena Chocolata con Arena caliza LN.
+ * Tres cosas de esa casilla que no se deducen del código:
+ *
+ * - **Arranca prendida si lo elegido ya cruza el grupo.** Quien abre un enlace
+ *   compartido de dos productos tiene que ver las dos listas; si no, el
+ *   selector diría una cosa y los chips otra.
+ * - **No vive en la URL.** Lo que se comparte es qué muestras se comparan,
+ *   nunca cómo se llegó a elegirlas — y al volver se deduce sola de lo de
+ *   arriba.
+ * - **Sólo se nombran los productos del grupo que tienen alguna muestra.** Hoy
+ *   Calcio 1-2 declara el juego grueso y no tiene ninguna: nombrarlo promete
+ *   una curva que no existe.
+ */
+function ElegirMuestras({
+  productoId,
+  productos,
+  comparten,
+  juego,
+  delSelector,
+  elegidas,
+  ir,
+}: {
+  productoId: string;
+  /** El catálogo entero, para poner el nombre del producto en cada etiqueta. */
+  productos: { id: string; nombre: string }[];
+  /** Los otros productos que declaran el mismo juego de tamices. */
+  comparten: { id: string; nombre: string }[];
+  /** El juego que declara el producto elegido, para decirlo en pantalla. */
+  juego: number[];
+  /** Las muestras del producto elegido **y las del resto del grupo**. */
+  delSelector: MuestraParaLaLista[];
+  /** Todo lo elegido, que puede incluir muestras de cualquier producto. */
+  elegidas: string[];
+  ir: (producto: string, ids: string[]) => void;
+}) {
+  const nombres = useMemo(() => new Map(productos.map((p) => [p.id, p.nombre])), [productos]);
+  const nombreDe = useCallback(
+    (id: string) => nombres.get(id) ?? "Producto sin nombre",
+    [nombres]
+  );
+
+  /**
+   * Las del grupo que no son del producto elegido, agrupadas por producto en
+   * el orden del catálogo. Intercalarlas por fecha —que es como vienen de la
+   * base— deja una lista donde hay que leer el nombre de cada renglón para
+   * saber de qué producto es.
+   */
+  const delResto = useMemo(
+    () =>
+      comparten.flatMap((p) => delSelector.filter((m) => m.producto_id === p.id)),
+    [comparten, delSelector]
+  );
+  const delProducto = useMemo(
+    () => delSelector.filter((m) => m.producto_id === productoId),
+    [delSelector, productoId]
+  );
+
+  /** Los del grupo que tienen alguna muestra: son los que se nombran. */
+  const conMuestras = useMemo(
+    () => comparten.filter((p) => delSelector.some((m) => m.producto_id === p.id)),
+    [comparten, delSelector]
+  );
+
+  const [conElGrupo, setConElGrupo] = useState(() =>
+    delResto.some((m) => elegidas.includes(m.id))
+  );
+
+  const visibles = useMemo(
+    () => (conElGrupo ? [...delProducto, ...delResto] : delProducto),
+    [conElGrupo, delProducto, delResto]
+  );
+  const idsVisibles = useMemo(() => visibles.map((m) => m.id), [visibles]);
+
+  const [tildadas, setTildadas] = useState<string[]>(() =>
+    idsVisibles.filter((id) => elegidas.includes(id))
+  );
+  const [yendo, empezarAIr] = useTransition();
+
+  /** Prender o apagar la casilla cambia qué se ve, no lo que alguien decidió. */
+  function cambiarElAlcance(prendida: boolean) {
+    const ahora = prendida
+      ? [...delProducto, ...delResto].map((m) => m.id)
+      : delProducto.map((m) => m.id);
+    setTildadas(losTildesQueSiguen(tildadas, idsVisibles, ahora, elegidas));
+    setConElGrupo(prendida);
+  }
+
+  const opciones = useMemo(() => {
+    // El producto va en la etiqueta sólo cuando hay más de uno a la vista: con
+    // uno solo repetiría su nombre en cada renglón. Es la misma pregunta que
+    // se hace `compararMuestras` para los chips y la leyenda.
+    const etiquetas = etiquetasDeMuestras(
+      visibles.map((m) => ({
+        producto: nombreDe(m.producto_id),
+        fecha: m.fecha,
+        observaciones: m.observaciones,
+      })),
+      conElGrupo
+    );
+    return visibles.map((m, i): [string, string] => [m.id, etiquetas[i]]);
+  }, [visibles, conElGrupo, nombreDe]);
+
+  const quedaria = laEleccionQueQueda(elegidas, idsVisibles, tildadas);
+  const hayCambio =
+    quedaria.length !== elegidas.length || quedaria.some((id, i) => id !== elegidas[i]);
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        {/*
+          Su botón es `w-full` —nació para una fila de filtros en grilla—, así
+          que acá va dentro de algo que le dé el ancho.
+        */}
+        <div className="w-60 max-w-full">
+          <MultiSelect
+            valores={tildadas}
+            onCambio={setTildadas}
+            // «Elegí las muestras» y no «Elegí una muestra»: el resumen cerrado
+            // dice cuántas de lo que está a la vista están tildadas, y vacío
+            // puede ser tanto «todavía no elegí nada» como «destildé las que
+            // había», que no es «agregar otra».
+            vacio="Elegí las muestras"
+            plural="muestras"
+            opciones={opciones}
+            limpiar="Destildar todas"
+          />
+        </div>
+        <button
+          type="button"
+          // Sin `disabled:opacity-50` al lado: `globals.css` ya le pone el
+          // apagado y el `:hover:not(:disabled)` a los cuatro `.btn-*`, y una
+          // utilidad que repite lo que la clase sin capa ya declara no gana
+          // nunca — sólo promete que sí.
+          className="btn-secondary"
+          disabled={!hayCambio || yendo}
+          onClick={() => empezarAIr(() => ir(productoId, quedaria))}
+        >
+          {yendo ? "Buscando…" : "Comparar"}
+        </button>
+      </div>
+
+      {conMuestras.length > 0 && (
+        <label className="flex cursor-pointer items-start gap-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            className="mt-0.5 shrink-0 accent-[var(--primary)]"
+            checked={conElGrupo}
+            onChange={(e) => cambiarElAlcance(e.target.checked)}
+          />
+          <span>
+            Sumar los{" "}
+            {conMuestras.length === 1 ? "otro producto" : `otros ${conMuestras.length} productos`}{" "}
+            con el mismo juego de tamices
+            {juego.length > 0 && <> ({juego.join(" · ")})</>}:{" "}
+            <span className="text-slate-500">
+              {conMuestras.map((p) => p.nombre).join(", ")}
+            </span>
+          </span>
+        </label>
+      )}
+    </div>
+  );
+}
+
 export default function CurvaClient({
   productos,
   productoId,
-  productoNombre,
+  comparten,
+  juego,
   delSelector,
   muestras,
 }: {
   productos: { id: string; nombre: string }[];
   /** "" si no hay producto elegido. */
   productoId: string;
-  productoNombre: string;
-  /** Las muestras del producto elegido, para el selector. */
+  /** Los otros productos que declaran el mismo juego de tamices que el elegido. */
+  comparten: { id: string; nombre: string }[];
+  /** El juego que declara el producto elegido; vacío si no declara ninguno. */
+  juego: number[];
+  /** Las muestras del producto elegido y las del resto de su grupo. */
   delSelector: MuestraParaLaLista[];
   /** Las muestras elegidas, que pueden ser de varios productos. */
   muestras: MuestraParaComparar[];
@@ -434,37 +814,15 @@ export default function CurvaClient({
   const elegidas = muestras.map((m) => m.id);
   const producto = productos.find((p) => p.id === productoId);
 
+  // `delSelector` trae además las del resto del grupo, así que cuántas tiene
+  // **este** producto hay que contarlo: su largo diría que Arena Chocolata
+  // tiene 37 muestras porque Calcio 0-2 tiene 25.
+  const cuantasTiene = delSelector.filter((m) => m.producto_id === productoId).length;
+
   // Las etiquetas y los colores de las elegidas salen de la misma función que
   // los usa adentro, sin los tamices apagados —que no los cambian—, para que
   // el chip y la leyenda del gráfico no puedan decir cosas distintas.
   const series = useMemo(() => compararMuestras(muestras, []).series, [muestras]);
-
-  /**
-   * Lo que ofrece el desplegable: las muestras del producto que todavía no
-   * están elegidas. La etiqueta no repite el producto, porque son todas suyas.
-   *
-   * **Las etiquetas se numeran contra la lista entera del producto y recién
-   * después se sacan las elegidas.** Numerar sobre las que quedan hace que el
-   * «(n de m)» cuente otra cosa: con tres muestras del mismo día, elegir una
-   * dejaría a las otras dos diciendo «(1 de 2)» y «(2 de 2)», y la que ya está
-   * elegida tiene su chip diciendo «(1 de 3)». Acá se elige una muestra por su
-   * etiqueta, así que un número que no cierra hace comparar la que no era.
-   */
-  const porAgregar = useMemo(() => {
-    const etiquetas = etiquetasDeMuestras(
-      delSelector.map((m) => ({
-        producto: productoNombre,
-        fecha: m.fecha,
-        observaciones: m.observaciones,
-      })),
-      false
-    );
-    return delSelector
-      .map((m, i) => ({ id: m.id, etiqueta: etiquetas[i] }))
-      .filter((m) => !elegidas.includes(m.id));
-  }, [delSelector, elegidas, productoNombre]);
-
-  const lleno = elegidas.length >= TOPE_DE_MUESTRAS;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 md:p-6">
@@ -491,28 +849,22 @@ export default function CurvaClient({
             ))}
           </Select>
 
-          {productoId !== "" && !lleno && porAgregar.length > 0 && (
-            <Select
-              value=""
-              onChange={(e) => e.target.value && ir(productoId, [...elegidas, e.target.value])}
-              className="max-w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
-            >
-              <option value="">
-                {elegidas.length === 0 ? "Elegí una muestra" : "Agregar otra muestra"}
-              </option>
-              {porAgregar.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.etiqueta}
-                </option>
-              ))}
-            </Select>
+          {productoId !== "" && delSelector.length > 0 && (
+            // La `key` lo vuelve a montar con lo elegido de cada navegación:
+            // lo tildado es estado local, y sin esto quedaría diciendo lo de
+            // antes del salto —o lo del producto anterior—.
+            <ElegirMuestras
+              key={`${productoId}:${elegidas.join(",")}`}
+              productoId={productoId}
+              productos={productos}
+              comparten={comparten}
+              juego={juego}
+              delSelector={delSelector}
+              elegidas={elegidas}
+              ir={ir}
+            />
           )}
 
-          {lleno && (
-            <p className="self-center text-xs text-slate-500">
-              Son {TOPE_DE_MUESTRAS} muestras como máximo: sacá una para poder agregar otra.
-            </p>
-          )}
         </div>
 
         {/*
@@ -526,11 +878,23 @@ export default function CurvaClient({
                 key={s.id}
                 className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white py-1 pl-2 pr-1 text-xs text-slate-700"
               >
-                <span
-                  aria-hidden
-                  className="inline-block h-2.5 w-2.5 rounded-full"
-                  style={{ background: s.color }}
-                />
+                {/*
+                  El mismo trazo que la curva y que la leyenda, y no un punto
+                  de color: sin tope, dos muestras pueden compartir color y
+                  distinguirse sólo por el trazo, y un punto las haría ver
+                  iguales justo en el lugar donde se elige cuál sacar.
+                */}
+                <svg width="16" height="8" aria-hidden className="shrink-0">
+                  <line
+                    x1="0"
+                    y1="4"
+                    x2="16"
+                    y2="4"
+                    stroke={s.color}
+                    strokeWidth="2"
+                    strokeDasharray={s.trazo}
+                  />
+                </svg>
                 {s.etiqueta}
                 <button
                   type="button"
@@ -549,13 +913,16 @@ export default function CurvaClient({
           <LasCurvas key={elegidas.join(",")} muestras={muestras} />
         ) : productoId === "" ? (
           <Aviso>Elegí un producto para ver las muestras que tiene.</Aviso>
-        ) : delSelector.length === 0 ? (
-          <Aviso>{producto?.nombre} todavía no tiene muestras cargadas.</Aviso>
+        ) : cuantasTiene === 0 ? (
+          <Aviso>
+            {producto?.nombre} todavía no tiene muestras cargadas
+            {delSelector.length > 0 && <>, pero sí los otros productos de su juego de tamices</>}.
+          </Aviso>
         ) : (
           <Aviso>
-            {producto?.nombre} tiene {delSelector.length}{" "}
-            {delSelector.length === 1 ? "muestra" : "muestras"}: elegí una para ver su curva, o
-            varias para compararlas.
+            {producto?.nombre} tiene {cuantasTiene}{" "}
+            {cuantasTiene === 1 ? "muestra" : "muestras"}: elegí una para ver su curva, o varias
+            para compararlas.
           </Aviso>
         )}
       </section>
