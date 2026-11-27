@@ -84,6 +84,29 @@ const palabrasPropias = (clave: string): string[] =>
   clave.split(" ").filter((p) => p.length >= MINIMO && !DEL_RUBRO.has(p));
 
 /**
+ * Las formas en que una misma palabra puede estar escrita en singular o en
+ * plural.
+ *
+ * Se devuelven variantes en vez de reducir a una raíz porque en castellano el
+ * plural se arma de dos maneras y no se sabe cuál mirando sólo la palabra
+ * larga: «fundiciones» es «fundición» + `es` y «torres» es «torre» + `s`.
+ * Una raíz única acierta con una y falla con la otra —cortar `es` deja
+ * «torr», que no es «torre»—, mientras que dos conjuntos que se cruzan
+ * aciertan con las dos.
+ *
+ * Entró el 27/11/2026 porque el padrón tenía «FUNDICIONES NAVARRO» —44 RI, sin
+ * CUIT— y «Fundición Navarro» —4 RI, con CUIT, enlace a Odoo y razón social
+ * FUNDICION ELECTRICA NAVARRO S.A.— y el detector no los proponía nunca. Lo
+ * mismo con «HIERRO GONZALEZ» y «Hierros González», que se lleva 21 RI.
+ *
+ * Medido sobre el padrón entero el día que se puso: esto suma **cuatro** pares
+ * y los cuatro son la misma empresa. No es una red que haya que ajustar: el
+ * plural no aparece por casualidad entre dos proveedores distintos.
+ */
+const variantes = (p: string): string[] =>
+  p.endsWith("es") ? [p, p.slice(0, -1), p.slice(0, -2)] : p.endsWith("s") ? [p, p.slice(0, -1)] : [p];
+
+/**
  * Los nombres que probablemente sean el mismo proveedor.
  *
  * Se juntan los que uno contiene al otro entero —"Cortadi" dentro de "Domingo
@@ -127,7 +150,7 @@ export function nombresParecidos(nombres: string[]): string[][] {
  * Si uno de los dos nombres está entero dentro del otro, como palabras.
  *
  * Se compara por palabra y no por subcadena para que "Mario" no entre en
- * "Mariotti".
+ * "Mariotti", y el singular cuenta como el plural: ver `variantes`.
  */
 function unoContieneAlOtro(a: string, b: string): boolean {
   if (a === b) return true;
@@ -140,8 +163,8 @@ function unoContieneAlOtro(a: string, b: string): boolean {
   const propiasDelCorto = palabrasPropias(corto);
   if (propiasDelCorto.length === 0) return false;
 
-  const palabrasDelLargo = new Set(largo.split(" "));
-  return propiasDelCorto.every((p) => palabrasDelLargo.has(p));
+  const palabrasDelLargo = new Set(largo.split(" ").flatMap(variantes));
+  return propiasDelCorto.every((p) => variantes(p).some((v) => palabrasDelLargo.has(v)));
 }
 
 /**

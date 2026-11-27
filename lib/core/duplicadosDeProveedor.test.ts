@@ -75,6 +75,35 @@ describe("los grupos por nombre", () => {
     expect(grupos[0].ids.sort()).toEqual(["a", "b"]);
   });
 
+  /*
+   * El singular y el plural son la misma palabra. En el padrón real esto
+   * tenía separadas «FUNDICIONES NAVARRO» —44 RI, sin CUIT— de «Fundición
+   * Navarro» —con CUIT, Odoo y razón social FUNDICION ELECTRICA NAVARRO S.A.—,
+   * que es el duplicado que más filas arrastraba de todos.
+   */
+  it("el plural no hace a un nombre distinto", () => {
+    const grupos = gruposDeDuplicados([
+      { id: "a", nombre: "FUNDICIONES NAVARRO", cuit: null },
+      { id: "b", nombre: "Fundición Navarro", cuit: "30-71059736-3" },
+    ]);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].ids.sort()).toEqual(["a", "b"]);
+  });
+
+  /*
+   * Y vale para las dos formas de armar el plural, que es la razón de que
+   * `variantes` devuelva un conjunto en vez de una raíz: «fundiciones» es
+   * «fundición» + es, y «torres» es «torre» + s. Una raíz sola acierta con
+   * una y falla con la otra.
+   */
+  it("también con el plural que sólo agrega una s", () => {
+    const grupos = gruposDeDuplicados([
+      { id: "a", nombre: "Hierros González", cuit: "30-71786313-1" },
+      { id: "b", nombre: "HIERRO GONZALEZ", cuit: null },
+    ]);
+    expect(grupos).toHaveLength(1);
+  });
+
   /** Compartir el rubro no es ser el mismo proveedor. */
   it("dos nombres que sólo comparten la palabra del rubro no se juntan", () => {
     expect(
