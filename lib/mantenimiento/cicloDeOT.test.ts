@@ -342,3 +342,50 @@ describe("descripcionDeLaOT", () => {
     })).toBe("Cambio de Martillos — las 3 rotaciones están hechas. Martillos cambiados el 17/10/2026.");
   });
 });
+
+/*
+ * Estos dos **pasan desde el primer momento**, porque ejercitan funciones que
+ * ya existen. Eso es lo que son: el candado sobre la afirmacion central del
+ * boton «Fue un cambio» (26/11/2026) — que el estado que esa ruta deja hace
+ * que la corrida siguiente decida lo unico correcto. No son TDD mal hecho; el
+ * dia que alguien simplifique esa ruta, son lo que grita.
+ *
+ * El spec:
+ * `docs/superpowers/specs/2026-11-26-mantenimiento-la-rotacion-que-fue-un-cambio-design.md`.
+ */
+describe("despues de registrar un cambio fuera de turno", () => {
+  /** El corte en la fecha del cambio, y la madre nueva como unica OT del ciclo. */
+  const TRAS_EL_CAMBIO: CicloParaDecidir = {
+    ...CICLO, desde: "2026-11-03", vuelta_desde: 0,
+  };
+
+  const LA_MADRE_NUEVA = ot({
+    ot_number: 3211, ciclo_vuelta: 0, estado: "REALIZADO",
+    fecha_cierre: "2026-11-03", fecha_ejecucion: "2026-11-03",
+    created_at_app: "2026-11-26T13:00:00Z",
+  });
+
+  it("con el cambio en la misma fecha que el corte viejo, crea la rotacion 1", () => {
+    expect(queSigueEnElCiclo(TRAS_EL_CAMBIO, [LA_MADRE_NUEVA]))
+      .toEqual({ que: "crear", vuelta: 1, fecha_ejecucion: "2026-11-06" });
+    // Y el corte ya esta donde tiene que estar: no se vuelve a mover.
+    expect(elCorteQueSigue(TRAS_EL_CAMBIO, [LA_MADRE_NUEVA])).toBeNull();
+  });
+
+  /*
+   * El otro final malo, y por eso este test afirma lo que NO queremos: si una
+   * hija vieja se quedara en el ciclo con `created_at_app` posterior al cambio,
+   * pasa a ser «la ultima» —la madre esta excluida porque su cierre empata con
+   * el corte— y el ciclo crea la vuelta siguiente, ya atrasada. Es exactamente
+   * lo que `lasQueSalenDelCiclo` existe para impedir.
+   */
+  it("con una hija vieja todavia en el ciclo, volveria a crear la vuelta siguiente", () => {
+    const laQueDeberiaHaberSalido = ot({
+      ot_number: 3100, ciclo_vuelta: 2, estado: "REALIZADO",
+      fecha_cierre: "2026-11-04", created_at_app: "2026-11-04T09:00:00Z",
+    });
+
+    expect(queSigueEnElCiclo(TRAS_EL_CAMBIO, [LA_MADRE_NUEVA, laQueDeberiaHaberSalido]))
+      .toEqual({ que: "crear", vuelta: 3, fecha_ejecucion: "2026-11-07" });
+  });
+});

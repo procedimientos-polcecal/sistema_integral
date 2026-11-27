@@ -80,7 +80,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
- * Las cuatro primitivas que escriben en una planilla de Google.
+ * Las primitivas que escriben en una planilla de Google (`agregarFilas`, el bloque de Compras, se sumó el 26/11/2026).
  *
  * Son las de `lib/core/sheets.ts` más `agregarFila` de `lib/compras/drive.ts`,
  * que es el escritor propio de Compras. Si algún día aparece una quinta, hay
@@ -89,7 +89,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  * No están `crearPestana`, `formatearColumnas`, `protegerPestana` ni
  * `borrarPestana`: no escriben un dato que un importador pueda volver a leer.
  */
-const PRIMITIVAS = ["escribirCeldas", "agregarFila", "escribirBloque", "reemplazarPestana"];
+const PRIMITIVAS = ["escribirCeldas", "agregarFila", "agregarFilas", "escribirBloque", "reemplazarPestana"];
 
 /**
  * Qué protege a cada archivo que escribe una planilla.
@@ -238,6 +238,21 @@ export const REGISTRO = {
       "exportación hubiera funcionado. Exportar no sirve si el otro lado no " +
       "sabe leer lo que se escribió.",
   },
+  "app/api/mantenimiento/ordenes/[id]/fue-un-cambio/route.ts": {
+    estrategia: "cola",
+    porque:
+      "Escribe **dos** filas del master, y cada una tiene su cola. La orden nueva " +
+      "del cambio nace cerrada, así que lleva estado, cierre, horas y los tres " +
+      "operarios; la rotación que reemplaza queda CANCELADA y lleva la M más la " +
+      "observación previa con el motivo. Las dos anotan `sheets_pendiente` con " +
+      "`elPendienteDelIntento`. La de la orden nueva **falla casi siempre en el " +
+      "primer intento** y es lo esperado: su fila llega al master por " +
+      "`IMPORTRANGE` minutos después de crearse, igual que en el alta y en " +
+      "`generarEncadenadas`. Sin la cola, la sincronización siguiente leería las " +
+      "celdas vacías y devolvería las dos órdenes a POR_HACER: reviviría la " +
+      "rotación sobre martillos que ya se cambiaron, que es el anti-objetivo que " +
+      "este botón existe para cerrar.",
+  },
   "lib/mantenimiento/planillaDelAviso.ts": {
     estrategia: "delega",
     porque:
@@ -285,6 +300,19 @@ export const REGISTRO = {
       "por pedido y no un espejo que un cron relea —de ahí sólo se importa cuando " +
       "una persona aprieta vincular—. El master sí va por la cola, con " +
       "`exportarRequerimiento`.",
+  },
+  "app/api/compras/presupuestos/route.ts": {
+    estrategia: "pantalla",
+    porque:
+      "Es la carga de una respuesta que cubre varios pedidos, y tiene dos mitades. " +
+      "Las filas de comparativa van a un libro por artículo que nadie relee solo, " +
+      "y `compras_cotizaciones` no tiene columna de pendiente —el `sheets_pendiente` " +
+      "que existe es del pedido y pertenece al master—, así que un fallo de Drive " +
+      "queda guardado y vuelve en `aviso_drive` con lo que dijo Google, sin " +
+      "anotarse en ninguna parte: declarar `cola` sería prometer una cola que no " +
+      "existe. La otra mitad sí va por la cola: el avance a EN_COMPARATIVA se " +
+      "exporta al master con `exportarRequerimiento`, en una sola pasada dentro " +
+      "de `after()` para no gastar la cuota de lectura una vez por renglón.",
   },
 
   // ── Los espejos que devuelven el resultado ───────────────────────────────

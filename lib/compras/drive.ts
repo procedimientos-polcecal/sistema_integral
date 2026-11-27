@@ -17,7 +17,12 @@ import {
 import { letraDeColumna } from "@/lib/core/columnaDeSheets";
 // La regla de en qué fila escribir vive en el núcleo: la usan las cuatro
 // planillas y tenerla dos veces es cómo se corrige en una sola.
-import { filaSiguienteSegunLaColumna, estaCalculando, errorDeCalculo } from "@/lib/core/sheets";
+import {
+  filaSiguienteSegunLaColumna, estaCalculando, errorDeCalculo,
+  asegurarColumnas, textoParaLaCelda,
+} from "@/lib/core/sheets";
+import { anchoUsado, indiceDeLaColumnaDelId } from "@/lib/compras/comparativa";
+import { rangoDelBloque } from "@/lib/compras/bloqueDeFilas";
 export { filaSiguienteSegunLaColumna };
 export { urlDePlanilla } from "@/lib/compras/vincular";
 
@@ -41,30 +46,72 @@ const idCarpeta = () => {
   return id;
 };
 
-/** Los archivos de la carpeta, los más recientes primero. */
+/**
+ * El tope que se le pide a Drive por página. No es el total: ver abajo.
+ *
+ * Drive devuelve como máximo 1000 por página y además puede devolver menos de
+ * lo pedido aunque haya más, así que la señal de que terminó es que no venga
+ * `nextPageToken`, nunca que la página haya vuelto corta.
+ */
+const POR_PAGINA = 200;
+
+/**
+ * Un freno para no quedarse dando vueltas si Drive repite el token.
+ *
+ * 20 páginas son 4.000 archivos: veinte veces la carpeta de hoy. Si alguna vez
+ * se llega acá, el síntoma es una lista incompleta y no una ruta colgada.
+ */
+const PAGINAS_MAXIMAS = 20;
+
+/**
+ * Los archivos de la carpeta, los más recientes primero.
+ *
+ * **Se pagina con `nextPageToken`, y eso no es una precaución para el futuro:**
+ * el 26/11/2026 la carpeta tenía **200 planillas** y se pedían 200, o sea
+ * exactamente el tope. La planilla 201 empuja a otra afuera del desplegable y
+ * **el único síntoma es que no aparece**: quien la busca elige «Sin elegir», el
+ * presupuesto se guarda sin respaldo, y el aviso que sale después dice «no tiene
+ * comparativa vinculada», que manda a mirar el pedido cuando el problema estaba
+ * en la lista.
+ */
 export async function listarComparativas(): Promise<ArchivoComparativa[]> {
   const token = await obtenerToken([SCOPE_DRIVE_LECTURA]);
-  const parametros = new URLSearchParams({
-    q: `'${idCarpeta()}' in parents and trashed = false`,
-    fields: "files(id, name, modifiedTime, mimeType)",
-    orderBy: "modifiedTime desc",
-    pageSize: "200",
-  });
+  const archivos: ArchivoComparativa[] = [];
+  let pagina: string | undefined;
 
-  const res = await fetch(`https://www.googleapis.com/drive/v3/files?${parametros}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
+  for (let i = 0; i < PAGINAS_MAXIMAS; i++) {
+    const parametros = new URLSearchParams({
+      q: `'${idCarpeta()}' in parents and trashed = false`,
+      // `nextPageToken` tiene que estar en `fields` o Google no lo manda, y la
+      // paginación se corta sola en la primera página sin decir nada.
+      fields: "nextPageToken, files(id, name, modifiedTime, mimeType)",
+      orderBy: "modifiedTime desc",
+      pageSize: String(POR_PAGINA),
+    });
+    if (pagina) parametros.set("pageToken", pagina);
 
-  const json = await res.json();
-  return (json.files ?? []).map(
-    (f: { id: string; name: string; modifiedTime: string; mimeType: string }) => ({
-      id: f.id,
-      nombre: f.name,
-      modificado: f.modifiedTime,
-      esPlanillaGoogle: f.mimeType === MIME_PLANILLA,
-    })
-  );
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?${parametros}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
+
+    const json = await res.json();
+    for (const f of (json.files ?? []) as {
+      id: string; name: string; modifiedTime: string; mimeType: string;
+    }[]) {
+      archivos.push({
+        id: f.id,
+        nombre: f.name,
+        modificado: f.modifiedTime,
+        esPlanillaGoogle: f.mimeType === MIME_PLANILLA,
+      });
+    }
+
+    pagina = json.nextPageToken || undefined;
+    if (!pagina) break;
+  }
+
+  return archivos;
 }
 
 /**
@@ -189,6 +236,57 @@ export async function agregarFila(
   return fila;
 }
 
+/**
+ * Agrega un bloque de filas de una sola vez y devuelve la primera que escribió.
+ *
+ * Existe por la cuota: la de lecturas de Google es de 60 por minuto y la
+ * comparten todos los módulos. Siete renglones con `agregarFila()` son siete
+ * lecturas de la columna A y siete escrituras, y eso fue lo que se agotó el
+ * 26/11/2026 y dejó un requerimiento exportado a medias. Acá es una lectura y
+ * una escritura sin importar cuántas filas sean.
+ *
+ * **Eso es lo que cuesta esta función, no lo que cuesta el respaldo entero.**
+ * Escribir el respaldo en una planilla son **3 o 4 lecturas y de 1 a 3
+ * escrituras**: `leerComparativa` gasta dos lecturas (la cabecera y los
+ * valores), `asegurarLaColumnaDelId` una más y hasta dos escrituras la primera
+ * vez, y de acá sale la lectura de la columna A y la escritura del bloque. El
+ * número sirve para razonar contra la cuota de 60 por minuto, así que conviene
+ * que sea el de verdad; lo que no cambia es que **nada de eso es por renglón**.
+ *
+ * Conserva las dos reglas de `agregarFila()`: la fila se busca por la columna A
+ * con `proximaFilaLibre` —que corta si la planilla está calculando, así que no
+ * se escribe sobre una lectura que no eran datos— y se escribe en un rango
+ * explícito, nunca con `append`.
+ *
+ * **La cantidad de filas sale de lo que devuelve `armarValores` y de ningún
+ * otro lado.** Con un `cantidad` aparte habría dos fuentes para el mismo número,
+ * que es cómo la fórmula del RI 1865 apuntó a la fila 1001 mientras el
+ * presupuesto iba a la 1003.
+ */
+export async function agregarFilas(
+  fileId: string,
+  pestana: string,
+  armarValores: (filaInicial: number) => string[][]
+): Promise<number> {
+  const token = await obtenerToken([SCOPE_SHEETS]);
+  const filaInicial = await proximaFilaLibre(token, fileId, pestana);
+  const valores = armarValores(filaInicial);
+
+  const rango = rangoDelBloque(pestana, filaInicial, valores);
+  const url =
+    `https://sheets.googleapis.com/v4/spreadsheets/${fileId}` +
+    `/values/${encodeURIComponent(rango)}?valueInputOption=USER_ENTERED`;
+
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ values: valores }),
+  });
+  if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
+
+  return filaInicial;
+}
+
 /** Escribe un valor en una celda de una planilla de la carpeta. */
 export async function escribirCelda(
   fileId: string,
@@ -209,6 +307,35 @@ export async function escribirCelda(
     body: JSON.stringify({ values: [[valor]] }),
   });
   if (!res.ok) throw new Error(mensajeDeGoogle(res.status, await res.text(), cuentaDeServicio()));
+}
+
+/**
+ * Devuelve el índice (0-based) de la columna `ID SISTEMA`, creándola si falta.
+ *
+ * Va **a continuación de lo último que se usa** y no en una letra fija: las
+ * comparativas miden 16, 19 y 20 columnas, y una ya usa la T para EQUIPO.
+ * Antes de escribir el encabezado se asegura que la pestaña tenga esa columna,
+ * porque escribir fuera de su ancho real hace que Google rechace el pedido
+ * entero con `exceeds grid limits` —el incidente de la `K` de carbonilla del
+ * 14/10/2026—.
+ *
+ * Devuelve el número en vez de dejar que quien llama vuelva a mapear: la
+ * columna pudo haberse creado en esta misma llamada, después de que se leyó el
+ * encabezado.
+ */
+export async function asegurarLaColumnaDelId(
+  fileId: string,
+  pestana: string,
+  encabezado: string[],
+  filas: string[][]
+): Promise<number> {
+  const existente = indiceDeLaColumnaDelId(encabezado);
+  if (existente >= 0) return existente;
+
+  const indice = anchoUsado(encabezado, filas); // 0-based de la primera libre
+  await asegurarColumnas(fileId, pestana, indice + 1);
+  await escribirCelda(fileId, pestana, indice, 1, textoParaLaCelda("ID SISTEMA"));
+  return indice;
 }
 
 /**

@@ -86,6 +86,15 @@ describe("el árbol no tiene embeds ambiguos", () => {
     return salida;
   }
 
+  /*
+   * El tope va escrito y no es el de vitest. Esto lee **todo** `app/` y `lib/`
+   * —1.800 y pico de archivos— y corre un regex por cada uno: solo tarda ~1 s,
+   * pero adentro de la suite compite con otros 470 archivos y el 26/11/2026 se
+   * pasó de los 5 s por omisión (5.107 ms) sin que nada estuviera roto. El
+   * árbol crece todas las semanas, así que ese tope se iba a cruzar igual; lo
+   * que esto compra no es evitar un rojo sino que un rojo de este archivo
+   * vuelva a significar «hay un embed ambiguo» y nada más.
+   */
   it("ni en app/ ni en lib/", () => {
     const malos: string[] = [];
     for (const ruta of [...archivos("app"), ...archivos("lib")]) {
@@ -94,5 +103,5 @@ describe("el árbol no tiene embeds ambiguos", () => {
       }
     }
     expect(malos).toEqual([]);
-  });
+  }, 60_000);
 });

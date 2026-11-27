@@ -86,6 +86,15 @@ export interface OpcionesDeLaBase {
    * conoce los índices, así que el test dice cuál es la regla.
    */
   alInsertar?: (tabla: string, fila: Fila, filas: readonly Fila[]) => ErrorDeLaBase | null;
+  /**
+   * Si la base se niega a actualizar esta fila, y con qué error. Es la tercera de
+   * la familia y llegó última: existe para probar qué contesta una ruta que
+   * escribe en varios pasos cuando uno de los `update` del medio falla. Sin
+   * esto, un paso que no mira su error se ve exactamente igual que uno que sí.
+   * Se consulta **por fila**, como las otras dos, así que un `update` que toca
+   * varias se niega entero con el primer error y no deja ninguna tocada.
+   */
+  alActualizar?: (tabla: string, fila: Fila, filas: readonly Fila[]) => ErrorDeLaBase | null;
 }
 
 /** Cuántas filas devuelve PostgREST como mucho. */
@@ -303,7 +312,11 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
 
     /** Sólo las columnas pedidas, como PostgREST. Lo que lleva `:` es un embed. */
     private proyectar(fila: Fila): Fila {
-      if (!this.columnas) return fila;
+      // `*` no es el nombre de una columna: es todas. Tratarlo como un nombre
+      // devolvía `{ "*": undefined }` —una fila que existe y no tiene ni una
+      // columna—, así que una ruta que lee la OT entera veía `undefined` en
+      // todo y la rechazaba por motivos inventados, sin un solo error.
+      if (!this.columnas || this.columnas.trim() === "*") return fila;
       const salida: Fila = {};
       for (const c of this.columnas.split(/,(?![^(]*\))/).map((x) => x.trim())) {
         if (c.includes(":")) {
@@ -329,7 +342,19 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
       }
 
       if (this.accion === "upsert" && this.conflicto) {
-        const choca = filas.find((f) => f[this.conflicto!] === this.fila![this.conflicto!]);
+        // `onConflict` es una **lista** de columnas separadas por coma, que es
+        // como se nombra una clave natural: `equipment_id,accion,componente`.
+        // Tratarla como un solo nombre de columna hacía que el fake comparara
+        // `undefined === undefined` y diera que **todo choca con todo**: dos
+        // upserts distintos sobre la misma tabla terminaban en una sola fila, y
+        // un test que afirmara «no se escribió nada» pasaba en verde por el
+        // motivo equivocado (25/11/2026).
+        const claves = this.conflicto.split(",").map((c) => c.trim()).filter(Boolean);
+        // Una fila que no trae alguna de las columnas de la clave no puede
+        // chocar por ella: en Postgres dos NULL no son iguales para un `unique`.
+        const choca = claves.every((c) => this.fila![c] !== undefined)
+          ? filas.find((f) => claves.every((c) => f[c] === this.fila![c]))
+          : undefined;
         // La fila que ya estaba se actualiza y no se anota en `inserts`: lo que un
         // test quiere saber de un upsert repetido es justamente que no agregó nada.
         if (choca) {
@@ -359,6 +384,10 @@ export function supabaseDeMentira(opciones: OpcionesDeLaBase = {}): BaseDeMentir
 
       if (this.accion === "update") {
         const aTocar = filas.filter(coincide);
+        for (const f of aTocar) {
+          const seNego = opciones.alActualizar?.(this.tabla, f, filas) ?? null;
+          if (seNego) return { data: null, error: seNego };
+        }
         for (const f of aTocar) Object.assign(f, this.fila);
         return { data: this.pidioSelect ? aTocar.map((f) => this.proyectar(f)) : null, error: null };
       }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gruposDeDuplicados } from "./duplicadosDeProveedor";
+import { fichasCompuestas, gruposDeDuplicados } from "./duplicadosDeProveedor";
 
 const NAVARRO = "30710597363";
 const MARFRA = "30714412333";
@@ -99,5 +99,57 @@ describe("el orden", () => {
     ]);
     expect(grupos.map((g) => g.motivo)).toEqual(["mismo cuit", "mismo cuit", "nombre parecido"]);
     expect(grupos.slice(0, 2).map((g) => g.clave)).toEqual(["30590139072", MARFRA]);
+  });
+});
+
+describe("la celda con varios proveedores adentro", () => {
+  /*
+   * El caso real: a un pedido se le compró a cuatro, quien llenó la planilla
+   * puso los cuatro en la columna PROVEEDOR, y `asegurarProveedores()` tomó la
+   * celda entera como el nombre de uno nuevo.
+   */
+  const padron = [
+    { id: "compuesta", nombre: "PLATINO, ZMG, TRACK MAR, EQUIPARTES", cuit: null },
+    { id: "guion", nombre: "TRACK MAR - EQUIPARTES", cuit: null },
+    { id: "platino", nombre: "PLATINO", cuit: null },
+    { id: "platino2", nombre: "Platino", cuit: "20439821540" },
+    { id: "zmg", nombre: "ZMG", cuit: null },
+    { id: "track", nombre: "TRACK MAR", cuit: null },
+    { id: "equi", nombre: "EQUIPARTES", cuit: null },
+  ];
+
+  it("la reconoce por coma y por guion", () => {
+    expect(fichasCompuestas(padron).map((f) => f.id).sort()).toEqual(["compuesta", "guion"]);
+  });
+
+  it("dice qué proveedores nombra", () => {
+    const f = fichasCompuestas(padron).find((x) => x.id === "compuesta")!;
+    expect(f.partes).toEqual(["PLATINO", "ZMG", "TRACK MAR", "EQUIPARTES"]);
+  });
+
+  /*
+   * El reconocimiento es conservador: si un pedazo no es un proveedor que ya
+   * existe, la coma es parte del nombre y no un separador.
+   */
+  it("una coma que no separa proveedores no la convierte en compuesta", () => {
+    expect(
+      fichasCompuestas([
+        { id: "a", nombre: "Pagano, Kopaitich y asociados", cuit: null },
+        { id: "b", nombre: "Pagano", cuit: null },
+      ])
+    ).toEqual([]);
+  });
+
+  /*
+   * Es la razón de ser de todo esto: sin apartarla, la compuesta arrastra a
+   * los tres proveedores de verdad a un grupo donde ya no se ve que el único
+   * duplicado era «PLATINO» contra «Platino».
+   */
+  it("no entra a ningún grupo, y el duplicado real queda a la vista", () => {
+    const grupos = gruposDeDuplicados(padron);
+    expect(grupos.flatMap((g) => g.ids)).not.toContain("compuesta");
+    expect(grupos.flatMap((g) => g.ids)).not.toContain("guion");
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].ids.sort()).toEqual(["platino", "platino2"]);
   });
 });

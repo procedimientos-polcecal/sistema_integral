@@ -6,7 +6,12 @@ import { puedeEditarCompras } from "@/lib/compras/auth";
 import {
   leerComparativa, urlDePlanilla, carpetaConfigurada,
 } from "@/lib/compras/drive";
-import { mapearEncabezados, filasParaEsteRi, parsearFila } from "@/lib/compras/comparativa";
+import {
+  mapearEncabezados, filasParaEsteRi, parsearFila, indiceDeLaColumnaDelId,
+} from "@/lib/compras/comparativa";
+import {
+  esEcoAlReleer, ubicarLoDelSistema, type CotizacionDelSistema,
+} from "@/lib/compras/ecoDelSistema";
 import { claveProveedor } from "@/lib/compras/sheets";
 import { indicePorClave } from "@/lib/core/proveedores";
 
@@ -18,7 +23,8 @@ import { comparativaCongelada, tienePresupuestoElegido } from "@/lib/compras/con
  *
  * Es idempotente: se puede volver a llamar para releer la planilla. Al hacerlo
  * se borran los presupuestos que habían venido de Drive —sobre esos manda la
- * planilla— y se dejan intactos los que se cargaron en el sistema.
+ * planilla— y se dejan intactos los que se cargaron en el sistema, y las filas
+ * de la planilla que son copia de ésos no entran de nuevo.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -114,19 +120,64 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // la siguiente.
   const { data: previas } = await admin
     .from("compras_cotizaciones")
-    .select("drive_fila, elegida")
+    .select("id, drive_fila, elegida, origen")
     .eq("requerimiento_id", id)
     .not("drive_fila", "is", null);
 
+  // La herencia sale sólo de las de origen "drive", que son las que se borran
+  // y se reinsertan. Una "app" sobrevive con su propia marca: heredarla a una
+  // fila nueva sería elegir dos presupuestos para la misma compra.
   const filasElegidas = new Set(
-    (previas ?? []).filter((p) => p.elegida).map((p) => p.drive_fila as number)
+    (previas ?? [])
+      .filter((p) => p.elegida && p.origen === "drive")
+      .map((p) => p.drive_fila as number)
   );
+
+  // Lo que el sistema escribió él mismo: su id y su fila. Las filas de la
+  // planilla que lo repiten no son presupuestos nuevos: ver `esEcoAlReleer`.
+  const idxId = indiceDeLaColumnaDelId(planilla.encabezado);
+  // Los ids salen de TODAS las 'app' del RI, tengan o no `drive_fila`: una
+  // cuya copia ya está en la planilla pero quedó sin fila anotada también es eco.
+  const { data: delSistema } = await admin
+    .from("compras_cotizaciones")
+    .select("id, drive_fila")
+    .eq("requerimiento_id", id)
+    .eq("origen", "app");
+
+  const { idsDelSistema, filasSinId, correcciones } = ubicarLoDelSistema(
+    propias, idxId, (delSistema ?? []) as CotizacionDelSistema[]
+  );
+
+  // Dónde está hoy cada copia, según la planilla.
+  //
+  // Antes esto no hacía falta: la fila 'app' se borraba y se reinsertaba en cada
+  // relectura, así que su `drive_fila` se corregía solo. Ahora sobrevive con el
+  // número que tenía el día que se escribió, y en estas planillas se insertan
+  // filas en el medio. Un número viejo vacía la fila de otro al borrar el
+  // presupuesto, así que la relectura es el momento de corregirlo.
+  for (const c of correcciones) {
+    const { error: errorDeFila } = await admin
+      .from("compras_cotizaciones")
+      .update({ drive_fila: c.drive_fila })
+      .eq("id", c.id);
+    // No se le dice a quien apretó: no hay nada que pueda hacer, y la próxima
+    // relectura lo vuelve a intentar con la planilla ya leída.
+    if (errorDeFila) {
+      console.error(
+        `No se pudo corregir la fila de la cotización ${c.id} a ${c.drive_fila}:`,
+        errorDeFila.message
+      );
+    }
+  }
 
   const nuevas: Record<string, unknown>[] = [];
   const proveedoresNuevos: string[] = [];
   let sinPrecio = 0;
 
   for (const { fila, numeroFila } of propias) {
+    // Es la copia de algo que cargó el sistema: ya está, no se vuelve a traer.
+    if (esEcoAlReleer(fila, idxId, idsDelSistema, numeroFila, filasSinId)) continue;
+
     const leida = parsearFila(fila, mapeo.idx);
     if (!leida) { sinPrecio += 1; continue; }
 
@@ -156,21 +207,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   }
 
-  // Sobre las filas de la planilla manda la planilla: se reemplazan.
+  // Sobre las filas que vinieron de la planilla manda la planilla: se reemplazan.
   //
-  // Se borran TODAS las que apuntan a una fila de la planilla, no sólo las que
-  // entraron por acá. Una cotización cargada a mano se escribe en la planilla y
-  // queda con su `drive_fila`: al releer, esa misma fila volvía a entrar como
-  // nueva y el presupuesto quedaba duplicado —uno de origen "app" y otro de
-  // origen "drive", con el mismo precio y el mismo proveedor—. Le pasó al RI
-  // 1865. Una fila de la planilla es una cotización, no importa cómo llegó.
+  // Se borran las de origen "drive" y NO las que cargó el sistema (`origen =
+  // 'app'`). Antes se borraba todo lo que tuviera `drive_fila`, porque una
+  // cotización cargada a mano se escribe en la planilla y, al releer, esa misma
+  // fila volvía a entrar como nueva: el presupuesto quedaba duplicado, uno "app"
+  // y otro "drive" (le pasó al RI 1865). Ese argumento ya no aplica: la copia
+  // lleva su id en la columna `ID SISTEMA` y la lectura de arriba la saltea
+  // (`esEcoAlReleer`), así que ya no hace falta borrar lo del sistema para
+  // evitar el duplicado —y borrarlo perdía la cotización con su marca de
+  // elegida y sus datos—. Las cotizaciones anteriores a la columna no traen id y
+  // se reconocen por su número de fila: es la cláusula de transición.
   //
-  // Las cargadas a mano sin planilla vinculada tienen `drive_fila` nulo y se
-  // conservan: ésas no están en ninguna planilla que pueda mandar sobre ellas.
+  // Las cargadas a mano sin planilla vinculada tienen `drive_fila` nulo y
+  // también se conservan.
   await admin
     .from("compras_cotizaciones")
     .delete()
     .eq("requerimiento_id", id)
+    .neq("origen", "app")
     .not("drive_fila", "is", null);
 
   // Primero de una, que es lo normal y lo rápido. Si algo de una fila no entra
