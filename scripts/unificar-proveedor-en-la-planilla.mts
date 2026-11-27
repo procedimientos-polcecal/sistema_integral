@@ -146,8 +146,9 @@ const UNIFICAR: Record<string, string> = {
    * que sopesar. Las 3 celdas que dicen «HIERROS GONZÁLEZ» con tilde no entran
    * y no hace falta que entren: `claveProveedor()` ya las une.
    */
-  "FUNDICION NAVARRO": "FUNDICIONES NAVARRO",
-  "HIERRO GONZALEZ": "HIERROS GONZALEZ",
+  // Aplicada el 27/11/2026: 17 de 17 celdas. Se vacía la tabla, como las dos
+  // anteriores — dejar los pares de una corrida hecha hace que el script no
+  // cambie nada y parezca roto.
 };
 
 console.log(aplicar ? "APLICANDO sobre la planilla de PRODUCCIÓN\n" : "ENSAYO — no escribe nada. Con --aplicar, sí.\n");

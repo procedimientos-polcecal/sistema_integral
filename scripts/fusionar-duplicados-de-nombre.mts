@@ -69,7 +69,7 @@ const { contarNombresDeLaPlanilla, loQueDiceLaPlanilla } = await import(
   "../lib/compras/proveedoresDeLaPlanilla.ts"
 );
 const { cuitEsValido, normalizarCuit } = await import("../lib/odoo/proveedores.ts");
-const { claveDeProveedor } = await import("../lib/core/proveedores.ts");
+const { claveDeProveedor, unoContieneAlOtro } = await import("../lib/core/proveedores.ts");
 const { leerVariosRangos, listarPestanas, letraDeColumna } = await import("../lib/core/sheets.ts");
 const { esPestanaDeArea, indexarColumnas } = await import("../lib/compras/sheets.ts");
 
@@ -374,8 +374,7 @@ for (const grupo of paresArg >= 0 ? [] : grupos) {
    * de palabras del rubro: «rodamientos» no la usa ningún proveedor de afuera
    * del grupo, o sea que por frecuencia no se distingue de un apellido.
    */
-  const propiasDe = (n: string) =>
-    new Set(claveDeProveedor(n).split(" ").filter((p) => p.length >= 4));
+
   /*
    * `--confirmado` apaga este control para un grupo, y sólo éste. Existe
    * porque el control acierta en general y falla cuando la misma empresa se
@@ -390,8 +389,10 @@ for (const grupo of paresArg >= 0 ? [] : grupos) {
   const confirmadoAMano = unaSolaClave || nombres.every((n) => confirmados.has(n));
   const cruzados = confirmadoAMano ? [] : filas.flatMap((a, i) =>
     filas.slice(i + 1).map((b) => {
-      const [A, B] = [propiasDe(a.nombre), propiasDe(b.nombre)];
-      const unoEnElOtro = [...A].every((p) => B.has(p)) || [...B].every((p) => A.has(p));
+      // La misma pregunta que se hace el detector, y con la misma función:
+      // tener dos copias hizo que el script frenara «FUNDICIONES NAVARRO»
+      // contra «Fundición Navarro» mientras la pantalla ya los proponía.
+      const unoEnElOtro = unoContieneAlOtro(claveDeProveedor(a.nombre), claveDeProveedor(b.nombre));
       return unoEnElOtro ? null : [a.nombre, b.nombre];
     })
   ).filter(Boolean) as string[][];

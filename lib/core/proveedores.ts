@@ -151,8 +151,18 @@ export function nombresParecidos(nombres: string[]): string[][] {
  *
  * Se compara por palabra y no por subcadena para que "Mario" no entre en
  * "Mariotti", y el singular cuenta como el plural: ver `variantes`.
+ *
+ * Se exporta porque `scripts/fusionar-duplicados-de-nombre.mts` necesita la
+ * misma pregunta y tenía su propia copia. Dos copias de esto no se notan
+ * cuando se escriben y se notan cuando una se arregla: el día que acá entró
+ * el plural, el script siguió frenando «FUNDICIONES NAVARRO» contra
+ * «Fundición Navarro» diciendo que cada uno aporta una palabra propia,
+ * mientras la pantalla ya los proponía juntos.
+ *
+ * Los argumentos son **claves** —lo que devuelve `claveDeProveedor`—, no
+ * nombres tal como se escribieron.
  */
-function unoContieneAlOtro(a: string, b: string): boolean {
+export function unoContieneAlOtro(a: string, b: string): boolean {
   if (a === b) return true;
 
   // El mismo nombre pegado o separado: "ConMet" y "Con-Met" son uno solo.
