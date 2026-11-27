@@ -3,8 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { exportarRequerimiento } from "@/lib/compras/sheets";
 import { puedeEditarCompras } from "@/lib/compras/auth";
-import { leerComparativa, agregarFila } from "@/lib/compras/drive";
+import { leerComparativa, agregarFila, asegurarLaColumnaDelId } from "@/lib/compras/drive";
 import { cotizacionDeHoy } from "@/lib/compras/dolar";
+import { hoyEnArgentina } from "@/lib/core/fechas";
 import { mapearEncabezados, filaParaPlanilla } from "@/lib/compras/comparativa";
 
 const CAMPOS = [
@@ -15,6 +16,9 @@ const CAMPOS = [
   // se hace al mostrar, con el dólar del día, y recién se congela al elegir
   // este presupuesto.
   "moneda",
+  // El día en que contestó el proveedor. Opcional: si no viene, la planilla
+  // recibe el de hoy, pero en la base queda en null —no se inventa un dato.
+  "fecha_respuesta",
 ] as const;
 
 /** Estados en los que la comparativa ya es el respaldo de una decisión tomada. */
@@ -138,6 +142,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       } else {
         const area = ri.compras_areas as unknown as { nombre: string } | null;
 
+        // La columna del id tiene que existir ANTES de escribir la fila, y su
+        // índice puede ser uno recién creado: por eso no sale del mapeo.
+        const idxIdSistema = await asegurarLaColumnaDelId(
+          ri.comparativa_drive_id, planilla.pestana, planilla.encabezado, planilla.filas
+        );
+
         // La planilla es toda en pesos: si el presupuesto se cargó en dólares
         // hay que convertirlo, o la fórmula del total lo suma con los que están
         // en pesos y el más barato pasa a ser el que está en otra moneda.
@@ -155,7 +165,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           idx: mapeo.idx,
           numeroFila,
           nroRi: ri.nro_ri,
-          fecha: ri.fecha,
+          // La fecha de la respuesta del proveedor, no la del pedido. Sin ella,
+          // la de hoy: se la está cargando ahora, y una celda vacía o la del
+          // pedido serían las dos mentira.
+          fecha: (cotizacion.fecha_respuesta as string | null) ?? hoyEnArgentina(),
+          idCotizacion: String(cotizacion.id),
+          idxIdSistema,
           area: area?.nombre ?? null,
           descripcion: ri.descripcion,
           moneda: cotizacion.moneda,
@@ -188,6 +203,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         "El presupuesto se guardó, pero no se pudo escribir en la planilla: " +
         (e instanceof Error ? e.message : String(e));
     }
+  } else {
+    // Antes no había `else` y el caso pasaba en silencio. Esta ruta es
+    // `pantalla` en revisar-exportaciones: el aviso ES la estrategia.
+    avisoDrive =
+      "El presupuesto se guardó, pero este pedido no tiene una comparativa " +
+      "vinculada, así que no se escribió en ninguna planilla.";
   }
 
   return NextResponse.json(

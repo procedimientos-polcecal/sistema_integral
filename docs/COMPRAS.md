@@ -158,6 +158,7 @@ botella. Pedir no compromete nada; aprobar y comprar sí.
 | `/compras/para-aprobar` | Bandeja de quien aprueba: lo suyo arriba, lo de otros abajo |
 | `/compras/aprobaciones` | Cola por urgencia y antigüedad, con aprobación en tanda |
 | `/compras/tablero` | Para comprar → En comparativa → Pedido |
+| `/compras/presupuestos` | Cargar de una vez la respuesta de un proveedor: proveedor, fecha y planilla una vez, y después los renglones (ver `## Cargar la respuesta de un proveedor`) |
 | `/compras/proveedores` | Padrón compartido con Mantenimiento, con volumen por proveedor |
 | `/compras/ubicaciones` | Catálogo de "dónde se necesita", con detección de duplicados y fusión |
 | `/compras/configuracion` | Estado de la sincronización con la planilla |
@@ -260,6 +261,163 @@ Se ejercita contra los datos reales con
 `npx tsx scripts/probar-buscador-de-comparativas.mts`, que corre la misma
 consulta y las mismas funciones que la pantalla. La pantalla en sí **no se abrió
 en un navegador**: está detrás del login, como casi todo el sistema.
+
+## Cargar la respuesta de un proveedor (26/11/2026)
+
+[Spec](superpowers/specs/2026-11-26-compras-carga-de-presupuestos-design.md) ·
+[plan](superpowers/plans/2026-11-26-compras-carga-de-presupuestos.md). Vive en
+`app/(app)/compras/presupuestos`, `app/api/compras/presupuestos` y
+`lib/compras/` (`cargaDePresupuestos.ts`, `numeroDeCampo.ts`, `ecoDelSistema.ts`,
+`bloqueDeFilas.ts`).
+
+Es el primer paso de «que el sistema mande y las planillas se usen menos», y
+parte de un número: de **1.077** presupuestos, **1.069** entraron leyendo la
+planilla y **8** se cargaron en el SdG; en octubre y noviembre el SdG tocó la
+comparativa **dos veces**, y en toda su historia hubo **una sola** cotización
+marcada como elegida. Del otro lado hay **200 planillas** en Drive y tres se
+editaron el mismo día. **No es que la comparativa no se use: el SdG no estaba en
+el camino.** Ahora se carga acá y la planilla recibe una copia de respaldo.
+
+Lo que no se deduce del código:
+
+- **La unidad de trabajo no es un pedido.** Medido sobre 224 respuestas de
+  proveedor, el **29%** cubre más de un pedido (máximo **7**) y sólo el **4%**
+  cruza más de un artículo. Por eso la pantalla elige proveedor, fecha y
+  planilla **una vez** y después suma renglones, cada uno con su pedido, en vez
+  de colgar de un pedido como la carga de la ficha, que sigue existiendo.
+- **La columna del id va por nombre y nunca por letra.** Las comparativas miden
+  **16, 19 y 20** columnas, y `REPUESTOS MÁQUINAS` ya usa la **T** para `EQUIPO`
+  con datos adentro («Doosan 300»): fijar la letra habría pisado el equipo de
+  alguien, y escribir fuera del ancho real hace que Google rechace **la
+  escritura entera**, no la celda.
+- **La relectura dejó de borrar lo que cargó el sistema.** El «Volver a traer»
+  borraba por número de fila sin mirar el origen, a propósito (el RI 1865 está
+  en el comentario). Con la columna de id esa defensa se da vuelta: borraría la
+  fila y después saltearía su eco, y el presupuesto desaparecería del sistema
+  quedando sólo en la planilla. Ahora el borrado lleva `.neq("origen", "app")`.
+- **Una fila sin id se reconoce por su número de fila, y eso es transición.**
+  Es la única forma de reconocer las **8** filas escritas antes de que la
+  columna existiera. Se borra el día que esas 8 tengan id. **Y alcanza sólo a
+  ésas**: la cláusula vale para las `'app'` cuyo id **no** aparece escrito en la
+  planilla, nunca para todas. Con todas adentro, una fila 150 que hoy es un
+  presupuesto tipeado a mano del mismo pedido —porque alguien insertó filas
+  arriba— se salteaba como si fuera eco propio, y ese presupuesto **no entraba
+  nunca al sistema sin que nada lo dijera**. Lo decide `ubicarLoDelSistema()`.
+- **Un `drive_fila` guardado envejece, y la relectura es donde se corrige.**
+  Antes de esto, cada «Volver a traer» borraba la fila `'app'` y la reinsertaba,
+  así que su número se re-sincronizaba solo. Ahora la cotización sobrevive **con
+  el número que tenía el día que se escribió**, y en estas planillas se insertan
+  filas en el medio. **El id es para reconocer y la fila para volver a tocar**, y
+  un número viejo hace que el `DELETE` vacíe la fila de otro: ese presupuesto
+  queda en blanco en la planilla y, como en la base sigue siendo `'drive'` con su
+  `drive_fila`, la próxima relectura lo borra y no lo re-importa — desaparece de
+  los dos lados. Por eso **la fila que trae un id conocido dice dónde está esa
+  cotización hoy** y las dos relecturas corrigen ahí el número. Si esa corrección
+  falla no se avisa en pantalla: no hay nada que la persona pueda hacer, y la
+  próxima relectura lo reintenta.
+- **Qué le pasa al id cuando se borra un presupuesto.** El `DELETE` vacía la
+  fila, y eso incluye la celda del id, porque el ancho sale de
+  `anchoDeLaFilaEscrita()` —el mismo con el que se escribió— y no de
+  `COLUMNAS_COMPARATIVA.length`. **Esa distinción no es cosmética**: con las 19
+  fijas, el uuid sobrevivía solo en una fila por lo demás vacía en las planillas
+  de 19 y 20 columnas —donde `ID SISTEMA` cae en el índice 19 o 20— y sí se
+  limpiaba en las de 16, o sea que el borrado terminaba dependiendo del ancho de
+  la planilla, que es justo lo que ubicar la columna por nombre existe para
+  evitar. Y la asimetría que queda escrita a propósito: si una fila quedara con
+  el id de una cotización ya borrada, el sistema no la reconocería como eco —el
+  id dejó de estar en la base— y **el presupuesto volvería a entrar como
+  `'drive'`**, con los datos de la planilla y sin su marca de elegida. Es
+  coherente con «sobre lo que está en la planilla manda la planilla», pero hay
+  que saberlo antes de vaciar una fila a mano.
+- **La planilla ya no le gana a una corrección del sistema, y eso es nuevo.**
+  Con la fila `'app'` viva para siempre y salteada en la relectura, **una
+  corrección tipeada en la planilla sobre una fila del sistema no llega nunca al
+  SdG**. Es coherente con «el sistema manda», y es lo que esta rama vino a hacer,
+  pero durante la transición se sigue cargando en Sheets y Compras va a corregir
+  ahí por costumbre. El `PATCH` de un presupuesto ya avisa la mitad simétrica
+  —«la fila de la planilla no se reescribió»—; ésta es la otra, y no tiene
+  cartel: el cambio simplemente se queda en la planilla. Si hay que corregir un
+  presupuesto que cargó el sistema, se corrige **en el sistema**.
+- **La FECHA de la planilla es la de la respuesta, no la del pedido**: de 323
+  filas comparables, el **74%** difiere, mediana **+3 días**, y 233 de 238
+  son posteriores. Eso destapó que la carga por pedido venía escribiendo ahí la
+  fecha equivocada, y obligó a la columna `fecha_respuesta` (migración
+  `20261126135912`, aplicada). Si la cotización no la trae, va la de hoy: nunca
+  la del pedido y nunca una celda vacía.
+- **La ruta no es idempotente, y se defiende por dos lados.**
+  `unique(requerimiento_id, proveedor_id)` ya no existe —la migración 026 lo sacó
+  a propósito, porque el mismo proveedor puede cotizar dos marcas para el mismo
+  pedido y hay **7 pares repetidos** en la base—, así que un segundo envío
+  inserta todo de nuevo y reescribe las filas. La **pantalla** apaga el botón
+  mientras el POST está en vuelo y no lo rehabilita tras un 201; ante un corte de
+  red o un 502 no se sabe si el servidor guardó, así que queda apagado y hay que
+  mirar la ficha de cada pedido. Lo que la pantalla **no** puede cubrir son **dos
+  pestañas** —o la misma carga en el teléfono y en la computadora— y el «Ya los
+  revisé» apretado sobre un 502 que sí había guardado: eso lo frena la **ruta**,
+  con un **409** cuando un renglón es idéntico en
+  `(pedido, proveedor, precio unitario, fecha de respuesta)` a uno insertado hace
+  menos de dos minutos (`renglonesYaCargados`). **No es un `unique` y no toca el
+  caso legítimo**: dos marcas tienen precios distintos. Si la consulta del freno
+  falla no se frena nada — no se rechaza una carga por no poder comprobar que no
+  es un duplicado.
+- **El costo contra la cuota de Google se cuenta por planilla, y no es «1
+  lectura + 1 escritura».** Son **3 o 4 lecturas y de 1 a 3 escrituras** por
+  planilla: `leerComparativa` gasta dos (cabecera y valores), `asegurarColumnas`
+  una más —siempre, aunque no tenga nada que ensanchar—, y `agregarFilas` la
+  columna A y el bloque; las escrituras de más son el encabezado `ID SISTEMA` y
+  el ensanchado de la hoja, sólo la primera vez. El número importa porque se
+  razona contra las **60 lecturas por minuto** que comparten los siete módulos.
+  Lo que sí se cumple es que **nada de eso es por renglón**: siete renglones en
+  una planilla cuestan lo mismo que uno.
+- **El desplegable de planillas se pagina, y eso ya hacía falta.** La carpeta
+  tenía **200 planillas** el 26/11/2026 y `listarComparativas()` pedía 200: ya
+  estábamos en el tope. La 201 habría empujado a otra afuera y **el único síntoma
+  es que no aparece** — quien la busca elige «Sin elegir», el presupuesto se
+  guarda sin respaldo, y el aviso dice «no tiene comparativa vinculada», que
+  manda a mirar el pedido cuando el problema estaba en la lista. Se sigue
+  `nextPageToken`, que viene en la misma respuesta siempre que esté nombrado en
+  `fields`.
+- **Si Drive falla, lo cargado queda** y el fallo se dice en pantalla nombrando
+  la planilla y los pedidos. No hay cola porque el libro de comparativa no tiene
+  columna de pendiente: `compras_cotizaciones` no la tiene y el
+  `sheets_pendiente` del pedido es del master. Por eso la ruta está declarada
+  `pantalla` en `revisar-exportaciones`. El avance de estado al master sí va por
+  cola y anota su pendiente **antes** del `after()`, para cubrir también el
+  corte por `maxDuration`.
+- **El pedido sin comparativa vinculada ahora avisa.** Antes el `if` no tenía
+  `else` y se pasaba en silencio: son **63 de los 102** pedidos candidatos.
+  Cargar un presupuesto le vincula la planilla.
+- **El parseo de números decide plata** y por eso vive en
+  `lib/compras/numeroDeCampo.ts`, con tests. Con los dos separadores, el decimal
+  es el que está más a la derecha (`"12.500,50"` → 12500,5 y `"1,234.56"` →
+  1234,56). **Trampa viva: `PresupuestoForm.tsx` todavía tiene su propio `num()`
+  copiado, y ahí `"12.500"` da 12,5, mil veces menor y en silencio.** No se tocó
+  porque es una pantalla en uso diario y la decisión es del usuario.
+- **«Vacío» y «no se pudo leer» no son lo mismo, y confundirlos elegía
+  proveedor.** La pantalla mandaba `(num(campo) ?? 0) / 100` para IVA y
+  descuento: alguien que tipea `"21%"` en un campo rotulado «IVA %» cargaba
+  **IVA 0**, la fórmula de la planilla daba un total **21% más bajo** que el de
+  los otros proveedores, y en una comparativa donde gana el más barato eso
+  decide la compra. Lo mismo perdía entero un `"1.500 $"` en envío y un
+  `"cuatro"` en cantidad. Ahora `numerosDelRenglon()` separa las dos cosas: **un
+  campo vacío sigue valiendo 0** en IVA y descuento —y `null` en precio,
+  cantidad y envío, porque una celda sin cantidad no es una cantidad de cero—, y
+  **un texto que no se pudo leer se rechaza y se nombra** antes de mandar nada,
+  con el renglón y el campo. Es la misma vara que la ruta ya aplicaba al precio
+  unitario, un piso más arriba.
+
+**Los 8 presupuestos viejos se dejan como están: no se les escribe el id.**
+Medido contra producción **el 26/11/2026** —la fecha importa, porque es un
+número que alguien invalida el día que les escriba los ids—, los 8 tienen
+`drive_fila` y ninguno está elegido, así
+que la cláusula de transición ya los reconoce y no se duplican ni se borran.
+Escribirles el id pediría escribir en 8 planillas de producción, que es una
+acción de otro peso que una limpieza. **Queda una pregunta sobre el dato, no
+sobre el código, para el usuario:** dos de esos ocho son del **mismo pedido y la
+misma fila** (RI `0622980c`, fila 19), o sea una fila de planilla con dos
+cotizaciones en la base. Antes la relectura borraba las dos y volvía una;
+ahora sobreviven las dos y la fila se saltea, así que ese pedido pasa de **1
+presupuesto a 2**.
 
 ## El semáforo de pedidos y el reclamo (12/11/2026)
 
