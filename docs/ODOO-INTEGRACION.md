@@ -564,6 +564,69 @@ limita la corrida a los grupos cuya ficha sobreviviente se llame así e imprime
 cuáles deja afuera: aprobar «estos diez» y correr «lo que dé hoy» no son lo
 mismo.
 
+### El 27/11/2026: se tocó la planilla, y el padrón quedó en 349
+
+Diecisiete fusiones más, **20 fichas borradas** y 78 filas re-apuntadas: de
+**369 a 349**. Cero huérfanas después de cada tanda. Se hicieron de a pares
+nombrados a mano (`--pares "QUEDA = SE_VA, OTRA ; …"`), que saltea el agrupador
+entero — cuando una persona ya miró el grupo, el encadenamiento desde un ancla
+sobra y estorba. Lo que no se saltea es la validación: `problemaParaFusionar()`
+y el freno de los choques corren igual, y un nombre que no esté en el padrón
+corta la corrida antes de escribir nada.
+
+**Primero, el bug que fabricaba los duplicados.** `asegurarProveedores()`
+deduplicaba los nombres de la columna PROVEEDOR **por el texto de la celda** y
+recién después comparaba contra el padrón **por clave**. Dos escrituras de la
+misma empresa —«FERRETERIA MARFRA» y «FERRETERÍA MARFRA»— sobrevivían a ese
+`Set` y entraban como dos filas en el mismo `insert`: dos fichas creadas en el
+**mismo segundo**, las dos vacías, con los pedidos repartidos. Los cuatro pares
+que esto creó así son FERRETERIA MARFRA, PINTURERIA ARCO IRIS, OLAVARRIA GOMA y
+RM SEGURIDAD AMBIENTAL. Ahora las dos preguntas —«esto ya existe» y «esto es lo
+mismo que aquello»— se contestan con el mismo comparador, en
+`nombresQueFaltan()`, que salió exportado porque adentro de la sincronización no
+se podía probar.
+
+**Segundo, y es lo que ahorra el trabajo: los 11 grupos que esperaban una
+edición de la planilla ya no la esperaban.** Se habían listado como «hay que
+unificar la columna PROVEEDOR primero», y medido ese día la planilla **ya dice
+una sola forma de cada uno**: «FERRETERÍA RANDAZZO», «PETRO TANDIL», «GRASSO»,
+«FERRETERIA MARFRA», «ARCO IRIS», «FIPHSA», «ALERTA 2DA OFERTA», «GUSTAVO
+RIGO», «ECHEVARNE», «JOSE HOFFER» y «MARTINEZ MARIO» aparecen **cero veces** en
+las 2.160 celdas. Las fichas duplicadas eran el rastro de lo que la planilla
+decía antes. Siete se fusionaron derecho, y dos —PETROTANDIL y MARIO MARTINEZ—
+ya tenían una sola ficha.
+
+Conviene saber **dónde se mide eso**: el master `Requerimientos internos` va de
+A a N y **no tiene columna PROVEEDOR**, así que la única fuente son las 9
+pestañas `RI *`, donde la P está tipeada a mano al lado del derrame.
+
+**Tercero, las 70 celdas que sí hubo que escribir.** En cuatro casos la
+planilla nombra justamente la ficha **sin** CUIT: `RANDAZZO` (46 celdas),
+`FIPH SA` (10), `RIGO` (10) y `HOFFER` (4), mientras el CUIT y el enlace a Odoo
+viven en «Ferretería Randazzo», «FiphSA», «Gustavo Rigo» y «Jose Hoffer».
+Fusionar sin tocar la planilla obliga a elegir entre dos males —dejar viva la de
+la planilla, que hereda el CUIT pero deja el padrón diciendo «RANDAZZO», o dejar
+viva la del CUIT, que la sincronización recrea vacía—. El usuario eligió la
+tercera: cambiar las celdas. Lo hace
+`scripts/unificar-proveedor-en-la-planilla.mts`, de a una celda y releyendo
+justo antes para comprobar que la fila sigue siendo el mismo N° de RI, porque
+las columnas A a M son el derrame de un `FILTER` y se corren solas.
+
+**Y una trampa de Google que parte la corrida al medio sin corromper nada.**
+Sheets permite **60 lecturas por minuto por usuario**; una celda cuesta una
+lectura más una escritura, así que 70 celdas sin freno se pasan de largo. La
+primera corrida murió en la **tercera** celda con dos ya escritas, porque los
+ensayos previos ya habían gastado el minuto. Volver a correrlo es seguro —una
+celda ya cambiada deja de coincidir con la tabla de reemplazos, así que retoma
+donde quedó— pero el 429 no dice que la columna quedó a medio unificar. De ahí
+la pausa fija y el reintento que espera el minuto entero.
+
+**La prueba de que ninguna vuelve** no es haber borrado bien: es que las 2.160
+celdas con proveedor, que son **187 nombres distintos por clave**, resuelven
+todas contra una ficha que ya existe. Eso es exactamente lo que
+`asegurarProveedores()` decide, así que la próxima sincronización no crea
+ninguna.
+
 ### Lo que el archivo no cambia nunca
 
 **El `nombre`.** Volvió con 18 nombres cambiados y 77 pasados a mayúscula por

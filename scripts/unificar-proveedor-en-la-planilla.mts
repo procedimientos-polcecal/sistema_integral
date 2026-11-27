@@ -60,31 +60,40 @@ const LIBRO = process.env.GOOGLE_SHEETS_COMPRAS_ID!;
 /**
  * Qué texto se reemplaza por cuál.
  *
- * La forma que **queda** es siempre la mayoritaria, para que el cambio sea el
- * menor posible; da igual cuál se elija mientras sea una sola. Las claves se
- * comparan exactas (sin espacios de los bordes): una coincidencia parcial
- * convertiría «REPUESTOS GRASSO» en «REPUESTOS REPUESTOS GRASSO».
+ * Las claves se comparan exactas (sin espacios de los bordes): una
+ * coincidencia parcial convertiría «REPUESTOS GRASSO» en «REPUESTOS REPUESTOS
+ * GRASSO».
  *
- * No están acá los pares que se distinguen sólo por una tilde —«OLAVARRIA» y
- * «OLAVARRÍA GOMA»—, porque `claveProveedor()` ya los une: ésos son un bug del
- * importador y no un problema de la planilla.
+ * No van acá los pares que se distinguen sólo por una tilde —«OLAVARRIA» y
+ * «OLAVARRÍA GOMA»—, porque `claveProveedor()` ya los une: ésos eran un bug
+ * del importador y no un problema de la planilla.
+ *
+ * ── POR QUÉ LA QUE QUEDA ES LA MINORITARIA ──────────────────────
+ *
+ * Lo intuitivo sería dejar la forma que la planilla ya escribe más veces,
+ * para que el cambio sea el menor posible. Acá es al revés a propósito, y el
+ * caso es exactamente el inverso del que arregla `--la-de-la-planilla`:
+ * **la planilla escribe el nombre de la ficha que NO tiene CUIT**.
+ *
+ * En los cuatro, la ficha con el CUIT, la razón social y el enlace a Odoo se
+ * llama de la otra forma, la que la planilla no nombra nunca. Fusionar sin
+ * tocar la planilla obliga a elegir entre dos males: dejar viva la de la
+ * planilla —que hereda el CUIT pero deja el padrón diciendo «RANDAZZO»— o
+ * dejar viva la del CUIT, que la sincronización recrea vacía en la corrida
+ * siguiente. Cambiar estas 70 celdas evita los dos: el nombre bueno queda, el
+ * CUIT queda, y la ficha vacía se puede borrar sin que vuelva.
+ *
+ * Decidido por el usuario el 27/11/2026, sabiendo que escribe sobre la
+ * planilla de producción. Las otras once formas viejas que esta tabla supo
+ * tener —«GRASSO», «FERRETERIA MARFRA», «ALERTA 2DA OFERTA», «ECHEVARNE»…—
+ * salieron porque esa dirección ya no hacía falta: medido ese día, la planilla
+ * no las escribe en ninguna celda, así que sus fusiones se hicieron derecho.
  */
 const UNIFICAR: Record<string, string> = {
-  "FERRETERÍA RANDAZZO": "RANDAZZO",
-  "FERRETERIA RANDAZZO": "RANDAZZO",
-  "PETRO TANDIL": "PETROTANDIL",
-  "GRASSO": "REPUESTOS GRASSO",
-  "FERRETERIA MARFRA": "MARFRA",
-  "FERRETERÍA MARFRA": "MARFRA",
-  "ARCO IRIS": "PINTURERIA ARCO IRIS",
-  "PINTURERÍA ARCO IRIS": "PINTURERIA ARCO IRIS",
-  "PINTURERÍA Y FERRETERÍA ARCO IRIS": "PINTURERIA ARCO IRIS",
-  "FIPHSA": "FIPH SA",
-  "ALERTA 2DA OFERTA": "ALERTA",
-  "GUSTAVO RIGO": "RIGO",
-  "ECHEVARNE": "ECHEVARNE HNOS",
-  "JOSE HOFFER": "HOFFER",
-  "MARTINEZ MARIO": "MARIO MARTINEZ",
+  "RANDAZZO": "Ferretería Randazzo",
+  "FIPH SA": "FiphSA",
+  "RIGO": "Gustavo Rigo",
+  "HOFFER": "Jose Hoffer",
 };
 
 console.log(aplicar ? "APLICANDO sobre la planilla de PRODUCCIÓN\n" : "ENSAYO — no escribe nada. Con --aplicar, sí.\n");
@@ -137,15 +146,47 @@ if (!aplicar) {
  * De a una, releyendo justo antes. Lento a propósito: lo que se protege es que
  * la fila siga siendo el pedido que era cuando se leyó — las columnas A a M son
  * el derrame de un FILTER y se corren solas.
+ *
+ * ── LA CUOTA DE SHEETS, QUE ES LO QUE PARTE LA CORRIDA AL MEDIO ──
+ *
+ * Google permite **60 lecturas por minuto por usuario** y contesta 429 cuando
+ * se pasa. Una celda cuesta una lectura (A y P van en un solo batchGet) más
+ * una escritura, así que sin freno 70 celdas se pasan de largo: el 27/11/2026
+ * la primera corrida murió en la tercera celda, con dos ya escritas, porque
+ * los ensayos previos ya habían gastado el minuto.
+ *
+ * Eso no corrompe nada —cada celda se escribe sola y las ya hechas dejan de
+ * coincidir con `UNIFICAR`, así que volver a correr es seguro y retoma donde
+ * quedó—, pero deja la columna a medio unificar sin que el error lo diga.
+ * De ahí las dos defensas: una pausa fija que mantiene el ritmo por debajo de
+ * la cuota, y un reintento que espera el minuto entero cuando igual llega un
+ * 429. Un error que no sea 429 sigue cortando la corrida.
  */
+const PAUSA_MS = 1200;
+const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function conReintento<T>(que: string, hacer: () => Promise<T>): Promise<T> {
+  for (let intento = 1; ; intento++) {
+    try {
+      return await hacer();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.includes("429") || intento > 5) throw e;
+      const espera = 60_000;
+      console.log(`  … cuota de Google agotada en ${que}; espero ${espera / 1000}s (intento ${intento})`);
+      await dormir(espera);
+    }
+  }
+}
+
 let escritas = 0;
 const salteadas: string[] = [];
 for (const c of aCambiar) {
+  await dormir(PAUSA_MS);
   const L = letraDeColumna(c.columna);
-  const [ahoraRi, ahoraNombre] = await leerVariosRangos(LIBRO, [
-    `${c.pestana}!A${c.fila}`,
-    `${c.pestana}!${L}${c.fila}`,
-  ]);
+  const [ahoraRi, ahoraNombre] = await conReintento(`leer ${c.pestana}!${L}${c.fila}`, () =>
+    leerVariosRangos(LIBRO, [`${c.pestana}!A${c.fila}`, `${c.pestana}!${L}${c.fila}`])
+  );
   const riAhora = (ahoraRi[0]?.[0] ?? "").trim();
   const nombreAhora = (ahoraNombre[0]?.[0] ?? "").trim();
 
@@ -156,9 +197,11 @@ for (const c of aCambiar) {
     continue;
   }
 
-  await escribirCeldas(LIBRO, [
-    { pestana: c.pestana, columna: c.columna, fila: c.fila, valor: textoParaLaCelda(c.nuevo) },
-  ]);
+  await conReintento(`escribir ${c.pestana}!${L}${c.fila}`, () =>
+    escribirCeldas(LIBRO, [
+      { pestana: c.pestana, columna: c.columna, fila: c.fila, valor: textoParaLaCelda(c.nuevo) },
+    ])
+  );
   escritas++;
   console.log(`  ✓ ${c.pestana}!${L}${c.fila}  RI ${c.ri}  "${c.viejo}" → "${c.nuevo}"`);
 }
