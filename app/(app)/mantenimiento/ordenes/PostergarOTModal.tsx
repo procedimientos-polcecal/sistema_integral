@@ -134,6 +134,20 @@ export default function PostergarOTModal({
     }
     // Recién con el guardado en verde no hay nada que recordar.
     tirar();
+    // La orden se movió, así que el modal cierra como siempre; pero si el
+    // movimiento no quedó en el historial hay que decirlo ANTES de cerrar: la
+    // ruta contesta 200 justamente para que nadie reintente (y posterge de
+    // nuevo), y esa decisión sólo paga si el aviso se ve. El `alert` va antes de
+    // `onPostergada()` porque ése desmonta el modal y recarga la pantalla: con
+    // el aviso después, la persona vería la lista nueva y recién entonces el
+    // cartel, sin saber de qué orden habla.
+    if (body.reprogramacion_error) {
+      window.alert(
+        "La fecha se movió, pero la reprogramación no quedó registrada, así que " +
+        "no va a aparecer en la pantalla de Análisis. No hace falta volver a " +
+        `postergar. Detalle: ${body.reprogramacion_error}`
+      );
+    }
     onPostergada();
   }
 

@@ -9,6 +9,7 @@ import {
   leerFiltrosDeLaUrl, escribirFiltrosEnLaUrl, consultaDeLaRuta, hayAlgunFiltro,
   FILTROS_VACIOS, TIPOS_DE_OT, QUIENES_DE_OT, PRIORIDADES_DE_OT, CAMPOS_DE_FECHA,
   ETIQUETA_DE_TIPO, ETIQUETA_DE_QUIEN, ORDENES_DEL_LISTADO,
+  VALORES_DE_REPROGRAMACION, ETIQUETA_DE_REPROGRAMACION,
   type FiltrosOt,
 } from "@/lib/mantenimiento/filtrosOt";
 import { leerPaginaDeLaUrl } from "@/lib/core/filtrosUrl";
@@ -39,6 +40,8 @@ import { ESTADO_CANCELADA, SE_CANCELA_DESDE } from "@/lib/mantenimiento/cancelac
 import InfoTip from "@/components/InfoTip";
 import { useCargar } from "@/lib/core/useCargar";
 import Select from "@/components/Select";
+import CadenaDeFechas from "@/components/mantenimiento/CadenaDeFechas";
+import { cadenaDeFechas, type Reprogramacion } from "@/lib/mantenimiento/reprogramaciones";
 
 const ESTADOS = [
   { value: "",           label: "Todos",      color: "#64748B", bg: "#F8FAFC", dot: "#94A3B8" },
@@ -90,6 +93,8 @@ export default function OrdenesClient({
   const confirm = useConfirm();
   const [orders, setOrders]     = useState<any[]>([]);
   const [count, setCount]       = useState(0);
+  // Los movimientos de fecha de las reprogramadas de la página, por OT.
+  const [movimientos, setMovimientos] = useState<Record<string, Reprogramacion[]>>({});
   const [loading, setLoading]   = useState(true);
   // Los filtros vienen en la URL: así el tablero manda directo a "las
   // atrasadas" en vez de dejar a alguien filtrando a mano, y así se puede pasar
@@ -134,6 +139,7 @@ export default function OrdenesClient({
   const [proveedor, setProveedor] = useState(arranque.proveedor);
   const [sector, setSector] = useState(arranque.sector);
   const [equipo, setEquipo] = useState(arranque.equipo);
+  const [reprogramacion, setReprogramacion] = useState(arranque.reprogramacion);
   // Un sí o un no y no un valor de `estado`: ver `FiltrosOt.atrasada`.
   const [atrasada, setAtrasada] = useState(arranque.atrasada);
   // No es un filtro —no saca filas— pero viaja igual que ellos, porque el
@@ -211,9 +217,11 @@ export default function OrdenesClient({
 
   const filtros: FiltrosOt = useMemo(() => ({
     busqueda: busquedaAplicada, campoFecha, orden, desde, hasta,
-    estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo, atrasada,
+    estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo,
+    reprogramacion, atrasada,
   }), [busquedaAplicada, campoFecha, orden, desde, hasta,
-       estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo, atrasada]);
+       estado, especialidad, tipo, quien, prioridad, proveedor, sector, equipo,
+       reprogramacion, atrasada]);
 
   const hayFiltros = hayAlgunFiltro(filtros);
 
@@ -224,6 +232,7 @@ export default function OrdenesClient({
     setCampoFecha(""); setDesde(""); setHasta("");
     setEstado([]); setEspecialidad([]); setTipo([]); setQuien([]);
     setPrioridad([]); setProveedor([]); setSector([]); setEquipo([]);
+    setReprogramacion([]);
     setAtrasada(false);
   }
 
@@ -300,6 +309,7 @@ export default function OrdenesClient({
     const data = json.data ?? [];
     setOrders(data);
     setCount(json.count ?? 0);
+    setMovimientos(json.movimientos ?? {});
     setLoading(false);
     void cargarJustificadas(data);
   }, [page, filtros, cargarJustificadas]);
@@ -320,6 +330,24 @@ export default function OrdenesClient({
           (body.numeros_repetidos?.length
             ? ` Ojo: la planilla tiene dos filas con el N° ${body.numeros_repetidos.join(", ")}` +
               ` — se guardó la de más abajo. Corregilo en la planilla.`
+            : "") +
+          // El freno del historial de reprogramaciones, dicho. La ruta ya lo
+          // devolvía y esta pantalla lo tiraba, que es la peor combinación: el
+          // sistema creyendo que avisó. El mensaje viene del módulo y ya dice
+          // que esos movimientos no vuelven.
+          (body.reprogramaciones_freno ? ` ${body.reprogramaciones_freno}` : "") +
+          // Y si no se pudo registrar nada (la migración todavía no corrió, o
+          // la escritura falló), también se dice: un historial que no se
+          // escribe no se distingue de uno vacío.
+          //
+          // **No se redacta como algo pasajero**, y es a propósito: el upsert
+          // de esta misma corrida ya guardó las fechas de la planilla, así que
+          // volver a sincronizar encuentra los dos lados iguales y no registra
+          // nada. Lo que se perdió, se perdió. Decir "reintentá" acá sería
+          // prometer una salida que no existe.
+          (body.reprogramaciones_sin_registrar
+            ? ` No se registró lo que la planilla movió en esta corrida y no se recupera `
+              + `sincronizando de nuevo: ${body.reprogramaciones_sin_registrar}`
             : "")
         : (body.error ?? "No se pudo sincronizar.")
     );
@@ -599,8 +627,9 @@ export default function OrdenesClient({
               placeholder="Buscar equipo, sector, descripción..."
               className="w-full sm:w-60 sm:ml-auto rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
 
-            {/* En teléfono el resto arranca cerrado: siete desplegables más
-                empujarían la tabla fuera de la pantalla. */}
+            {/* En teléfono el resto arranca cerrado: ocho desplegables más
+                empujarían la tabla fuera de la pantalla. Eran siete hasta que
+                entró el de reprogramación, el 19/11/2026. */}
             <button
               onClick={() => setFiltrosAbiertos((v) => !v)}
               className="sm:hidden rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600"
@@ -637,6 +666,10 @@ export default function OrdenesClient({
             <MultiSelect valores={equipo} onCambio={setEquipo}
               vacio="Todo equipo" plural="equipos"
               opciones={equipos.map((x: any) => [x.id, x.code ? `${x.code} · ${x.name}` : x.name])} />
+            {/* Un solo filtro con dos valores que suman: ver `VALORES_DE_REPROGRAMACION`. */}
+            <MultiSelect valores={reprogramacion} onCambio={setReprogramacion}
+              vacio="Reprogramación" plural="criterios"
+              opciones={VALORES_DE_REPROGRAMACION.map((v) => [v, ETIQUETA_DE_REPROGRAMACION[v]])} />
 
             {hayFiltros && (
               <button
@@ -773,6 +806,15 @@ export default function OrdenesClient({
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-900 truncate">{o.descripcion ?? "—"}</p>
                           <p className="text-xs text-slate-900 truncate">{o.sector_raw}{o.equipo_raw ? ` · ${o.equipo_raw}` : ""}</p>
+                          {/* La cadena va acá y no en la columna de fechas de la
+                              derecha: esa no se encoge y lo que crece ahí se lo
+                              come la descripción. Sin recorte: con seis fechas se
+                              parte en dos renglones y se ven todas. */}
+                          {(o.reprogramada_veces ?? 0) > 0 && (
+                            <CadenaDeFechas
+                              fechas={cadenaDeFechas(movimientos[o.id] ?? [], o.fecha_ejecucion)}
+                            />
+                          )}
                         </div>
                         {/* El recuadro abre el modal de puntuar. Va dentro del
                             botón que despliega la fila, así que no puede ser otro
@@ -815,6 +857,17 @@ export default function OrdenesClient({
                             className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700"
                           >
                             Sin justificar
+                          </span>
+                        )}
+                        {/* Cuántas veces se corrió. No cambia de color por
+                            cantidad: «a partir de tres es grave» sería un umbral
+                            inventado, el número ya es la señal. */}
+                        {(o.reprogramada_veces ?? 0) > 0 && (
+                          <span
+                            title={`Se reprogramó ${o.reprogramada_veces} ${o.reprogramada_veces === 1 ? "vez" : "veces"}`}
+                            className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700"
+                          >
+                            Reprog. ×{o.reprogramada_veces}
                           </span>
                         )}
                         {/* Las dos fechas que se miran de un vistazo: cuándo se

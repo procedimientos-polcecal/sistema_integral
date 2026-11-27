@@ -161,7 +161,9 @@ export const MODULO_DE_TABLA: Record<string, Ambito> = {
   mant_programacion_referencia: "mantenimiento",
   mant_programacion_pisadas: "mantenimiento",
   // Mover una OT de fecha: el catálogo de razones y el historial de cada
-  // postergación, con la fecha de antes y la de después.
+  // postergación, con la fecha de antes y la de después. El historial **no
+  // cubre a las cerradas** a propósito, así que contar sobre él subcuenta;
+  // está en `notas.ts`, que es donde el modelo lo lee.
   mant_razones_de_postergacion: "mantenimiento",
   mant_reprogramaciones_ot: "mantenimiento",
   // Qué dice distinto la planilla de lo que dice el sistema, campo por campo.

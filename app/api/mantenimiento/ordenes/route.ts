@@ -13,6 +13,7 @@ import {
 } from "@/lib/mantenimiento/cancelacion";
 import { celdaDeObservacionPrevia } from "@/lib/mantenimiento/notas";
 import { fechaDeLaCarga, type FechaDeLaCarga } from "@/lib/mantenimiento/avisos";
+import { traerTodo } from "@/lib/core/paginado";
 import { marcarElAviso } from "@/lib/mantenimiento/marcarElAviso";
 import {
   reservarClave, anotarLaClave, respuestaDeLaReserva, soltarLaClave,
@@ -35,7 +36,7 @@ import {
 import { exportarLoPendiente } from "@/lib/mantenimiento/sincronizar";
 import { avisarDeLaCarga } from "@/lib/mantenimiento/avisarDeLaCarga";
 import { paginaPedida } from "@/lib/core/paginado";
-import { columnaDeFecha, ordenDelListado } from "@/lib/mantenimiento/filtrosOt";
+import { columnaDeFecha, ordenDelListado, condicionDeReprogramacion } from "@/lib/mantenimiento/filtrosOt";
 import { filtroDePrioridadConGut } from "@/lib/mantenimiento/prioridad";
 import { cuerpoJson } from "@/lib/core/cuerpo";
 import { repuestosDelCuerpo, filasParaLaBase } from "@/lib/mantenimiento/repuestosDeLaOT";
@@ -44,6 +45,7 @@ import { condicionDeAtrasada, CERRADAS } from "@/lib/mantenimiento/alertas";
 import { esquemaGut } from "@/lib/mantenimiento/gut";
 import { esquemaFalla } from "@/lib/mantenimiento/fallas";
 import { validar, errorDeValidacion } from "@/lib/core/validar";
+import type { Reprogramacion } from "@/lib/mantenimiento/reprogramaciones";
 import { alNacerLaOT } from "@/lib/agenda/alNacerLaOT";
 
 /**
@@ -104,6 +106,7 @@ export async function GET(request: Request) {
   const proveedor    = varios("proveedor");
   const sector       = varios("sector");
   const equipo       = varios("equipo");
+  const reprogramacion = varios("reprogramacion");
   // `equipment_id` es el nombre viejo, con un solo valor. Lo usa la ficha del
   // equipo para traer sus órdenes; se conserva para no romperla.
   const equipment_id = searchParams.get("equipment_id");
@@ -170,6 +173,12 @@ export async function GET(request: Request) {
   if (sector.length)       query = query.in("sector_id", sector);
   if (equipo.length)       query = query.in("equipment_id", equipo);
   if (equipment_id)        query = query.eq("equipment_id", equipment_id);
+  // Los dos valores suman (un solo `.or()` con las dos condiciones) y se
+  // recortan contra el resto de los filtros, porque cada `.or()` va como su
+  // propio parámetro y PostgREST los une con y. Qué sale de cada valor lo decide
+  // `condicionDeReprogramacion`, que tiene los tests.
+  const deReprogramacion = condicionDeReprogramacion(reprogramacion, hoyEnArgentina());
+  if (deReprogramacion)    query = query.or(deReprogramacion);
 
   // «Atrasada» es que se le pasó la fecha, no lo que marca la planilla: la
   // condición es la misma que `estaAtrasada` y está verificada contra
@@ -229,7 +238,51 @@ export async function GET(request: Request) {
     after(() => exportarLoPendiente(createAdminClient(), { conFreno: true }));
   }
 
-  return NextResponse.json({ data, count });
+  // ── Los movimientos de fecha de las reprogramadas de esta página ──
+  //
+  // Una segunda consulta y no un embebido: la fila sólo necesita la cadena, y
+  // pedirla sólo de las que dicen haberse movido (`reprogramada_veces`) la
+  // deja en cero consultas para casi toda la página. Va de a 200 ids porque un
+  // `.in()` más largo arma una URL que PostgREST rechaza; la página es de 50,
+  // pero `?pendientes=1` trae hasta 300.
+  //
+  // El lote está atrapado entre dos límites mudos: la URL (de ahí los 200) y
+  // las 1.000 filas que PostgREST corta sin avisar —cada id trae varios
+  // movimientos, así que 300 órdenes pasan de largo—. Achicar el lote no cierra
+  // el segundo, por eso cada lote se pagina por dentro con `traerTodo`, y el
+  // `id` desempata porque dos movimientos anotados en la misma pasada comparten
+  // `creado_en` y sin él la cadena de fechas podría salir invertida en pantalla.
+  //
+  // Si la consulta falla —por ejemplo la migración todavía no corrió— el listado
+  // sale igual, sin cadenas: perder un renglón de la fila es mejor que perder la
+  // pantalla entera.
+  const movimientos: Record<string, Reprogramacion[]> = {};
+  const idsReprogramadas = (data ?? [])
+    .filter((o) => ((o as { reprogramada_veces?: number }).reprogramada_veces ?? 0) > 0)
+    .map((o) => o.id as string);
+  for (let i = 0; i < idsReprogramadas.length; i += 200) {
+    const lote = idsReprogramadas.slice(i, i + 200);
+    let filas: Reprogramacion[];
+    try {
+      filas = await traerTodo<Reprogramacion>((desde, hasta) =>
+        supabase
+          .from("mant_reprogramaciones_ot")
+          .select("*")
+          .in("ot_id", lote)
+          .order("creado_en", { ascending: true })
+          .order("id", { ascending: true })
+          .range(desde, hasta),
+      );
+    } catch (errMov) {
+      // Se loguea: un listado que pierde todas las cadenas por un error pasajero
+      // es indistinguible de uno donde nunca se reprogramó nada.
+      console.error("[mantenimiento/ordenes] no se pudo leer el historial de reprogramaciones:", errMov);
+      break;
+    }
+    for (const f of filas) (movimientos[f.ot_id] ??= []).push(f);
+  }
+
+  return NextResponse.json({ data, count, movimientos });
 }
 
 /** Qué estados valen, dicho en el error: adivinarlos es la parte lenta. */
