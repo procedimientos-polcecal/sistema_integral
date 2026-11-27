@@ -50,12 +50,30 @@ for (const linea of readFileSync(RUTA_ENV, "utf8").split(/\r?\n/)) {
 }
 process.env.GOOGLE_SHEETS_COMPRAS_ID ??= "1hnfYHaWBprT9UGOETSoQ9GQCl3B1ZezPr5FPbCrUO80";
 
+import { createClient } from "@supabase/supabase-js";
+
 const { leerVariosRangos, listarPestanas, letraDeColumna, escribirCeldas, estaCalculando, textoParaLaCelda } =
   await import("../lib/core/sheets.ts");
-const { esPestanaDeArea, indexarColumnas } = await import("../lib/compras/sheets.ts");
+const { esPestanaDeArea, indexarColumnas, claveProveedor } = await import("../lib/compras/sheets.ts");
 
 const aplicar = process.argv.includes("--aplicar");
 const LIBRO = process.env.GOOGLE_SHEETS_COMPRAS_ID!;
+
+/**
+ * Salir con un código, sin que Node aborte.
+ *
+ * `process.exit()` con el cliente de Supabase recién usado revienta en Windows
+ * con `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` y el proceso
+ * termina en **127** en vez del código pedido. No corrompe nada —el mensaje ya
+ * salió y no se escribió ninguna celda— pero un 127 dice «no se pudo ejecutar»
+ * y acá significa «se ejecutó y decidió no escribir», que no es lo mismo para
+ * quien encadene este script con otro. El respiro deja cerrar los sockets que
+ * el cliente dejó abiertos.
+ */
+async function salir(codigo: number): Promise<never> {
+  await new Promise((r) => setTimeout(r, 150));
+  process.exit(codigo);
+}
 
 /**
  * Qué texto se reemplaza por cuál.
@@ -75,28 +93,107 @@ const LIBRO = process.env.GOOGLE_SHEETS_COMPRAS_ID!;
  * caso es exactamente el inverso del que arregla `--la-de-la-planilla`:
  * **la planilla escribe el nombre de la ficha que NO tiene CUIT**.
  *
- * En los cuatro, la ficha con el CUIT, la razón social y el enlace a Odoo se
- * llama de la otra forma, la que la planilla no nombra nunca. Fusionar sin
- * tocar la planilla obliga a elegir entre dos males: dejar viva la de la
- * planilla —que hereda el CUIT pero deja el padrón diciendo «RANDAZZO»— o
- * dejar viva la del CUIT, que la sincronización recrea vacía en la corrida
- * siguiente. Cambiar estas 70 celdas evita los dos: el nombre bueno queda, el
- * CUIT queda, y la ficha vacía se puede borrar sin que vuelva.
+ * En todos, la ficha con el CUIT, la razón social y el enlace a Odoo se llama
+ * de la otra forma, la que la planilla no nombra nunca. Fusionar sin tocar la
+ * planilla obliga a elegir entre dos males: dejar viva la de la planilla
+ * —que hereda el CUIT pero deja el padrón diciendo «RANDAZZO»— o dejar viva la
+ * del CUIT, que la sincronización recrea vacía en la corrida siguiente.
+ * Cambiar la celda evita los dos: el nombre bueno queda, el CUIT queda, y la
+ * ficha vacía se puede borrar sin que vuelva.
  *
  * Decidido por el usuario el 27/11/2026, sabiendo que escribe sobre la
- * planilla de producción. Las otras once formas viejas que esta tabla supo
- * tener —«GRASSO», «FERRETERIA MARFRA», «ALERTA 2DA OFERTA», «ECHEVARNE»…—
- * salieron porque esa dirección ya no hacía falta: medido ese día, la planilla
- * no las escribe en ninguna celda, así que sus fusiones se hicieron derecho.
+ * planilla de producción. Fueron dos tandas ese día: primero RANDAZZO, FIPH
+ * SA, RIGO y HOFFER (70 celdas), después los tres de abajo (49).
+ *
+ * **De dónde salieron los tres segundos, que es lo que hay que entender antes
+ * de agregar un cuarto.** No son escrituras viejas de la planilla: son las
+ * fichas que la sincronización **creó vacías el 26/11/2026 a las 18:42:20**,
+ * cuatro minutos después de que una persona fusionara desde
+ * `/compras/proveedores/duplicados` eligiendo como sobreviviente la ficha que
+ * la planilla **no** nombra. La pantalla lo permite y sólo avisa con un cartel.
+ * Mientras eso siga siendo un cartel y no un candado, esta tabla va a seguir
+ * creciendo.
+ *
+ * Las otras once formas viejas que supo tener —«GRASSO», «FERRETERIA MARFRA»,
+ * «ALERTA 2DA OFERTA», «ECHEVARNE»…— salieron porque esa dirección ya no hacía
+ * falta: medido ese día, la planilla no las escribe en ninguna celda, así que
+ * sus fusiones se hicieron derecho.
  */
 const UNIFICAR: Record<string, string> = {
-  "RANDAZZO": "Ferretería Randazzo",
-  "FIPH SA": "FiphSA",
-  "RIGO": "Gustavo Rigo",
-  "HOFFER": "Jose Hoffer",
+  /*
+   * Tercera tanda del 27/11/2026, y la primera donde la que queda es la
+   * MAYORITARIA. No contradice lo de arriba: lo que manda no es cuántas
+   * celdas la escriben sino cuál de las dos fichas tiene el CUIT, y acá las
+   * dos cosas caen del mismo lado una vez y de lados distintos la otra.
+   *
+   *   FUNDICIONES NAVARRO  90 celdas → ficha sin CUIT, 44 RI
+   *   FUNDICION NAVARRO     9 celdas → ficha con CUIT y Odoo, 4 RI
+   *
+   * Se tocan las 9 y no las 90 porque el resultado es el mismo —una sola
+   * ficha, con el CUIT, el enlace a Odoo y las 48 órdenes— y diez veces menos
+   * celdas cambian de aspecto para los que leen la planilla. Lo que se paga
+   * es que la ficha queda llamándose «FUNDICIONES NAVARRO», en plural y en
+   * mayúsculas, en vez de «Fundición Navarro»; la razón social buena
+   * —FUNDICION ELECTRICA NAVARRO S.A.— la hereda igual, y es la que importa
+   * del lado de Odoo. El nombre de la ficha **tiene** que ser el que escribe
+   * la planilla: renombrarla después para que se vea linda la desconecta de
+   * la celda y la sincronización crea una tercera.
+   *
+   *   HIERROS GONZALEZ     49 celdas → ficha con CUIT y Odoo, 21 RI
+   *   HIERRO GONZALEZ       8 celdas → ficha sin CUIT, 0 RI
+   *
+   * Acá la mayoritaria es además la que tiene el CUIT, así que no hay nada
+   * que sopesar. Las 3 celdas que dicen «HIERROS GONZÁLEZ» con tilde no entran
+   * y no hace falta que entren: `claveProveedor()` ya las une.
+   */
+  "FUNDICION NAVARRO": "FUNDICIONES NAVARRO",
+  "HIERRO GONZALEZ": "HIERROS GONZALEZ",
 };
 
 console.log(aplicar ? "APLICANDO sobre la planilla de PRODUCCIÓN\n" : "ENSAYO — no escribe nada. Con --aplicar, sí.\n");
+
+/*
+ * ── EL CONTROL QUE SE PAGÓ CARO ─────────────────────────────────
+ *
+ * Antes de tocar una celda: que el nombre que vamos a escribir **exista en el
+ * padrón**. Si no existe, escribirlo hace justo lo contrario de lo que este
+ * script busca — `asegurarProveedores()` lo va a crear vacío y sin CUIT en la
+ * corrida siguiente.
+ *
+ * No es una hipótesis. El 27/11/2026 se escribieron 49 celdas apuntando a
+ * «Petro Tandil», «Pinturería y ferretería Arco Iris» y «MARTINEZ MARIO»
+ * mientras, en paralelo, una persona fusionaba esos mismos grupos desde
+ * `/compras/proveedores/duplicados` dejando viva la OTRA ficha. Para cuando el
+ * script terminó, los tres nombres destino ya no existían y la planilla había
+ * quedado pidiendo tres fichas nuevas. Hubo que revertir las 49.
+ *
+ * El padrón se relee acá y no se confía en una medición anterior, justamente
+ * porque **se mueve mientras uno lo mira**. Igual queda una ventana: nada
+ * impide que alguien fusione entre esta comprobación y la última escritura.
+ * Achicarla sería releer el padrón por celda; lo que la cierra de verdad es
+ * que la pantalla deje de permitir elegir un sobreviviente que la planilla no
+ * nombra, que hoy sólo avisa con un cartel.
+ */
+const db = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { persistSession: false } }
+);
+const { data: padron, error: errorPadron } = await db.from("proveedores").select("nombre");
+if (errorPadron) {
+  console.error(`No se pudo leer el padrón, así que no se escribe nada: ${errorPadron.message}`);
+  process.exit(1);
+}
+const clavesDelPadron = new Set((padron ?? []).map((p) => claveProveedor(p.nombre as string)));
+const sinFicha = [...new Set(Object.values(UNIFICAR))].filter((n) => !clavesDelPadron.has(claveProveedor(n)));
+if (sinFicha.length) {
+  console.error(
+    "Estos nombres NO están en el padrón, así que escribirlos crearía una ficha vacía en la próxima\n" +
+      "sincronización — que es exactamente lo que este script evita. No se toca ninguna celda:\n" +
+      sinFicha.map((n) => `  · «${n}»`).join("\n")
+  );
+  await salir(1);
+}
 
 const pestanas = (await listarPestanas(LIBRO)).filter(esPestanaDeArea);
 const encabezados = await leerVariosRangos(LIBRO, pestanas.map((p) => `${p}!A1:Z1`));

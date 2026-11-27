@@ -115,6 +115,39 @@ const solo = soloArg >= 0 ? new Set(process.argv[soloArg + 1].split("|").map((x)
 const confArg = process.argv.indexOf("--confirmado");
 const confirmados = new Set(confArg >= 0 ? process.argv[confArg + 1].split("|").map((x) => x.trim()) : []);
 
+/**
+ * `--distinto-cuit "QUEDA|OTRA"` acepta borrar una ficha cuyo CUIT no es el de
+ * la que queda. **Sólo vale con `--pares`**, y es lo más peligroso del script.
+ *
+ * `problemaParaFusionar()` frena ese caso con razón: dos CUIT distintos son
+ * **dos contribuyentes distintos ante la AFIP**, y facturarle a uno no es
+ * facturarle al otro. Casi siempre la respuesta correcta es dejarlas separadas,
+ * y cuando no lo es, el mensaje del freno señala el camino bueno —corregir el
+ * CUIT mal cargado en su ficha y recién después fusionar—.
+ *
+ * Esta bandera es para el caso que queda afuera de los dos: **el mismo negocio
+ * con dos personerías**, una persona física y una sociedad, donde ninguno de
+ * los dos CUIT está mal y sin embargo hay un solo proveedor. Pasó el
+ * 27/11/2026 con «Romanelli» (20-05515425-3, ROMANELLI OSCAR ALFREDO) y
+ * «Gruas Romanelli» (30-71918988-8, GRUAS Y MONTAJES ROMANELLI S.R.L.): la
+ * dirección de la primera dice «Grúas e Hidrogruas Romanelli», y la segunda
+ * nació el 06/11 cotizando una orden de servicio, sin que quien la dio de alta
+ * viera que la otra existía.
+ *
+ * **Lo que se pierde y por qué hay que mirarlo antes:** el CUIT de la que se va
+ * desaparece del padrón. Si el día de mañana facturan por separado, el
+ * comprobante de la sociedad va a caer bajo la razón social de la persona
+ * física. Lo único que queda es la fila de `auditoria`, que lleva el CUIT
+ * descartado en `contexto` y lo nombra en el `motivo`.
+ *
+ * Por eso pide las dos cosas juntas: que el par esté nombrado a mano y que
+ * alguien escriba esta bandera. Ninguna tanda automática la activa.
+ */
+const cuitArg = process.argv.indexOf("--distinto-cuit");
+const distintoCuit = new Set(
+  cuitArg >= 0 ? process.argv[cuitArg + 1].split("|").map((x) => x.trim()) : []
+);
+
 const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -240,7 +273,25 @@ if (paresArg >= 0) {
     if (seVan.some((f) => !f)) continue;
 
     const vivas = seVan as Prov[];
-    const problema = vivas.map((f) => problemaParaFusionar(queda, f)).find(Boolean);
+    /*
+     * El único freno que `--distinto-cuit` apaga es el de los dos CUIT, y se
+     * comprueba sobre los valores y no sobre el texto del mensaje: parsear la
+     * cadena que devuelve `problemaParaFusionar()` ataría este script a cómo
+     * está redactada, y el día que alguien la mejore se apagaría otro control
+     * sin que nada avise.
+     */
+    const soloEsElCuitDistinto = (f: Prov) => {
+      const a = normalizarCuit(queda.cuit ?? null);
+      const b = normalizarCuit(f.cuit ?? null);
+      return Boolean(a && b && a !== b) && queda.id !== f.id;
+    };
+    const problema = vivas
+      .map((f) =>
+        distintoCuit.has(nombreQueda) && soloEsElCuitDistinto(f)
+          ? null
+          : problemaParaFusionar(queda, f)
+      )
+      .find(Boolean);
     if (problema) { frenados.push({ clave: nombreQueda, nombres: nombresSeVan, motivo: problema }); continue; }
     const choca = FRENAN.find(
       (t) => (cuelganPorTabla.get(t)?.get(queda.id) ?? 0) > 0 && vivas.some((f) => (cuelganPorTabla.get(t)?.get(f.id) ?? 0) > 0)
@@ -513,6 +564,14 @@ for (const p of listos) {
         // lo que pasó, y el registro es lo único que va a quedar de por qué.
         (confirmados.has(p.queda.nombre) && confirmados.has(seVa.nombre)
           ? ". El par lo confirmó una persona a mano (--confirmado): los nombres no se contienen entre sí"
+          : "") +
+        // El CUIT que se descarta es lo único irrecuperable de la fusión, así
+        // que se escribe en el motivo además de en el contexto: quien lea esto
+        // dentro de un año tiene que poder reconstruir a qué contribuyente
+        // dejamos de nombrar, sin cruzar dos campos.
+        (distintoCuit.has(p.queda.nombre) && seVa.cuit && p.queda.cuit && normalizarCuit(seVa.cuit) !== normalizarCuit(p.queda.cuit)
+          ? `. Una persona declaró que son el mismo proveedor pese a tener dos CUIT (--distinto-cuit): se descarta el ${seVa.cuit}` +
+            `${seVa.razon_social ? ` de ${seVa.razon_social}` : ""} y queda el ${p.queda.cuit}`
           : ""),
       contexto: {
         fusionada_en: p.queda.id,
