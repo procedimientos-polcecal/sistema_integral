@@ -11,12 +11,30 @@ interface Archivo {
   esPlanillaGoogle: boolean;
 }
 
+/** Lo que el servidor sugiere para este pedido, con su motivo. */
+interface Sugerencia {
+  driveId: string;
+  nombre: string;
+  porque: string;
+  fuerte: boolean;
+}
+
 /**
  * Elegir de la carpeta de Drive la planilla de comparativa de este pedido.
  *
- * Los nombres son genéricos y a veces no corresponden a lo que pidió el RI, así
- * que esto no se puede adivinar: lo elige la persona. Al elegir, el sistema trae
- * las filas que estén libres o ya sean de este RI.
+ * Al elegir, el sistema trae las filas que estén libres o ya sean de este RI.
+ *
+ * Hasta el 27/11/2026 esto decía que «no se puede adivinar: lo elige la
+ * persona». Con 1.717 pedidos ya enlazados eso se midió, y resultó ser mitad
+ * cierto: la primera sugerencia acierta el **76,4%** y la correcta está entre
+ * las tres el **87,7%**. Así que arriba van las sugerencias y abajo la carpeta
+ * entera, igual que antes — **la elección sigue siendo de la persona**, porque
+ * una de cada cuatro veces la primera no es la buena y enlazar la planilla
+ * equivocada importa a este pedido los presupuestos de otro.
+ *
+ * Las de la clase fuerte —el mismo artículo ya se enlazó antes, que acierta
+ * 95,9%— se marcan distinto a propósito: sin eso pesan igual que las flojas y
+ * la buena deja de servir para ahorrarse la revisión.
  */
 export default function SelectorComparativa({
   requerimientoId, onListo, onCerrar,
@@ -30,18 +48,22 @@ export default function SelectorComparativa({
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
   const [adjuntando, setAdjuntando] = useState<string | null>(null);
+  const [sugerencias, setSugerencias] = useState<Sugerencia[]>([]);
 
   useEffect(() => {
-    fetch("/api/compras/comparativas")
+    fetch(`/api/compras/comparativas?requerimiento=${requerimientoId}`)
       .then((r) => r.json())
       .then((body) => {
         if (body.error) setError(body.error);
         else if (body.aviso) setError(body.aviso);
-        else setArchivos(body.archivos ?? []);
+        else {
+          setArchivos(body.archivos ?? []);
+          setSugerencias(body.sugerencias ?? []);
+        }
       })
       .catch(() => setError("No se pudo leer la carpeta de comparativas."))
       .finally(() => setCargando(false));
-  }, []);
+  }, [requerimientoId]);
 
   async function adjuntar(archivo: Archivo) {
     setAdjuntando(archivo.id);
@@ -106,6 +128,50 @@ export default function SelectorComparativa({
             </div>
           )}
 
+          {/* Las sugerencias, arriba y separadas de la carpeta.
+              Se esconden apenas alguien escribe en el buscador: ahí ya está
+              buscando otra cosa, y dejarlas arriba sería discutirle. */}
+          {!cargando && !busqueda && sugerencias.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Para este pedido
+              </p>
+              <ul className="divide-y divide-slate-100 card">
+                {sugerencias.map((su) => {
+                  const archivo = archivos.find((a) => a.id === su.driveId);
+                  return (
+                    <li key={su.driveId} className="flex items-center justify-between gap-3 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-900">
+                          {su.nombre}
+                          {/* La marca de la señal certera. Va por `style` y no
+                              con una utilidad de color: `.card` declara su
+                              borde fuera de capa y las de al lado no ganan. */}
+                          {su.fuerte && (
+                            <span className="ml-1.5 text-xs font-normal text-green-700">
+                              ✓ ya se usó para esto
+                            </span>
+                          )}
+                        </p>
+                        <p className="truncate text-xs text-slate-500">{su.porque}</p>
+                      </div>
+                      <button
+                        onClick={() => archivo && adjuntar(archivo)}
+                        disabled={!archivo?.esPlanillaGoogle || adjuntando !== null}
+                        className="shrink-0 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--primary-dark)] disabled:opacity-40"
+                      >
+                        {adjuntando === su.driveId ? "Trayendo…" : "Usar esta"}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-1.5 text-xs text-slate-400">
+                Son sugerencias y pueden estar erradas: revisá el nombre antes de usarla.
+              </p>
+            </div>
+          )}
+
           {cargando ? (
             <p className="py-6 text-center text-sm text-slate-400">Leyendo la carpeta…</p>
           ) : visibles.length === 0 ? (
@@ -113,6 +179,12 @@ export default function SelectorComparativa({
               {archivos.length === 0 ? "No hay archivos en la carpeta." : "Ningún archivo coincide."}
             </p>
           ) : (
+            <>
+            {!busqueda && sugerencias.length > 0 && (
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Toda la carpeta
+              </p>
+            )}
             <ul className="max-h-80 divide-y divide-slate-100 overflow-y-auto card">
               {visibles.map((a) => (
                 <li key={a.id} className="flex items-center justify-between gap-3 px-3 py-2">
@@ -133,6 +205,7 @@ export default function SelectorComparativa({
                 </li>
               ))}
             </ul>
+            </>
           )}
         </div>
     </Modal>

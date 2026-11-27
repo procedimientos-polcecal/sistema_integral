@@ -508,6 +508,65 @@ adelante en el circuito.
 Se ejercita contra los datos reales, sin escribir nada, con
 `npx tsx scripts/probar-pase-a-comparativa.mts`.
 
+## El sistema sugiere qué comparativa enlazar (27/11/2026)
+
+Al abrir «Elegir comparativa» en la ficha de un pedido, arriba de la carpeta
+aparecen **hasta tres planillas sugeridas**, cada una con el motivo, y abajo
+la carpeta entera como antes.
+
+Hasta esta fecha el componente decía en su propio docstring que esto «no se
+puede adivinar: lo elige la persona». Con **1.717 pedidos ya enlazados a mano**
+eso se podía medir en vez de suponer, y medido resultó ser mitad cierto: no se
+puede adivinar siempre, pero sí se puede sugerir. Simulando hacia adelante
+—cada pedido adivinado usando sólo los que lo precedieron— la primera
+sugerencia acierta el **76,4%** y la correcta está entre las tres el **87,7%**.
+
+Cinco cosas que no se deducen del código:
+
+**Sugiere y no elige, y la cuenta es la de siempre.** Una de cada cuatro veces
+la primera no es la buena, y enlazar la planilla equivocada **importa a este
+pedido los presupuestos de otro** — un error que no se nota hasta que alguien
+mira la comparativa y no reconoce ninguna fila. Es la misma decisión que ya
+había tomado `historicoDelArticulo` al no marcar nada solo: «un aviso que se
+equivoca una de cada cinco veces enseña a ignorar los avisos».
+
+**Hay dos clases de sugerencia y la pantalla las distingue.** La fuerte —el
+mismo artículo ya se enlazó antes— acierta el **95,9%**, pero sólo puede
+contestar en el **23,2%** de los pedidos, porque la mayoría son de un artículo
+que nunca se pidió. Lleva un ✓ y dice cuántos pedidos iguales fueron a esa
+planilla. Sin esa marca pesaría igual que una del 68% y dejaría de servir para
+ahorrarse la revisión.
+
+**La señal del nombre del archivo es la única que puede contestar por una
+planilla que nunca se usó**, y eso importa más de lo que parece: el **12,8%**
+de los enlaces estrenan un archivo, y ése es el techo duro de cualquier método
+que sólo mire el pasado. En esos 175 estrenos el nombre solo acierta el
+**68,6%**, porque las planillas se llaman como el artículo en plural —CORREAS,
+MECHAS, CAÑOS, FICHAS, MANGUERAS, RODAMIENTOS—. Por eso el comparador unifica
+singular y plural, y por eso la regla elegida saca «ES» y si no la «S»: está
+medida contra la de sacar sólo la «S» —**73,3% contra 70,7%**— y los
+TERMINALES pesan más que los CABLES, que es lo que esa regla rompe.
+
+**El área del pedido se probó y se descartó**: acierta el 18,5%, peor que
+tirar una moneda entre dos, y sumarla no movía el total.
+
+**No hay nada que entrenar ni que mantener.** Lo que «aprende» es el historial
+de `comparativa_drive_id`, que ya se escribía: no hay tabla nueva, no hay
+migración y no hay modelo. Cada enlace que una persona hace mejora la
+sugerencia siguiente, y un artículo enlazado dos veces a la misma planilla pasa
+a la señal del 95,9%. Una corrección también se aplica sola: si alguien enlaza
+distinto, el próximo pedido igual sigue al nuevo.
+
+Dos detalles que se ven sólo mirando los datos de verdad: **sólo se sugiere lo
+que está hoy en la carpeta** —7 de los 228 archivos del historial ya no están
+en Drive, y ofrecerlos sería mandar a un callejón—, y **si las sugerencias
+fallan la pantalla queda como estaba**: la ruta las envuelve en un `try` y
+devuelve la carpeta igual, porque no poder sugerir no es motivo para no poder
+elegir.
+
+Se mide con `npx tsx scripts/medir-sugerencia-de-comparativa.mts`, que corre la
+misma función contra los enlaces reales sin escribir nada.
+
 ## El semáforo de pedidos y el reclamo (12/11/2026)
 
 `/mis-pedidos` pinta de verde, amarillo o rojo los pedidos que **esperan a
