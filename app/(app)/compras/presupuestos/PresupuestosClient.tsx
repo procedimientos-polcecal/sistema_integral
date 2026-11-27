@@ -6,6 +6,7 @@ import Select from "@/components/Select";
 import MultiSelect from "@/components/MultiSelect";
 import { PLAZOS_PAGO, DISPONIBILIDADES } from "@/lib/compras/comparativa";
 import { numerosDelRenglon } from "@/lib/compras/numeroDeCampo";
+import { avisoDeCuit } from "@/lib/compras/avisoDeCuit";
 
 export type PedidoOfrecido = {
   id: string;
@@ -70,7 +71,7 @@ export default function PresupuestosClient({
   pedidos, proveedores, archivos, avisoDeDrive, hoy,
 }: {
   pedidos: PedidoOfrecido[];
-  proveedores: { id: string; nombre: string }[];
+  proveedores: { id: string; nombre: string; cuit: string | null }[];
   archivos: { id: string; nombre: string }[];
   avisoDeDrive: string | null;
   hoy: string;
@@ -95,6 +96,10 @@ export default function PresupuestosClient({
   // El freno de verdad: el estado se actualiza al próximo render, y dos clicks
   // seguidos pueden entrar antes.
   const enVuelo = useRef(false);
+
+  // Sin CUIT la orden de compra no sale. Se dice al elegir al proveedor, no al
+  // final del circuito: el mismo criterio que `PresupuestoForm`.
+  const avisoDelCuit = avisoDeCuit(proveedores.find((p) => p.id === proveedorId));
 
   const pedidoPorId = new Map(pedidos.map((p) => [p.id, p]));
   const elegidos = new Set(renglones.map((r) => r.requerimientoId).filter(Boolean));
@@ -309,6 +314,11 @@ export default function PresupuestosClient({
             <option value="">Elegir…</option>
             {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
           </Select>
+          {/* Acá pesa más que en el formulario por pedido: ahí se carga una
+              cotización y acá la respuesta entera de un proveedor, que en el
+              29% de los casos cubre más de un pedido. Enterarse al final de
+              que no se le puede comprar tira abajo toda esa carga de una. */}
+          {avisoDelCuit && <p className="mt-1 text-sm text-amber-700">{avisoDelCuit}</p>}
         </Campo>
         <Campo label="Fecha de la respuesta">
           <input

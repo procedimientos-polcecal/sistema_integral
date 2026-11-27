@@ -17,8 +17,15 @@
 /**
  * El nombre de un proveedor, listo para comparar.
  *
- * Sin acentos, sin mayúsculas, sin puntos ni comas y con los espacios
- * colapsados. Un guión suelto no es un nombre.
+ * Sin acentos, sin mayúsculas, sin puntos, comas ni comillas, y con los
+ * espacios colapsados. Un guión suelto no es un nombre.
+ *
+ * Las comillas entraron el 27/11/2026 y no son cosmética: en el padrón
+ * convivían «Distribuidora Pueyrredon» —23 RI, CUIT y enlace a Odoo— y
+ * «DISTRIBUIDORA "PUEYRREDÓN"» —0 RI, sin CUIT—, y no se reconocían como la
+ * misma porque la palabra propia de la segunda era `"pueyrredon"` **con las
+ * comillas puestas**, que no contiene ni está contenida en `pueyrredon`. O
+ * sea: el duplicado más fácil de ver a ojo era invisible para el detector.
  */
 export function claveDeProveedor(nombre: string | null | undefined): string {
   const s = String(nombre ?? "")
@@ -26,6 +33,7 @@ export function claveDeProveedor(nombre: string | null | undefined): string {
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[.,]/g, "")
+    .replace(/["'«»]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -76,6 +84,29 @@ const palabrasPropias = (clave: string): string[] =>
   clave.split(" ").filter((p) => p.length >= MINIMO && !DEL_RUBRO.has(p));
 
 /**
+ * Las formas en que una misma palabra puede estar escrita en singular o en
+ * plural.
+ *
+ * Se devuelven variantes en vez de reducir a una raíz porque en castellano el
+ * plural se arma de dos maneras y no se sabe cuál mirando sólo la palabra
+ * larga: «fundiciones» es «fundición» + `es` y «torres» es «torre» + `s`.
+ * Una raíz única acierta con una y falla con la otra —cortar `es` deja
+ * «torr», que no es «torre»—, mientras que dos conjuntos que se cruzan
+ * aciertan con las dos.
+ *
+ * Entró el 27/11/2026 porque el padrón tenía «FUNDICIONES NAVARRO» —44 RI, sin
+ * CUIT— y «Fundición Navarro» —4 RI, con CUIT, enlace a Odoo y razón social
+ * FUNDICION ELECTRICA NAVARRO S.A.— y el detector no los proponía nunca. Lo
+ * mismo con «HIERRO GONZALEZ» y «Hierros González», que se lleva 21 RI.
+ *
+ * Medido sobre el padrón entero el día que se puso: esto suma **cuatro** pares
+ * y los cuatro son la misma empresa. No es una red que haya que ajustar: el
+ * plural no aparece por casualidad entre dos proveedores distintos.
+ */
+const variantes = (p: string): string[] =>
+  p.endsWith("es") ? [p, p.slice(0, -1), p.slice(0, -2)] : p.endsWith("s") ? [p, p.slice(0, -1)] : [p];
+
+/**
  * Los nombres que probablemente sean el mismo proveedor.
  *
  * Se juntan los que uno contiene al otro entero —"Cortadi" dentro de "Domingo
@@ -119,9 +150,19 @@ export function nombresParecidos(nombres: string[]): string[][] {
  * Si uno de los dos nombres está entero dentro del otro, como palabras.
  *
  * Se compara por palabra y no por subcadena para que "Mario" no entre en
- * "Mariotti".
+ * "Mariotti", y el singular cuenta como el plural: ver `variantes`.
+ *
+ * Se exporta porque `scripts/fusionar-duplicados-de-nombre.mts` necesita la
+ * misma pregunta y tenía su propia copia. Dos copias de esto no se notan
+ * cuando se escriben y se notan cuando una se arregla: el día que acá entró
+ * el plural, el script siguió frenando «FUNDICIONES NAVARRO» contra
+ * «Fundición Navarro» diciendo que cada uno aporta una palabra propia,
+ * mientras la pantalla ya los proponía juntos.
+ *
+ * Los argumentos son **claves** —lo que devuelve `claveDeProveedor`—, no
+ * nombres tal como se escribieron.
  */
-function unoContieneAlOtro(a: string, b: string): boolean {
+export function unoContieneAlOtro(a: string, b: string): boolean {
   if (a === b) return true;
 
   // El mismo nombre pegado o separado: "ConMet" y "Con-Met" son uno solo.
@@ -132,8 +173,8 @@ function unoContieneAlOtro(a: string, b: string): boolean {
   const propiasDelCorto = palabrasPropias(corto);
   if (propiasDelCorto.length === 0) return false;
 
-  const palabrasDelLargo = new Set(largo.split(" "));
-  return propiasDelCorto.every((p) => palabrasDelLargo.has(p));
+  const palabrasDelLargo = new Set(largo.split(" ").flatMap(variantes));
+  return propiasDelCorto.every((p) => variantes(p).some((v) => palabrasDelLargo.has(v)));
 }
 
 /**

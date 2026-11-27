@@ -4,7 +4,7 @@
 > Lo escrito a mano —para qué sirve cada módulo, cómo está armada una ruta y
 > las trampas— está en [API.md](API.md). Acá sólo hay lo que sale del código.
 
-Al 2026-11-27: **328 rutas** y **509 handlers** en 25 carpetas.
+Al 2026-11-27: **329 rutas** y **510 handlers** en 25 carpetas.
 
 ## Cómo leer la columna «guarda»
 
@@ -43,7 +43,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | secreto propio | 3 |
 | token contra la base | 1 |
 | permiso de módulo | 216 |
-| sesión | 31 |
+| sesión | 32 |
 | el proxy | 56 |
 | **ABIERTA** | 0 |
 
@@ -124,7 +124,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/cantera/voladuras` | POST | permiso de módulo · `puedeEditarCantera` | `cantera_voladuras` | — |
 | `/api/cantera/yacimientos` | GET, POST, PATCH | permiso de módulo · `tieneAccesoCantera` | `cantera_yacimientos` | — |
 
-## compras (33)
+## compras (34)
 
 | Ruta | Métodos | Guarda | Tablas | Marcas |
 |---|---|---|---|---|
@@ -152,6 +152,7 @@ de PostgREST en 1000 filas; `zod` es que valida el cuerpo con el helper.
 | `/api/compras/requerimientos/[id]/odoo/pdf` | GET | permiso de módulo · `tieneAccesoCompras` | `compras_odoo_ordenes` | admin · 60s |
 | `/api/compras/requerimientos/[id]/odoo` | GET, POST | permiso de módulo · `puedeEditarCompras` | — | admin · 60s |
 | `/api/compras/requerimientos/[id]` | PATCH, DELETE | permiso de módulo · `puedeAprobarLaCompra` | `compras_cotizaciones`, `compras_historial`, `compras_requerimientos`, `usuarios` | admin · audita |
+| `/api/compras/requerimientos/pasar-a-comparativa` | POST | sesión | `compras_historial`, `compras_requerimientos`, `usuarios` | admin · 300s |
 | `/api/compras/requerimientos/reutilizar` | GET | sesión | `compras_requerimientos` | — |
 | `/api/compras/requerimientos` | POST, GET | permiso de módulo · `puedeEditarCompras` | `compras_historial`, `compras_requerimientos`, `equipos`, `ordenes_trabajo_repuestos`, `usuarios` | admin · 120s |
 | `/api/compras/sheets/opciones` | GET | sesión | — | — |
@@ -578,6 +579,7 @@ tabla puede tocar seis a través de un módulo compartido.
 | `/api/compras/requerimientos/[id]/odoo/pdf` | `lib/compras/auth`, `lib/core/descarga`, `lib/odoo/client`, `lib/odoo/pdfDeOrden`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/requerimientos/[id]/odoo` | `lib/compras/auth`, `lib/odoo/client`, `lib/odoo/pushOrden`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/requerimientos/[id]` | `lib/compras/aprobarCompra`, `lib/compras/auth`, `lib/compras/comparativa`, `lib/compras/constants`, `lib/compras/denegacion`, `lib/compras/devolucion`, `lib/compras/registrarElPedido`, `lib/compras/seguimientoSheets`, `lib/compras/sheets`, `lib/compras/types`, `lib/core/auditoria`, `lib/core/fechas`, `lib/odoo/client`, `lib/odoo/pushOrden`, `lib/supabase/admin`, `lib/supabase/server` |
+| `/api/compras/requerimientos/pasar-a-comparativa` | `lib/compras/auth`, `lib/compras/pasarAComparativa`, `lib/compras/seguimientoSheets`, `lib/compras/sheets`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/requerimientos/reutilizar` | `lib/supabase/server` |
 | `/api/compras/requerimientos` | `lib/compras/ajustes`, `lib/compras/auth`, `lib/compras/avisoDeAprobacion`, `lib/compras/constants`, `lib/compras/formulario`, `lib/compras/montoAlto`, `lib/compras/serieDeRi`, `lib/core/paginado`, `lib/supabase/admin`, `lib/supabase/server` |
 | `/api/compras/sheets/opciones` | `lib/compras/sheets`, `lib/supabase/server` |

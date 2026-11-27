@@ -24,9 +24,10 @@
  * La ambigüedad que queda es `"1.500"` pensado como uno coma cinco: se lee como
  * mil quinientos, que es lo que significa en una planilla argentina.
  *
- * `PresupuestoForm.tsx` tiene su propio `num()` copiado, con el defecto
- * contrario (`"12.500"` da 12,5). No se tocó: es una pantalla en uso diario y
- * cambiarla es una decisión aparte.
+ * Lo usan las dos pantallas que cargan un presupuesto: `/compras/presupuestos`
+ * y el `PresupuestoForm` de la ficha de un RI. Esa segunda tenía su propio
+ * `num()` copiado, con el defecto contrario —`"12.500"` daba 12,5, mil veces
+ * menos y sin decir nada—, y se pasó acá el 27/11/2026.
  */
 export function numeroDeCampo(texto: string): number | null {
   const t = texto.trim();
@@ -120,11 +121,15 @@ const ETIQUETAS: Record<keyof CamposTipeados, string> = {
  *   cinco. Es la misma vara que ya tenía el precio unitario, un piso más arriba:
  *   antes de llegar a la ruta.
  *
- * `comoSeLlama` es cómo nombrar el renglón en el mensaje ("RI 2301").
+ * `comoSeLlama` es cómo nombrar el renglón en el mensaje ("RI 2301"). **Se
+ * omite cuando hay un solo renglón en la pantalla** —la ficha de un RI carga
+ * una cotización por vez—, y entonces el mensaje arranca directamente por el
+ * campo: nombrar el renglón ahí sería decirle a alguien en qué pedido está
+ * cuando la pantalla entera es ese pedido.
  */
 export function numerosDelRenglon(
   tipeados: CamposTipeados,
-  comoSeLlama: string
+  comoSeLlama?: string
 ): { campos: NumerosDelRenglon; problemas: string[] } {
   const problemas: string[] = [];
 
@@ -133,8 +138,9 @@ export function numerosDelRenglon(
     const lectura = leerCampo(texto);
     if (lectura.estado === "vacio") return siVacio;
     if (lectura.estado === "ilegible") {
+      const donde = comoSeLlama ? `${comoSeLlama} · ` : "";
       problemas.push(
-        `${comoSeLlama} · ${ETIQUETAS[campo]}: «${texto.trim()}» no es un número. ` +
+        `${donde}${ETIQUETAS[campo]}: «${texto.trim()}» no es un número. ` +
         "Escribí sólo el número, sin % ni $ ni letras."
       );
       return siVacio;

@@ -45,16 +45,63 @@ describe("los grupos por nombre", () => {
   });
 
   /*
-   * Si ninguna tiene CUIT, fusionarlas no destraba nada: ninguna se iba a
-   * conectar con Odoo igual. Son datos a ordenar, no un circuito frenado.
+   * Hasta el 27/11/2026 un grupo sin ningún CUIT no se proponía, porque
+   * fusionarlo no conectaba nada con Odoo. Se empezaron a cargar comparativas
+   * y eso dejó de ser cierto: el que elige proveedor ve la empresa dos veces y
+   * los presupuestos se reparten entre las dos fichas. Ahora se propone, y
+   * quien decide sigue siendo una persona.
    */
-  it("sin ningún CUIT en el grupo, no se propone", () => {
-    expect(
-      gruposDeDuplicados([
-        { id: "a", nombre: "METAL SUPPLY", cuit: null },
-        { id: "b", nombre: "Metal Supply SRL", cuit: null },
-      ])
-    ).toHaveLength(0);
+  it("sin ningún CUIT en el grupo, igual se propone", () => {
+    const grupos = gruposDeDuplicados([
+      { id: "a", nombre: "METAL SUPPLY", cuit: null },
+      { id: "b", nombre: "Metal Supply SRL", cuit: null },
+    ]);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].ids.sort()).toEqual(["a", "b"]);
+  });
+
+  /*
+   * El duplicado más fácil de ver a ojo era invisible: la palabra propia de
+   * `DISTRIBUIDORA "PUEYRREDÓN"` era `"pueyrredon"` **con las comillas**, que
+   * no contiene ni está contenida en `pueyrredon`. En el padrón real eso tenía
+   * separadas una ficha con 23 RI, CUIT y Odoo de otra vacía.
+   */
+  it("las comillas no hacen a un nombre distinto", () => {
+    const grupos = gruposDeDuplicados([
+      { id: "a", nombre: "Distribuidora Pueyrredon", cuit: "20-24163988-7" },
+      { id: "b", nombre: 'DISTRIBUIDORA "PUEYRREDÓN"', cuit: null },
+    ]);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].ids.sort()).toEqual(["a", "b"]);
+  });
+
+  /*
+   * El singular y el plural son la misma palabra. En el padrón real esto
+   * tenía separadas «FUNDICIONES NAVARRO» —44 RI, sin CUIT— de «Fundición
+   * Navarro» —con CUIT, Odoo y razón social FUNDICION ELECTRICA NAVARRO S.A.—,
+   * que es el duplicado que más filas arrastraba de todos.
+   */
+  it("el plural no hace a un nombre distinto", () => {
+    const grupos = gruposDeDuplicados([
+      { id: "a", nombre: "FUNDICIONES NAVARRO", cuit: null },
+      { id: "b", nombre: "Fundición Navarro", cuit: "30-71059736-3" },
+    ]);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].ids.sort()).toEqual(["a", "b"]);
+  });
+
+  /*
+   * Y vale para las dos formas de armar el plural, que es la razón de que
+   * `variantes` devuelva un conjunto en vez de una raíz: «fundiciones» es
+   * «fundición» + es, y «torres» es «torre» + s. Una raíz sola acierta con
+   * una y falla con la otra.
+   */
+  it("también con el plural que sólo agrega una s", () => {
+    const grupos = gruposDeDuplicados([
+      { id: "a", nombre: "Hierros González", cuit: "30-71786313-1" },
+      { id: "b", nombre: "HIERRO GONZALEZ", cuit: null },
+    ]);
+    expect(grupos).toHaveLength(1);
   });
 
   /** Compartir el rubro no es ser el mismo proveedor. */

@@ -627,6 +627,79 @@ todas contra una ficha que ya existe. Eso es exactamente lo que
 `asegurarProveedores()` decide, así que la próxima sincronización no crea
 ninguna.
 
+### La carrera: 49 celdas escritas y revertidas el mismo día
+
+Es lo más caro que dejó el 27/11/2026 y no estaba en ningún plan. Se midieron
+tres grupos —PETROTANDIL, PINTURERIA ARCO IRIS, MARIO MARTINEZ—, se decidió
+cambiar sus 49 celdas de la planilla para conservar el nombre bueno, y se
+escribieron las 49. **Mientras tanto, en paralelo, una persona estaba fusionando
+esos mismos tres grupos desde `/compras/proveedores/duplicados`**, eligiendo
+como sobreviviente la ficha contraria: la que la planilla nombra, que hereda el
+CUIT.
+
+El resultado era correcto por los dos lados y destructivo junto. Para cuando el
+script terminó, «Petro Tandil», «Pinturería y ferretería Arco Iris» y «MARTINEZ
+MARIO» **ya no existían** —el CUIT 30-53523084-2 había pasado a vivir en la
+ficha «PETROTANDIL»— y la planilla había quedado pidiendo tres proveedores que
+el padrón no tenía. La próxima sincronización los habría creado vacíos: el
+script habría fabricado exactamente lo que vino a eliminar. Se revirtieron las
+49 en el acto y la columna quedó consistente, pero **la ventana entre escribir y
+revertir fue de minutos, y el cron corre solo**.
+
+Dos cosas salieron de ahí, y la segunda importa más que la primera:
+
+- **`unificar-proveedor-en-la-planilla.mts` relee el padrón y corta** si algún
+  nombre destino no existe, antes de tocar una celda. Se ejercitó con un nombre
+  inventado: sale 1 y no escribe nada. (Detalle de Windows que se arregló de
+  paso: `process.exit()` con el cliente de Supabase recién usado aborta con un
+  `Assertion failed` de libuv y el proceso termina en **127**, que dice «no se
+  pudo ejecutar» cuando lo que pasó es «se ejecutó y decidió no escribir».)
+- **Eso achica la ventana pero no la cierra**, porque nada impide fusionar entre
+  la comprobación y la última escritura. Lo que la cierra es que la pantalla
+  **deje de permitir elegir un sobreviviente que la planilla no nombra**. Hoy
+  sólo avisa con un cartel ámbar, y esa permisividad ya causó las dos cosas: las
+  tres fichas vacías del 26/11 a las 18:42:20 —cuatro minutos después de
+  fusionar— y esta carrera. Mientras sea un cartel, vuelve a pasar.
+
+### Dos CUIT que son un solo proveedor: `--distinto-cuit`
+
+`problemaParaFusionar()` frena cuando las dos fichas tienen CUIT y no coinciden,
+con razón: son **dos contribuyentes distintos ante la AFIP** y facturarle a uno
+no es facturarle al otro. El mensaje señala el camino bueno —corregir el que
+esté mal cargado y recién después fusionar—.
+
+Queda un caso que no es ninguno de los dos: **el mismo negocio con dos
+personerías**. El 27/11/2026 fueron dos pares, los dos con una persona física
+contra una sociedad, y los dos nacidos el 06/11 **en el mismo segundo**,
+cotizando una orden de servicio, sin que quien los dio de alta viera que ya
+existía el otro:
+
+| | CUIT | Razón social |
+|---|---|---|
+| `Romanelli` | 20-05515425-3 | ROMANELLI OSCAR ALFREDO |
+| `Gruas Romanelli` | 30-71918988-8 | GRUAS Y MONTAJES ROMANELLI S.R.L. |
+| `PAGANO` | 20-22388623-0 | PAGANO BIASSI VICTOR |
+| `Pagano y Kopaitich SRL` | 30-67398951-5 | PAGANO Y KOPAITICH SRL |
+
+El usuario resolvió **Romanelli sí y Pagano no**: en el primero la dirección de
+la ficha vieja dice «Grúas e Hidrogruas Romanelli», y en el segundo son dos
+cosas distintas. Que la respuesta haya sido distinta para dos pares de la misma
+forma es justamente la razón por la que esto no se automatiza.
+
+Lo hace `--distinto-cuit "QUEDA|OTRA"`, que **sólo vale con `--pares`** y pide
+las dos cosas juntas: el par nombrado a mano y la bandera escrita. Apaga ese
+freno y nada más, y lo decide sobre los valores de los CUIT y no sobre el texto
+del mensaje —parsear la cadena ataría el script a cómo está redactada, y el día
+que alguien la mejore se apagaría otro control sin que nada avise—.
+
+**Lo que se pierde es el CUIT de la que se va**, y es irrecuperable desde el
+padrón: si mañana facturan por separado, el comprobante de la sociedad cae bajo
+la razón social de la persona física. Por eso la fila de `auditoria` lo nombra
+en el `motivo` además de guardarlo en el `contexto`: *«se descarta el
+30719189888 de GRUAS Y MONTAJES ROMANELLI S.R.L. y queda el 20-05515425-3»*.
+Quien lea eso dentro de un año reconstruye a qué contribuyente dejamos de
+nombrar sin cruzar dos campos.
+
 ### Lo que el archivo no cambia nunca
 
 **El `nombre`.** Volvió con 18 nombres cambiados y 77 pasados a mayúscula por

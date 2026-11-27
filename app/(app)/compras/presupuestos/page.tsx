@@ -40,10 +40,12 @@ export default async function PresupuestosPage() {
       .range(desde, hasta)
   );
 
-  const proveedores = await traerTodo<{ id: string; nombre: string }>((desde, hasta) =>
+  // El `cuit` viaja sólo para poder avisar que falta: no completa ningún campo
+  // de la carga. Es el mismo criterio que en el formulario por pedido.
+  const proveedores = await traerTodo<{ id: string; nombre: string; cuit: string | null }>((desde, hasta) =>
     supabase
       .from("proveedores")
-      .select("id, nombre")
+      .select("id, nombre, cuit")
       .eq("activo", true)
       .order("nombre")
       .range(desde, hasta)

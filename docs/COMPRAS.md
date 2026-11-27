@@ -419,6 +419,65 @@ cotizaciones en la base. Antes la relectura borraba las dos y volvía una;
 ahora sobreviven las dos y la fila se saltea, así que ese pedido pasa de **1
 presupuesto a 2**.
 
+## Pasar varios pedidos a comparativa de una vez (27/11/2026)
+
+En el listado de `/compras/requerimientos` cada pedido que puede arrancar la
+comparativa lleva una casilla; con uno o más elegidos aparece una barra con
+**Pasar a comparativa**. Existe porque el circuito deja los pedidos aprobados
+en `SIN_INICIAR` hasta que alguien los pone a juntar presupuestos, y eso se
+hacía de a uno: medido el 27/11/2026 hay **62 pedidos aprobados esperando
+ahí**, el más viejo del 20/08, o sea 62 idas y vueltas a la ficha.
+
+Cuatro cosas que no se deducen del código:
+
+**La planilla no se escribe entera en esa llamada, y no es una omisión.**
+`reintentarPendientes` —el reintento que ya existía— hace **cinco pedidos por
+corrida** y espera un segundo entre cada uno, porque «la cuota es por minuto y
+ocho escrituras seguidas por cada uno la agotan en ráfaga». Un pedido que pasa
+a comparativa se lleva la aprobación y las dos columnas a mano del master más
+las de compra en la hoja de su área: del orden de media docena de escrituras,
+que por sesenta pedidos son cientos. Así que el orden es **cola primero,
+escritura después**: se guarda el estado de todos en un `update`, se les deja
+`sheets_pendiente` puesto **antes** de tocar Google, y recién ahí se exportan
+los que entren en el presupuesto de tiempo —cada exportación que sale bien
+borra su propio pendiente—. Al revés, un corte dejaría pedidos cambiados en la
+base, sin escribir en la planilla y sin nadie anotado para reintentarlo. Lo que
+queda en la cola lo drena el cron de `compras-sync`, que corre cada diez
+minutos y toma cinco por vez.
+
+**Pasar un pedido a comparativa lo saca de la mano de la planilla, para
+siempre.** El trigger de `editado_en_app` marca el pedido en cuanto cambia
+`estado_compra`, y desde ahí la importación deja de pisarlo. De los 62, **60
+todavía no estaban marcados**. No es una consecuencia nueva —avanzarlos uno por
+uno hace lo mismo— pero de a sesenta es un solo paso grande, y por eso el
+cartel de confirmación lo dice antes y no después.
+
+**El historial se firma por tres condiciones y no por `usuario_id is null`.**
+El `PATCH` de un pedido suelto le pone autor a la fila del trigger filtrando
+por el RI y por «sin autor», y acá parecía natural cambiar el `eq` por un `in`.
+No lo es: **4.032 de las 4.180 filas del historial no tienen autor** —las
+escribe la sincronización de la planilla—, así que un `in` sobre 62 pedidos no
+toca la fila recién creada sino toda su historia anterior. Medido: serían **57
+filas viejas** firmadas con ese nombre y con la nota de la tanda, y **56 de
+ellas son cambios de `estado_aprobacion`**, o sea justo el registro de quién
+aprobó cada pedido. Por eso el `update` pide el campo, el valor nuevo y haber
+nacido después de que la tanda empezara.
+
+**Lo que no puede pasar no muestra casilla.** La regla vive en un solo lugar
+—`motivoPorElQueNoPasa()` de
+[lib/compras/pasarAComparativa.ts](../lib/compras/pasarAComparativa.ts)— y la
+usan la tabla, la tarjeta del teléfono y el servidor, para que la casilla no
+aparezca sobre algo que después va a ser rechazado. Son cuatro motivos
+distintos y los cuatro existen en los datos de hoy: 89 sin aprobar (ahí entran
+los **27 denegados** que siguen en `SIN_INICIAR`, filas viejas de antes de que
+denegar pusiera `estado_compra: "DENEGADO"` — una selección de «todos» no los
+revive), 33 ya en comparativa, **20 en espera** —que están frenados a propósito
+y salen por su propia puerta, la que guarda `etapa_previa`— y 2.178 más
+adelante en el circuito.
+
+Se ejercita contra los datos reales, sin escribir nada, con
+`npx tsx scripts/probar-pase-a-comparativa.mts`.
+
 ## El semáforo de pedidos y el reclamo (12/11/2026)
 
 `/mis-pedidos` pinta de verde, amarillo o rojo los pedidos que **esperan a

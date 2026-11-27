@@ -101,4 +101,13 @@ describe("numerosDelRenglon", () => {
     expect(problemas).toHaveLength(1);
     expect(problemas[0]).toContain("Precio unitario");
   });
+
+  // La ficha de un RI carga una cotización por vez: ahí el renglón no tiene
+  // nombre que valga la pena decir, porque la pantalla entera es ese pedido.
+  it("sin etiqueta, el mensaje arranca por el campo y no por un separador suelto", () => {
+    const { problemas } = numerosDelRenglon({ ...vacio, precio: "100", iva: "21%" });
+    expect(problemas).toHaveLength(1);
+    expect(problemas[0]).toMatch(/^IVA %: /);
+    expect(problemas[0]).not.toContain("·");
+  });
 });
