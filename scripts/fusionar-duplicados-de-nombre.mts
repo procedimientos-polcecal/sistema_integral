@@ -201,7 +201,62 @@ const porId = new Map(padron.map((p) => [p.id, p]));
 const listos: Plan[] = [];
 const frenados: { clave: string; nombres: string[]; motivo: string }[] = [];
 
-for (const grupo of grupos) {
+/**
+ * `--pares "QUEDA = SE_VA, OTRA ; QUEDA2 = SE_VA2"` fusiona exactamente esos
+ * pares, nombrados a mano, y no mira los grupos.
+ *
+ * Existe porque **el agrupador no sabe cuándo un grupo es en realidad dos
+ * empresas**. «PAPELERA M Y M», «Papelera MyM» y «Papelera Ciuffo» caen
+ * juntas y Ciuffo es otra firma con su propio CUIT; «RM SEGURIDAD AMBIENTAL»
+ * y «SU SEGURIDAD» también, y ahí son dos pares distintos dentro de un grupo
+ * de cuatro. Decidir eso es de quien los conoce, así que el modo normal los
+ * frena y éste es por donde entra esa decisión, una vez tomada.
+ *
+ * Los nombres van **exactos**, como están en el padrón. Si alguno no está, no
+ * se hace nada: un nombre mal tipeado tiene que salir por la puerta de
+ * «no existe» y no por la de «fusiono lo que encontré».
+ */
+const paresArg = process.argv.indexOf("--pares");
+if (paresArg >= 0) {
+  const porNombre = new Map(padron.map((p) => [p.nombre, p]));
+  const faltan: string[] = [];
+  for (const bloque of process.argv[paresArg + 1].split(";")) {
+    const [izq, der] = bloque.split("=");
+    if (!izq || !der) continue;
+    const nombreQueda = izq.trim();
+    const nombresSeVan = der.split(",").map((x) => x.trim()).filter(Boolean);
+    const queda = porNombre.get(nombreQueda);
+    const seVan = nombresSeVan.map((n) => porNombre.get(n));
+    for (const [i, f] of seVan.entries()) if (!f) faltan.push(nombresSeVan[i]);
+    if (!queda) { faltan.push(nombreQueda); continue; }
+    if (seVan.some((f) => !f)) continue;
+
+    const vivas = seVan as Prov[];
+    const problema = vivas.map((f) => problemaParaFusionar(queda, f)).find(Boolean);
+    if (problema) { frenados.push({ clave: nombreQueda, nombres: nombresSeVan, motivo: problema }); continue; }
+    const choca = FRENAN.find(
+      (t) => (cuelganPorTabla.get(t)?.get(queda.id) ?? 0) > 0 && vivas.some((f) => (cuelganPorTabla.get(t)?.get(f.id) ?? 0) > 0)
+    );
+    if (choca) { frenados.push({ clave: nombreQueda, nombres: nombresSeVan, motivo: `las dos tienen datos propios en ${choca}` }); continue; }
+
+    const cambios: Record<string, unknown> = {};
+    for (const f of vivas) Object.assign(cambios, camposQueSeMudan({ ...queda, ...cambios }, f));
+    listos.push({
+      clave: nombreQueda,
+      queda,
+      seVan: vivas,
+      porQue: "par nombrado a mano",
+      mueve: vivas.reduce((a, f) => a + cuelgaDe(f.id).total, 0),
+      hereda: Object.keys(cambios),
+    });
+  }
+  if (faltan.length) {
+    console.error(`Estos nombres no están en el padrón, así que no se hace nada: ${faltan.map((n) => `«${n}»`).join(", ")}`);
+    process.exit(1);
+  }
+}
+
+for (const grupo of paresArg >= 0 ? [] : grupos) {
   const filas = grupo.ids.map((id) => porId.get(id)!).filter(Boolean);
   const nombres = filas.map((f) => f.nombre);
   const dice = loQueDiceLaPlanilla(filas, planilla);
