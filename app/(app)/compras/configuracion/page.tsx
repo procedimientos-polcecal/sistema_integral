@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { usuarioActual } from "@/lib/core/sesion";
 import {
   permisosComprasDe, aprobadoresDeCompras, aprobadoresDeOS, consultadosDeCompras,
@@ -65,17 +66,17 @@ export default async function ConfiguracionPage() {
     .order("nro_ri", { ascending: false })
     .limit(50);
 
-  const aprobadores = await aprobadoresDeCompras(supabase);
+  const aprobadores = await aprobadoresDeCompras();
 
   // La otra lista: quién decide sobre las órdenes de servicio. Va acá al lado y
   // no en otra pantalla justamente para que se vea que son dos y no una.
-  const aprobadoresOS = await aprobadoresDeOS(supabase);
+  const aprobadoresOS = await aprobadoresDeOS();
 
   // Y la tercera, que no decide nada: a quién se le avisa cuando Mantenimiento
   // pregunta por un repuesto. Va al lado de las otras dos por lo mismo —son tres
   // y no una—, y porque cuando la pregunta no interrumpe a nadie, lo que la
   // pantalla de la OT le dice a quien preguntó es que la lista se arma acá.
-  const consultados = await consultadosDeCompras(supabase);
+  const consultados = await consultadosDeCompras();
 
   // Con qué alias figura cada uno en el desplegable de la planilla.
   const { data: alias } = await supabase
@@ -86,8 +87,16 @@ export default async function ConfiguracionPage() {
   );
   const conAlias = aprobadores.map((a) => ({ ...a, alias: porUsuario[a.id] ?? null }));
 
-  // Para poder sumar a alguien a la lista hace falta saber a quién.
-  const { data: usuarios } = await supabase
+  // Para poder sumar a alguien a la lista hace falta saber a quién, y por eso
+  // va con el cliente admin: `usuarios_select_self` sólo deja ver la fila propia
+  // a quien no es `admin_sistema`, así que con la sesión este desplegable le
+  // ofrecía a Facundo —el encargado de compras— una sola persona, él mismo, sin
+  // un solo error. Es el mismo embed callado de las tres listas de arriba; el
+  // porqué medido está en el encabezado de `lib/compras/auth.ts`.
+  //
+  // El permiso lo pone esta página, que ya redirigió a quien no tenga `edicion`
+  // en Compras: quien llega acá es quien administra las listas.
+  const { data: usuarios } = await createAdminClient()
     .from("usuarios")
     .select("id, nombre, apellido, email")
     .eq("activo", true)

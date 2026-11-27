@@ -54,7 +54,7 @@ export default async function RequerimientosPage({
     // Quiénes pueden aprobar una compra. Sale de `compras_aprobadores` y no de
     // los grants del módulo: administrar Compras y estar autorizado a aprobar
     // un gasto son cosas distintas, y las hacen personas distintas.
-    aprobadoresDeCompras(supabase),
+    aprobadoresDeCompras(),
     // Esta tabla es el espejo de la planilla: cuándo se actualizó es parte de
     // lo que hay que saber para leerla.
     ultimaSincronizacionDe(supabase, "compras", "planilla"),

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { nivelEnModulo } from "@/lib/core/access";
 import type { Rol, UsuarioModulo } from "@/lib/core/types";
 
@@ -134,6 +135,41 @@ export async function esAdminCompras(
   return (await nivelComprasDe(supabase, userId)) === "admin";
 }
 
+/**
+ * **Las tres listas de abajo leen con el cliente admin, y no es una comodidad.**
+ *
+ * Las tres traen gente embebiendo `usuarios(...)` desde su tabla de pertenencia,
+ * y `usuarios` está cerrada con `usuarios_select_self` (migración 002):
+ * `using (id = auth.uid() or es_admin())`. Nunca se ensanchó, y desde la
+ * `20260910091647` `es_admin()` es **sólo `admin_sistema`**. O sea que a
+ * cualquier otro el embed le devuelve `usuarios: null` en todas las filas que no
+ * son la suya — **sin error**, que es lo que lo volvía invisible: el `.filter()`
+ * de cada función las descarta como si esas personas no existieran.
+ *
+ * Medido en producción el 27/11/2026, y el síntoma lo reportó quien lo sufría:
+ * `compras_aprobadores` tiene cuatro —MAXI, NICO, ADMIN (Bernardo Strupp) y
+ * COMPRAS (Facundo Ortiz)—, los cuatro activos. Facundo es el **encargado de
+ * compras** y su rol es `encargado`, no `admin_sistema`, así que el desplegable
+ * «A quien le toca aprobarla» del diálogo «Comparativa lista» le ofrecía **una
+ * sola opción: él mismo**, y no podía mandarle la compra a Maxi ni a Nico. Nico y
+ * Bernardo veían las cuatro porque son `admin_sistema`: por eso nadie lo vio.
+ * En `/compras/configuracion` es lo mismo tres veces, en la pantalla cuyo
+ * propósito es mostrar quién está en cada lista.
+ *
+ * **Por eso ya no reciben un cliente.** Dejarles el parámetro era dejar abierta
+ * la puerta por la que entró el bug: quien escriba la próxima pantalla pasaría
+ * la sesión —que es lo natural— y la lista volvería a venir corta y callada. No
+ * hay nada que variar acá: estas tres **tienen** que saltear RLS para ser
+ * correctas, y el permiso lo pone la pantalla (las dos de requerimientos piden
+ * el módulo; Configuración pide `edicion`).
+ *
+ * Lo que esto expone, dicho: nombre, apellido y correo de las cuatro personas de
+ * cada lista. Sus nombres ya estaban a la vista en todo el módulo —el estado de
+ * la planilla dice literalmente `PARA COMPRAR (NICO)`—, y el correo llega sólo a
+ * Configuración, que pide `edicion`; las dos pantallas de requerimientos lo
+ * descartan al mapear antes de pasarlo al cliente.
+ */
+
 /** Quiénes pueden aprobar. Es la misma fuente que el permiso. */
 export interface Aprobador {
   id: string;
@@ -143,8 +179,8 @@ export interface Aprobador {
   alias: string | null;
 }
 
-export async function aprobadoresDeCompras(supabase: SupabaseClient): Promise<Aprobador[]> {
-  const { data } = await supabase
+export async function aprobadoresDeCompras(): Promise<Aprobador[]> {
+  const { data } = await createAdminClient()
     .from("compras_aprobadores")
     .select("alias_planilla, usuarios(id, nombre, apellido, email, activo)");
 
@@ -172,10 +208,8 @@ export async function aprobadoresDeCompras(supabase: SupabaseClient): Promise<Ap
  * Sin alias, que es la única diferencia con `aprobadoresDeCompras()`: la
  * planilla de OS no firma la aprobación.
  */
-export async function aprobadoresDeOS(
-  supabase: SupabaseClient
-): Promise<Omit<Aprobador, "alias">[]> {
-  const { data } = await supabase
+export async function aprobadoresDeOS(): Promise<Omit<Aprobador, "alias">[]> {
+  const { data } = await createAdminClient()
     .from("os_aprobadores")
     .select("usuarios(id, nombre, apellido, email, activo)");
 
@@ -207,10 +241,8 @@ export async function aprobadoresDeOS(
  * tampoco le manda. Y estar en la lista no abre el módulo: la bandeja vive bajo
  * `/compras`, así que sumar a alguien sin darle Compras no le hace nada visible.
  */
-export async function consultadosDeCompras(
-  supabase: SupabaseClient
-): Promise<Omit<Aprobador, "alias">[]> {
-  const { data } = await supabase
+export async function consultadosDeCompras(): Promise<Omit<Aprobador, "alias">[]> {
+  const { data } = await createAdminClient()
     .from("compras_consultados")
     .select("usuarios(id, nombre, apellido, email, activo)");
 

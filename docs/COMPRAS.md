@@ -143,6 +143,36 @@ La lista vigente se ve en `/compras/configuracion`, para compararla con la de la
 planilla. Las dos se mantienen a mano: no hay forma de leer los editores de una
 protección de Google desde afuera de ella.
 
+**Y quién lee esa lista no es un detalle: hasta el 27/11/2026 estuvo rota para
+todos menos para los `admin_sistema`, en silencio.** Las tres listas de
+Configuración —aprobadores de compra, aprobadores de OS y consultados— y el
+desplegable «A quien le toca aprobarla» del diálogo «Comparativa lista» salen de
+funciones que traen a la gente **embebiendo `usuarios(...)`** desde su tabla de
+pertenencia. La tabla de pertenencia es abierta, pero `usuarios` está cerrada con
+`usuarios_select_self` (migración 002): `using (id = auth.uid() or es_admin())`,
+nunca ensanchada, y desde la `20260910091647` `es_admin()` es **sólo
+`admin_sistema`**. O sea que a cualquier otro el embed le devolvía
+`usuarios: null` en todas las filas menos la suya —**sin error**— y el `.filter()`
+de cada función las descartaba como si esas personas no existieran.
+
+Lo que eso producía, medido: **Facundo Ortiz, el encargado de compras, es
+`encargado` y no `admin_sistema`**, así que al declarar una comparativa lista el
+desplegable le ofrecía **una sola opción, él mismo**, y no podía asignarle la
+compra ni a Maxi ni a Nico. En Configuración veía las tres listas con una sola
+persona, y «sumar aprobador» le ofrecía un solo nombre. Nico y Bernardo son
+`admin_sistema` y veían las cuatro: por eso pasó meses sin que nadie lo notara.
+Lo reportó quien lo sufría, como un pedido de función —«que igualmente pueda
+decidir si aprueba maxi o nico»— y no como un error, que es exactamente lo que
+hace un fallo que no da error.
+
+Hoy **las tres funciones leen con el cliente admin y ya no reciben un cliente**.
+Dejarles el parámetro era dejar abierta la puerta por la que entró: quien escriba
+la próxima pantalla pasaría la sesión, que es lo natural, y la lista volvería a
+venir corta y callada. El permiso lo pone la pantalla. Vale notar que **las rutas
+que agregan y sacan gente de esas listas ya usaban el cliente admin**: el agujero
+estaba sólo en la lectura que las dibuja, que es el tipo de asimetría que no se
+ve revisando una ruta sola.
+
 **El alta es la excepción**: la puede hacer cualquier usuario activo del
 sistema, tenga o no el módulo, desde `/mis-pedidos`. Son nueve áreas las que
 piden materiales y exigirles un permiso convertiría a Compras en un cuello de

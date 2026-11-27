@@ -73,7 +73,7 @@ export default async function RequerimientoPage({
 
   // Quiénes pueden aprobar una compra: es a uno de ellos a quien Compras se
   // la asigna.
-  const aprobadores = await aprobadoresDeCompras(supabase);
+  const aprobadores = await aprobadoresDeCompras();
 
   const permisos = await permisosComprasActuales();
 
@@ -212,7 +212,13 @@ export default async function RequerimientoPage({
       esAsignado={esAsignado}
       umbralMontoAlto={umbralMontoAlto}
       historicoDelArticulo={historicoDelArticulo}
-      aprobadores={aprobadores}
+      // Se mapea, como en el listado, y no es prolijidad: pasar el objeto entero
+      // mandaba el **correo** de cada aprobador al navegador. TypeScript no lo
+      // ve —un objeto con campos de más es asignable— y el tipo del cliente, que
+      // declara sólo los tres, tampoco los borra del payload.
+      aprobadores={aprobadores.map((a) => ({
+        id: a.id, nombre: a.nombre, apellido: a.apellido,
+      }))}
       odoo={dondeApuntaOdoo()}
       ordenesOdoo={(ordenesOdoo ?? []).map((o) => ({
         odooOrderId: o.odoo_order_id as number,
