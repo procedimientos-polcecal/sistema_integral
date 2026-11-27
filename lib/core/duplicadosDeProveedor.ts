@@ -109,10 +109,22 @@ export interface GrupoDeDuplicados {
  * Las fichas compuestas se apartan antes de empezar, así que no aparecen en
  * ningún grupo.
  *
- * **Un grupo de nombres parecidos donde ninguno tiene CUIT no se devuelve.** No
- * es que no sea un duplicado: es que fusionarlo no destraba nada —ninguna de
- * las dos filas se iba a conectar con Odoo igual— y llenaría la pantalla de
- * decisiones sin consecuencia. Son datos a ordenar, no un circuito frenado.
+ * **Hasta el 27/11/2026 un grupo donde ninguno tenía CUIT no se devolvía.** El
+ * motivo escrito acá era que fusionarlo no destraba nada —ninguna de las dos
+ * filas se iba a conectar con Odoo igual— y que llenaría la pantalla de
+ * decisiones sin consecuencia. Eso era cierto mientras el objetivo era Odoo, y
+ * dejó de serlo cuando se empezaron a cargar comparativas: ahí alguien elige
+ * un proveedor de una lista, y ver la misma empresa dos veces **sí** tiene
+ * consecuencia —la mitad de los presupuestos cuelga de una ficha y la mitad de
+ * la otra, y el historial del proveedor deja de servir para comparar—.
+ *
+ * Lo que se midió antes de sacarlo, que es lo que hacía falta saber: sin el
+ * filtro aparecen **14 grupos más**, no cien. Cuatro son idénticos salvo
+ * mayúsculas o comillas (`Prestigio`/`PRESTIGIO`), seis son la misma empresa
+ * escrita distinto (`BULL VIAL`/`BULL-VIAL`, `ConMet`/`Con-Met`) y el resto
+ * son celdas con varios proveedores que ya se apartan por otro lado. Si algún
+ * día esa cuenta se dispara, el filtro que conviene no es éste sino ordenar
+ * los grupos por cuántas filas cuelgan de ellos.
  */
 export function gruposDeDuplicados(
   entrada: readonly ProveedorParaAgrupar[]
@@ -153,13 +165,9 @@ export function gruposDeDuplicados(
   for (const p of sueltos) {
     idsPorNombre.set(p.nombre, [...(idsPorNombre.get(p.nombre) ?? []), p.id]);
   }
-  const conCuit = new Set(sueltos.filter((p) => normalizarCuit(p.cuit)).map((p) => p.id));
-
   for (const nombres of nombresParecidos([...idsPorNombre.keys()])) {
     const ids = nombres.flatMap((n) => idsPorNombre.get(n) ?? []);
     if (ids.length < 2) continue;
-    // Sin ninguno con CUIT no hay nada que destrabar: ver el docstring.
-    if (!ids.some((id) => conCuit.has(id))) continue;
     grupos.push({ motivo: "nombre parecido", clave: nombres[0], ids });
     for (const id of ids) yaAgrupado.add(id);
   }
@@ -171,7 +179,6 @@ export function gruposDeDuplicados(
    */
   for (const [nombre, ids] of idsPorNombre) {
     if (ids.length < 2 || ids.some((id) => yaAgrupado.has(id))) continue;
-    if (!ids.some((id) => conCuit.has(id))) continue;
     grupos.push({ motivo: "nombre parecido", clave: nombre, ids });
     for (const id of ids) yaAgrupado.add(id);
   }

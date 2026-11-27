@@ -107,6 +107,14 @@ const laDeLaPlanilla = process.argv.includes("--la-de-la-planilla");
 const soloArg = process.argv.indexOf("--solo");
 const solo = soloArg >= 0 ? new Set(process.argv[soloArg + 1].split("|").map((x) => x.trim())) : null;
 
+/*
+ * `--confirmado "A|B"` declara que ese grupo es la misma empresa, y apaga
+ * para él —y sólo para él— el control de contención. Ver el comentario largo
+ * donde se aplica.
+ */
+const confArg = process.argv.indexOf("--confirmado");
+const confirmados = new Set(confArg >= 0 ? process.argv[confArg + 1].split("|").map((x) => x.trim()) : []);
+
 const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -272,7 +280,23 @@ for (const grupo of paresArg >= 0 ? [] : grupos) {
    * repetido— y con ninguno no hay nada que conectar. Las dos van a la mano.
    */
   const conCuit = filas.filter((f) => f.cuit && cuitEsValido(normalizarCuit(f.cuit)));
-  if (conCuit.length === 0) {
+
+  /*
+   * La excepción: cuando todas las fichas del grupo comparten la clave, no es
+   * un parecido sino **la misma escritura** —«Prestigio» y «PRESTIGIO»,
+   * «Distribuidora Pueyrredon» y «DISTRIBUIDORA "PUEYRREDÓN"»—, y ahí no hay
+   * nada que juzgar: el CUIT no aporta nada a una decisión que ya está tomada
+   * por los propios textos.
+   *
+   * Y es seguro además por donde importa: `asegurarProveedores()` busca por
+   * clave, así que la que quede responde igual al texto de la planilla y el
+   * sync **no** recrea la que se borró. Ésa es justamente la diferencia con
+   * los grupos de nombres parecidos, donde cada ficha tiene su propia clave y
+   * borrar la que la planilla nombra la hace volver vacía a la hora siguiente.
+   */
+  const unaSolaClave = new Set(filas.map((f) => claveDeProveedor(f.nombre))).size === 1;
+
+  if (conCuit.length === 0 && !unaSolaClave) {
     frenados.push({ clave: grupo.clave, nombres, motivo: "ninguna tiene CUIT válido: fusionar no conecta nada" });
     continue;
   }
@@ -301,7 +325,19 @@ for (const grupo of paresArg >= 0 ? [] : grupos) {
    */
   const propiasDe = (n: string) =>
     new Set(claveDeProveedor(n).split(" ").filter((p) => p.length >= 4));
-  const cruzados = filas.flatMap((a, i) =>
+  /*
+   * `--confirmado` apaga este control para un grupo, y sólo éste. Existe
+   * porque el control acierta en general y falla cuando la misma empresa se
+   * escribe pegada y separada: «PETROTANDIL» es una palabra y «Petro Tandil»
+   * son dos, así que ninguna contiene a la otra y el par queda frenado para
+   * siempre. Que sean la misma lo dice la razón social de la que tiene CUIT
+   * —PETROTANDIL SOCIEDAD ANONIMA…—, y eso es un juicio de una persona que no
+   * se deduce de los textos: por eso se nombra el par a mano en la línea de
+   * comandos y queda escrito en el `motivo` de la auditoría, en vez de
+   * aflojar el control para todos.
+   */
+  const confirmadoAMano = unaSolaClave || nombres.every((n) => confirmados.has(n));
+  const cruzados = confirmadoAMano ? [] : filas.flatMap((a, i) =>
     filas.slice(i + 1).map((b) => {
       const [A, B] = [propiasDe(a.nombre), propiasDe(b.nombre)];
       const unoEnElOtro = [...A].every((p) => B.has(p)) || [...B].every((p) => A.has(p));
@@ -324,7 +360,7 @@ for (const grupo of paresArg >= 0 ? [] : grupos) {
      * Este modo atiende UN solo caso y saltea todo lo demás, para que correrlo
      * no pueda tocar nada que no sea lo que una persona aprobó mirándolo.
      */
-    if (nombradas.length !== 1 || nombradas[0].id === conCuit[0].id) continue;
+    if (nombradas.length !== 1 || nombradas[0].id === conCuit[0]?.id) continue;
     const queda = nombradas[0];
     const seVan = filas.filter((f) => f.id !== queda.id);
     const cambios: Record<string, unknown> = {};
@@ -340,7 +376,19 @@ for (const grupo of paresArg >= 0 ? [] : grupos) {
     continue;
   }
 
-  const queda = conCuit[0];
+  /*
+   * Con CUIT manda el CUIT. Sin ninguno —que ahora pasa, porque el grupo de
+   * una sola clave entra sin él— manda de quién cuelgan más filas, y si
+   * empatan la más vieja: es la que viene usándose, y la otra es la que
+   * nació de una grafía nueva.
+   */
+  const queda =
+    conCuit[0] ??
+    [...filas].sort(
+      (a, b) =>
+        cuelgaDe(b.id).total - cuelgaDe(a.id).total ||
+        String(a.created_at ?? "").localeCompare(String(b.created_at ?? ""))
+    )[0];
   const seVan = filas.filter((f) => f.id !== queda.id);
 
   /*
@@ -351,7 +399,9 @@ for (const grupo of paresArg >= 0 ? [] : grupos) {
    * único que crea fichas desde una planilla y lo llama sólo Compras—.
    */
   const nombraAlgunaQueSeVa = seVan.some((f) => dice.porFila[f.id]?.laNombra);
-  if (nombraAlgunaQueSeVa && !dice.porFila[queda.id]?.laNombra) {
+  // Salvo con una sola clave: ahí la que queda responde al mismo texto, así
+  // que no hay nada que recrear. Ver el comentario de `unaSolaClave`.
+  if (!unaSolaClave && nombraAlgunaQueSeVa && !dice.porFila[queda.id]?.laNombra) {
     frenados.push({
       clave: grupo.clave,
       nombres,
@@ -359,7 +409,9 @@ for (const grupo of paresArg >= 0 ? [] : grupos) {
     });
     continue;
   }
-  const porQue = dice.porFila[queda.id]?.laNombra
+  const porQue = unaSolaClave && !conCuit.length
+    ? "misma escritura (sólo cambian mayúsculas, acentos o comillas); queda la que tiene más filas"
+    : dice.porFila[queda.id]?.laNombra
     ? "tiene el CUIT y es la que nombra la planilla"
     : "tiene el CUIT, y la planilla no nombra a ninguna";
   const problema = seVan.map((f) => problemaParaFusionar(queda, f)).find(Boolean);
@@ -453,9 +505,15 @@ for (const p of listos) {
       actor: "persona",
       valor_anterior: `${seVa.nombre}${seVa.cuit ? ` (${seVa.cuit})` : ""}`,
       valor_nuevo: `${p.queda.nombre}${p.queda.cuit ? ` (${p.queda.cuit})` : ""}`,
-      motivo: laDeLaPlanilla
-        ? "Fusión de duplicados del padrón: queda la ficha que nombra la planilla, que hereda el CUIT"
-        : "Fusión de duplicados del padrón (tanda de nombres parecidos)",
+      motivo:
+        (laDeLaPlanilla
+          ? "Fusión de duplicados del padrón: queda la ficha que nombra la planilla, que hereda el CUIT"
+          : "Fusión de duplicados del padrón (tanda de nombres parecidos)") +
+        // Que el control de contención no las hubiera unido solas es parte de
+        // lo que pasó, y el registro es lo único que va a quedar de por qué.
+        (confirmados.has(p.queda.nombre) && confirmados.has(seVa.nombre)
+          ? ". El par lo confirmó una persona a mano (--confirmado): los nombres no se contienen entre sí"
+          : ""),
       contexto: {
         fusionada_en: p.queda.id,
         nombre: seVa.nombre,

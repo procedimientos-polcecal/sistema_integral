@@ -17,8 +17,15 @@
 /**
  * El nombre de un proveedor, listo para comparar.
  *
- * Sin acentos, sin mayúsculas, sin puntos ni comas y con los espacios
- * colapsados. Un guión suelto no es un nombre.
+ * Sin acentos, sin mayúsculas, sin puntos, comas ni comillas, y con los
+ * espacios colapsados. Un guión suelto no es un nombre.
+ *
+ * Las comillas entraron el 27/11/2026 y no son cosmética: en el padrón
+ * convivían «Distribuidora Pueyrredon» —23 RI, CUIT y enlace a Odoo— y
+ * «DISTRIBUIDORA "PUEYRREDÓN"» —0 RI, sin CUIT—, y no se reconocían como la
+ * misma porque la palabra propia de la segunda era `"pueyrredon"` **con las
+ * comillas puestas**, que no contiene ni está contenida en `pueyrredon`. O
+ * sea: el duplicado más fácil de ver a ojo era invisible para el detector.
  */
 export function claveDeProveedor(nombre: string | null | undefined): string {
   const s = String(nombre ?? "")
@@ -26,6 +33,7 @@ export function claveDeProveedor(nombre: string | null | undefined): string {
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[.,]/g, "")
+    .replace(/["'«»]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
