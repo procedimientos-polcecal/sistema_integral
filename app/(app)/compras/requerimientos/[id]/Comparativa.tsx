@@ -11,6 +11,7 @@ import {
 } from "@/lib/compras/comparativa";
 import { moneda } from "@/lib/compras/constants";
 import { comparativaCongelada, ESTADOS_DECIDIDOS } from "@/lib/compras/congelada";
+import { loQueFaltaSubir } from "@/lib/compras/subirALaPlanilla";
 import type { CotizacionDolar } from "@/lib/compras/dolar";
 import ComparativaTabla from "./ComparativaTabla";
 import ComparativaDecision from "./ComparativaDecision";
@@ -53,6 +54,7 @@ export default function Comparativa({
   const [error, setError] = useState("");
   const [eligiendo, setEligiendo] = useState<string | null>(null);
   const [trayendo, setTrayendo] = useState(false);
+  const [subiendo, setSubiendo] = useState(false);
 
   /*
    * Congelada = hay una decisión que proteger, no que el estado diga que sí. La
@@ -106,6 +108,17 @@ export default function Comparativa({
    * la respuesta.
    */
   const puedeCargar = puedeEditar && !congelada && r.estado_aprobacion === "APROBADA";
+
+  /*
+   * Los presupuestos que se cargaron acá y nunca llegaron a la planilla.
+   *
+   * Pasa cuando se carga la respuesta del proveedor antes de que el pedido
+   * tenga comparativa vinculada: la carga escribe sólo la fila que crea, y
+   * vincular después lee la planilla pero no sube nada. El botón aparece sólo
+   * si hay algo que subir —si no, sería un botón que no hace nada— y la cuenta
+   * sale de la misma función que usa la ruta.
+   */
+  const faltanSubir = loQueFaltaSubir(cotizaciones);
   const puedeElegir = esAsignado && (r.estado_compra === "PARA_COMPRAR" || trabada);
 
   function refrescar(mensaje: string | null) {
@@ -140,6 +153,36 @@ export default function Comparativa({
       return;
     }
     refrescar(`Se releyó la planilla: ${body.traidas} presupuesto(s).`);
+  }
+
+  /**
+   * Sube a la planilla los presupuestos que quedaron sólo en el sistema.
+   *
+   * La ruta no reescribe lo que ya está: cruza los ids contra la columna
+   * `ID SISTEMA` antes de agregar nada.
+   */
+  async function subir() {
+    setSubiendo(true);
+    setError("");
+
+    const res = await fetch(`/api/compras/requerimientos/${r.id}/comparativa/subir`, {
+      method: "POST",
+    });
+    const body = await res.json().catch(() => ({}));
+    setSubiendo(false);
+
+    if (!res.ok) {
+      setError(body.error ?? "No se pudo escribir en la planilla.");
+      return;
+    }
+
+    // Qué pasó con cada uno, y no sólo cuántos se escribieron: "0 subidos"
+    // sobre un pedido que mostraba el botón es indistinguible de un fallo.
+    const partes: string[] = [];
+    if (body.subidas > 0) partes.push(`${body.subidas} presupuesto(s) subido(s) a la planilla`);
+    if (body.ya_estaban > 0) partes.push(`${body.ya_estaban} ya estaba(n) escrito(s) ahí`);
+    if (partes.length === 0) partes.push("No quedó nada por subir");
+    refrescar([partes.join(" · "), ...(body.avisos ?? [])].join(" · "));
   }
 
   async function elegir(cotizacion: Cotizacion) {
@@ -208,6 +251,18 @@ export default function Comparativa({
             >
               {r.comparativa_drive_id ? "Cambiar planilla" : "Elegir comparativa de Drive"}
             </button>
+            {r.comparativa_drive_id && faltanSubir.length > 0 && (
+              <button
+                onClick={subir}
+                disabled={subiendo}
+                className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-amber-50 disabled:opacity-50"
+                title="Estos presupuestos se cargaron cuando el pedido no tenía planilla vinculada, así que no se escribieron en ninguna."
+              >
+                {subiendo
+                  ? "Subiendo…"
+                  : `Subir a la planilla (${faltanSubir.length})`}
+              </button>
+            )}
             {r.comparativa_drive_id && (
               <button
                 onClick={volverATraer}

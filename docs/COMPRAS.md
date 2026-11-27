@@ -292,6 +292,63 @@ Se ejercita contra los datos reales con
 consulta y las mismas funciones que la pantalla. La pantalla en sí **no se abrió
 en un navegador**: está detrás del login, como casi todo el sistema.
 
+## Subir a la planilla lo que quedó sólo en el sistema (27/11/2026)
+
+**Las dos rutas que cargan un presupuesto escriben sólo la fila que están
+creando en ese momento.** Si justo entonces el pedido no tenía comparativa
+vinculada, el presupuesto se guarda igual, el cartel lo dice —«no tiene una
+comparativa vinculada, así que no se escribió en ninguna planilla»— y hasta el
+27/11/2026 no volvía nadie por él: quedaba con `drive_fila` en null para
+siempre.
+
+**Vincular la planilla después tampoco lo subía, y eso es lo que no se deduce
+leyendo el código.** Las dos puertas que vinculan —«Elegir comparativa de
+Drive» en la ficha y el botón de `/compras/configuracion`— **leen** la planilla
+hacia la base; ninguna empuja en la otra dirección. La única salida era borrar
+el presupuesto y volver a cargarlo.
+
+El caso no es raro, y por eso hay un botón y no una corrección a mano: **el
+vínculo con la planilla suele llegar por la sincronización**, que lo lee del
+hipervínculo escondido detrás del "LINK" del master, y eso puede pasar
+**después** de que alguien cargó la respuesta del proveedor. Medido el
+27/11/2026: de 13 presupuestos cargados por la app había uno así —el RI 2367,
+CORREA B-58, con la planilla CORREAS ya vinculada—.
+
+El botón **«Subir a la planilla (n)»** aparece en la ficha sólo si hay algo que
+subir, y la cuenta sale de `loQueFaltaSubir()` de
+[lib/compras/subirALaPlanilla.ts](../lib/compras/subirALaPlanilla.ts), la misma
+función que usa la ruta: la pantalla no puede ofrecer algo distinto de lo que la
+ruta va a hacer.
+
+Tres cosas que no se deducen del código:
+
+- **Sólo sube las de origen `app`.** Una `drive` nació de una fila de la
+  planilla, así que escribirla sería devolverle a la planilla lo que ella misma
+  dictó: un duplicado del presupuesto de otro proveedor, en la comparativa que
+  después alguien usa para elegir a quién comprar. Si una `drive` tiene
+  `drive_fila` nulo, lo que hay es un dato roto y subirla lo empeora.
+- **Apretar de nuevo no duplica.** Antes de escribir nada, la ruta cruza los ids
+  contra la columna `ID SISTEMA` con `ubicarLoDelSistema()` —el mismo cruce que
+  hace la relectura—. Lo que ya aparece allá no se reescribe: se le anota el
+  número de fila. Eso cubre los dos casos en que la fila existe y la base no lo
+  sabe: el doble envío y la carga que escribió la fila pero no pudo guardar su
+  número, que es un aviso que la ruta de carga ya contempla. Lo que **no** cubre
+  son dos llamadas de verdad simultáneas, donde la segunda lee la planilla antes
+  de que la primera escriba; la pantalla deshabilita el botón mientras corre,
+  que es la misma defensa que tiene la carga desde la ficha.
+- **Un presupuesto en dólares sin cotización no se escribe.** La planilla es toda
+  en pesos: un unitario en dólares escrito tal cual se suma con los que están en
+  pesos y el más barato pasa a ser el que está en otra moneda. Acá la regla sirve
+  para **no escribir la fila entera**, y no sólo para dejar el precio vacío como
+  hace `filaParaPlanilla`: una fila sin precio en una comparativa parece un
+  presupuesto que el proveedor no coticó.
+
+Como las dos rutas de carga, es `pantalla` en `revisar-exportaciones`:
+`compras_cotizaciones` no tiene columna de pendiente —el `sheets_pendiente` del
+pedido es del master—, así que un fallo de Google vuelve en el cuerpo, sin
+traducir. La diferencia con las otras dos es que acá **reintentar es el camino
+previsto**, y el botón sigue ahí mientras quede algo sin subir.
+
 ## Cargar la respuesta de un proveedor (26/11/2026)
 
 [Spec](superpowers/specs/2026-11-26-compras-carga-de-presupuestos-design.md) ·

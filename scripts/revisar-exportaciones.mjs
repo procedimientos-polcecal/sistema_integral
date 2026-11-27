@@ -290,6 +290,18 @@ export const REGISTRO = {
       "una persona aprieta vincular—. El master sí va por la cola, con " +
       "`exportarRequerimiento`.",
   },
+  "app/api/compras/requerimientos/[id]/comparativa/subir/route.ts": {
+    estrategia: "pantalla",
+    porque:
+      "Es el botón que sube a la planilla lo que quedó sólo en el sistema, y escribe " +
+      "en el mismo libro de comparativa por artículo que la carga: no hay espejo que " +
+      "un cron relea ni columna de pendiente en `compras_cotizaciones`, así que un " +
+      "fallo de Google vuelve en el cuerpo, sin traducir. Declarar `cola` sería " +
+      "prometer una cola que no existe. Lo que esta ruta sí tiene, y la carga no, es " +
+      "que **reintentar es el camino previsto**: cruza los ids contra `ID SISTEMA` " +
+      "antes de escribir, así que apretar de nuevo no duplica — y el botón sigue " +
+      "ahí mientras quede algo sin subir.",
+  },
   "app/api/compras/presupuestos/route.ts": {
     estrategia: "pantalla",
     porque:
