@@ -418,6 +418,41 @@ export function claveProveedor(nombre: string) {
     .trim();
 }
 
+/**
+ * De los nombres que trae la planilla, cuáles hay que crear en el padrón.
+ *
+ * **Deduplica por la clave y no por el texto de la celda**, y esa diferencia
+ * es la que fabricaba duplicados en cada corrida. «FERRETERIA MARFRA» y
+ * «FERRETERÍA MARFRA» son dos textos distintos y una sola clave: con un
+ * `new Set` sobre el texto crudo las dos pasaban el filtro —ninguna de las dos
+ * claves estaba en el padrón— y entraban **las dos en el mismo insert**.
+ * `onConflict: "nombre"` tampoco las frena, porque los nombres sí difieren.
+ *
+ * Medido el 26/11/2026: cuatro pares del padrón nacieron así, el mismo
+ * segundo —`FERRETERIA/FERRETERÍA MARFRA`, `PINTURERIA/PINTURERÍA ARCO IRIS`,
+ * `OLAVARRIA/OLAVARRÍA GOMA`, `RM Seguridad ambiental/RM SEGURIDAD
+ * AMBIENTAL`—. Son duplicados que el sistema se fabrica solo, y que después
+ * alguien tiene que fusionar a mano.
+ *
+ * Se queda con **la primera forma que aparece**, que es arbitraria a
+ * propósito: elegir «la mejor escrita» sería un juicio, y lo que importa es
+ * que haya una sola fila por clave. El nombre lo corrige después una persona.
+ */
+export function nombresQueFaltan(
+  valores: unknown[],
+  yaEsta: (clave: string) => boolean
+): string[] {
+  const porClave = new Map<string, string>();
+  for (const v of valores) {
+    if (!v) continue;
+    const nombre = String(v);
+    const clave = claveProveedor(nombre);
+    if (!clave || yaEsta(clave) || porClave.has(clave)) continue;
+    porClave.set(clave, nombre);
+  }
+  return [...porClave.values()];
+}
+
 // ── Importar: planilla → app ─────────────────────────────────
 
 export interface ResultadoSync {
@@ -1038,8 +1073,7 @@ async function asegurarProveedores(admin: Admin, valores: unknown[]) {
     .select("id, nombre, cuit, created_at");
   const porClave = indicePorClave(actuales ?? [], claveProveedor);
 
-  const nuevos = [...new Set(valores.filter(Boolean).map(String))]
-    .filter((n) => claveProveedor(n) && !porClave.has(claveProveedor(n)));
+  const nuevos = nombresQueFaltan(valores, (clave) => porClave.has(clave));
 
   if (nuevos.length > 0) {
     const { data: creados } = await admin
