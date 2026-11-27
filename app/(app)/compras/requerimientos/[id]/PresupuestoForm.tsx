@@ -7,6 +7,7 @@ import {
   datosDePagoDe, alCambiarDeProveedor, type ProveedorElegible,
 } from "@/lib/compras/comparativa";
 import { avisoDeCuit } from "@/lib/compras/avisoDeCuit";
+import { numerosDelRenglon } from "@/lib/compras/numeroDeCampo";
 import SelectorProveedor from "../../SelectorProveedor";
 import NuevoProveedorModal from "./NuevoProveedorModal";
 import MultiSelect from "@/components/MultiSelect";
@@ -94,20 +95,29 @@ export default function PresupuestoForm({
   // tienen. Se dice al elegirlo, no al final del circuito.
   const avisoDelCuit = avisoDeCuit(lista.find((p) => p.id === proveedorId));
 
-  const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(",", ".")));
+  // Los cinco campos numéricos los lee `numerosDelRenglon`, el mismo parser
+  // que usa `/compras/presupuestos`. Antes había acá un `num()` propio que
+  // hacía `Number(v.replace(",", "."))`: con eso `"12.500"` entraba como 12,5
+  // —mil veces menos, en el campo que decide a quién se le compra— y un
+  // `"21%"` en el IVA daba NaN, que `?? 0` no atrapa porque NaN no es null.
+  const leido = numerosDelRenglon(
+    { precio: unitario, cantidad, descuento, iva, envio }
+  );
 
-  const total = totalCotizacion({
-    precio_unitario: num(unitario),
-    cantidad: num(cantidad),
-    descuento: (num(descuento) ?? 0) / 100,
-    iva: (num(iva) ?? 0) / 100,
-    costo_envio: num(envio),
-  });
+  const total = totalCotizacion(leido.campos);
 
   // El equivalente en pesos, para verlo mientras se escribe.
   const enPesos = divisa === "USD" && dolar ? Math.round(total * dolar.venta * 100) / 100 : null;
 
   async function guardar() {
+    // Un campo ilegible se frena acá y se nombra. La ruta no puede: le llega
+    // un número válido de magnitud equivocada, o un null que no distingue de
+    // un campo vacío.
+    if (leido.problemas.length > 0) {
+      setError(leido.problemas.join(" "));
+      return;
+    }
+
     setGuardando(true);
     setError("");
 
@@ -118,12 +128,12 @@ export default function PresupuestoForm({
         proveedor_id: proveedorId,
         marca: marca.trim() || null,
         unidad_medida: unidad.trim() || null,
-        precio_unitario: num(unitario),
+        precio_unitario: leido.campos.precio_unitario,
         moneda: divisa,
-        cantidad: num(cantidad),
-        costo_envio: num(envio),
-        descuento: (num(descuento) ?? 0) / 100,
-        iva: (num(iva) ?? 0) / 100,
+        cantidad: leido.campos.cantidad,
+        costo_envio: leido.campos.costo_envio,
+        descuento: leido.campos.descuento,
+        iva: leido.campos.iva,
         precio_hasta: precioHasta || null,
         plazos_pago_dias: plazos,
         condiciones_pago: condiciones.trim() || null,
